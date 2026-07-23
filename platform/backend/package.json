@@ -149,6 +149,7 @@
     "lodash-es": "^4.18.1",
     "mammoth": "^1.12.0",
     "node-vault": "^0.11.0",
+    "ollama-ai-provider-v2": "3.6.0",
     "openai": "^6.26.0",
     "pdf-parse": "1.1.1",
     "pg": "^8.20.0",

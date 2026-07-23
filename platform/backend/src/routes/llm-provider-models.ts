@@ -51,6 +51,10 @@ const LAZY_MODEL_SYNC_TTL_BY_PROVIDER: Partial<
 > = {
   openrouter: TimeInMs.Hour,
   ollama: 5 * TimeInMs.Minute,
+  // Same server as `ollama`, so it needs the same TTL: on the default one-day
+  // fallback a freshly `ollama pull`-ed model appeared in one provider within
+  // five minutes and the other a day later, which reads as a failed pull.
+  "ollama-native": 5 * TimeInMs.Minute,
   vllm: 5 * TimeInMs.Minute,
 };
 
@@ -362,6 +366,32 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Model not found");
       }
 
+      // Validated here rather than in the body schema, which carries neither the
+      // provider nor the context length. The route gate (`llmModel:update`) is
+      // the only permission check: model rows are global, but so are the pricing
+      // and `ignored` fields an editor can already write, so singling out
+      // generation parameters bought a 403 class without a matching guarantee.
+      if (body.configuredParameters !== undefined) {
+        if (existing.provider !== "ollama-native") {
+          throw new ApiError(
+            400,
+            `Generation parameters are only supported for Ollama (Native) models, not "${existing.provider}"`,
+          );
+        }
+
+        const numCtx = body.configuredParameters?.num_ctx;
+        if (
+          numCtx !== undefined &&
+          existing.contextLength !== null &&
+          numCtx > existing.contextLength
+        ) {
+          throw new ApiError(
+            400,
+            `num_ctx (${numCtx}) exceeds the model's context length of ${existing.contextLength}`,
+          );
+        }
+      }
+
       // The knowledge base reads embedding dimensions from this row at embed
       // time, so changing them — or clearing them, which turns the model back
       // into a chat model — while an organization's embedding config points
@@ -665,7 +695,8 @@ async function getPerUserProviderModels(params: {
 
 /**
  * Shape a model row into the models-with-API-keys response, attaching the
- * computed effective pricing (input/output + cache) and price sources.
+ * computed effective pricing (input/output + cache) and price sources, plus the
+ * context window the model actually enforces.
  */
 function toModelWithApiKeysResponse(params: {
   model: Model;
@@ -673,18 +704,22 @@ function toModelWithApiKeysResponse(params: {
   apiKeys: LinkedApiKey[];
 }) {
   const { model, isBest, apiKeys } = params;
-  const pricing = ModelModel.toCapabilities(model);
+  const capabilities = ModelModel.toCapabilities(model);
   return {
     ...model,
     isBest,
     apiKeys,
-    pricePerMillionInput: pricing.pricePerMillionInput,
-    pricePerMillionOutput: pricing.pricePerMillionOutput,
-    isCustomPrice: pricing.isCustomPrice,
-    priceSource: pricing.priceSource,
-    pricePerMillionCacheRead: pricing.pricePerMillionCacheRead,
-    pricePerMillionCacheWrite: pricing.pricePerMillionCacheWrite,
-    cachePriceSource: pricing.cachePriceSource,
+    // The spread above carries the architectural `contextLength`, which stays
+    // the ceiling for `num_ctx` validation. Displaying it would over-promise
+    // when Ollama enforces a smaller window, so the resolved one rides along.
+    effectiveContextLength: capabilities.contextLength,
+    pricePerMillionInput: capabilities.pricePerMillionInput,
+    pricePerMillionOutput: capabilities.pricePerMillionOutput,
+    isCustomPrice: capabilities.isCustomPrice,
+    priceSource: capabilities.priceSource,
+    pricePerMillionCacheRead: capabilities.pricePerMillionCacheRead,
+    pricePerMillionCacheWrite: capabilities.pricePerMillionCacheWrite,
+    cachePriceSource: capabilities.cachePriceSource,
     isFree: isFreeModel(model),
   };
 }

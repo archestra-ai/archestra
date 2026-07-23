@@ -1101,6 +1101,7 @@ export async function handleLLMProxy<
       provider.extractErrorMessage,
       requestAdapter.isStreaming(),
       provider.extractInternalCode.bind(provider),
+      provider.formatStreamErrorFrame,
     );
   }
 }
@@ -1243,28 +1244,38 @@ async function handleStreaming<
             ensureStreamHeaders();
             reply.raw.write(result.sseData);
           } else if (result.isToolCallChunk) {
-            // Determine if the current tool call should be streamed.
+            // Determine whether the accumulated tool calls can be streamed.
             // Tools with no blocking policy stream immediately for low latency;
             // tools with blocking policies buffer until evaluation completes.
+            //
+            // Every known tool call is checked, not just the most recent one: a
+            // single chunk can carry several calls (Ollama's native wire
+            // delivers parallel calls in one `tool_calls` array rather than as
+            // per-index deltas), and streaming on the last one alone would
+            // write a blocked call's arguments to the client before
+            // `evaluatePolicies` ever ran. Repeat lookups are served by
+            // `toolPolicyCache`, so re-checking earlier calls is free.
             let shouldStream = false;
-            if (!shouldStream && !bufferAllToolCalls) {
-              const currentToolCall =
-                streamAdapter.state.toolCalls[
-                  streamAdapter.state.toolCalls.length - 1
-                ];
-              if (currentToolCall?.name) {
-                const cacheKey = `${agent.id}:${currentToolCall.name}:${contextIsTrusted}`;
+            if (!bufferAllToolCalls) {
+              let anyBlocking = false;
+              let sawNamedToolCall = false;
+              for (const toolCall of streamAdapter.state.toolCalls) {
+                if (!toolCall?.name) {
+                  continue;
+                }
+                sawNamedToolCall = true;
+                const cacheKey = `${agent.id}:${toolCall.name}:${contextIsTrusted}`;
                 let hasBlocking = toolPolicyCache.get(cacheKey);
                 if (hasBlocking === undefined) {
                   try {
                     hasBlocking =
                       await ToolInvocationPolicyModel.hasBlockingPolicy(
-                        currentToolCall.name,
+                        toolCall.name,
                         contextIsTrusted,
                       );
                   } catch (err) {
                     logger.warn(
-                      { err, toolName: currentToolCall.name },
+                      { err, toolName: toolCall.name },
                       "hasBlockingPolicy lookup failed, defaulting to buffer",
                     );
                     hasBlocking = true;
@@ -1272,10 +1283,13 @@ async function handleStreaming<
                   toolPolicyCache.set(cacheKey, hasBlocking);
                 }
                 if (hasBlocking) {
-                  bufferAllToolCalls = true;
+                  anyBlocking = true;
                 }
-                shouldStream = !hasBlocking;
               }
+              if (anyBlocking) {
+                bufferAllToolCalls = true;
+              }
+              shouldStream = sawNamedToolCall && !anyBlocking;
             }
 
             if (shouldStream) {
@@ -1538,6 +1552,7 @@ async function handleStreaming<
       provider.extractErrorMessage,
       true,
       provider.extractInternalCode.bind(provider),
+      provider.formatStreamErrorFrame,
     );
   } finally {
     // Always record interaction (whether stream completed or was aborted)

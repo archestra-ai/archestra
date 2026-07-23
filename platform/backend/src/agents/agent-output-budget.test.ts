@@ -45,6 +45,89 @@ describe("resolveAgentMaxOutputTokens", () => {
     ).toBe(4096);
   });
 
+  describe("Ollama providers (unknown output ceiling)", () => {
+    for (const provider of ["ollama", "ollama-native"] as const) {
+      test(`${provider}: derives the budget from the context window, not 8192`, () => {
+        // `num_predict` is drawn from the same `num_ctx` window as the prompt,
+        // so the fallback lands on half the window rather than all of it.
+        expect(
+          resolveAgentMaxOutputTokens({
+            outputLength: null,
+            ceiling,
+            provider,
+            contextLength: 40960,
+          }),
+        ).toBe(20480);
+      });
+
+      test(`${provider}: the operator ceiling still caps the context fallback`, () => {
+        expect(
+          resolveAgentMaxOutputTokens({
+            outputLength: null,
+            ceiling,
+            provider,
+            contextLength: 262144,
+          }),
+        ).toBe(ceiling);
+      });
+
+      test(`${provider}: a real output ceiling still wins over the context window`, () => {
+        expect(
+          resolveAgentMaxOutputTokens({
+            outputLength: 4096,
+            ceiling,
+            provider,
+            contextLength: 262144,
+          }),
+        ).toBe(4096);
+      });
+
+      test(`${provider}: unknown context still falls back to 8192`, () => {
+        expect(
+          resolveAgentMaxOutputTokens({
+            outputLength: null,
+            ceiling,
+            provider,
+            contextLength: null,
+          }),
+        ).toBe(UNKNOWN_MODEL_OUTPUT_TOKENS);
+      });
+    }
+
+    test("non-Ollama providers keep the 8192 fallback even with a context length", () => {
+      expect(
+        resolveAgentMaxOutputTokens({
+          outputLength: null,
+          ceiling,
+          provider: "openai",
+          contextLength: 128000,
+        }),
+      ).toBe(UNKNOWN_MODEL_OUTPUT_TOKENS);
+    });
+
+    test("an invalid context window falls back rather than propagating", () => {
+      // A 0, negative or fractional window would otherwise become the output
+      // budget — and, once folded into `options.num_predict`, cap every
+      // generation at a nonsense length.
+      for (const contextLength of [
+        0,
+        -1,
+        8192.5,
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+      ]) {
+        expect(
+          resolveAgentMaxOutputTokens({
+            outputLength: null,
+            ceiling,
+            provider: "ollama-native",
+            contextLength,
+          }),
+        ).toBe(UNKNOWN_MODEL_OUTPUT_TOKENS);
+      }
+    });
+  });
+
   test("caps shared-window models at half the context so the prompt has room", () => {
     // gpt-4: output 8192 == context 8192 — requesting the full output ceiling
     // would consume the entire window and 400 on every request.

@@ -13011,6 +13011,354 @@
           "object"
         ]
       },
+      "OllamaNativeChatRequestInput": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "content": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "array",
+                      "items": {}
+                    }
+                  ]
+                },
+                "thinking": {
+                  "type": "string"
+                },
+                "images": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "tool_calls": {
+                  "nullable": true,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "function": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "number"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "arguments": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "arguments"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": [
+                      "function"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "tool_name": {
+                  "type": "string"
+                },
+                "tool_call_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "role"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "function": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "type",
+                "function"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "format": {},
+          "options": {
+            "type": "object",
+            "properties": {
+              "temperature": {
+                "type": "number"
+              },
+              "top_k": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "top_p": {
+                "type": "number"
+              },
+              "min_p": {
+                "type": "number"
+              },
+              "typical_p": {
+                "type": "number"
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "repeat_penalty": {
+                "type": "number"
+              },
+              "repeat_last_n": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "presence_penalty": {
+                "type": "number"
+              },
+              "frequency_penalty": {
+                "type": "number"
+              },
+              "stop": {
+                "maxItems": 16,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 256
+                }
+              },
+              "num_keep": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "num_ctx": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000000
+              },
+              "num_predict": {
+                "type": "integer",
+                "minimum": -2,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          "stream": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "keep_alive": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "think": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "temperature": {
+            "nullable": true,
+            "type": "number"
+          },
+          "top_p": {
+            "nullable": true,
+            "type": "number"
+          },
+          "max_output_tokens": {
+            "nullable": true,
+            "type": "number"
+          },
+          "truncate": {
+            "type": "boolean"
+          },
+          "shift": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "model",
+          "messages"
+        ],
+        "additionalProperties": {}
+      },
+      "OllamaNativeChatResponseInput": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "message": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "thinking": {
+                "type": "string"
+              },
+              "tool_calls": {
+                "nullable": true,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "function": {
+                      "type": "object",
+                      "properties": {
+                        "index": {
+                          "type": "number"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "arguments": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "arguments"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "function"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": [
+              "role",
+              "content"
+            ],
+            "additionalProperties": {}
+          },
+          "done": {
+            "type": "boolean"
+          },
+          "done_reason": {
+            "type": "string"
+          },
+          "total_duration": {
+            "type": "number"
+          },
+          "load_duration": {
+            "type": "number"
+          },
+          "prompt_eval_count": {
+            "type": "number"
+          },
+          "prompt_eval_duration": {
+            "type": "number"
+          },
+          "eval_count": {
+            "type": "number"
+          },
+          "eval_duration": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "model",
+          "message",
+          "done"
+        ],
+        "additionalProperties": {}
+      },
       "ZhipuaiChatCompletionRequestInput": {
         "type": "object",
         "properties": {
@@ -31972,6 +32320,346 @@
         ],
         "additionalProperties": false
       },
+      "OllamaNativeChatRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "content": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "array",
+                      "items": {}
+                    }
+                  ]
+                },
+                "thinking": {
+                  "type": "string"
+                },
+                "images": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "tool_calls": {
+                  "nullable": true,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "function": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "number"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "arguments": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "arguments"
+                        ],
+                        "additionalProperties": {}
+                      }
+                    },
+                    "required": [
+                      "function"
+                    ],
+                    "additionalProperties": {}
+                  }
+                },
+                "tool_name": {
+                  "type": "string"
+                },
+                "tool_call_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "role"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "function": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "type",
+                "function"
+              ],
+              "additionalProperties": {}
+            }
+          },
+          "format": {},
+          "options": {
+            "type": "object",
+            "properties": {
+              "temperature": {
+                "type": "number"
+              },
+              "top_k": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "top_p": {
+                "type": "number"
+              },
+              "min_p": {
+                "type": "number"
+              },
+              "typical_p": {
+                "type": "number"
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "repeat_penalty": {
+                "type": "number"
+              },
+              "repeat_last_n": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "presence_penalty": {
+                "type": "number"
+              },
+              "frequency_penalty": {
+                "type": "number"
+              },
+              "stop": {
+                "maxItems": 16,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 256
+                }
+              },
+              "num_keep": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "num_ctx": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000000
+              },
+              "num_predict": {
+                "type": "integer",
+                "minimum": -2,
+                "maximum": 9007199254740991
+              }
+            },
+            "additionalProperties": false
+          },
+          "stream": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "keep_alive": {},
+          "think": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "temperature": {
+            "nullable": true,
+            "type": "number"
+          },
+          "top_p": {
+            "nullable": true,
+            "type": "number"
+          },
+          "max_output_tokens": {
+            "nullable": true,
+            "type": "number"
+          },
+          "truncate": {
+            "type": "boolean"
+          },
+          "shift": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "model",
+          "messages"
+        ],
+        "additionalProperties": {}
+      },
+      "OllamaNativeChatResponse": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "message": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "thinking": {
+                "type": "string"
+              },
+              "tool_calls": {
+                "nullable": true,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "function": {
+                      "type": "object",
+                      "properties": {
+                        "index": {
+                          "type": "number"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "arguments": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "arguments"
+                      ],
+                      "additionalProperties": {}
+                    }
+                  },
+                  "required": [
+                    "function"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            },
+            "required": [
+              "role",
+              "content"
+            ],
+            "additionalProperties": {}
+          },
+          "done": {
+            "type": "boolean"
+          },
+          "done_reason": {
+            "type": "string"
+          },
+          "total_duration": {
+            "type": "number"
+          },
+          "load_duration": {
+            "type": "number"
+          },
+          "prompt_eval_count": {
+            "type": "number"
+          },
+          "prompt_eval_duration": {
+            "type": "number"
+          },
+          "eval_count": {
+            "type": "number"
+          },
+          "eval_duration": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "model",
+          "message",
+          "done"
+        ],
+        "additionalProperties": {}
+      },
       "ZhipuaiChatCompletionRequest": {
         "type": "object",
         "properties": {
@@ -38858,6 +39546,7 @@
                               "openrouter",
                               "vllm",
                               "ollama",
+                              "ollama-native",
                               "zhipuai",
                               "deepseek",
                               "minimax",
@@ -40012,6 +40701,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -40902,6 +41592,7 @@
                           "openrouter",
                           "vllm",
                           "ollama",
+                          "ollama-native",
                           "zhipuai",
                           "deepseek",
                           "minimax",
@@ -41710,6 +42401,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -42518,6 +43210,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -43670,6 +44363,7 @@
                             "openrouter",
                             "vllm",
                             "ollama",
+                            "ollama-native",
                             "zhipuai",
                             "deepseek",
                             "minimax",
@@ -44525,6 +45219,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -45636,6 +46331,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -46757,6 +47453,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -49345,6 +50042,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -91631,6 +92329,7 @@
                           "openrouter",
                           "vllm",
                           "ollama",
+                          "ollama-native",
                           "zhipuai",
                           "deepseek",
                           "minimax",
@@ -91887,6 +92586,7 @@
                                         "openrouter",
                                         "vllm",
                                         "ollama",
+                                        "ollama-native",
                                         "zhipuai",
                                         "deepseek",
                                         "minimax",
@@ -91926,6 +92626,7 @@
                                         "openrouter",
                                         "vllm",
                                         "ollama",
+                                        "ollama-native",
                                         "zhipuai",
                                         "deepseek",
                                         "minimax",
@@ -92408,6 +93109,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -92664,6 +93366,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -92703,6 +93406,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -93156,6 +93860,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -93412,6 +94117,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -93451,6 +94157,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -93945,6 +94652,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -94201,6 +94909,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -94240,6 +94949,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -96470,6 +97180,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -96726,6 +97437,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -96765,6 +97477,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -97861,6 +98574,7 @@
                             "openrouter",
                             "vllm",
                             "ollama",
+                            "ollama-native",
                             "zhipuai",
                             "deepseek",
                             "minimax",
@@ -98117,6 +98831,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -98156,6 +98871,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -99565,6 +100281,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -99821,6 +100538,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -99860,6 +100578,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -100337,6 +101056,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -100593,6 +101313,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -100632,6 +101353,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -101101,6 +101823,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -101357,6 +102080,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -101396,6 +102120,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -101875,6 +102600,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -102131,6 +102857,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -102170,6 +102897,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -109902,6 +110630,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -110283,6 +111012,7 @@
                       "openrouter",
                       "vllm",
                       "ollama",
+                      "ollama-native",
                       "zhipuai",
                       "deepseek",
                       "minimax",
@@ -110660,6 +111390,7 @@
                       "openrouter",
                       "vllm",
                       "ollama",
+                      "ollama-native",
                       "zhipuai",
                       "deepseek",
                       "minimax",
@@ -127617,6 +128348,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -127656,6 +128388,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -128599,6 +129332,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -128638,6 +129372,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -129292,6 +130027,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -129331,6 +130067,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -129974,6 +130711,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -130013,6 +130751,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -130656,6 +131395,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -130695,6 +131435,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -131206,6 +131947,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -131245,6 +131987,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -131767,6 +132510,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -131806,6 +132550,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -134279,6 +135024,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -134318,6 +135064,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -137502,6 +138249,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -137541,6 +138289,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -138063,6 +138812,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -138102,6 +138852,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -138624,6 +139375,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -138663,6 +139415,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -139185,6 +139938,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -139224,6 +139978,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -139746,6 +140501,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -139785,6 +140541,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -140307,6 +141064,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -140346,6 +141104,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -140868,6 +141627,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -140907,6 +141667,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -141429,6 +142190,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -141468,6 +142230,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -141979,6 +142742,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -142018,6 +142782,559 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
+                                                "zhipuai",
+                                                "deepseek",
+                                                "minimax",
+                                                "kimi",
+                                                "azure",
+                                                "github-copilot",
+                                                "microsoft-365-copilot",
+                                                "archestra"
+                                              ]
+                                            },
+                                            "status": {
+                                              "type": "number"
+                                            },
+                                            "message": {
+                                              "type": "string"
+                                            },
+                                            "type": {
+                                              "type": "string"
+                                            },
+                                            "raw": {}
+                                          },
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "code",
+                                        "message",
+                                        "isRetryable"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "createdAt": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "conversationId",
+                                    "error",
+                                    "createdAt"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "profileId",
+                              "externalAgentId",
+                              "executionId",
+                              "userId",
+                              "virtualKeyId",
+                              "passthroughVirtualKeyId",
+                              "environmentId",
+                              "sessionId",
+                              "sessionSource",
+                              "billingMode",
+                              "authenticatedAppId",
+                              "authenticatedAppName",
+                              "request",
+                              "response",
+                              "type",
+                              "model",
+                              "baselineModel",
+                              "inputTokens",
+                              "inputTokensEstimated",
+                              "outputTokens",
+                              "cacheReadTokens",
+                              "cacheWriteTokens",
+                              "cacheWrite1hTokens",
+                              "baselineCost",
+                              "cost",
+                              "cacheCost",
+                              "cacheSavings",
+                              "toonTokensBefore",
+                              "toonTokensAfter",
+                              "toonCostSavings",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "profileId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "externalAgentId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "executionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "userId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "virtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "passthroughVirtualKeyId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "sessionId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "sessionSource": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "source": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "api",
+                                  "model_router",
+                                  "chat",
+                                  "chat:compaction",
+                                  "a2a:compaction",
+                                  "chat:title_generation",
+                                  "chat:tool_call_repair",
+                                  "skill:description_generation",
+                                  "chatops:slack",
+                                  "chatops:ms-teams",
+                                  "chatops:telegram",
+                                  "email",
+                                  "schedule-trigger",
+                                  "knowledge:embedding",
+                                  "knowledge:reranker",
+                                  "knowledge:query-expansion",
+                                  "app:llm_complete",
+                                  "app:recording_enhancement"
+                                ]
+                              },
+                              "authMethod": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "provider_key",
+                                  "virtual_key",
+                                  "passthrough_virtual_key",
+                                  "jwks",
+                                  "oauth_client_credentials",
+                                  "oauth_user",
+                                  "internal",
+                                  "unknown"
+                                ]
+                              },
+                              "billingMode": {
+                                "type": "string",
+                                "enum": [
+                                  "metered",
+                                  "subscription"
+                                ]
+                              },
+                              "authenticatedAppId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "request": {
+                                "anyOf": [
+                                  {
+                                    "$ref": "#/components/schemas/OllamaNativeChatRequest"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              },
+                              "processedRequest": {
+                                "nullable": true,
+                                "anyOf": [
+                                  {
+                                    "$ref": "#/components/schemas/OllamaNativeChatRequest"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  }
+                                ]
+                              },
+                              "response": {
+                                "anyOf": [
+                                  {
+                                    "$ref": "#/components/schemas/OllamaNativeChatResponse"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "error": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "error"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "dualLlmAnalyses": {
+                                "nullable": true,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "toolCallId": {
+                                      "type": "string"
+                                    },
+                                    "conversations": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "role": {
+                                            "type": "string",
+                                            "enum": [
+                                              "user",
+                                              "assistant"
+                                            ]
+                                          },
+                                          "content": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "role",
+                                          "content"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                      }
+                                    },
+                                    "result": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "toolCallId",
+                                    "conversations",
+                                    "result"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "unsafeContextBoundary": {
+                                "nullable": true,
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "preexisting_untrusted"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "tool_result"
+                                        ]
+                                      },
+                                      "reason": {
+                                        "type": "string",
+                                        "enum": [
+                                          "agent_configured_untrusted",
+                                          "inherited_from_parent",
+                                          "tool_result_marked_untrusted",
+                                          "tool_result_blocked"
+                                        ]
+                                      },
+                                      "toolCallId": {
+                                        "type": "string"
+                                      },
+                                      "toolName": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "reason",
+                                      "toolCallId",
+                                      "toolName"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "ollama-native:chat"
+                                ]
+                              },
+                              "model": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "baselineModel": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "inputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "inputTokensEstimated": {
+                                "type": "boolean"
+                              },
+                              "outputTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheReadTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWriteTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "cacheWrite1hTokens": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "baselineCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheCost": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "cacheSavings": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonTokensBefore": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonTokensAfter": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "toonCostSavings": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toonSkipReason": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "not_enabled",
+                                  "not_effective",
+                                  "no_tool_results"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "chatErrors": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "conversationId": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "error": {
+                                      "type": "object",
+                                      "properties": {
+                                        "code": {
+                                          "type": "string",
+                                          "enum": [
+                                            "rate_limit",
+                                            "usage_limit_exceeded",
+                                            "authentication",
+                                            "permission_denied",
+                                            "invalid_request",
+                                            "provider_insufficient_balance",
+                                            "not_found",
+                                            "context_too_long",
+                                            "request_too_large",
+                                            "content_filtered",
+                                            "server_error",
+                                            "network_error",
+                                            "empty_response",
+                                            "incomplete_tool_call",
+                                            "tool_call_output_truncated",
+                                            "provider_auth_required",
+                                            "tools_unsupported",
+                                            "aborted",
+                                            "unknown"
+                                          ]
+                                        },
+                                        "message": {
+                                          "type": "string"
+                                        },
+                                        "isRetryable": {
+                                          "type": "boolean"
+                                        },
+                                        "sessionId": {
+                                          "type": "string"
+                                        },
+                                        "traceId": {
+                                          "type": "string"
+                                        },
+                                        "spanId": {
+                                          "type": "string"
+                                        },
+                                        "usageLimitExceeded": {
+                                          "type": "boolean"
+                                        },
+                                        "usageLimitEntityType": {
+                                          "type": "string"
+                                        },
+                                        "authAction": {
+                                          "type": "object",
+                                          "properties": {
+                                            "provider": {
+                                              "type": "string",
+                                              "enum": [
+                                                "openai",
+                                                "gemini",
+                                                "anthropic",
+                                                "bedrock",
+                                                "cohere",
+                                                "cerebras",
+                                                "mistral",
+                                                "perplexity",
+                                                "groq",
+                                                "xai",
+                                                "openrouter",
+                                                "vllm",
+                                                "ollama",
+                                                "ollama-native",
+                                                "zhipuai",
+                                                "deepseek",
+                                                "minimax",
+                                                "kimi",
+                                                "azure",
+                                                "github-copilot",
+                                                "microsoft-365-copilot",
+                                                "archestra"
+                                              ]
+                                            },
+                                            "providerLabel": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "provider",
+                                            "providerLabel"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "originalError": {
+                                          "type": "object",
+                                          "properties": {
+                                            "provider": {
+                                              "type": "string",
+                                              "enum": [
+                                                "openai",
+                                                "gemini",
+                                                "anthropic",
+                                                "bedrock",
+                                                "cohere",
+                                                "cerebras",
+                                                "mistral",
+                                                "perplexity",
+                                                "groq",
+                                                "xai",
+                                                "openrouter",
+                                                "vllm",
+                                                "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -142529,6 +143846,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -142568,6 +143886,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -143090,6 +144409,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -143129,6 +144449,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -143651,6 +144972,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -143690,6 +145012,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -146388,6 +147711,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -146427,6 +147751,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -149120,6 +150445,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -149159,6 +150485,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -151857,6 +153184,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -151896,6 +153224,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -152418,6 +153747,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -152457,6 +153787,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -153213,6 +154544,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -153252,6 +154584,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -154195,6 +155528,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -154234,6 +155568,7 @@
                                                 "openrouter",
                                                 "vllm",
                                                 "ollama",
+                                                "ollama-native",
                                                 "zhipuai",
                                                 "deepseek",
                                                 "minimax",
@@ -156278,6 +157613,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -156317,6 +157653,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -157260,6 +158597,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -157299,6 +158637,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -157953,6 +159292,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -157992,6 +159332,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -158635,6 +159976,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -158674,6 +160016,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -159317,6 +160660,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -159356,6 +160700,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -159867,6 +161212,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -159906,6 +161252,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -160428,6 +161775,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -160467,6 +161815,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -162940,6 +164289,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -162979,6 +164329,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -166163,6 +167514,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -166202,6 +167554,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -166724,6 +168077,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -166763,6 +168117,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -167285,6 +168640,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -167324,6 +168680,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -167846,6 +169203,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -167885,6 +169243,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -168407,6 +169766,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -168446,6 +169806,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -168968,6 +170329,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -169007,6 +170369,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -169529,6 +170892,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -169568,6 +170932,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -170090,6 +171455,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -170129,6 +171495,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -170640,6 +172007,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -170679,6 +172047,559 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
+                                          "zhipuai",
+                                          "deepseek",
+                                          "minimax",
+                                          "kimi",
+                                          "azure",
+                                          "github-copilot",
+                                          "microsoft-365-copilot",
+                                          "archestra"
+                                        ]
+                                      },
+                                      "status": {
+                                        "type": "number"
+                                      },
+                                      "message": {
+                                        "type": "string"
+                                      },
+                                      "type": {
+                                        "type": "string"
+                                      },
+                                      "raw": {}
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "code",
+                                  "message",
+                                  "isRetryable"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "conversationId",
+                              "error",
+                              "createdAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "profileId",
+                        "externalAgentId",
+                        "executionId",
+                        "userId",
+                        "virtualKeyId",
+                        "passthroughVirtualKeyId",
+                        "environmentId",
+                        "sessionId",
+                        "sessionSource",
+                        "billingMode",
+                        "authenticatedAppId",
+                        "authenticatedAppName",
+                        "request",
+                        "response",
+                        "type",
+                        "model",
+                        "baselineModel",
+                        "inputTokens",
+                        "inputTokensEstimated",
+                        "outputTokens",
+                        "cacheReadTokens",
+                        "cacheWriteTokens",
+                        "cacheWrite1hTokens",
+                        "baselineCost",
+                        "cost",
+                        "cacheCost",
+                        "cacheSavings",
+                        "toonTokensBefore",
+                        "toonTokensAfter",
+                        "toonCostSavings",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "profileId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "externalAgentId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "executionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "userId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "virtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "passthroughVirtualKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "sessionId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sessionSource": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "source": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "api",
+                            "model_router",
+                            "chat",
+                            "chat:compaction",
+                            "a2a:compaction",
+                            "chat:title_generation",
+                            "chat:tool_call_repair",
+                            "skill:description_generation",
+                            "chatops:slack",
+                            "chatops:ms-teams",
+                            "chatops:telegram",
+                            "email",
+                            "schedule-trigger",
+                            "knowledge:embedding",
+                            "knowledge:reranker",
+                            "knowledge:query-expansion",
+                            "app:llm_complete",
+                            "app:recording_enhancement"
+                          ]
+                        },
+                        "authMethod": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "provider_key",
+                            "virtual_key",
+                            "passthrough_virtual_key",
+                            "jwks",
+                            "oauth_client_credentials",
+                            "oauth_user",
+                            "internal",
+                            "unknown"
+                          ]
+                        },
+                        "billingMode": {
+                          "type": "string",
+                          "enum": [
+                            "metered",
+                            "subscription"
+                          ]
+                        },
+                        "authenticatedAppId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "request": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/components/schemas/OllamaNativeChatRequest"
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          ]
+                        },
+                        "processedRequest": {
+                          "nullable": true,
+                          "anyOf": [
+                            {
+                              "$ref": "#/components/schemas/OllamaNativeChatRequest"
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            }
+                          ]
+                        },
+                        "response": {
+                          "anyOf": [
+                            {
+                              "$ref": "#/components/schemas/OllamaNativeChatResponse"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "error": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "error"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "dualLlmAnalyses": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "toolCallId": {
+                                "type": "string"
+                              },
+                              "conversations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "role": {
+                                      "type": "string",
+                                      "enum": [
+                                        "user",
+                                        "assistant"
+                                      ]
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "role",
+                                    "content"
+                                  ],
+                                  "additionalProperties": false,
+                                  "description": "Provider-agnostic transcript entry for the built-in Dual LLM workflow."
+                                }
+                              },
+                              "result": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "toolCallId",
+                              "conversations",
+                              "result"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "unsafeContextBoundary": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preexisting_untrusted"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "tool_result"
+                                  ]
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "enum": [
+                                    "agent_configured_untrusted",
+                                    "inherited_from_parent",
+                                    "tool_result_marked_untrusted",
+                                    "tool_result_blocked"
+                                  ]
+                                },
+                                "toolCallId": {
+                                  "type": "string"
+                                },
+                                "toolName": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "reason",
+                                "toolCallId",
+                                "toolName"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "ollama-native:chat"
+                          ]
+                        },
+                        "model": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "baselineModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "inputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "inputTokensEstimated": {
+                          "type": "boolean"
+                        },
+                        "outputTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheReadTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWriteTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "cacheWrite1hTokens": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "baselineCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheCost": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "cacheSavings": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonTokensBefore": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonTokensAfter": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "toonCostSavings": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "toonSkipReason": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "not_enabled",
+                            "not_effective",
+                            "no_tool_results"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "chatErrors": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "conversationId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "error": {
+                                "type": "object",
+                                "properties": {
+                                  "code": {
+                                    "type": "string",
+                                    "enum": [
+                                      "rate_limit",
+                                      "usage_limit_exceeded",
+                                      "authentication",
+                                      "permission_denied",
+                                      "invalid_request",
+                                      "provider_insufficient_balance",
+                                      "not_found",
+                                      "context_too_long",
+                                      "request_too_large",
+                                      "content_filtered",
+                                      "server_error",
+                                      "network_error",
+                                      "empty_response",
+                                      "incomplete_tool_call",
+                                      "tool_call_output_truncated",
+                                      "provider_auth_required",
+                                      "tools_unsupported",
+                                      "aborted",
+                                      "unknown"
+                                    ]
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "isRetryable": {
+                                    "type": "boolean"
+                                  },
+                                  "sessionId": {
+                                    "type": "string"
+                                  },
+                                  "traceId": {
+                                    "type": "string"
+                                  },
+                                  "spanId": {
+                                    "type": "string"
+                                  },
+                                  "usageLimitExceeded": {
+                                    "type": "boolean"
+                                  },
+                                  "usageLimitEntityType": {
+                                    "type": "string"
+                                  },
+                                  "authAction": {
+                                    "type": "object",
+                                    "properties": {
+                                      "provider": {
+                                        "type": "string",
+                                        "enum": [
+                                          "openai",
+                                          "gemini",
+                                          "anthropic",
+                                          "bedrock",
+                                          "cohere",
+                                          "cerebras",
+                                          "mistral",
+                                          "perplexity",
+                                          "groq",
+                                          "xai",
+                                          "openrouter",
+                                          "vllm",
+                                          "ollama",
+                                          "ollama-native",
+                                          "zhipuai",
+                                          "deepseek",
+                                          "minimax",
+                                          "kimi",
+                                          "azure",
+                                          "github-copilot",
+                                          "microsoft-365-copilot",
+                                          "archestra"
+                                        ]
+                                      },
+                                      "providerLabel": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "provider",
+                                      "providerLabel"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "originalError": {
+                                    "type": "object",
+                                    "properties": {
+                                      "provider": {
+                                        "type": "string",
+                                        "enum": [
+                                          "openai",
+                                          "gemini",
+                                          "anthropic",
+                                          "bedrock",
+                                          "cohere",
+                                          "cerebras",
+                                          "mistral",
+                                          "perplexity",
+                                          "groq",
+                                          "xai",
+                                          "openrouter",
+                                          "vllm",
+                                          "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -171190,6 +173111,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -171229,6 +173151,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -171751,6 +173674,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -171790,6 +173714,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -172312,6 +174237,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -172351,6 +174277,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -175049,6 +176976,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -175088,6 +177016,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -177781,6 +179710,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -177820,6 +179750,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -180518,6 +182449,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -180557,6 +182489,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -181079,6 +183012,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -181118,6 +183052,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -181874,6 +183809,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -181913,6 +183849,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -182856,6 +184793,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -182895,6 +184833,7 @@
                                           "openrouter",
                                           "vllm",
                                           "ollama",
+                                          "ollama-native",
                                           "zhipuai",
                                           "deepseek",
                                           "minimax",
@@ -213142,6 +215081,7 @@
                 "openrouter",
                 "vllm",
                 "ollama",
+                "ollama-native",
                 "zhipuai",
                 "deepseek",
                 "minimax",
@@ -213210,6 +215150,7 @@
                           "openrouter",
                           "vllm",
                           "ollama",
+                          "ollama-native",
                           "zhipuai",
                           "deepseek",
                           "minimax",
@@ -213593,7 +215534,7 @@
         "tags": [
           "LLM Models"
         ],
-        "description": "Sync models from providers for all visible API keys and store them in the database\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Modify LLM model pricing and modality settings",
+        "description": "Sync models from providers for all visible API keys and store them in the database\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Modify LLM model pricing, modality and generation-parameter settings",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -213892,6 +215833,7 @@
                           "openrouter",
                           "vllm",
                           "ollama",
+                          "ollama-native",
                           "zhipuai",
                           "deepseek",
                           "minimax",
@@ -214014,6 +215956,63 @@
                           ]
                         }
                       },
+                      "configuredParameters": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "temperature": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "top_p": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "top_k": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "repeat_penalty": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "seed": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "stop": {
+                            "maxItems": 16,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 256
+                            }
+                          },
+                          "num_ctx": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 10000000
+                          },
+                          "num_predict": {
+                            "type": "integer",
+                            "minimum": -2,
+                            "maximum": 9007199254740991
+                          },
+                          "reasoning_effort": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "low",
+                              "medium",
+                              "high"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false
+                      },
                       "discoveredViaLlmProxy": {
                         "type": "boolean"
                       },
@@ -214105,6 +216104,10 @@
                       },
                       "isFree": {
                         "type": "boolean"
+                      },
+                      "effectiveContextLength": {
+                        "nullable": true,
+                        "type": "number"
                       }
                     },
                     "required": [
@@ -214129,6 +216132,7 @@
                       "ignored",
                       "embeddingDimensions",
                       "defaultParameters",
+                      "configuredParameters",
                       "discoveredViaLlmProxy",
                       "lastSyncedAt",
                       "createdAt",
@@ -214142,7 +216146,8 @@
                       "pricePerMillionCacheRead",
                       "pricePerMillionCacheWrite",
                       "cachePriceSource",
-                      "isFree"
+                      "isFree",
+                      "effectiveContextLength"
                     ],
                     "additionalProperties": false
                   }
@@ -214393,7 +216398,7 @@
         "tags": [
           "LLM Models"
         ],
-        "description": "Update LLM model details including custom pricing and modalities.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Modify LLM model pricing and modality settings",
+        "description": "Update LLM model details including custom pricing and modalities.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmModel:update`: Modify LLM model pricing, modality and generation-parameter settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -214454,6 +216459,62 @@
                         "audio"
                       ]
                     }
+                  },
+                  "configuredParameters": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "temperature": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "top_p": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "top_k": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "repeat_penalty": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "seed": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "stop": {
+                        "maxItems": 16,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 256
+                        }
+                      },
+                      "num_ctx": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000000
+                      },
+                      "num_predict": {
+                        "type": "integer",
+                        "minimum": -2,
+                        "maximum": 9007199254740991
+                      },
+                      "reasoning_effort": {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "low",
+                          "medium",
+                          "high"
+                        ]
+                      }
+                    }
                   }
                 }
               }
@@ -214504,6 +216565,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -214626,6 +216688,63 @@
                         ]
                       }
                     },
+                    "configuredParameters": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "temperature": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "top_p": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "top_k": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "repeat_penalty": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "stop": {
+                          "maxItems": 16,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "maxLength": 256
+                          }
+                        },
+                        "num_ctx": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10000000
+                        },
+                        "num_predict": {
+                          "type": "integer",
+                          "minimum": -2,
+                          "maximum": 9007199254740991
+                        },
+                        "reasoning_effort": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "low",
+                            "medium",
+                            "high"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
                     "discoveredViaLlmProxy": {
                       "type": "boolean"
                     },
@@ -214664,6 +216783,7 @@
                     "ignored",
                     "embeddingDimensions",
                     "defaultParameters",
+                    "configuredParameters",
                     "discoveredViaLlmProxy",
                     "lastSyncedAt",
                     "createdAt",
@@ -214995,6 +217115,7 @@
                                 "openrouter",
                                 "vllm",
                                 "ollama",
+                                "ollama-native",
                                 "zhipuai",
                                 "deepseek",
                                 "minimax",
@@ -215389,6 +217510,7 @@
                             "openrouter",
                             "vllm",
                             "ollama",
+                            "ollama-native",
                             "zhipuai",
                             "deepseek",
                             "minimax",
@@ -215494,6 +217616,7 @@
                               "openrouter",
                               "vllm",
                               "ollama",
+                              "ollama-native",
                               "zhipuai",
                               "deepseek",
                               "minimax",
@@ -215893,6 +218016,7 @@
                             "openrouter",
                             "vllm",
                             "ollama",
+                            "ollama-native",
                             "zhipuai",
                             "deepseek",
                             "minimax",
@@ -216008,6 +218132,7 @@
                               "openrouter",
                               "vllm",
                               "ollama",
+                              "ollama-native",
                               "zhipuai",
                               "deepseek",
                               "minimax",
@@ -216690,6 +218815,7 @@
                               "openrouter",
                               "vllm",
                               "ollama",
+                              "ollama-native",
                               "zhipuai",
                               "deepseek",
                               "minimax",
@@ -217067,6 +219193,7 @@
                 "openrouter",
                 "vllm",
                 "ollama",
+                "ollama-native",
                 "zhipuai",
                 "deepseek",
                 "minimax",
@@ -217119,6 +219246,7 @@
                           "openrouter",
                           "vllm",
                           "ollama",
+                          "ollama-native",
                           "zhipuai",
                           "deepseek",
                           "minimax",
@@ -217508,6 +219636,7 @@
                       "openrouter",
                       "vllm",
                       "ollama",
+                      "ollama-native",
                       "zhipuai",
                       "deepseek",
                       "minimax",
@@ -217618,6 +219747,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -217963,6 +220093,7 @@
                 "openrouter",
                 "vllm",
                 "ollama",
+                "ollama-native",
                 "zhipuai",
                 "deepseek",
                 "minimax",
@@ -218025,6 +220156,7 @@
                           "openrouter",
                           "vllm",
                           "ollama",
+                          "ollama-native",
                           "zhipuai",
                           "deepseek",
                           "minimax",
@@ -218436,6 +220568,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -218918,6 +221051,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -243133,6 +245267,574 @@
         }
       }
     },
+    "/v1/ollama-native/api/chat": {
+      "post": {
+        "operationId": "ollamaNativeChatWithDefaultAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Create a chat completion with Ollama native /api/chat (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OllamaNativeChatRequestInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "Bearer token for Ollama (typically not required)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OllamaNativeChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ollama-native/{agentId}/api/chat": {
+      "post": {
+        "operationId": "ollamaNativeChatWithAgent",
+        "tags": [
+          "LLM Proxy"
+        ],
+        "description": "Create a chat completion with Ollama native /api/chat for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OllamaNativeChatRequestInput"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "agentId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "user-agent",
+            "required": false,
+            "description": "The user agent of the client"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "description": "Bearer token for Ollama (typically not required)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OllamaNativeChatResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/ollama/embeddings": {
       "post": {
         "operationId": "ollamaEmbeddingsWithDefaultAgent",
@@ -250221,6 +252923,7 @@
                           "openrouter",
                           "vllm",
                           "ollama",
+                          "ollama-native",
                           "zhipuai",
                           "deepseek",
                           "minimax",
@@ -250575,6 +253278,7 @@
                       "openrouter",
                       "vllm",
                       "ollama",
+                      "ollama-native",
                       "zhipuai",
                       "deepseek",
                       "minimax",
@@ -250678,6 +253382,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -251048,6 +253753,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -251401,6 +254107,7 @@
                       "openrouter",
                       "vllm",
                       "ollama",
+                      "ollama-native",
                       "zhipuai",
                       "deepseek",
                       "minimax",
@@ -251509,6 +254216,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -254032,6 +256740,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -255006,6 +257715,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -256269,6 +258979,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -257101,6 +259812,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -257926,6 +260638,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -258751,6 +261464,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -259591,6 +262305,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -260287,6 +263002,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -260509,6 +263225,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -261405,6 +264122,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -262240,6 +264958,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -263083,6 +265802,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -263893,6 +266613,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -265308,6 +268029,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -276296,6 +279018,7 @@
                         "openrouter",
                         "vllm",
                         "ollama",
+                        "ollama-native",
                         "zhipuai",
                         "deepseek",
                         "minimax",
@@ -276552,6 +279275,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -276591,6 +279315,7 @@
                                       "openrouter",
                                       "vllm",
                                       "ollama",
+                                      "ollama-native",
                                       "zhipuai",
                                       "deepseek",
                                       "minimax",
@@ -301736,6 +304461,7 @@
                                     "openrouter",
                                     "vllm",
                                     "ollama",
+                                    "ollama-native",
                                     "zhipuai",
                                     "deepseek",
                                     "minimax",
@@ -302136,6 +304862,7 @@
                             "openrouter",
                             "vllm",
                             "ollama",
+                            "ollama-native",
                             "zhipuai",
                             "deepseek",
                             "minimax",
@@ -302278,6 +305005,7 @@
                               "openrouter",
                               "vllm",
                               "ollama",
+                              "ollama-native",
                               "zhipuai",
                               "deepseek",
                               "minimax",
@@ -302690,6 +305418,7 @@
                               "openrouter",
                               "vllm",
                               "ollama",
+                              "ollama-native",
                               "zhipuai",
                               "deepseek",
                               "minimax",
@@ -303042,6 +305771,7 @@
                             "openrouter",
                             "vllm",
                             "ollama",
+                            "ollama-native",
                             "zhipuai",
                             "deepseek",
                             "minimax",
@@ -303190,6 +305920,7 @@
                               "openrouter",
                               "vllm",
                               "ollama",
+                              "ollama-native",
                               "zhipuai",
                               "deepseek",
                               "minimax",

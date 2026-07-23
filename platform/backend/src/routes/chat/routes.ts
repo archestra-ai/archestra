@@ -168,6 +168,7 @@ import {
   normalizeChatMessages,
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
+import { buildOllamaNativeProviderOptions } from "./ollama-native-params";
 import { buildModelMessages } from "./prepare-model-messages";
 import { readOpenedAppRef } from "./read-opened-app-ref";
 import {
@@ -1034,7 +1035,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   const breakdown = buildContextWindowBreakdown({
                     provider,
                     model: selectedModel,
-                    contextLength: modelRow?.contextLength ?? null,
+                    contextLength: modelRow
+                      ? ModelModel.resolveEffectiveContextLength(modelRow)
+                      : null,
                     inputPricePerToken: breakdownPricePerToken,
                     systemPrompt,
                     tools: supportsToolCalling ? mcpTools : undefined,
@@ -1302,8 +1305,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // and final submission turns.
                 const maxOutputTokens = resolveAgentMaxOutputTokens({
                   outputLength: modelRow?.outputLength ?? null,
-                  contextLength: modelRow?.contextLength ?? null,
                   ceiling: config.chat.maxOutputTokensCeiling,
+                  provider,
+                  // Effective (not architectural) window: for Ollama the
+                  // admin-pinned `num_ctx` is what the request actually runs
+                  // with, and it is the budget's fallback source.
+                  contextLength: modelRow
+                    ? ModelModel.resolveEffectiveContextLength(modelRow)
+                    : null,
                 });
                 if (
                   provider === "openai" &&
@@ -1321,6 +1330,41 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 } else {
                   streamTextConfig.maxOutputTokens = maxOutputTokens;
+                }
+
+                // Send the per-model generation parameters
+                // (num_ctx, num_predict, top_k, think, …) on native Ollama turns.
+                // These are the values `/v1` cannot carry; the native adapter
+                // forwards them into the `/api/chat` `options` bag. Must run
+                // AFTER the budget above: Ollama reads the output cap from
+                // `options.num_predict`, and the top-level `maxOutputTokens` the
+                // AI SDK emits is discarded by the native endpoint.
+                if (provider === "ollama-native") {
+                  const ollamaTurn = buildOllamaNativeProviderOptions({
+                    configured: modelRow?.configuredParameters,
+                    requestTemperature: temperature,
+                    maxOutputTokens: streamTextConfig.maxOutputTokens,
+                    effectiveContextLength: modelRow
+                      ? ModelModel.resolveEffectiveContextLength(modelRow)
+                      : null,
+                    // Ollama shares num_ctx between prompt and generation, so
+                    // the budget is trimmed to what this prompt leaves.
+                    promptTokens: latestBreakdown?.usedTokens ?? null,
+                  });
+                  if (ollamaTurn) {
+                    streamTextConfig.providerOptions = {
+                      ...streamTextConfig.providerOptions,
+                      ...ollamaTurn.providerOptions,
+                    };
+                    // Carries the explicit-thinking marker to the fetch wrapper,
+                    // which strips it before the request leaves this process.
+                    if (ollamaTurn.headers) {
+                      streamTextConfig.headers = {
+                        ...streamTextConfig.headers,
+                        ...ollamaTurn.headers,
+                      };
+                    }
+                  }
                 }
 
                 const { result, getAbortiveFinishReason } =

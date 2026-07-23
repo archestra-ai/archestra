@@ -69,6 +69,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -88,12 +89,18 @@ import { useOrganization } from "@/lib/organization.query";
 import { formatContextLength } from "@/lib/utils";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import {
+  buildConfiguredParameters,
+  type ConfiguredParametersFormValues,
   canFilterFreeModelsForApiKey,
   filterModelsForPage,
+  getConfiguredParameterDefaults,
   isKnowledgeBaseEmbeddingModel,
   type ModelsPageModelTypeFilter,
   OBSERVED_MODEL_SOURCE_DESCRIPTION,
   OBSERVED_MODEL_SOURCE_LABEL,
+  type OLLAMA_NATIVE_PARAM_RULES,
+  resolveDisplayContextLength,
+  validateConfiguredParameter,
 } from "./models-page-utils";
 
 export default function ModelsPage() {
@@ -318,17 +325,39 @@ export default function ModelsPage() {
         },
       },
       {
-        accessorKey: "contextLength",
+        id: "contextLength",
+        // Sorting must follow what the cell shows, not the architectural column.
+        accessorFn: (row) => resolveDisplayContextLength(row).display,
         size: 100,
         header: "Context",
         cell: ({ row }) => {
           if (hasUnknownCapabilities(row.original)) {
             return <UnknownCapabilitiesBadge />;
           }
+          const { display, architectural, isCapped } =
+            resolveDisplayContextLength(row.original);
+          if (!isCapped) {
+            return (
+              <span className="text-sm">{formatContextLength(display)}</span>
+            );
+          }
           return (
-            <span className="text-sm">
-              {formatContextLength(row.original.contextLength ?? null)}
-            </span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-sm underline decoration-dotted underline-offset-4">
+                    {formatContextLength(display)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p>
+                    This model supports {formatContextLength(architectural)}{" "}
+                    tokens, but is capped at {formatContextLength(display)} by
+                    its Ollama Modelfile or a configured num_ctx.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           );
         },
       },
@@ -565,6 +594,7 @@ interface EditModelFormValues {
   embeddingDimensions: EditModelEmbeddingDimensionsValue;
   inputModalities: string[];
   outputModalities: string[];
+  configuredParameters: ConfiguredParametersFormValues;
 }
 
 function EditModelDialog({
@@ -606,6 +636,14 @@ function EditModelDialog({
   });
   const selectedEmbeddingDimensions = form.watch("embeddingDimensions");
 
+  // Top-level field errors, surfaced next to the submit button — see the footer
+  // for why. Nested `configuredParameters.*` errors are deliberately not
+  // included: those inputs spread `field` onto a real DOM node, so
+  // react-hook-form focuses and scrolls to them on its own.
+  const blockingErrors = Object.values(form.formState.errors)
+    .map((error) => (error as { message?: string } | undefined)?.message)
+    .filter((message): message is string => Boolean(message));
+
   useEffect(() => {
     if (open) {
       form.reset(getDefaults(model));
@@ -632,6 +670,20 @@ function EditModelDialog({
       embeddingDimensions,
       inputModalities: values.inputModalities as ModelInputModality[],
       outputModalities: values.outputModalities as ModelOutputModality[],
+      // Configured parameters are only applied by the native Ollama provider;
+      // for other providers leave the field untouched. Sent only when actually
+      // edited: the update replaces the object wholesale, so including it on an
+      // unrelated save (a price tweak) would rewrite parameters the form no
+      // longer renders — `seed` among them.
+      ...(model.provider === "ollama-native" &&
+      form.formState.dirtyFields.configuredParameters
+        ? {
+            configuredParameters: buildConfiguredParameters(
+              values.configuredParameters,
+              model.configuredParameters,
+            ),
+          }
+        : {}),
     });
     if (result) {
       onOpenChange(false);
@@ -655,6 +707,20 @@ function EditModelDialog({
       onSubmit={form.handleSubmit(handleSubmit)}
       footer={
         <>
+          {/* The dialog body scrolls while this footer is pinned, so a field
+              error can render hundreds of pixels above the fold — and the
+              modality fields never forward a ref, so react-hook-form cannot
+              scroll to them either. Without this, a blocked submit looks
+              exactly like a button that does nothing. */}
+          {blockingErrors.length > 0 && (
+            <p
+              role="alert"
+              className="mr-auto text-sm text-destructive"
+              data-testid="edit-model-form-errors"
+            >
+              {blockingErrors.join(". ")}
+            </p>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -1049,10 +1115,162 @@ function EditModelDialog({
                 </div>
               </>
             )}
+
+          {model.provider === "ollama-native" && (
+            <>
+              <Separator />
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <span className="text-sm font-medium">Model parameters</span>
+                  <p className="text-sm text-muted-foreground">
+                    Sent to Ollama on every chat turn. Leave a field empty to
+                    inherit Ollama's own default
+                    {model.defaultParameters &&
+                    Object.keys(model.defaultParameters).length > 0
+                      ? " (shown as the placeholder)."
+                      : "."}
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {OLLAMA_NATIVE_PARAM_FIELDS.map((param) => (
+                    <FormField
+                      key={param.name}
+                      control={form.control}
+                      name={`configuredParameters.${param.name}`}
+                      rules={{
+                        validate: (value: string) =>
+                          validateConfiguredParameter({
+                            name: param.name,
+                            value,
+                            contextLength: model.contextLength,
+                          }),
+                      }}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-mono text-xs">
+                            {param.name}
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              inputMode="decimal"
+                              placeholder={ollamaDefaultPlaceholder(
+                                model,
+                                param.name,
+                              )}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="configuredParameters.stop"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-mono text-xs">
+                          stop
+                        </FormLabel>
+                        <FormControl>
+                          <Textarea
+                            rows={3}
+                            placeholder={ollamaDefaultPlaceholder(
+                              model,
+                              "stop",
+                            )}
+                            {...field}
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">
+                          One sequence per line.
+                        </p>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="configuredParameters.reasoning_effort"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Thinking</FormLabel>
+                        <Select
+                          // Rows saved before this control collapsed to on/off
+                          // still hold "low"/"high"; both mean thinking is on.
+                          value={
+                            field.value
+                              ? field.value === "none"
+                                ? "none"
+                                : "medium"
+                              : "inherit"
+                          }
+                          onValueChange={(value) =>
+                            field.onChange(value === "inherit" ? "" : value)
+                          }
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Inherit" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {/* Ollama's `think` is a boolean on this provider,
+                                so low/medium/high would all be identical on the
+                                wire — offering them implied a granularity that
+                                does not exist. */}
+                            <SelectItem value="inherit">Inherit</SelectItem>
+                            <SelectItem value="medium">On</SelectItem>
+                            <SelectItem value="none">Off</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Thinking-capable models only. "Inherit" uses Ollama's
+                          own default.
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </Form>
     </StandardFormDialog>
   );
+}
+
+/**
+ * The numeric native-Ollama parameters rendered as a grid in the model dialog.
+ * `stop` (a newline-delimited textarea) and `reasoning_effort` (a select) are
+ * rendered separately.
+ */
+const OLLAMA_NATIVE_PARAM_FIELDS: Array<{
+  name: keyof typeof OLLAMA_NATIVE_PARAM_RULES;
+}> = [
+  { name: "num_ctx" },
+  { name: "num_predict" },
+  { name: "temperature" },
+  { name: "top_p" },
+  { name: "top_k" },
+  { name: "repeat_penalty" },
+];
+
+function ollamaDefaultPlaceholder(
+  model: ModelWithApiKeys,
+  name: string,
+): string {
+  const value = model.defaultParameters?.[name];
+  if (value === undefined || value === null) return "inherit";
+  // Newline-joined, matching the delimiter `buildConfiguredParameters` parses.
+  // `/api/show` routinely reports several `stop` sequences, and a comma-joined
+  // placeholder invited admins to copy it back in as one sequence containing a
+  // comma — the exact value the newline switch was made to stop producing.
+  return Array.isArray(value) ? value.join("\n") : String(value);
 }
 
 // --- Internal helpers ---
@@ -1144,7 +1362,13 @@ function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
   const hasOutputModalities =
     model.outputModalities && model.outputModalities.length > 0;
   const hasToolCalling = model.supportsToolCalling !== null;
-  const hasContextLength = model.contextLength !== null;
+  // Effective as well as architectural: a freshly pulled Ollama model is absent
+  // from the public catalog (`contextLength` null) but still reports the window
+  // it actually runs with. Keying on the architectural value alone hid that
+  // number behind an "unknown capabilities" badge — the one figure the chat
+  // context ring is enforcing.
+  const hasContextLength =
+    model.contextLength !== null || model.effectiveContextLength !== null;
   const hasPricing =
     model.pricePerMillionInput !== null || model.pricePerMillionOutput !== null;
   return (
@@ -1190,6 +1414,7 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
       : "",
     inputModalities: model.inputModalities ?? [],
     outputModalities: model.outputModalities ?? [],
+    configuredParameters: getConfiguredParameterDefaults(model),
   };
 }
 

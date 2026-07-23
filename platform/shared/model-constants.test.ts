@@ -33,6 +33,7 @@ describe("requiresOpenAiResponsesApi", () => {
 describe("provider API key optional helpers", () => {
   test("treats self-hosted providers as optional", () => {
     expect(isProviderApiKeyOptional({ provider: "ollama" })).toBe(true);
+    expect(isProviderApiKeyOptional({ provider: "ollama-native" })).toBe(true);
     expect(isProviderApiKeyOptional({ provider: "vllm" })).toBe(true);
   });
 
@@ -63,19 +64,28 @@ describe("provider API key optional helpers", () => {
   });
 
   test("lists providers with optional API keys", () => {
-    expect(getProvidersWithOptionalApiKey()).toEqual(["ollama", "vllm"]);
+    expect(getProvidersWithOptionalApiKey()).toEqual([
+      "ollama",
+      "ollama-native",
+      "vllm",
+    ]);
     expect(
       getProvidersWithOptionalApiKey({ azureEntraIdEnabled: true }),
-    ).toEqual(["ollama", "vllm", "azure"]);
+    ).toEqual(["ollama", "ollama-native", "vllm", "azure"]);
     expect(
       getProvidersWithOptionalApiKey({ anthropicWifEnabled: true }),
-    ).toEqual(["ollama", "vllm", "anthropic"]);
+    ).toEqual(["ollama", "ollama-native", "vllm", "anthropic"]);
   });
 });
 
 describe("isSelfHostedProvider", () => {
   test("matches only the self-hosted providers", () => {
     expect(isSelfHostedProvider("ollama")).toBe(true);
+    // Both Ollama transports are the same self-hosted server, so the
+    // Docker-localhost hint has to apply to each. Coverage is transitive
+    // through the shared set today; assert it directly so a future split
+    // cannot silently drop one.
+    expect(isSelfHostedProvider("ollama-native")).toBe(true);
     expect(isSelfHostedProvider("vllm")).toBe(true);
   });
 

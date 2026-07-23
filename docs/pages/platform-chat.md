@@ -64,6 +64,8 @@ Expand any category to see the largest individual contributors (top tools by sch
 
 When auto-compaction frees tokens, a note appears in the panel showing how many tokens were recovered. See [Context Compaction](#context-compaction) for how compaction works.
 
+Ollama models often run with a smaller context window than the model architecturally supports. Archestra detects the effective window and sizes the ring to it — see [Ollama Context Window](/docs/platform-supported-llm-providers#context-window).
+
 ### File Attachments
 
 Chat attachments are scoped to their conversation. To reuse files across related sessions, add them to a [Project](./platform-projects) instead, where files are shared across all of the project's chats.

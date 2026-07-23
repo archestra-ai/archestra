@@ -1019,6 +1019,12 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Set this to override the default if your Ollama server runs on a different host or port
   - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
 
+- **`ARCHESTRA_OLLAMA_NATIVE_BASE_URL`** - Base URL for the "Ollama (Native)" provider, which uses Ollama's native `/api/chat` endpoint.
+  - Default: `ARCHESTRA_OLLAMA_BASE_URL` with the `/v1` suffix stripped (`http://localhost:11434`)
+  - Set this only if the native endpoint runs on a different host than the OpenAI-compatible one
+  - This is the server **root** — do not include a `/v1` suffix
+  - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
+
 - **`ARCHESTRA_DEEPSEEK_BASE_URL`** - Override the DeepSeek API base URL.
   - Default: `https://api.deepseek.com`
   - Use this to point to your own proxy or other custom endpoints
@@ -1146,6 +1152,7 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `ARCHESTRA`, `GITHUB_COPILOT`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
   - These serve as fallback API keys when no organization default or profile-specific key is configured
   - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
+  - Note: there is no separate `OLLAMA_NATIVE` value — the "Ollama (Native)" provider reads `ARCHESTRA_CHAT_OLLAMA_API_KEY`, since both providers talk to the same server
   - Note: `ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY` holds a GitHub OAuth token (`gho_...`) of an account with a Copilot subscription, not a static API key
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 

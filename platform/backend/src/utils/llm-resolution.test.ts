@@ -52,6 +52,7 @@ const MOCK_MODEL = {
   customPricePerMillionCacheWrite: null,
   embeddingDimensions: null,
   defaultParameters: null,
+  configuredParameters: null,
   ignored: false,
   discoveredViaLlmProxy: false,
   lastSyncedAt: new Date(),

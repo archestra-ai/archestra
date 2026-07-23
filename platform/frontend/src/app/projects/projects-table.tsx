@@ -14,7 +14,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { canManageProject } from "@/lib/projects/project-permissions";
+import {
+  canDeleteProject,
+  canManageProject,
+} from "@/lib/projects/project-permissions";
 
 type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
 
@@ -34,6 +37,7 @@ export function ProjectsTable({
 }) {
   const router = useRouter();
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
+  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
 
   const columns: ColumnDef<ProjectListItem>[] = [
     {
@@ -98,6 +102,12 @@ export function ProjectsTable({
           project.viewerRole,
           !!isProjectAdmin,
         );
+        const canDelete = canDeleteProject({
+          viewerRole: project.viewerRole,
+          visibility: project.visibility,
+          isProjectAdmin: !!isProjectAdmin,
+          canShareOrg: !!canShareOrg,
+        });
         const actions: TableRowAction[] = [
           ...(canPin
             ? [
@@ -119,6 +129,10 @@ export function ProjectsTable({
                   label: "Edit details",
                   onClick: () => onEdit(project),
                 } satisfies TableRowAction,
+              ]
+            : []),
+          ...(canManage && canDelete
+            ? [
                 {
                   icon: <Trash2 className="h-4 w-4" />,
                   label: "Delete",

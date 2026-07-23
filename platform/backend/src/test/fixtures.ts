@@ -1026,6 +1026,7 @@ async function makeIdentityProvider(
     oidcConfig?: Record<string, unknown>;
     samlConfig?: Record<string, unknown>;
     roleMapping?: Record<string, unknown>;
+    teamSyncConfig?: Record<string, unknown>;
     ssoLoginEnabled?: boolean;
     userId?: string | null;
   } = {},
@@ -1052,6 +1053,9 @@ async function makeIdentityProvider(
         : undefined,
       roleMapping: overrides.roleMapping
         ? (JSON.stringify(overrides.roleMapping) as unknown as undefined)
+        : undefined,
+      teamSyncConfig: overrides.teamSyncConfig
+        ? (JSON.stringify(overrides.teamSyncConfig) as unknown as undefined)
         : undefined,
       userId: overrides.userId ?? null,
       // WORKAROUND: With domainVerification enabled, all SSO providers need domainVerified: true

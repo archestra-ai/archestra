@@ -69,6 +69,12 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmProviderApiKey: ["read", "create", "update", "delete", "admin"],
   llmVirtualKey: ["read", "create", "update", "delete", "admin"],
   llmOauthClient: ["read", "create", "update", "delete", "team-admin", "admin"],
+  // "update" covers the whole model row, generation parameters included. An
+  // extra "admin" action once gated `configuredParameters` on the grounds that
+  // model rows are global, but pricing and `ignored` are equally global and
+  // equally editor-writable — so it drew a line the rest of the row does not,
+  // while permanently locking out custom roles, whose permission snapshots are
+  // frozen at creation and never gained the new action.
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
@@ -113,7 +119,15 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete", "admin", "read-all"],
+  project: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "share-org",
+    "admin",
+    "read-all",
+  ],
   file: ["manage"],
   log: ["read"],
 
@@ -231,7 +245,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete", "share-org"],
   file: ["manage"],
   log: ["read"],
 
@@ -306,7 +320,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete", "share-org"],
   file: ["manage"],
   log: [],
 
@@ -489,7 +503,8 @@ export const permissionDescriptions: Record<string, string> = {
   "llmOauthClient:admin":
     "Manage all LLM OAuth client registrations, bypassing team restrictions",
   "llmModel:read": "View synced LLM models and capabilities",
-  "llmModel:update": "Modify LLM model pricing and modality settings",
+  "llmModel:update":
+    "Modify LLM model pricing, modality and generation-parameter settings",
   "llmLimit:read": "View token usage limits",
   "llmLimit:create": "Create new usage limits",
   "llmLimit:update": "Modify existing usage limits",
@@ -519,6 +534,8 @@ export const permissionDescriptions: Record<string, string> = {
   "project:create": "Create projects",
   "project:update": "Edit project descriptions, instructions, and sharing",
   "project:delete": "Delete projects",
+  "project:share-org":
+    "Share projects with the entire organization, and change the sharing of or delete a project that is already org-wide. Without it, projects can still be shared with teams. Additive: sharing still requires project:update and deleting still requires project:delete.",
   "project:admin":
     "Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
   "project:read-all":
@@ -1144,6 +1161,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetVirtualApiKey]: {
     llmVirtualKey: ["read"],
   },
+  // Reveals the raw key value; restricted to the key's author in the handler.
+  [RouteId.GetVirtualApiKeyValue]: {
+    llmVirtualKey: ["read"],
+  },
   [RouteId.CreateVirtualApiKey]: {
     llmVirtualKey: ["create"],
   },
@@ -1346,11 +1367,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetIdentityProviders]: {
     identityProvider: ["read"],
   },
+  // Minimal projection (id, name, groups expression) for the team External
+  // Group Sync section: team admins link groups to their team without holding
+  // identityProvider:read. No configuration or secrets are exposed.
+  [RouteId.GetIdentityProviderTeamSyncOptions]: {
+    team: ["read"],
+  },
   [RouteId.GetIdentityProvider]: {
     identityProvider: ["read"],
   },
+  // Returns only the CALLER'S own decoded token claims (never another user's,
+  // never provider configuration), so team admins can find their group value
+  // while configuring external group sync.
   [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
-    identityProvider: ["read"],
+    team: ["read"],
   },
   // Installers need to know whether they must link a downstream IdP, but this
   // endpoint does not expose identity-provider configuration or secrets.

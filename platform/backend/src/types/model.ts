@@ -1,4 +1,7 @@
 import {
+  MAX_CONFIGURABLE_NUM_CTX,
+  MAX_STOP_SEQUENCE_LENGTH,
+  MAX_STOP_SEQUENCES,
   ModelInputModalitySchema,
   ModelOutputModalitySchema,
   SupportedEmbeddingDimensionsSchema,
@@ -37,6 +40,67 @@ export type ModelDefaultParameters = z.infer<
 >;
 
 /**
+ * Thinking-effort levels for Ollama's native `think` parameter.
+ * `none` → `think: false`; the rest map to the native string levels.
+ */
+export const ReasoningEffortSchema = z.enum(["none", "low", "medium", "high"]);
+export type ReasoningEffort = z.infer<typeof ReasoningEffortSchema>;
+
+/**
+ * Re-exported from `@archestra/shared` so backend callers keep importing these
+ * from the module that owns the schema they bound. The frontend form imports
+ * the same constants directly to mirror these rules.
+ */
+export type {
+  MAX_CONFIGURABLE_NUM_CTX,
+  MAX_STOP_SEQUENCE_LENGTH,
+  MAX_STOP_SEQUENCES,
+};
+
+/**
+ * Admin-configured, per-model generation parameters that Archestra SENDS on
+ * every native Ollama (`ollama-native`) chat turn (unlike `defaultParameters`,
+ * which is display-only). Each field is optional — an omitted field inherits
+ * Ollama's own Modelfile/server default. Precedence at request time is:
+ * request body > these configured values > omitted.
+ *
+ * Only `ollama-native` models accept these — the update route rejects them for
+ * every other provider, since nothing else ever sends them and a stray value
+ * would still redefine the displayed context window (see
+ * `ModelModel.resolveEffectiveContextLength`).
+ */
+export const ConfiguredParametersSchema = z.object({
+  temperature: z.number().min(0).optional(),
+  top_p: z.number().min(0).max(1).optional(),
+  top_k: z.number().int().min(0).optional(),
+  repeat_penalty: z.number().min(0).optional(),
+  seed: z.number().int().optional(),
+  /**
+   * Bounded on both axes: this row is world-readable to anyone with
+   * `llmModel:read` and is serialized into every native turn, so an unbounded
+   * array would be a cheap way to bloat both. Ollama only ever uses a handful
+   * of stop sequences.
+   */
+  stop: z
+    .array(z.string().max(MAX_STOP_SEQUENCE_LENGTH))
+    .max(MAX_STOP_SEQUENCES)
+    .optional(),
+  /**
+   * Upper bound is a sanity backstop. The update route additionally rejects
+   * anything above the model's own architectural `contextLength` — but only
+   * when that is known: a proxy-discovered row can have a null `contextLength`,
+   * and then this bound is the only ceiling. An unbounded value here would make
+   * Ollama allocate (or refuse) an absurd KV cache while Archestra kept
+   * displaying the inflated window.
+   */
+  num_ctx: z.number().int().min(1).max(MAX_CONFIGURABLE_NUM_CTX).optional(),
+  /** `-1` = generate until the context fills, `-2` = fill the context. */
+  num_predict: z.number().int().min(-2).optional(),
+  reasoning_effort: ReasoningEffortSchema.optional(),
+});
+export type ConfiguredParameters = z.infer<typeof ConfiguredParametersSchema>;
+
+/**
  * Fields to extend for drizzle-zod schema generation.
  */
 const fieldsToExtend = {
@@ -45,6 +109,7 @@ const fieldsToExtend = {
   inputModalities: z.array(ModelInputModalitySchema).nullable(),
   outputModalities: z.array(ModelOutputModalitySchema).nullable(),
   defaultParameters: ModelDefaultParametersSchema.nullable(),
+  configuredParameters: ConfiguredParametersSchema.nullable(),
 };
 
 /**
@@ -69,6 +134,7 @@ export const CreateModelSchema = InsertModelSchema.omit({
 }).extend({
   embeddingDimensions: SupportedEmbeddingDimensionsSchema.nullable().optional(),
   defaultParameters: ModelDefaultParametersSchema.nullable().optional(),
+  configuredParameters: ConfiguredParametersSchema.nullable().optional(),
 });
 
 /**
@@ -138,6 +204,7 @@ export const PatchModelBodySchema = createUpdateSchema(
     embeddingDimensions: true,
     inputModalities: true,
     outputModalities: true,
+    configuredParameters: true,
   })
   .extend({
     customPricePerMillionInput: z.string().nullable().optional(),
@@ -153,6 +220,8 @@ export const PatchModelBodySchema = createUpdateSchema(
       .nullable()
       .optional(),
     outputModalities: z.array(ModelOutputModalitySchema).nullable().optional(),
+    // Per-model generation parameters sent on every native Ollama chat turn.
+    configuredParameters: ConfiguredParametersSchema.nullable().optional(),
   })
   .refine(
     (data) => {
@@ -262,5 +331,15 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   cachePriceSource: PriceSourceSchema.nullable(),
   /** True when the provider charges nothing for this model (both raw prices are zero). */
   isFree: z.boolean(),
+  /**
+   * Context window the model will actually enforce, from
+   * `ModelModel.resolveEffectiveContextLength`. **Use this for display.**
+   *
+   * The inherited `contextLength` is the *architectural* window and stays the
+   * ceiling that `num_ctx` is validated against, so it must not be overwritten
+   * with this value — doing so would cap `num_ctx` at an Ollama Modelfile's
+   * default and make raising the window impossible.
+   */
+  effectiveContextLength: z.number().nullable(),
 });
 export type ModelWithApiKeys = z.infer<typeof ModelWithApiKeysSchema>;

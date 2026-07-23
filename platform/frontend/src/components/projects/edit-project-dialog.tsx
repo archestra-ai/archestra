@@ -22,6 +22,7 @@ import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useProject,
   useSetProjectShare,
@@ -77,6 +78,7 @@ function EditProjectDialogForm({
   const updateProject = useUpdateProject();
   const setShare = useSetProjectShare();
   const { data: teams = [] } = useTeams({ enabled: open });
+  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
 
   const form = useForm<EditProjectForm>({
     defaultValues: {
@@ -94,26 +96,38 @@ function EditProjectDialogForm({
     useState<ProjectVisibility>(initialVisibility);
   const [teamIds, setTeamIds] = useState<string[]>(project.shareTeamIds ?? []);
 
+  // Org-wide sharing (both entering and leaving it) is gated behind
+  // `project:share-org` on the backend; mirror that here so the dialog doesn't
+  // offer changes the save would reject.
+  const shareLocked = initialVisibility === "organization" && !canShareOrg;
+
   const visibilityOptions: Array<VisibilityOption<ProjectVisibility>> = [
     {
       value: "none",
       label: "Only me",
       description: "No one else can see this project.",
       icon: Lock,
+      disabled: shareLocked,
     },
     {
       value: "organization",
       label: "Organization",
       description: "Everyone in your organization can see this project.",
       icon: Globe,
+      disabled: !canShareOrg,
+      disabledLabel: !canShareOrg ? "Requires permission" : undefined,
+      disabledReason: !canShareOrg
+        ? "You don't have permission to share projects with the entire organization."
+        : undefined,
     },
     {
       value: "team",
       label: "Teams",
       description: "Share this project with selected teams.",
       icon: Users,
-      disabled: teams.length === 0,
-      disabledLabel: teams.length === 0 ? "No teams available" : undefined,
+      disabled: shareLocked || teams.length === 0,
+      disabledLabel:
+        !shareLocked && teams.length === 0 ? "No teams available" : undefined,
     },
   ];
 
@@ -237,6 +251,7 @@ function EditProjectDialogForm({
         value={visibility}
         options={visibilityOptions}
         onValueChange={setVisibility}
+        readOnly={shareLocked}
       >
         {visibility === "team" && (
           <div className="space-y-2">
@@ -271,6 +286,12 @@ function EditProjectDialogForm({
         )}
       </VisibilitySelector>
 
+      {shareLocked && (
+        <p className="text-xs text-muted-foreground">
+          This project is shared with the entire organization. Changing its
+          sharing requires the org-wide sharing permission.
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">
         People you share with can read every chat, start their own, and work
         with the project's files through chats.

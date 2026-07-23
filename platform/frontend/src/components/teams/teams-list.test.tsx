@@ -183,7 +183,10 @@ describe("TeamsList", () => {
     expect(screen.getByText("Edit dialog for Team A")).toBeInTheDocument();
   });
 
-  it("keeps edit disabled for regular team members without organization-level team update permission", () => {
+  it("keeps edit disabled for regular team members without team update or identity-provider read permission", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
     vi.mocked(useTeams).mockReturnValue({
       data: [
         makeTeam({
@@ -201,6 +204,34 @@ describe("TeamsList", () => {
     renderTeamsList();
 
     expect(screen.getByRole("button", { name: "Edit" })).toBeDisabled();
+  });
+
+  it("offers identity-provider readers a view-only group sync action instead of edit", () => {
+    // The default useHasPermissions mock grants everything except team:update,
+    // so this member holds identityProvider:read but cannot manage the team.
+    vi.mocked(useTeams).mockReturnValue({
+      data: [
+        makeTeam({
+          members: [
+            makeTeamMember({
+              userId: "user-1",
+              role: "member",
+            }),
+          ],
+        }),
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useTeams>);
+
+    renderTeamsList();
+
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    const viewButton = screen.getByRole("button", { name: "View group sync" });
+    expect(viewButton).toBeEnabled();
+
+    fireEvent.click(viewButton);
+
+    expect(screen.getByText("Edit dialog for Team A")).toBeInTheDocument();
   });
 
   it("passes the name and labels URL params to the teams query (server-side filtering)", () => {

@@ -15,6 +15,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { readVirtualKeyValue } from "@/services/connection-setup";
 import {
   credentialRequiresPerUserScope,
   perUserCredentialLabel,
@@ -172,6 +173,47 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(virtualKey);
+    },
+  );
+
+  fastify.get(
+    "/api/llm-virtual-keys/:id/value",
+    {
+      schema: {
+        operationId: RouteId.GetVirtualApiKeyValue,
+        description:
+          "Get the raw value of a virtual API key. Only the key's author can reveal it.",
+        tags: ["Virtual API Keys"],
+        params: z.object({
+          id: z.string().uuid(),
+        }),
+        response: constructResponseSchema(z.object({ value: z.string() })),
+      },
+    },
+    async ({ params, organizationId, user }, reply) => {
+      const virtualKey = await VirtualApiKeyModel.findVisibleById({
+        id: params.id,
+        organizationId,
+        userId: user.id,
+        getUserTeamIds: () => TeamModel.getUserTeamIds(user.id),
+        getIsAdmin: () =>
+          userHasPermission(user.id, organizationId, "llmVirtualKey", "admin"),
+      });
+      if (!virtualKey) {
+        throw new ApiError(404, "Virtual API key not found");
+      }
+      // The raw value is a bearer credential — visibility (shared team/org
+      // keys) is not enough to reveal it; only the author holds the secret.
+      if (virtualKey.authorId !== user.id) {
+        throw new ApiError(403, "Only the key's creator can reveal its value.");
+      }
+
+      const value = await readVirtualKeyValue(virtualKey.id);
+      if (!value) {
+        throw new ApiError(500, "Failed to retrieve the key value");
+      }
+
+      return reply.send({ value });
     },
   );
 

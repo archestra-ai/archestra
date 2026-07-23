@@ -1,6 +1,6 @@
 {
-  "id": "87ee04cf-9b32-4ca7-b0a3-f20979a6f5e1",
-  "prevId": "ff199c05-529a-41da-a5ab-02fb4c28281c",
+  "id": "5e65162c-4524-4ba5-92f8-a9e045a78a8c",
+  "prevId": "9529db47-c8c0-4972-9492-2a8cd3e97b9e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3029,12 +3029,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "resource_name": {
-          "name": "resource_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "before": {
           "name": "before",
           "type": "jsonb",
@@ -3164,33 +3158,6 @@
               "expression": "resource_id",
               "isExpression": false,
               "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "audit_logs_org_resource_id_created_at_idx": {
-          "name": "audit_logs_org_resource_id_created_at_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "resource_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
               "nulls": "last"
             }
           ],
@@ -10850,6 +10817,12 @@
         },
         "default_parameters": {
           "name": "default_parameters",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "configured_parameters": {
+          "name": "configured_parameters",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

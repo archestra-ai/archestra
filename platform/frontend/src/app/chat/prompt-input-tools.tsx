@@ -3,10 +3,7 @@
 import {
   type ContextWindowBreakdown,
   E2eTestId,
-  getSupportedFileTypesDescription,
-  type ModelInputModality,
   type SupportedProvider,
-  supportsFileUploads,
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { memo, useCallback } from "react";
@@ -75,8 +72,6 @@ export interface ChatPromptInputToolsProps {
     compactedTokenEstimate?: number;
     trigger?: "auto" | "manual";
   } | null;
-  /** Input modalities supported by the selected model (for file type filtering) */
-  inputModalities?: ModelInputModality[] | null;
   /** Agent's configured LLM API key ID - passed to LlmProviderApiKeySelector */
   agentLlmApiKeyId?: string | null;
   /** Current agent ID for agent selector */
@@ -135,7 +130,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   maxContextLength,
   contextWindow,
   lastCompaction,
-  inputModalities,
   agentLlmApiKeyId,
   selectorAgentId,
   onAgentChange,
@@ -170,17 +164,13 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           ? "chat override"
           : "user override";
 
-  // Determine if file uploads should be shown
-  // 1. Organization must allow file uploads (allowFileUploads)
-  // 2. Model must support at least one file type (modelSupportsFiles)
-  // A sandbox-equipped agent can process any file (staged for run_command), so
-  // uploads are offered even when the model itself has no file modalities.
-  const showFileUploadButton =
-    allowFileUploads &&
-    (supportsFileUploads(inputModalities) || sandboxAvailable);
+  // Any file type can be attached: a file the model can't read is still stored
+  // and surfaced in the conversation's Files panel (and staged into the
+  // sandbox when one is available), so the only gate is the org-level toggle.
+  const showFileUploadButton = allowFileUploads;
   const supportedTypesDescription = sandboxAvailable
     ? "any file type"
-    : getSupportedFileTypesDescription(inputModalities);
+    : "any file type (files this model can't read are saved to the chat's Files panel)";
 
   // Check if user can update agent settings (to show settings link in tooltip)
   const { data: canUpdateAgentSettings } = useHasPermissions({
@@ -380,23 +370,19 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             </span>
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={4}>
-            {!allowFileUploads ? (
-              canUpdateAgentSettings ? (
-                <span>
-                  File uploads are disabled.{" "}
-                  <a
-                    href="/settings/agents"
-                    className="underline hover:no-underline"
-                    aria-label="Enable file uploads in Chat settings"
-                  >
-                    Enable in settings
-                  </a>
-                </span>
-              ) : (
-                "File uploads are disabled by your administrator"
-              )
+            {canUpdateAgentSettings ? (
+              <span>
+                File uploads are disabled.{" "}
+                <a
+                  href="/settings/agents"
+                  className="underline hover:no-underline"
+                  aria-label="Enable file uploads in Chat settings"
+                >
+                  Enable in settings
+                </a>
+              </span>
             ) : (
-              "This model does not support file uploads"
+              "File uploads are disabled by your administrator"
             )}
           </TooltipContent>
         </Tooltip>

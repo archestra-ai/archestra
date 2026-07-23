@@ -151,6 +151,10 @@ export const TOOL_PERMISSIONS: Record<
   // Chat — available to all (operate within user's own chat session)
   todo_write: null,
   create_project_from_conversation: { resource: "project", action: "create" },
+  // Coarse gate matching the SetProjectShare route; the service additionally
+  // restricts to the owner/project-admin and gates org-wide visibility behind
+  // project:share-org.
+  set_project_share: { resource: "project", action: "update" },
 
   // Meta — permission is enforced on the target tool, not on run_tool itself
   search_tools: null,

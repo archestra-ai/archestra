@@ -168,6 +168,7 @@ import {
   normalizeChatMessages,
   normalizeChatMessagesForPersistence,
 } from "./normalization/normalize-chat-messages";
+import { buildOllamaNativeProviderOptions } from "./ollama-native-params";
 import { buildModelMessages } from "./prepare-model-messages";
 import { readOpenedAppRef } from "./read-opened-app-ref";
 import {
@@ -350,14 +351,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Gate uploaded attachments before any bytes are persisted: the model must
-      // be able to ingest the type, or it must be a small inlineable text
-      // document, or a sandbox must be available to stage arbitrary files. The
-      // frontend mirrors this for UX, but a custom client bypasses it, so this
-      // is the authoritative check. Runs before extractInlineAttachments and
-      // before the active run is acquired, so a rejected request stores nothing.
-      // Skipped (with its model/sandbox lookups) on the common turn that uploads
-      // nothing.
+      // Gate uploaded attachments before any bytes are persisted: anything
+      // within the storage byte limit is accepted — a file the model can't
+      // ingest still lands in the conversation's Files panel (and is staged
+      // into the sandbox when one is available). The frontend mirrors this for
+      // UX, but a custom client bypasses it, so this is the authoritative
+      // check. Runs before extractInlineAttachments and before the active run
+      // is acquired, so a rejected request stores nothing. Skipped (with its
+      // model/sandbox lookups) on the common turn that uploads nothing.
       if (messagesHaveNewInlineAttachments(messages as ChatMessage[])) {
         const attachmentModelRow = conversation.modelId
           ? await ModelModel.findById(conversation.modelId)
@@ -1034,7 +1035,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   const breakdown = buildContextWindowBreakdown({
                     provider,
                     model: selectedModel,
-                    contextLength: modelRow?.contextLength ?? null,
+                    contextLength: modelRow
+                      ? ModelModel.resolveEffectiveContextLength(modelRow)
+                      : null,
                     inputPricePerToken: breakdownPricePerToken,
                     systemPrompt,
                     tools: supportsToolCalling ? mcpTools : undefined,
@@ -1302,8 +1305,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // and final submission turns.
                 const maxOutputTokens = resolveAgentMaxOutputTokens({
                   outputLength: modelRow?.outputLength ?? null,
-                  contextLength: modelRow?.contextLength ?? null,
                   ceiling: config.chat.maxOutputTokensCeiling,
+                  provider,
+                  // Effective (not architectural) window: for Ollama the
+                  // admin-pinned `num_ctx` is what the request actually runs
+                  // with, and it is the budget's fallback source.
+                  contextLength: modelRow
+                    ? ModelModel.resolveEffectiveContextLength(modelRow)
+                    : null,
                 });
                 if (
                   provider === "openai" &&
@@ -1321,6 +1330,41 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 } else {
                   streamTextConfig.maxOutputTokens = maxOutputTokens;
+                }
+
+                // Send the per-model generation parameters
+                // (num_ctx, num_predict, top_k, think, …) on native Ollama turns.
+                // These are the values `/v1` cannot carry; the native adapter
+                // forwards them into the `/api/chat` `options` bag. Must run
+                // AFTER the budget above: Ollama reads the output cap from
+                // `options.num_predict`, and the top-level `maxOutputTokens` the
+                // AI SDK emits is discarded by the native endpoint.
+                if (provider === "ollama-native") {
+                  const ollamaTurn = buildOllamaNativeProviderOptions({
+                    configured: modelRow?.configuredParameters,
+                    requestTemperature: temperature,
+                    maxOutputTokens: streamTextConfig.maxOutputTokens,
+                    effectiveContextLength: modelRow
+                      ? ModelModel.resolveEffectiveContextLength(modelRow)
+                      : null,
+                    // Ollama shares num_ctx between prompt and generation, so
+                    // the budget is trimmed to what this prompt leaves.
+                    promptTokens: latestBreakdown?.usedTokens ?? null,
+                  });
+                  if (ollamaTurn) {
+                    streamTextConfig.providerOptions = {
+                      ...streamTextConfig.providerOptions,
+                      ...ollamaTurn.providerOptions,
+                    };
+                    // Carries the explicit-thinking marker to the fetch wrapper,
+                    // which strips it before the request leaves this process.
+                    if (ollamaTurn.headers) {
+                      streamTextConfig.headers = {
+                        ...streamTextConfig.headers,
+                        ...ollamaTurn.headers,
+                      };
+                    }
+                  }
                 }
 
                 const { result, getAbortiveFinishReason } =

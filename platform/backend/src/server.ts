@@ -101,6 +101,7 @@ import {
   Minimax,
   Mistral,
   Ollama,
+  OllamaNative,
   OpenAi,
   Openrouter,
   Perplexity,
@@ -219,6 +220,12 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(Ollama.API.ChatCompletionResponseSchema, {
     id: "OllamaChatCompletionResponse",
   });
+  z.globalRegistry.add(OllamaNative.API.ChatRequestSchema, {
+    id: "OllamaNativeChatRequest",
+  });
+  z.globalRegistry.add(OllamaNative.API.ChatResponseSchema, {
+    id: "OllamaNativeChatResponse",
+  });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionRequestSchema, {
     id: "ZhipuaiChatCompletionRequest",
   });
@@ -330,6 +337,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.modelRouterProxyRoutes);
   fastify.register(routes.mistralProxyRoutes);
   fastify.register(routes.ollamaProxyRoutes);
+  fastify.register(routes.ollamaNativeProxyRoutes);
   fastify.register(routes.openrouterProxyRoutes);
   fastify.register(routes.perplexityProxyRoutes);
   fastify.register(routes.vllmProxyRoutes);

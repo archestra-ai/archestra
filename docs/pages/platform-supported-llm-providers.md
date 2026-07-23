@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-07-22
+lastUpdated: 2026-07-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -388,37 +388,58 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 
 [Ollama](https://ollama.ai/) is a local LLM runner for open-source large language models on your machine. Use it for local development, testing, and privacy-conscious deployments.
 
+Ollama serves two APIs, and Archestra has a transport for each. Pick the transport when you add the key:
+
+- **Native** — Ollama's own `/api/chat` endpoint. Use it to control Ollama's generation parameters — `num_ctx`, `num_predict`, `top_k`, `repeat_penalty`, thinking, and the rest. The `/v1` endpoint silently drops those options.
+- **OpenAI-compatible** — Ollama's `/v1` endpoint. The simplest choice for standard chat, and the only transport with embeddings support.
+
+Both transports talk to the same Ollama server. You can add either or both.
+
 ### Supported Ollama APIs
 
-- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
-- **Embeddings API** (`/embeddings`) - OpenAI-compatible
+- **Chat API** (`/api/chat`) - Native transport. Discovery endpoints (`/api/tags`, `/api/show`, `/api/ps`) are proxied through unmodified.
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible transport
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible transport only
 
 ### Ollama Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/ollama/{profile-id}`
-- **Authentication**: API key is **optional**. Pass in `Authorization` header as `Bearer <your-api-key>` if your Ollama deployment requires auth (e.g., Ollama Cloud).
+- **Base URL (Native)**: `http://localhost:9000/v1/ollama-native/{profile-id}`
+- **Base URL (OpenAI-compatible)**: `http://localhost:9000/v1/ollama/{profile-id}`
+- **Authentication**: API key is **optional**. Pass it in the `Authorization` header as `Bearer <your-api-key>` if your Ollama deployment requires auth (e.g., Ollama Cloud).
 
 ### Setup
 
 1. Go to **Model Providers** and add a new key with provider **Ollama**
-2. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
-3. API key can be left blank for self-hosted Ollama
+2. Choose a **Transport**: **Native** (the default) or **OpenAI-compatible**
+3. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
+4. Leave the API key blank for self-hosted Ollama
 
-The default base URL is `http://localhost:11434/v1`. Override it per-key in the UI or globally via `ARCHESTRA_OLLAMA_BASE_URL`.
+### Model Parameters
+
+Open **LLM → Models**, edit a native-transport model, and set any generation parameter (`num_ctx`, `num_predict`, `temperature`, `top_p`, `top_k`, `repeat_penalty`, `stop`, thinking) under **Model parameters**. Archestra sends the values you set on every chat turn; leave a field empty to inherit Ollama's own default. The section only appears for the Native transport — `/v1` discards these options.
+
+### Context Window
+
+Ollama often runs a model with a smaller context window than the model architecturally supports. Archestra resolves the effective window — a `num_ctx` configured under [Model Parameters](#model-parameters), else a `num_ctx` baked into the Modelfile, else the model's architectural context length — and displays and enforces it on the Models page and in the [chat context ring](/docs/platform-chat#context-window-visualizer).
+
+A server-wide cap set through `OLLAMA_CONTEXT_LENGTH` is not reported by Ollama's model API and cannot be detected. If you run a capped server, set `num_ctx` on the model — a request-level value takes precedence.
 
 ### Environment Variables
 
-| Variable                        | Required | Description                                                                                  |
-| ------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
-| `ARCHESTRA_OLLAMA_BASE_URL`     | No       | Ollama server base URL (default: `http://localhost:11434/v1`)                                |
-| `ARCHESTRA_CHAT_OLLAMA_API_KEY` | No       | API key for Ollama server (optional, should be used for the Ollama Cloud API)                |
+| Variable                           | Required | Description                                                                                        |
+| ---------------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `ARCHESTRA_OLLAMA_BASE_URL`        | No       | OpenAI-compatible transport base URL (default: `http://localhost:11434/v1`)                       |
+| `ARCHESTRA_OLLAMA_NATIVE_BASE_URL` | No       | Native transport base URL — the server **root**, with no `/v1` suffix. Defaults to `ARCHESTRA_OLLAMA_BASE_URL` with `/v1` stripped (`http://localhost:11434`) |
+| `ARCHESTRA_CHAT_OLLAMA_API_KEY`    | No       | API key for the Ollama server, shared by both transports (optional; use it for the Ollama Cloud API) |
 
 ### Important Notes
 
-- **Enabled by default**: Ollama is enabled out of the box with a default base URL of `http://localhost:11434/v1`.
-- **No API key required**: Self-hosted Ollama doesn't require authentication. When adding an Ollama key in the platform, the API key field is marked as optional.
-- **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
-- **Running Archestra in Docker**: When Archestra runs in a container (e.g. the `docker run` quickstart) and Ollama runs on the host, `localhost` resolves to the container itself, not the host. Use `http://host.docker.internal:11434/v1` as the Base URL instead. The platform detects this case and suggests the change when a `localhost` connection fails.
+- **Enabled by default**: both transports point at `http://localhost:11434` out of the box — the OpenAI-compatible one under `/v1`, the native one at the server root.
+- **Model availability**: models must be pulled first using `ollama pull <model-name>`.
+- **Not available through the model router**: the router has no translation for `/api/chat`, so `ollama-native:` model IDs are not routable. Use the `ollama:` prefix through the router, or call the native base URL directly.
+- **Output tokens**: Ollama publishes no output cap, so when a model's output ceiling is unknown the per-turn output budget falls back to the model's context window instead of the 8192-token default. Applies to both transports.
+- **Thinking** (Native transport): on or off, not an effort scale. **Inherit** sends nothing and lets Ollama decide. Turning thinking **Off** on a model that reasons anyway can surface its reasoning as the visible answer.
+- **Running Archestra in Docker**: when Archestra runs in a container and Ollama runs on the host, `localhost` resolves to the container itself. Use `http://host.docker.internal:11434/v1` (OpenAI-compatible) or `http://host.docker.internal:11434` (Native) as the Base URL instead. The platform detects this case and suggests the change when a `localhost` connection fails.
 
 ## Zhipu AI
 

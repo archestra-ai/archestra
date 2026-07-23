@@ -80,6 +80,7 @@ function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
     openrouter: "openrouter",
     vllm: "vllm",
     ollama: "ollama-cloud",
+    "ollama-native": "ollama-cloud",
     zhipuai: "zhipuai",
     deepseek: "deepseek",
     minimax: "minimax",

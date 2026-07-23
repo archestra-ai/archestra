@@ -416,10 +416,10 @@ describe("assertInlineAttachmentsAcceptable", () => {
     ).not.toThrow();
   });
 
-  test("rejects an oversized text file when no sandbox is available", () => {
+  test("accepts an oversized text file without a sandbox (stored as a conversation file)", () => {
     expect(() =>
       assert("text/csv", INLINE_TEXT_MAX_BYTES + 1, policy()),
-    ).toThrow();
+    ).not.toThrow();
   });
 
   test("routes an oversized text file to the sandbox when available", () => {
@@ -432,8 +432,8 @@ describe("assertInlineAttachmentsAcceptable", () => {
     ).not.toThrow();
   });
 
-  test("rejects an unsupported binary type without a sandbox", () => {
-    expect(() => assert("application/zip", 1_000, policy())).toThrow();
+  test("accepts an unsupported binary type without a sandbox (stored as a conversation file)", () => {
+    expect(() => assert("application/zip", 1_000, policy())).not.toThrow();
   });
 
   test("accepts an arbitrary type within the limit when the sandbox is available", () => {
@@ -442,13 +442,16 @@ describe("assertInlineAttachmentsAcceptable", () => {
     ).not.toThrow();
   });
 
-  test("rejects a file over the sandbox artifact limit even when available", () => {
+  test("rejects a file over the storage limit regardless of sandbox availability", () => {
     expect(() =>
       assert(
         "application/zip",
         SANDBOX_LIMIT + 1,
         policy({ sandboxAvailable: true }),
       ),
+    ).toThrow();
+    expect(() =>
+      assert("application/zip", SANDBOX_LIMIT + 1, policy()),
     ).toThrow();
   });
 

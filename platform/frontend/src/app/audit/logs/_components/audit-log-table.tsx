@@ -318,10 +318,14 @@ export function AuditLogTable() {
         .map((item) => ({
           value: item.id,
           label: item.name,
-          // Machine names split mid-word (the Model providers convention) so
-          // they fill each line instead of overflowing the popover or leaving
-          // ragged hyphen-break lines.
-          content: <span className="break-all">{item.name}</span>,
+          // Single line per option: long machine names truncate with an
+          // ellipsis (full name in the hover title, and search still matches
+          // the full label) so the popover stays scannable.
+          content: (
+            <span className="block truncate" title={item.name}>
+              {item.name}
+            </span>
+          ),
           description: formatResourceType(resourceType),
         }))
         .sort((a, b) => a.label.localeCompare(b.label));
@@ -335,7 +339,7 @@ export function AuditLogTable() {
       (app) => app.source === "owned",
     );
     return [
-      { value: ALL_VALUE, label: "All entities" },
+      { value: ALL_VALUE, label: "All resources" },
       ...toOptions(activeAgentsResponse?.data, "agent"),
       ...deletedAgents,
       ...toOptions(mcpServers, "mcpServer"),
@@ -473,11 +477,12 @@ export function AuditLogTable() {
           // One chip holding "Type: name" as a single text flow (not flex
           // columns). break-all splits machine names mid-word (the Model
           // providers convention) so every line fills the cell width instead
-          // of breaking ragged at each hyphen.
+          // of breaking ragged at each hyphen; rounded-md instead of the
+          // badge's pill rounding keeps multiline corners off the text.
           return (
             <Badge
               variant="secondary"
-              className="max-w-full whitespace-normal text-xs"
+              className="max-w-full rounded-md whitespace-normal text-xs"
             >
               <span className="break-all font-normal">
                 {rt && (
@@ -594,14 +599,14 @@ export function AuditLogTable() {
         <SearchableSelect
           value={resourceType ?? ALL_VALUE}
           onValueChange={handleResourceChange}
-          placeholder="Filter by resource"
+          placeholder="Filter by resource type"
           items={resourceOptions}
           className="w-[200px]"
         />
         <SearchableSelect
           value={resourceId ?? ALL_VALUE}
           onValueChange={handleEntityChange}
-          placeholder="Filter by entity"
+          placeholder="Filter by resource"
           items={entityOptions}
           className="w-[220px]"
         />

@@ -372,7 +372,7 @@ describe("AuditLogTable", () => {
 
     // role=combobox is not a name-from-content role, so the trigger has no
     // accessible name — reach it through its visible label instead.
-    await userEvent.click(screen.getByText("All entities"));
+    await userEvent.click(screen.getByText("All resources"));
     await userEvent.click(
       await screen.findByRole("button", { name: /context7/i }),
     );

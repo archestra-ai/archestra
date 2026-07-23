@@ -318,6 +318,10 @@ export function AuditLogTable() {
         .map((item) => ({
           value: item.id,
           label: item.name,
+          // Machine names split mid-word (the Model providers convention) so
+          // they fill each line instead of overflowing the popover or leaving
+          // ragged hyphen-break lines.
+          content: <span className="break-all">{item.name}</span>,
           description: formatResourceType(resourceType),
         }))
         .sort((a, b) => a.label.localeCompare(b.label));
@@ -362,7 +366,7 @@ export function AuditLogTable() {
 
   const resourceOptions = useMemo(
     () => [
-      { value: ALL_VALUE, label: "All resources" },
+      { value: ALL_VALUE, label: "All resource types" },
       ...KNOWN_RESOURCE_TYPES.map((r) => ({
         value: r,
         label: formatResourceType(r),
@@ -467,14 +471,15 @@ export function AuditLogTable() {
               ? `${name.slice(0, RESOURCE_NAME_TRUNCATE_LENGTH)}…`
               : name;
           // One chip holding "Type: name" as a single text flow (not flex
-          // columns) so long names wrap like a sentence inside the cell
-          // instead of bleeding into the next column.
+          // columns). break-all splits machine names mid-word (the Model
+          // providers convention) so every line fills the cell width instead
+          // of breaking ragged at each hyphen.
           return (
             <Badge
               variant="secondary"
               className="max-w-full whitespace-normal text-xs"
             >
-              <span className="break-words font-normal">
+              <span className="break-all font-normal">
                 {rt && (
                   <span className="font-semibold">
                     {formatResourceType(rt)}

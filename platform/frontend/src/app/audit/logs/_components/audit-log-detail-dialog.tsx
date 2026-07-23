@@ -187,9 +187,9 @@ function ResourceBlock({ event }: { event: AuditLog }) {
     <div className="space-y-1">
       {(event.resourceType || name) && (
         // Same "Type: name" single-text-flow chip as the table's Resource
-        // column, with the full untruncated name.
+        // column (incl. mid-word break-all), with the full untruncated name.
         <Badge variant="secondary" className="max-w-full whitespace-normal">
-          <span className="break-words font-normal">
+          <span className="break-all font-normal">
             {event.resourceType && (
               <span className="font-semibold">
                 {formatResourceType(event.resourceType)}

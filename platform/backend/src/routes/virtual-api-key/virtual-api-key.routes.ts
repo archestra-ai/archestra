@@ -205,10 +205,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // The raw value is a bearer credential — visibility (shared team/org
       // keys) is not enough to reveal it; only the author holds the secret.
       if (virtualKey.authorId !== user.id) {
-        throw new ApiError(
-          403,
-          "Only the key's creator can reveal its value.",
-        );
+        throw new ApiError(403, "Only the key's creator can reveal its value.");
       }
 
       const value = await readVirtualKeyValue(virtualKey.id);

@@ -186,15 +186,18 @@ function ResourceBlock({ event }: { event: AuditLog }) {
   return (
     <div className="space-y-1">
       {(event.resourceType || name) && (
-        // Same "Type: name" chip as the table's Resource column.
+        // Same "Type: name" single-text-flow chip as the table's Resource
+        // column, with the full untruncated name.
         <Badge variant="secondary" className="max-w-full whitespace-normal">
-          {event.resourceType && (
-            <span className="font-semibold">
-              {formatResourceType(event.resourceType)}
-              {name ? ":" : ""}
-            </span>
-          )}
-          {name && <span className="break-words font-normal">{name}</span>}
+          <span className="break-words font-normal">
+            {event.resourceType && (
+              <span className="font-semibold">
+                {formatResourceType(event.resourceType)}
+              </span>
+            )}
+            {event.resourceType && name ? ": " : ""}
+            {name && <span>{name}</span>}
+          </span>
         </Badge>
       )}
       {event.resourceId && (

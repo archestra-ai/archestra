@@ -49,6 +49,7 @@ import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
 
 const ACTOR_FILTER_LIMIT = 100;
 const AGENT_FILTER_LIMIT = 100;
+const RESOURCE_NAME_TRUNCATE_LENGTH = 64;
 const ALL_VALUE = "all";
 
 // TS7 (tsgo) trips instantiating ColumnDef over AuditLog because `action` is a
@@ -392,27 +393,27 @@ export function AuditLogTable() {
           if (!rt && !name) {
             return <span className="text-xs text-muted-foreground">—</span>;
           }
-          // One chip holding "Type: name" — allowed to wrap so long names
-          // grow the row instead of bleeding into the next column.
+          const displayName =
+            name && name.length > RESOURCE_NAME_TRUNCATE_LENGTH
+              ? `${name.slice(0, RESOURCE_NAME_TRUNCATE_LENGTH)}…`
+              : name;
+          // One chip holding "Type: name" as a single text flow (not flex
+          // columns) so long names wrap like a sentence inside the cell
+          // instead of bleeding into the next column.
           return (
             <Badge
               variant="secondary"
               className="max-w-full whitespace-normal text-xs"
             >
-              {rt && (
-                <span className="font-semibold">
-                  {formatResourceType(rt)}
-                  {name ? ":" : ""}
-                </span>
-              )}
-              {name && (
-                <TruncatedText
-                  message={name}
-                  maxLength={64}
-                  noWrap={false}
-                  className="break-words font-normal"
-                />
-              )}
+              <span className="break-words font-normal">
+                {rt && (
+                  <span className="font-semibold">
+                    {formatResourceType(rt)}
+                  </span>
+                )}
+                {rt && name ? ": " : ""}
+                {name && <span title={name}>{displayName}</span>}
+              </span>
             </Badge>
           );
         },

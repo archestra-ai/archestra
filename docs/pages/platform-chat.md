@@ -64,18 +64,6 @@ Expand any category to see the largest individual contributors (top tools by sch
 
 When auto-compaction frees tokens, a note appears in the panel showing how many tokens were recovered. See [Context Compaction](#context-compaction) for how compaction works.
 
-**Ollama models use a different window.** Ollama often runs a model with a far smaller context than the model architecturally supports, and the architectural number would overstate what actually fits — the ring would show plenty of room while Ollama silently truncated the prompt, so compaction never fired and the model quietly lost its instructions. Archestra resolves the window in three steps and shows the first that applies:
-
-1. A configured `num_ctx` on an **Ollama (Native)** model — Archestra sends it on every turn, so it is the window by construction.
-2. A `num_ctx` baked into the model's Modelfile, which Ollama reports and applies on both transports.
-3. The model's architectural context length.
-
-So a model built with `PARAMETER num_ctx 8192` shows 8K rather than its architectural maximum, with no configuration needed. See [Model Parameters](/docs/platform-supported-llm-providers#model-parameters).
-
-One case stays invisible: a server-wide cap set through `OLLAMA_CONTEXT_LENGTH` is not reported by Ollama's model API and cannot be detected here. If you run a capped server, set `num_ctx` explicitly on the model — a request-level value takes precedence over both the Modelfile and the server default.
-
-Relatedly, for **both** Ollama providers the per-turn output-token budget falls back to the model's context window when the real output ceiling is unknown, rather than to the conservative 8192-token default used elsewhere. Ollama does not publish an output cap and its models are rarely in the public model catalog, so the old default silently truncated long generations. This applies to the OpenAI-compatible **Ollama** provider too, not only the native one.
-
 ### File Attachments
 
 Chat attachments are scoped to their conversation. To reuse files across related sessions, add them to a [Project](./platform-projects) instead, where files are shared across all of the project's chats.

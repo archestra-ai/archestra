@@ -1547,6 +1547,44 @@ describe("ToolModel", () => {
       expect(await ToolModel.countByName(currentName)).toBe(0);
       expect(await ToolModel.countByName(legacyName)).toBe(1);
     });
+
+    test("keeps the legacy name when refreshing a legacy-matched row", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalogName =
+        "acme-mcp-server-production-cluster-primary-region-deploy-us-east";
+      const legacyName =
+        "acme-mcp-server-production-cluster-primary-region-depl__get_data";
+      const catalog = await makeInternalMcpCatalog({ name: catalogName });
+
+      const existing = await makeTool({
+        name: legacyName,
+        description: "Old description",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      const currentName = ToolModel.slugifyName(catalogName, "get_data");
+      const result = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: currentName,
+          rawToolName: "get_data",
+          description: "New description",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+        },
+      ]);
+
+      // The schema refresh must update fields in place and never rename the
+      // grandfathered row to the current hashed format.
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(existing.id);
+      expect(result[0].name).toBe(legacyName);
+      expect(result[0].description).toBe("New description");
+      expect(await ToolModel.countByName(currentName)).toBe(0);
+      expect(await ToolModel.countByName(legacyName)).toBe(1);
+    });
   });
 
   describe("createToolIfNotExists - proxy to MCP upgrade", () => {

@@ -1,16 +1,20 @@
 import {
-  CLAUDE_CODE_GUARD_MARKER_END,
-  CLAUDE_CODE_GUARD_MARKER_START,
-  CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH,
-  CLAUDE_CODE_GUARD_SKIP_RELPATH,
   CLAUDE_CODE_PROXY_ENV_KEYS,
+  STARTUP_GUARD_INSTALL,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
-import type { ClaudeCodeStartupGuardContext } from "@/services/claude-code-startup-guard";
 import {
   buildWindowsClaudeCodeStartupGuardInstallSection,
   renderClaudeCodeStartupGuardPowerShell,
 } from "@/services/claude-code-startup-guard.windows";
+import type { StartupGuardContext } from "@/services/startup-guard";
+
+const {
+  psScriptRelpath: CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH,
+  skipRelpath: CLAUDE_CODE_GUARD_SKIP_RELPATH,
+  markerStart: CLAUDE_CODE_GUARD_MARKER_START,
+  markerEnd: CLAUDE_CODE_GUARD_MARKER_END,
+} = STARTUP_GUARD_INSTALL["claude-code"];
 
 /**
  * Structure pins for the PowerShell guard. No PowerShell runtime exists in CI,
@@ -18,7 +22,7 @@ import {
  * is pinned on the rendered text, mirroring the bash assertions.
  */
 
-const CTX: ClaudeCodeStartupGuardContext = {
+const CTX: StartupGuardContext = {
   appName: "Archestra",
   healthUrl:
     "https://archestra.example.com/v1/health?mcp=prod-gateway&llm=profile-123",
@@ -27,6 +31,7 @@ const CTX: ClaudeCodeStartupGuardContext = {
     providerLabel: "Anthropic",
     url: "https://archestra.example.com/v1/anthropic/profile-123",
     ref: "profile-123",
+    proxyName: "default_proxy",
   },
   mcp: {
     serverName: "prod_gateway",
@@ -241,6 +246,7 @@ describe("renderClaudeCodeStartupGuardPowerShell", () => {
         providerLabel: "AWS Bedrock",
         url: "https://archestra.example.com/v1/bedrock/profile-123",
         ref: "profile-123",
+        proxyName: "default_proxy",
       },
     });
     for (const key of CLAUDE_CODE_PROXY_ENV_KEYS.bedrock) {

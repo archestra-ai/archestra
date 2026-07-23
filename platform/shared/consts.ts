@@ -163,27 +163,47 @@ export const CLAUDE_CODE_PROXY_ENV_KEYS = {
 export const CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY = "ANTHROPIC_CUSTOM_HEADERS";
 
 /**
- * Claude Code startup guard ("pre-loader") install locations. The connect
- * setup script writes the guard to `~/<relpath>` and wraps `claude` in the
- * user's shell profiles inside the marker block; the Disconnect panel tells
- * users to remove exactly these.
+ * Per-client startup-guard ("pre-loader") install locations, one entry per
+ * scriptable CLI client that gets a guard. For each client the connect setup
+ * script writes the guard to `~/<scriptRelpath>` (PowerShell:
+ * `~/<psScriptRelpath>`) and wraps that client's binary in the user's shell
+ * profiles inside the `markerStart`…`markerEnd` block. The guard records
+ * remotes its own disconnect action already removed in `~/<skipRelpath>` (one
+ * resource kind per line) so later launches skip them, and removes itself
+ * entirely once nothing connected is left to check; connect clears the skip
+ * file so a fresh setup re-arms every check. The Disconnect panel tells users
+ * to remove exactly these paths.
+ *
+ * Cursor is a GUI IDE with no wrappable terminal launch command, so it has no
+ * guard entry — its connect is reversed from the Disconnect panel instead.
  */
-export const CLAUDE_CODE_GUARD_SCRIPT_RELPATH =
-  ".archestra/claude-startup-guard.sh";
-/** Windows (PowerShell) guard; forward slashes — PowerShell accepts them. */
-export const CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH =
-  ".archestra/claude-startup-guard.ps1";
-export const CLAUDE_CODE_GUARD_MARKER_START =
-  "# >>> archestra claude guard >>>";
-export const CLAUDE_CODE_GUARD_MARKER_END = "# <<< archestra claude guard <<<";
-/**
- * Remotes the guard's own disconnect action already removed from Claude Code,
- * one resource kind per line. The guard skips them on later launches (and
- * removes itself entirely once nothing connected is left to check); connect
- * clears the file so a fresh setup re-arms every check.
- */
-export const CLAUDE_CODE_GUARD_SKIP_RELPATH =
-  ".archestra/claude-startup-guard.skip";
+export const STARTUP_GUARD_INSTALL = {
+  "claude-code": {
+    scriptRelpath: ".archestra/claude-startup-guard.sh",
+    // Windows (PowerShell) guard; forward slashes — PowerShell accepts them.
+    psScriptRelpath: ".archestra/claude-startup-guard.ps1",
+    skipRelpath: ".archestra/claude-startup-guard.skip",
+    markerStart: "# >>> archestra claude guard >>>",
+    markerEnd: "# <<< archestra claude guard <<<",
+  },
+  codex: {
+    scriptRelpath: ".archestra/codex-startup-guard.sh",
+    psScriptRelpath: ".archestra/codex-startup-guard.ps1",
+    skipRelpath: ".archestra/codex-startup-guard.skip",
+    markerStart: "# >>> archestra codex guard >>>",
+    markerEnd: "# <<< archestra codex guard <<<",
+  },
+  "copilot-cli": {
+    scriptRelpath: ".archestra/copilot-startup-guard.sh",
+    psScriptRelpath: ".archestra/copilot-startup-guard.ps1",
+    skipRelpath: ".archestra/copilot-startup-guard.skip",
+    markerStart: "# >>> archestra copilot guard >>>",
+    markerEnd: "# <<< archestra copilot guard <<<",
+  },
+} as const;
+
+/** Client ids that get a startup guard (keys of {@link STARTUP_GUARD_INSTALL}). */
+export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
 
 /**
  * Header name for external agent ID.

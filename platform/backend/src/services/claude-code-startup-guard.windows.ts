@@ -1,18 +1,25 @@
 import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
-  CLAUDE_CODE_GUARD_MARKER_END,
-  CLAUDE_CODE_GUARD_MARKER_START,
-  CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH,
-  CLAUDE_CODE_GUARD_SKIP_RELPATH,
   CLAUDE_CODE_PROXY_ENV_KEYS,
   EXTERNAL_AGENT_ID_HEADER,
   isDefaultBrandedAppName,
+  STARTUP_GUARD_INSTALL,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import {
   ARCHESTRA_GUARD_MARK_LINES,
-  type ClaudeCodeStartupGuardContext,
-} from "./claude-code-startup-guard";
+  type StartupGuardContext,
+} from "./startup-guard";
+
+// This PowerShell guard is still Claude-Code-specific (the POSIX guard is now
+// client-generic; the Windows generalization to Codex/Copilot is a follow-up).
+// Pull its install locations from the shared per-client record.
+const {
+  markerStart: CLAUDE_CODE_GUARD_MARKER_START,
+  markerEnd: CLAUDE_CODE_GUARD_MARKER_END,
+  psScriptRelpath: CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH,
+  skipRelpath: CLAUDE_CODE_GUARD_SKIP_RELPATH,
+} = STARTUP_GUARD_INSTALL["claude-code"];
 
 /**
  * PowerShell counterpart of the Claude Code startup guard renderer in
@@ -54,7 +61,7 @@ import {
  * the unit tests, which knip --production ignores.
  */
 export function renderClaudeCodeStartupGuardPowerShell(
-  ctx: ClaudeCodeStartupGuardContext,
+  ctx: StartupGuardContext,
 ): string {
   const resources = guardResources(ctx);
   const remoteEntries = resources
@@ -712,7 +719,7 @@ Exit-ArchGuard
  * script's Say/Ok helpers being defined.
  */
 export function buildWindowsClaudeCodeStartupGuardInstallSection(
-  ctx: ClaudeCodeStartupGuardContext,
+  ctx: StartupGuardContext,
 ): string {
   return `Say ${psq(`Installing the ${ctx.appName} startup guard for Claude Code`)}
 $archGuardPath = Join-Path $env:USERPROFILE ${psq(CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH)}
@@ -780,7 +787,7 @@ function psq(value: string): string {
  * default brand or one of its own variants (same rule as the bash guard and
  * the setup banner).
  */
-function guardHeader(ctx: ClaudeCodeStartupGuardContext): string {
+function guardHeader(ctx: StartupGuardContext): string {
   if (!isDefaultBrandedAppName(ctx.appName)) {
     return `Write-Arch $AppName Cyan
 Write-Host ''`;
@@ -798,11 +805,11 @@ Write-Host ''`;
 
 /**
  * Same remotes, same pre-loader order, same down markers as the bash renderer
- * (both are fed by buildClaudeCodeStartupGuardContext). Skills marketplace
+ * (both are fed by buildStartupGuardContext). Skills marketplace
  * has no per-resource status — it rides on endpoint reachability, and a
  * revoked share link never blocks a claude launch.
  */
-function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
+function guardResources(ctx: StartupGuardContext): Array<{
   label: string;
   url: string;
   kind: "proxy" | "mcp" | "skills";
@@ -852,8 +859,10 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
  * ~/.claude/settings.json, keeping the user's own custom-header lines and
  * taking a one-time backup. Pure PowerShell — no python dependency on Windows.
  */
-function disconnectProxyFunction(ctx: ClaudeCodeStartupGuardContext): string {
-  const provider = ctx.proxy?.provider ?? "anthropic";
+function disconnectProxyFunction(ctx: StartupGuardContext): string {
+  // Claude Code's proxy providers are only anthropic/bedrock; the guard context
+  // now carries the widened SupportedProvider, so narrow back for the key list.
+  const provider = ctx.proxy?.provider === "bedrock" ? "bedrock" : "anthropic";
   const envKeys = CLAUDE_CODE_PROXY_ENV_KEYS[provider];
   const keysArray = envKeys.map((key) => psq(key)).join(", ");
   const oursArray = [EXTERNAL_AGENT_ID_HEADER, VIRTUAL_KEY_HEADER]

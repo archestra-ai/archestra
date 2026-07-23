@@ -437,13 +437,38 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     );
   });
 
-  test("only claude-code gets the startup guard", () => {
-    for (const clientId of ["codex", "copilot-cli", "cursor"] as const) {
-      expect(renderSetupScript(fullContext(clientId))).not.toContain(
-        "claude-startup-guard",
-      );
+  test("codex and copilot each install their own startup guard wrapping their own binary", () => {
+    const codex = renderSetupScript(fullContext("codex"));
+    expect(codex).toContain('cat > "$HOME/.archestra/codex-startup-guard.sh"');
+    expect(codex).toContain("# >>> archestra codex guard >>>");
+    expect(codex).toContain('command codex "$@"');
+    expect(codex).toContain("ARCHESTRA_CODEX_GUARD");
+    // never the wrong client's guard
+    expect(codex).not.toContain("claude-startup-guard");
+
+    const copilot = renderSetupScript(fullContext("copilot-cli"));
+    expect(copilot).toContain(
+      'cat > "$HOME/.archestra/copilot-startup-guard.sh"',
+    );
+    expect(copilot).toContain("# >>> archestra copilot guard >>>");
+    expect(copilot).toContain('command copilot "$@"');
+    expect(copilot).toContain("ARCHESTRA_COPILOT_GUARD");
+    expect(copilot).not.toContain("claude-startup-guard");
+  });
+
+  test("cursor (a GUI IDE) never gets a startup guard", () => {
+    expect(renderSetupScript(fullContext("cursor"))).not.toContain(
+      "startup-guard",
+    );
+    expect(renderSetupScript(fullContext("cursor", "windows"))).not.toContain(
+      "startup-guard",
+    );
+  });
+
+  test("the PowerShell guard is still Claude-Code-only (codex/copilot Windows parity is a follow-up)", () => {
+    for (const clientId of ["codex", "copilot-cli"] as const) {
       expect(renderSetupScript(fullContext(clientId, "windows"))).not.toContain(
-        "claude-startup-guard",
+        "startup-guard",
       );
     }
   });

@@ -13,11 +13,17 @@ import type {
   ConnectionSetupPlatform,
   ConnectionSetupProxyAuth,
 } from "@/types";
-import {
-  buildClaudeCodeStartupGuardContext,
-  buildClaudeCodeStartupGuardInstallSection,
-} from "./claude-code-startup-guard";
 import { renderWindowsSetupScript } from "./connection-setup-script.windows";
+import {
+  buildStartupGuardContext,
+  buildStartupGuardInstallSection,
+  type StartupGuardClient,
+} from "./startup-guard";
+import {
+  CLAUDE_CODE_GUARD_CLIENT,
+  CODEX_GUARD_CLIENT,
+  COPILOT_GUARD_CLIENT,
+} from "./startup-guard.clients";
 
 /**
  * Pure renderers for the /connection one-command setup scripts. Everything in
@@ -522,15 +528,27 @@ if ! cli claude plugin install ${sh(pluginRef)}; then
 fi`);
   }
 
-  if (ctx.mcp || ctx.proxy || ctx.skills) {
-    sections.push(
-      buildClaudeCodeStartupGuardInstallSection(
-        buildClaudeCodeStartupGuardContext(ctx),
-      ),
-    );
-  }
+  startupGuardSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 
   return sections;
+}
+
+/**
+ * Append the startup-guard install to a client's script when connect wired at
+ * least one remote — the guard's whole job is to check those before launch, so
+ * a script that configured nothing has nothing to guard. Shared by every CLI
+ * client that gets a guard (Claude Code, Codex, Copilot CLI).
+ */
+function startupGuardSection(
+  ctx: SetupScriptContext,
+  client: StartupGuardClient,
+  sections: string[],
+): void {
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    sections.push(
+      buildStartupGuardInstallSection(buildStartupGuardContext(ctx), client),
+    );
+  }
 }
 
 // One shared source for the proxy env keys connect writes into
@@ -756,6 +774,8 @@ if ! cli codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
 fi`);
   }
 
+  startupGuardSection(ctx, CODEX_GUARD_CLIENT, sections);
+
   return sections;
 }
 
@@ -800,6 +820,8 @@ if ! cli copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."
 fi`);
   }
+
+  startupGuardSection(ctx, COPILOT_GUARD_CLIENT, sections);
 
   return sections;
 }

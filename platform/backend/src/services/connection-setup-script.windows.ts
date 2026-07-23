@@ -7,7 +7,6 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
-import { buildClaudeCodeStartupGuardContext } from "./claude-code-startup-guard";
 import { buildWindowsClaudeCodeStartupGuardInstallSection } from "./claude-code-startup-guard.windows";
 import {
   claudeCodeOAuthNextStep,
@@ -15,6 +14,7 @@ import {
   type SetupScriptContext,
   type SetupScriptProxySection,
 } from "./connection-setup-script";
+import { buildStartupGuardContext } from "./startup-guard";
 
 /**
  * PowerShell renderer for the Windows variant of the /connection one-command
@@ -370,7 +370,7 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the skills automaticall
   if (ctx.mcp || ctx.proxy || ctx.skills) {
     sections.push(
       buildWindowsClaudeCodeStartupGuardInstallSection(
-        buildClaudeCodeStartupGuardContext(ctx),
+        buildStartupGuardContext(ctx),
       ),
     );
   }

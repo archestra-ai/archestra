@@ -20,6 +20,32 @@ export type ModelsPageFilterableModel = {
   isBest?: boolean | null;
 };
 
+/**
+ * Whether this model row is the one the knowledge base resolves for embeddings:
+ * the org's configured embedding model ID under the embedding API key's
+ * provider. While that holds, its embedding configuration is locked (changes
+ * must go through the drop-embedding flow in Knowledge settings); the backend
+ * enforces the same lock.
+ */
+export function isKnowledgeBaseEmbeddingModel(params: {
+  model: { modelId: string; provider: string };
+  embeddingModel: string | null | undefined;
+  embeddingChatApiKeyId: string | null | undefined;
+  availableApiKeys: readonly ModelsPageAvailableApiKey[];
+}): boolean {
+  const { model, embeddingModel, embeddingChatApiKeyId, availableApiKeys } =
+    params;
+  if (!embeddingModel || !embeddingChatApiKeyId) {
+    return false;
+  }
+  const embeddingKeyProvider = availableApiKeys.find(
+    (key) => key.id === embeddingChatApiKeyId,
+  )?.provider;
+  return (
+    embeddingModel === model.modelId && embeddingKeyProvider === model.provider
+  );
+}
+
 export function canFilterFreeModelsForApiKey(params: {
   availableApiKeys: readonly ModelsPageAvailableApiKey[];
   apiKeyFilter: string;

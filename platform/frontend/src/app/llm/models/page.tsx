@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -83,11 +84,13 @@ import {
   useUpdateModel,
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
 import { formatContextLength } from "@/lib/utils";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import {
   canFilterFreeModelsForApiKey,
   filterModelsForPage,
+  isKnowledgeBaseEmbeddingModel,
   type ModelsPageModelTypeFilter,
   OBSERVED_MODEL_SOURCE_DESCRIPTION,
   OBSERVED_MODEL_SOURCE_LABEL,
@@ -577,7 +580,15 @@ function EditModelDialog({
   const [inputModalityToAdd, setInputModalityToAdd] = useState("");
   const [outputModalityToAdd, setOutputModalityToAdd] = useState("");
   const updateModel = useUpdateModel();
+  const { data: organization } = useOrganization();
+  const { data: apiKeys = [] } = useLlmProviderApiKeys();
   const providerConfig = PROVIDER_CONFIG[model.provider];
+  const embeddingConfigLocked = isKnowledgeBaseEmbeddingModel({
+    model,
+    embeddingModel: organization?.embeddingModel,
+    embeddingChatApiKeyId: organization?.embeddingChatApiKeyId,
+    availableApiKeys: apiKeys,
+  });
   const fallbackPricing = getFallbackPricing(model);
   // The model's provider supports prompt caching when the backend resolved a
   // cache price for it (synced, custom, or multiplier-derived).
@@ -929,6 +940,7 @@ function EditModelDialog({
                 <FormItem>
                   <Select
                     value={field.value || NOT_EMBEDDING_MODEL_VALUE}
+                    disabled={embeddingConfigLocked}
                     onValueChange={(value) =>
                       field.onChange(
                         value === NOT_EMBEDDING_MODEL_VALUE ? "" : value,
@@ -954,6 +966,20 @@ function EditModelDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                  {embeddingConfigLocked && (
+                    <p className="text-sm text-muted-foreground">
+                      This model is used for knowledge base embeddings, so its
+                      embedding configuration is locked. To change it, drop the
+                      embedding configuration in{" "}
+                      <Link
+                        href="/settings/knowledge"
+                        className="underline underline-offset-2"
+                      >
+                        Knowledge settings
+                      </Link>{" "}
+                      first — all documents will need to be re-embedded.
+                    </p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canFilterFreeModelsForApiKey,
   filterModelsForPage,
+  isKnowledgeBaseEmbeddingModel,
   type ModelsPageAvailableApiKey,
   type ModelsPageFilterableModel,
 } from "./models-page-utils";
@@ -99,5 +100,45 @@ describe("filterModelsForPage", () => {
     });
 
     expect(result.map((model) => model.modelId)).toEqual(["openrouter/free"]);
+  });
+});
+
+describe("isKnowledgeBaseEmbeddingModel", () => {
+  const embeddingApiKeys = [
+    { id: "gemini-key", provider: "gemini" },
+    { id: "openrouter-key", provider: "openrouter" },
+  ] as const satisfies readonly ModelsPageAvailableApiKey[];
+
+  it("locks the model the org's embedding config resolves to", () => {
+    expect(
+      isKnowledgeBaseEmbeddingModel({
+        model: { modelId: "gemini-embedding-001", provider: "gemini" },
+        embeddingModel: "gemini-embedding-001",
+        embeddingChatApiKeyId: "gemini-key",
+        availableApiKeys: embeddingApiKeys,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not lock a same-ID model under a different provider", () => {
+    expect(
+      isKnowledgeBaseEmbeddingModel({
+        model: { modelId: "gemini-embedding-001", provider: "openrouter" },
+        embeddingModel: "gemini-embedding-001",
+        embeddingChatApiKeyId: "gemini-key",
+        availableApiKeys: embeddingApiKeys,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not lock anything when no embedding config is set", () => {
+    expect(
+      isKnowledgeBaseEmbeddingModel({
+        model: { modelId: "gemini-embedding-001", provider: "gemini" },
+        embeddingModel: null,
+        embeddingChatApiKeyId: null,
+        availableApiKeys: embeddingApiKeys,
+      }),
+    ).toBe(false);
   });
 });

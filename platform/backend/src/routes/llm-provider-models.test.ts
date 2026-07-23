@@ -4,6 +4,7 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import OrganizationModel from "@/models/organization";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -357,6 +358,142 @@ describe("chat model routes", () => {
     expect(copilotModel.apiKeys.map((k: { id: string }) => k.id)).toEqual([
       ownKey.id,
     ]);
+  });
+
+  test("PATCH /api/llm-models/:id rejects embedding changes for the model backing the knowledge base", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "gemini",
+      scope: "org",
+    });
+    const embeddingModel = await ModelModel.create({
+      externalId: "gemini/gemini-embedding-001",
+      provider: "gemini",
+      modelId: "gemini-embedding-001",
+      description: "Gemini Embedding 001",
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: [],
+      supportsToolCalling: false,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      embeddingDimensions: 3072,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    await OrganizationModel.patch(organizationId, {
+      embeddingChatApiKeyId: apiKey.id,
+      embeddingModel: embeddingModel.modelId,
+    });
+
+    // Changing dimensions would silently corrupt the existing index.
+    const changeDimensionsResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${embeddingModel.id}`,
+      payload: { embeddingDimensions: 768 },
+    });
+    expect(changeDimensionsResponse.statusCode).toBe(400);
+    expect(changeDimensionsResponse.json().error.message).toContain(
+      "knowledge base embedding model",
+    );
+    expect(changeDimensionsResponse.json().error.internal_code).toBe(
+      "embedding_validation_failed",
+    );
+
+    // Clearing dimensions (turning it back into a chat model) is just as bad.
+    const clearDimensionsResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${embeddingModel.id}`,
+      payload: { embeddingDimensions: null },
+    });
+    expect(clearDimensionsResponse.statusCode).toBe(400);
+    expect(clearDimensionsResponse.json().error.internal_code).toBe(
+      "embedding_validation_failed",
+    );
+
+    const unchanged = await ModelModel.findById(embeddingModel.id);
+    expect(unchanged?.embeddingDimensions).toBe(3072);
+
+    // Non-embedding updates (and resending the unchanged dimensions, which is
+    // what the edit dialog does) stay allowed while the model is locked.
+    const benignResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${embeddingModel.id}`,
+      payload: { ignored: true, embeddingDimensions: 3072 },
+    });
+    expect(benignResponse.statusCode).toBe(200);
+    expect(benignResponse.json().ignored).toBe(true);
+  });
+
+  test("PATCH /api/llm-models/:id embedding lock is scoped to the embedding key's provider and lifts after drop", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "gemini",
+      scope: "org",
+    });
+    const geminiModel = await ModelModel.create({
+      externalId: "gemini/gemini-embedding-001",
+      provider: "gemini",
+      modelId: "gemini-embedding-001",
+      description: "Gemini Embedding 001",
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: [],
+      supportsToolCalling: false,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      embeddingDimensions: 3072,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    // Same model ID under a different provider — a different model row that the
+    // knowledge base never resolves, so it must remain editable.
+    const openrouterModel = await ModelModel.create({
+      externalId: "openrouter/gemini-embedding-001",
+      provider: "openrouter",
+      modelId: "gemini-embedding-001",
+      description: "Gemini Embedding 001 via OpenRouter",
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: [],
+      supportsToolCalling: false,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      embeddingDimensions: 3072,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    await OrganizationModel.patch(organizationId, {
+      embeddingChatApiKeyId: apiKey.id,
+      embeddingModel: geminiModel.modelId,
+    });
+
+    const otherProviderResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${openrouterModel.id}`,
+      payload: { embeddingDimensions: 768 },
+    });
+    expect(otherProviderResponse.statusCode).toBe(200);
+    expect(otherProviderResponse.json().embeddingDimensions).toBe(768);
+
+    // Dropping the embedding config unlocks the previously locked model.
+    await OrganizationModel.patch(organizationId, {
+      embeddingChatApiKeyId: null,
+      embeddingModel: null,
+    });
+    const afterDropResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-models/${geminiModel.id}`,
+      payload: { embeddingDimensions: null },
+    });
+    expect(afterDropResponse.statusCode).toBe(200);
+    expect(afterDropResponse.json().embeddingDimensions).toBe(null);
   });
 
   test("syncModelsForVisibleApiKeys syncs visible keys and preserves baseUrl", async ({

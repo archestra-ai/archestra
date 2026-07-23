@@ -198,6 +198,9 @@ const PromptInputContent = ({
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   agentModelProvider,
+  subscriptionSignInRequired,
+  subscriptionSignInLabel,
+  onSubscriptionSignIn,
   sandboxAvailable,
   prefillText,
   onPrefillApplied,
@@ -883,6 +886,9 @@ const PromptInputContent = ({
             agentRequiresPerUserConnect={agentRequiresPerUserConnect}
             agentModelDisplayName={agentModelDisplayName}
             agentModelProvider={agentModelProvider}
+            subscriptionSignInRequired={subscriptionSignInRequired}
+            subscriptionSignInLabel={subscriptionSignInLabel}
+            onSubscriptionSignIn={onSubscriptionSignIn}
             textareaRef={textareaRef}
             contextWindow={contextWindow}
             lastCompaction={lastCompaction}
@@ -972,6 +978,9 @@ const ArchestraPromptInput = ({
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   agentModelProvider,
+  subscriptionSignInRequired,
+  subscriptionSignInLabel,
+  onSubscriptionSignIn,
   prefillText,
   onPrefillApplied,
 }: ArchestraPromptInputProps) => {
@@ -1067,6 +1076,9 @@ const ArchestraPromptInput = ({
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
           agentModelProvider={agentModelProvider}
+          subscriptionSignInRequired={subscriptionSignInRequired}
+          subscriptionSignInLabel={subscriptionSignInLabel}
+          onSubscriptionSignIn={onSubscriptionSignIn}
           sandboxAvailable={sandboxAvailable}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}

@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, Info, Loader2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Check, ExternalLink, Info, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CopyableCode } from "@/components/copyable-code";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,17 +23,27 @@ interface OpenaiCodexSignInProps {
    */
   onCredential: (credential: string) => void;
   disabled?: boolean;
+  /**
+   * Single-provider surfaces set this to run the fetch step automatically on
+   * mount, so the code + instructions appear without a first click. Never opens
+   * the provider tab — that stays an explicit click so popup blockers don't eat
+   * it.
+   */
+  autoStart?: boolean;
 }
 
 /**
  * "Sign in with ChatGPT" device flow: shows a one-time code the user enters at
  * auth.openai.com, then polls until OpenAI hands back the OAuth credential that
  * becomes the OpenAI (ChatGPT subscription) provider key. Works on hosted
- * deployments and custom domains — no localhost loopback required.
+ * deployments and custom domains — no localhost loopback required. Two explicit
+ * steps: fetch the code (button or autoStart), then open the ChatGPT page
+ * (button).
  */
 export function OpenaiCodexSignIn({
   onCredential,
   disabled,
+  autoStart,
 }: OpenaiCodexSignInProps) {
   const start = useStartOpenaiCodexDeviceFlow();
   const poll = usePollOpenaiCodexDeviceFlow();
@@ -98,31 +108,36 @@ export function OpenaiCodexSignIn({
     };
   }, [flow, completed]);
 
-  // Start the device flow and open the ChatGPT login tab in the same click. The
-  // tab is opened synchronously as a blank page (so a popup blocker can't stop
-  // it across the async start), then pointed at the verification URL. The code +
-  // link fields below are the fallback when the popup is blocked; polling
-  // finishes the sign-in automatically — still one button.
-  const begin = async () => {
+  // Step 1: fetch the device code and show it. We deliberately do NOT open the
+  // ChatGPT tab here — that is the separate, explicit open step below, kept
+  // click-synchronous so popup blockers don't stop it.
+  const begin = useCallback(async () => {
     setExpired(false);
     setCompleted(false);
-    const authWindow = window.open("about:blank", "_blank");
     try {
       const result = await start.mutateAsync();
-      if (result) {
-        setFlow(result);
-        if (authWindow) {
-          authWindow.opener = null; // reverse-tabnabbing guard
-          authWindow.location.href = result.verificationUri;
-        }
-      } else {
-        authWindow?.close();
-      }
+      if (result) setFlow(result);
     } catch {
       // network-level failure — leave the button enabled for another attempt
-      authWindow?.close();
     }
+  }, [start.mutateAsync]);
+
+  // Step 2: open the ChatGPT verification page. Synchronous with the click and
+  // opened with noopener so the new tab can't reach back through window.opener.
+  const openVerification = (deviceFlow: OpenaiCodexDeviceStart) => {
+    window.open(deviceFlow.verificationUri, "_blank", "noopener,noreferrer");
   };
+
+  // Auto-run the fetch step (never the open step) on mount for single-provider
+  // surfaces. Fires at most once: the ref guards React strict-mode's
+  // double-invoke and any re-render, and we skip while a fetch is in flight.
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (!autoStart || autoStartedRef.current) return;
+    if (flow || completed || start.isPending) return;
+    autoStartedRef.current = true;
+    void begin();
+  }, [autoStart, begin, flow, completed, start.isPending]);
 
   if (completed) {
     return (
@@ -173,6 +188,14 @@ export function OpenaiCodexSignIn({
               {flow.userCode}
             </code>
           </CopyableCode>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => openVerification(flow)}
+          >
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Open ChatGPT sign-in
+          </Button>
         </li>
         <li className="flex items-center gap-1">
           <Loader2 className="h-3 w-3 animate-spin" />

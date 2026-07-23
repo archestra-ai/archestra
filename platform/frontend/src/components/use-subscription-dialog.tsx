@@ -56,6 +56,11 @@ export function UseSubscriptionDialog({
   const visible = providers
     ? subscriptions.filter((entry) => providers.includes(entry.provider))
     : subscriptions;
+  // Single-provider dialogs (opened from a subscription card, the key dropdown,
+  // the model selector, or chat) show one row, so fetch and display its code +
+  // instructions immediately. Multi-provider dialogs keep per-row buttons and
+  // must never auto-fetch — showing every provider's code at once is noise.
+  const autoStart = visible.length === 1;
 
   return (
     <FormDialog
@@ -75,6 +80,7 @@ export function UseSubscriptionDialog({
             entry={entry}
             existingKeys={existingKeys}
             onConnected={onConnected}
+            autoStart={autoStart}
           />
         ))}
       </DialogBody>
@@ -86,10 +92,13 @@ function SubscriptionRow({
   entry,
   existingKeys,
   onConnected,
+  autoStart,
 }: {
   entry: SubscriptionEntry;
   existingKeys: LlmProviderApiKey[];
   onConnected?: (apiKeyId: string) => void;
+  /** Auto-run the leaf's fetch step on mount (single-provider dialogs only). */
+  autoStart?: boolean;
 }) {
   const option = entry;
   const createMutation = useCreateLlmProviderApiKey();
@@ -160,6 +169,7 @@ function SubscriptionRow({
                 provider={option.provider}
                 onCredential={handleCredential}
                 disabled={createMutation.isPending}
+                autoStart={autoStart}
               />
             )}
           </div>
@@ -173,20 +183,38 @@ function SubscriptionSignIn({
   provider,
   onCredential,
   disabled,
+  autoStart,
 }: {
   provider: SubscriptionProvider;
   onCredential: (credential: string) => void;
   disabled?: boolean;
+  autoStart?: boolean;
 }) {
   if (provider === "github-copilot") {
-    return <GithubCopilotSignIn onToken={onCredential} disabled={disabled} />;
+    return (
+      <GithubCopilotSignIn
+        onToken={onCredential}
+        disabled={disabled}
+        autoStart={autoStart}
+      />
+    );
   }
   if (provider === "microsoft-365-copilot") {
     return (
-      <Microsoft365CopilotSignIn onToken={onCredential} disabled={disabled} />
+      <Microsoft365CopilotSignIn
+        onToken={onCredential}
+        disabled={disabled}
+        autoStart={autoStart}
+      />
     );
   }
-  return <OpenaiCodexSignIn onCredential={onCredential} disabled={disabled} />;
+  return (
+    <OpenaiCodexSignIn
+      onCredential={onCredential}
+      disabled={disabled}
+      autoStart={autoStart}
+    />
+  );
 }
 
 /**

@@ -70,11 +70,29 @@ export function resolveAutoSelectedModel(params: {
   selectedModel: string;
   availableModels: AutoSelectableModel[];
   isLoading: boolean;
+  /**
+   * The current selection is a per-user/subscription model held by id alone
+   * (e.g. an agent/org default backed by a ChatGPT subscription the viewer
+   * hasn't connected). Such a model is intentionally absent from the viewer's
+   * catalog, so the normal "not in the list -> pick best" fallback would swap
+   * it for the org key's model and silently change who pays. Hold it instead.
+   *
+   * Mirrors the `suppressAutoSelect` gate the caller already applies, but lives
+   * in the pure resolver so the two can't disagree if that runtime gate races
+   * the auto-select effect — the timing asymmetry this fix removes.
+   */
+  selectedModelHeldPerUser?: boolean;
 }): string | null {
-  const { selectedModel, availableModels, isLoading } = params;
+  const {
+    selectedModel,
+    availableModels,
+    isLoading,
+    selectedModelHeldPerUser,
+  } = params;
   if (isLoading || availableModels.length === 0) return null;
   if (!selectedModel) return null;
   if (availableModels.some((m) => m.id === selectedModel)) return null;
+  if (selectedModelHeldPerUser) return null;
   const ready = availableModels.filter(
     (m) => !(m.requiresUserConnection && !m.isConnected),
   );
@@ -93,6 +111,18 @@ interface ModelInfo {
 interface AgentInfo {
   modelId?: string | null;
   llmApiKeyId?: string | null;
+  /**
+   * Backend flag (from `populateResolvedLlm`): the agent's effective default
+   * LLM — its own complete pin, else the inherited organization default —
+   * resolves to a per-user credential. That covers a per-user provider like
+   * GitHub Copilot AND a ChatGPT subscription riding the shared `openai`
+   * provider. The pure `providerRequiresPerUserCredential` check can see the
+   * former but never the latter, and a non-creator viewer holds neither the
+   * subscription's key nor its model in their own catalog — so this flag is the
+   * only signal that the pinned model must be held per-user (by id, key
+   * dropped) rather than paired with a key the viewer cannot use.
+   */
+  llmProviderRequiresPerUserCredential?: boolean | null;
 }
 
 interface OrganizationInfo {
@@ -155,12 +185,32 @@ export function resolveInitialModel(
     );
   };
 
+  // A ChatGPT subscription rides the shared `openai` provider, so the
+  // provider check below never flags it, and for a non-creator viewer the
+  // subscription's model isn't in `modelsByProvider` at all. The backend flag
+  // on the agent payload is the authority: when it is set, the agent's
+  // effective default model (its own complete pin, else the inherited org
+  // default — the same rule as `resolveEffectiveDefaultLlm`) is per-user,
+  // whatever provider it rides. Hold that model by id alone, exactly like the
+  // Copilot path, so a non-creator gets `{ model, apiKeyId: null }` instead of
+  // the creator's unusable key.
+  const perUserEffectiveModelId = agent?.llmProviderRequiresPerUserCredential
+    ? resolveEffectiveDefaultLlm({ agent, organization }).modelId
+    : null;
+
   // A per-user provider (e.g. GitHub Copilot) is catalogued org-wide, but its
   // credential is the viewer's own and resolved at send time — the viewer holds
   // no key for it. So a per-user model is selectable by model alone: pairing it
   // with `findKeyForProvider` (null) would otherwise drop it from the catalog
   // and leave an org/agent default pointing at one half-pinned and skipped.
   const isPerUserModel = (modelId: string | null | undefined): boolean => {
+    if (!modelId) return false;
+    if (
+      perUserEffectiveModelId != null &&
+      modelId === perUserEffectiveModelId
+    ) {
+      return true;
+    }
     const provider = providerForModel(modelId);
     return (
       provider != null &&

@@ -9,6 +9,13 @@ type AgentInfo = {
   id: string;
   modelId?: string | null;
   llmApiKeyId?: string | null;
+  /**
+   * Backend flag: the agent's effective default LLM resolves per-user (a
+   * per-user provider or a ChatGPT subscription). Threaded into
+   * `resolveInitialModel` so a subscription-backed default is held by model id
+   * alone for a non-creator viewer instead of pairing an unusable key.
+   */
+  llmProviderRequiresPerUserCredential?: boolean | null;
 };
 
 type ChatApiKeyInfo = {

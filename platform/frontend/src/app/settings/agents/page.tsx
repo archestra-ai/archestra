@@ -12,7 +12,6 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import { SubscriptionSignInCta } from "@/components/subscription-sign-in-cta";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -303,12 +302,6 @@ export default function AgentSettingsPage() {
                       !selectedApiKeyId
                     }
                   />
-                  {selectedSubscription && !selectedSubscription.connected && (
-                    <SubscriptionSignInCta
-                      entry={selectedSubscription}
-                      onConnected={setSelectedApiKeyId}
-                    />
-                  )}
                   <Button
                     type="button"
                     variant="outline"

@@ -8,7 +8,7 @@ import {
   type SupportedProvider,
   supportsFileUploads,
 } from "@archestra/shared";
-import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
+import { KeyRound, MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
 import { memo, useCallback } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
@@ -27,6 +27,7 @@ import {
   providerToLogoProvider,
 } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -41,6 +42,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
+import { cn } from "@/lib/utils";
 
 export interface ChatPromptInputToolsProps {
   selectedModel: string;
@@ -110,6 +112,16 @@ export interface ChatPromptInputToolsProps {
    * and offer the matching subscription sign-in for the held selection.
    */
   agentModelProvider?: SupportedProvider;
+  /**
+   * The selected model rides a subscription the viewer hasn't connected, so a
+   * send is blocked (the chat page's `blockedSubscriptionEntry` signal). Shows a
+   * compact "Sign in" chip in the model pill next to the scope badge.
+   */
+  subscriptionSignInRequired?: boolean;
+  /** Provider title for the sign-in chip's accessible label (e.g. "ChatGPT"). */
+  subscriptionSignInLabel?: string;
+  /** Opens the chat page's single-provider subscription sign-in dialog. */
+  onSubscriptionSignIn?: () => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   /**
    * Whether the toolbar should collapse its inline controls into a three-dots
@@ -151,6 +163,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   agentRequiresPerUserConnect = false,
   agentModelDisplayName,
   agentModelProvider,
+  subscriptionSignInRequired = false,
+  subscriptionSignInLabel,
+  onSubscriptionSignIn,
   textareaRef,
   isNarrow,
   toolbarRef,
@@ -274,6 +289,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                             </button>
                           )}
                         </ComposerBadge>
+                      </div>
+                    )}
+                    {subscriptionSignInRequired && onSubscriptionSignIn && (
+                      <div className="flex items-center gap-1.5">
+                        <SubscriptionSignInBadge
+                          label={subscriptionSignInLabel}
+                          onClick={onSubscriptionSignIn}
+                        />
                       </div>
                     )}
                     {toolsUnavailable && (
@@ -429,15 +452,27 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           {!canSeeProviderSettings ? null : showDefaultLogo &&
             logoProvider &&
             (modelSource === "agent" || modelSource === "organization") ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2"
-              onClick={expandModelSelector}
-            >
-              <ModelSelectorLogo provider={logoProvider} className="size-4" />
-            </Button>
+            // Collapsed provider-logo button (the default state for an
+            // agent/org model). A non-creator viewer whose model rides an
+            // unconnected subscription gets the sign-in chip adjacent to it, so
+            // the affordance is reachable without expanding the selector.
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                onClick={expandModelSelector}
+              >
+                <ModelSelectorLogo provider={logoProvider} className="size-4" />
+              </Button>
+              {subscriptionSignInRequired && onSubscriptionSignIn && (
+                <SubscriptionSignInBadge
+                  label={subscriptionSignInLabel}
+                  onClick={onSubscriptionSignIn}
+                />
+              )}
+            </div>
           ) : (
             <div className="flex items-center h-8 rounded-full bg-muted/50 overflow-hidden">
               {(conversationId || onApiKeyChange) && (
@@ -495,6 +530,13 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   )}
                 </ComposerBadge>
               )}
+              {subscriptionSignInRequired && onSubscriptionSignIn && (
+                <SubscriptionSignInBadge
+                  label={subscriptionSignInLabel}
+                  onClick={onSubscriptionSignIn}
+                  className="ml-1 mr-2"
+                />
+              )}
             </div>
           )}
           {toolsUnavailable && <NoToolsModelBadge />}
@@ -531,5 +573,41 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     </PromptInputTools>
   );
 });
+
+/**
+ * Compact "Sign in" affordance shown in the composer model pill when the
+ * selected model rides a subscription the viewer hasn't connected. Rendered as
+ * a real button (badge-styled, subtle outline) placed adjacent to the scope
+ * badge — never nested inside the ModelSelector's button trigger.
+ */
+function SubscriptionSignInBadge({
+  label,
+  onClick,
+  className,
+}: {
+  label?: string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <Badge
+      asChild
+      variant="outline"
+      className={cn(
+        "cursor-pointer gap-1 px-2 py-1 leading-none transition-colors hover:bg-accent hover:text-accent-foreground",
+        className,
+      )}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label ? `Sign in to ${label}` : "Sign in"}
+      >
+        <KeyRound className="size-3" />
+        Sign in
+      </button>
+    </Badge>
+  );
+}
 
 export { ChatPromptInputTools };

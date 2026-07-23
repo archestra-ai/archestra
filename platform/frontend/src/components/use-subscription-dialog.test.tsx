@@ -5,19 +5,31 @@ import { useFeature } from "@/lib/config/config.query";
 import { UseSubscriptionDialog } from "./use-subscription-dialog";
 
 // Stub the device-flow sign-in components so the row renders without their
-// query hooks; we only assert whether a "Sign in with X" affordance is present.
+// query hooks; we assert whether a "Sign in with X" affordance is present and
+// whether the dialog forwarded autoStart (single-provider surfaces fetch the
+// code on mount).
 vi.mock("@/components/github-copilot-sign-in", () => ({
-  GithubCopilotSignIn: () => <button type="button">Sign in with GitHub</button>,
+  GithubCopilotSignIn: ({ autoStart }: { autoStart?: boolean }) => (
+    <button type="button" data-autostart={autoStart ? "true" : "false"}>
+      Sign in with GitHub
+    </button>
+  ),
 }));
 
 vi.mock("@/components/microsoft-365-copilot-sign-in", () => ({
-  Microsoft365CopilotSignIn: () => (
-    <button type="button">Sign in with Microsoft</button>
+  Microsoft365CopilotSignIn: ({ autoStart }: { autoStart?: boolean }) => (
+    <button type="button" data-autostart={autoStart ? "true" : "false"}>
+      Sign in with Microsoft
+    </button>
   ),
 }));
 
 vi.mock("@/components/openai-codex-sign-in", () => ({
-  OpenaiCodexSignIn: () => <button type="button">Sign in with ChatGPT</button>,
+  OpenaiCodexSignIn: ({ autoStart }: { autoStart?: boolean }) => (
+    <button type="button" data-autostart={autoStart ? "true" : "false"}>
+      Sign in with ChatGPT
+    </button>
+  ),
 }));
 
 vi.mock("@/components/llm-provider-api-key-form", () => ({
@@ -102,5 +114,41 @@ describe("UseSubscriptionDialog", () => {
     expect(
       screen.queryByText(/administrator hasn't enabled/i),
     ).not.toBeInTheDocument();
+  });
+
+  it("auto-starts the sign-in when narrowed to a single provider", () => {
+    render(
+      <UseSubscriptionDialog
+        open
+        onOpenChange={vi.fn()}
+        providers={["openai"]}
+      />,
+    );
+
+    // Only the one narrowed row renders, and it fetches its code on mount.
+    expect(
+      screen.getByRole("button", { name: /sign in with chatgpt/i }),
+    ).toHaveAttribute("data-autostart", "true");
+    expect(
+      screen.queryByRole("button", { name: /sign in with github/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("never auto-starts when multiple providers are shown", () => {
+    vi.mocked(useFeature).mockReturnValue(true);
+
+    render(<UseSubscriptionDialog open onOpenChange={vi.fn()} />);
+
+    // Multi-provider dialogs keep per-row buttons; none may auto-fetch.
+    for (const name of [
+      /sign in with chatgpt/i,
+      /sign in with github/i,
+      /sign in with microsoft/i,
+    ]) {
+      expect(screen.getByRole("button", { name })).toHaveAttribute(
+        "data-autostart",
+        "false",
+      );
+    }
   });
 });

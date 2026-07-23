@@ -71,7 +71,6 @@ import {
   PermissionRequirementHint,
 } from "@/components/permission-requirement-hint";
 import { SharePersonalCredentialsDialog } from "@/components/share-personal-credentials-dialog";
-import { SubscriptionSignInCta } from "@/components/subscription-sign-in-cta";
 import { SystemPromptEditor } from "@/components/system-prompt-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -2498,13 +2497,6 @@ export function AgentDialog({
                                 {pinnedSubscription.title} plan.
                               </p>
                             )}
-                            {pinnedSubscription &&
-                              !pinnedSubscription.connected && (
-                                <SubscriptionSignInCta
-                                  entry={pinnedSubscription}
-                                  onConnected={handleLlmApiKeyChange}
-                                />
-                              )}
                             {showNoToolsModelNotice && (
                               <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                                 <InfoIcon

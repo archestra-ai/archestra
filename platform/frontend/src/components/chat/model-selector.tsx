@@ -787,6 +787,11 @@ export const ModelSelector = memo(function ModelSelector({
         isConnected: m.isConnected,
       })),
       isLoading,
+      // Defense-in-depth beneath `suppressAutoSelect`: the current (unavailable)
+      // selection is a subscription the viewer hasn't connected. Its model is
+      // absent from their catalog by design, so hold it rather than swap in the
+      // org key's model, which would silently change who pays.
+      selectedModelHeldPerUser: currentModelSignInEntry != null,
     });
     if (modelToSelect) {
       onModelChange(modelToSelect);
@@ -798,6 +803,7 @@ export const ModelSelector = memo(function ModelSelector({
     allAvailableModels,
     selectedModel,
     onModelChange,
+    currentModelSignInEntry,
   ]);
 
   // If loading, show loading state

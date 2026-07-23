@@ -53,6 +53,7 @@ export function ProviderAuthRequiredCard({
           {provider === "github-copilot" ? (
             <GithubCopilotSignIn
               disabled={createKey.isPending}
+              autoStart
               onToken={async (token) => {
                 try {
                   await createKey.mutateAsync({
@@ -73,6 +74,7 @@ export function ProviderAuthRequiredCard({
           ) : provider === "microsoft-365-copilot" ? (
             <Microsoft365CopilotSignIn
               disabled={createKey.isPending}
+              autoStart
               onToken={async (token) => {
                 try {
                   await createKey.mutateAsync({
@@ -96,6 +98,7 @@ export function ProviderAuthRequiredCard({
             // (Codex) credential mode — connect via the ChatGPT device flow.
             <OpenaiCodexSignIn
               disabled={createKey.isPending}
+              autoStart
               onCredential={async (credential) => {
                 try {
                   await createKey.mutateAsync({

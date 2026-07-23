@@ -364,13 +364,6 @@ export default function ApiKeysPage() {
     () => queriedApiKeys.filter((key) => !isOwnPersonalSubscription(key)),
     [queriedApiKeys, isOwnPersonalSubscription],
   );
-  // Whether the credential inventory has anything beyond the viewer's own
-  // subscriptions — used to decide which section leads the page below.
-  const hasTableKeys = useMemo(
-    () => allApiKeys.some((key) => !isOwnPersonalSubscription(key)),
-    [allApiKeys, isOwnPersonalSubscription],
-  );
-
   const providerOptions = useMemo(() => {
     const seen = new Set<string>();
     return allApiKeys
@@ -619,17 +612,15 @@ export default function ApiKeysPage() {
           />
         ) : (
           <>
-            {/* Once the org runs on API keys, the key inventory leads and
-                subscriptions demote to a quieter section below the table —
-                "Add API Key" stays the primary path. Subscriptions only lead
-                while they are the org's sole way of connecting a model. */}
-            {!hasTableKeys && (
-              <SubscriptionsPanel
-                keys={allApiKeys}
-                onDisconnect={openDeleteDialog}
-                onEdit={openEditDialog}
-              />
-            )}
+            {/* Subscriptions are first-class credentials, so the panel always
+                leads the page above the API keys header and table — a
+                subscription is one person's plan, never demoted below the org's
+                shared keys. */}
+            <SubscriptionsPanel
+              keys={allApiKeys}
+              onDisconnect={openDeleteDialog}
+              onEdit={openEditDialog}
+            />
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <SearchInput
@@ -690,14 +681,6 @@ export default function ApiKeysPage() {
                 }
               />
             </div>
-
-            {hasTableKeys && (
-              <SubscriptionsPanel
-                keys={allApiKeys}
-                onDisconnect={openDeleteDialog}
-                onEdit={openEditDialog}
-              />
-            )}
           </>
         )}
 

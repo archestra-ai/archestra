@@ -74,7 +74,6 @@ import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-trigger.utils";
 import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
 import { StandardDialog } from "@/components/standard-dialog";
-import { SubscriptionSignInCta } from "@/components/subscription-sign-in-cta";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -966,11 +965,11 @@ export function ChatPageContent({
   const updateConversationMutateRef = useRef(updateConversationMutation.mutate);
   updateConversationMutateRef.current = updateConversationMutation.mutate;
 
-  // Land the chat on a just-connected subscription key — shared by the sign-in
-  // dialog (Enter path) and the CTA banners above the composers. The pinned
-  // model stays; without this the conversation keeps whatever key it was
-  // created with (e.g. a stale same-provider org key) and the next send still
-  // uses the wrong credential.
+  // Land the chat on a just-connected subscription key — the sign-in dialog's
+  // onConnected, reached from the Enter guard and the composer pill's "Sign in"
+  // chip. The pinned model stays; without this the conversation keeps whatever
+  // key it was created with (e.g. a stale same-provider org key) and the next
+  // send still uses the wrong credential.
   const applyChatApiKeyId = useCallback(
     (apiKeyId: string) => {
       if (conversationId) {
@@ -2961,12 +2960,6 @@ export function ChatPageContent({
                           default="none"
                         >
                           <div className="max-w-4xl mx-auto space-y-3">
-                            {blockedSubscriptionEntry && (
-                              <SubscriptionSignInCta
-                                entry={blockedSubscriptionEntry}
-                                onConnected={applyChatApiKeyId}
-                              />
-                            )}
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
                               toolsUnavailable={conversationToolsUnavailable}
@@ -3017,6 +3010,15 @@ export function ChatPageContent({
                                 conversationPerUserConnect.needsConnect
                                   ? conversationPerUserConnect.provider
                                   : undefined
+                              }
+                              subscriptionSignInRequired={
+                                !!blockedSubscriptionEntry
+                              }
+                              subscriptionSignInLabel={
+                                blockedSubscriptionEntry?.title
+                              }
+                              onSubscriptionSignIn={() =>
+                                setSubscriptionSignInOpen(true)
                               }
                               prefillText={composerPrefill}
                               onPrefillApplied={handleComposerPrefillApplied}
@@ -3127,12 +3129,6 @@ export function ChatPageContent({
                           default="none"
                         >
                           <div className="w-full max-w-4xl space-y-3">
-                            {blockedSubscriptionEntry && (
-                              <SubscriptionSignInCta
-                                entry={blockedSubscriptionEntry}
-                                onConnected={applyChatApiKeyId}
-                              />
-                            )}
                             <ArchestraPromptInput
                               onSubmit={handleInitialSubmit}
                               toolsUnavailable={initialToolsUnavailable}
@@ -3179,6 +3175,15 @@ export function ChatPageContent({
                                 initialPerUserConnect.needsConnect
                                   ? initialPerUserConnect.provider
                                   : undefined
+                              }
+                              subscriptionSignInRequired={
+                                !!blockedSubscriptionEntry
+                              }
+                              subscriptionSignInLabel={
+                                blockedSubscriptionEntry?.title
+                              }
+                              onSubscriptionSignIn={() =>
+                                setSubscriptionSignInOpen(true)
                               }
                               prefillText={composerPrefill}
                               onPrefillApplied={handleComposerPrefillApplied}

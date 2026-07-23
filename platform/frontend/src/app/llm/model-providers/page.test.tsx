@@ -1,6 +1,9 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import {
+  E2eTestId,
+  getSubscriptionPickerOptionTestId,
+} from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -313,6 +316,42 @@ describe("ApiKeysPage", () => {
 
     expect(screen.getByTestId(E2eTestId.AddChatApiKeyButton)).toBeEnabled();
     expect(screen.getByTestId(E2eTestId.UseSubscriptionButton)).toBeEnabled();
+  });
+
+  it("renders the Subscriptions panel above the API keys table even when table keys exist", () => {
+    // The panel always leads the page — above the API keys header and table.
+    // Previously it demoted below the table once any table-visible key existed;
+    // a subscription is one person's plan and never sits under shared org keys.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [
+        {
+          id: "k1",
+          name: "Personal",
+          provider: "openai",
+          scope: "personal",
+          userId: "user-1",
+          isSystem: false,
+          secretStorageType: "database",
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    const panelCard = screen.getByTestId(
+      getSubscriptionPickerOptionTestId("openai"),
+    );
+    const table = screen.getByTestId(E2eTestId.ChatApiKeysTable);
+    // The panel card precedes the table in document order.
+    expect(
+      panelCard.compareDocumentPosition(table) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("disables edit/delete for another user's personal key even for an admin", () => {

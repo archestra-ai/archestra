@@ -186,6 +186,66 @@ describe("resolveInitialModel", () => {
     });
     expect(result).toEqual({ modelId: "uuid-gpt-4o", apiKeyId: "key-openai" });
   });
+
+  // A ChatGPT subscription rides the shared `openai` provider, so the pure
+  // provider check can't flag it — the backend's per-user flag on the agent is
+  // the authority. For a non-creator viewer the subscription's model isn't in
+  // their catalog at all, and its key is the creator's. The default must still
+  // be held by model id alone with the key dropped (exactly the Copilot path),
+  // NOT paired with a key the viewer can't use — otherwise auto-select would
+  // later swap in the org key's model.
+  test("holds an openai ChatGPT-subscription agent default by model alone for a non-creator", () => {
+    const result = resolveInitialModel({
+      // The subscription model is absent from the non-creator's catalog.
+      modelsByProvider: baseModels,
+      agent: {
+        modelId: "uuid-gpt-5-codex",
+        llmApiKeyId: "key-creator-chatgpt",
+        llmProviderRequiresPerUserCredential: true,
+      },
+      chatApiKeys: baseChatApiKeys,
+      organization: null,
+      memberDefault: null,
+    });
+    expect(result).toEqual({ modelId: "uuid-gpt-5-codex", apiKeyId: null });
+  });
+
+  test("holds an org-default ChatGPT subscription by model alone, dropping the admin key", () => {
+    const result = resolveInitialModel({
+      modelsByProvider: baseModels,
+      // The agent pins nothing; the backend flag reflects the inherited org
+      // default subscription.
+      agent: {
+        modelId: null,
+        llmApiKeyId: null,
+        llmProviderRequiresPerUserCredential: true,
+      },
+      chatApiKeys: baseChatApiKeys,
+      organization: {
+        defaultModelId: "uuid-gpt-5-codex",
+        defaultLlmApiKeyId: "key-admin-chatgpt",
+      },
+      memberDefault: null,
+    });
+    expect(result).toEqual({ modelId: "uuid-gpt-5-codex", apiKeyId: null });
+  });
+
+  test("keeps the member's own keyed model over a subscription agent default", () => {
+    // The per-user hold applies only to the agent/org effective model — an
+    // explicit member choice still wins normally with its own key.
+    const result = resolveInitialModel({
+      modelsByProvider: baseModels,
+      agent: {
+        modelId: "uuid-gpt-5-codex",
+        llmApiKeyId: "key-creator-chatgpt",
+        llmProviderRequiresPerUserCredential: true,
+      },
+      chatApiKeys: baseChatApiKeys,
+      organization: null,
+      memberDefault: { modelId: "uuid-gpt-4o", chatApiKeyId: "key-openai" },
+    });
+    expect(result).toEqual({ modelId: "uuid-gpt-4o", apiKeyId: "key-openai" });
+  });
 });
 
 describe("resolveModelForAgent", () => {
@@ -290,6 +350,22 @@ describe("resolveAutoSelectedModel", () => {
         isLoading: false,
       }),
     ).toBe("uuid-copilot");
+  });
+
+  // A subscription-held selection (e.g. an agent default backed by a ChatGPT
+  // subscription the viewer hasn't connected) is absent from the catalog by
+  // design. Even with a keyed org model available, it must NOT be swapped in —
+  // that silently changes who pays. This is the defense-in-depth beneath
+  // `suppressAutoSelect`.
+  test("does not swap a subscription-held selection for the org key's model", () => {
+    expect(
+      resolveAutoSelectedModel({
+        selectedModel: "uuid-sub-model",
+        availableModels: [{ id: "uuid-org", isBest: true }],
+        isLoading: false,
+        selectedModelHeldPerUser: true,
+      }),
+    ).toBeNull();
   });
 });
 

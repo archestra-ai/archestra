@@ -198,6 +198,22 @@ describe("ModelSelector coverage matrix", () => {
     await waitFor(() => expect(onModelChange).toHaveBeenCalledWith("kimi-1"));
   });
 
+  // A ChatGPT-subscription agent/org default the viewer hasn't connected is
+  // absent from their catalog by design. Even without the `suppressAutoSelect`
+  // gate, the resolver must hold it (via the resolved subscription-provider
+  // hint) rather than swap in the org key's model — that silently changes who
+  // pays. This is the pure-resolver defense beneath `suppressAutoSelect`.
+  it("does not auto-swap a subscription model absent from the viewer's list", () => {
+    // No keys mocked -> the ChatGPT (openai) subscription reads as unconnected.
+    setQuery({ modelsByProvider: { openai: [model()] } });
+    const { onModelChange } = renderSelector({
+      selectedModel: "sub-model-absent",
+      fallbackModelProvider: "openai",
+      variant: "default",
+    });
+    expect(onModelChange).not.toHaveBeenCalled();
+  });
+
   it("renders the empty-selection placeholder and does not auto-select", () => {
     setQuery({ modelsByProvider: { openai: [model()] } });
     const { onModelChange } = renderSelector({

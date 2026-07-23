@@ -109,9 +109,11 @@ function shortSlugHash(value: string): string {
  * shape so existing tool names never change invisibly (stale clients cache
  * them and `limits` rows are keyed on them). Legacy rows re-mint to the
  * current format only through an explicit user action — a catalog rename
- * (`renameToolPrefixesForCatalog`). Returns null when the combo needs no
- * trimming, or when it leaves no prefix room at all — the legacy and current
- * formats agree in both of those cases.
+ * (`renameToolPrefixesForCatalog`). Grandfathering is scoped to the catalog's
+ * current display name: a stored prefix minted under an older name never
+ * matches this shape and keeps the pre-existing sync-rename behavior. Returns
+ * null when the combo needs no trimming, or when it leaves no prefix room at
+ * all — the legacy and current formats agree in both of those cases.
  */
 function legacySlugifyName(
   mcpServerName: string,
@@ -125,6 +127,25 @@ function legacySlugifyName(
     return null;
   }
   return `${serverSlug.slice(0, prefixBudget)}${suffix}`;
+}
+
+/**
+ * Look up a tool by its incoming current-format name, falling back to the
+ * grandfathered legacy-format name the stored row may still carry (see
+ * `legacySlugifyName`).
+ */
+function getByCurrentOrLegacyName<T>(params: {
+  byName: Map<string, T>;
+  name: string;
+  legacyNameByInputName: Map<string, string>;
+}): T | undefined {
+  const { byName, name, legacyNameByInputName } = params;
+  const current = byName.get(name);
+  if (current !== undefined) {
+    return current;
+  }
+  const legacyName = legacyNameByInputName.get(name);
+  return legacyName === undefined ? undefined : byName.get(legacyName);
 }
 
 /**
@@ -1034,9 +1055,11 @@ class ToolModel {
 
     for (const tool of tools) {
       const rawName = tool.rawToolName ?? ToolModel.unslugifyName(tool.name);
-      const existingTool =
-        existingToolsByName.get(tool.name) ??
-        existingToolsByName.get(legacyNameByInputName.get(tool.name) ?? "");
+      const existingTool = getByCurrentOrLegacyName({
+        byName: existingToolsByName,
+        name: tool.name,
+        legacyNameByInputName,
+      });
       if (existingTool) {
         // Refresh cached schema fields when the upstream tool changed, so
         // re-discovery (install/reinstall) propagates new descriptions and
@@ -1132,10 +1155,12 @@ class ToolModel {
     // keyed under its stored name, not the incoming current-format one)
     const resultToolsByName = new Map(resultTools.map((t) => [t.name, t]));
     return tools
-      .map(
-        (t) =>
-          resultToolsByName.get(t.name) ??
-          resultToolsByName.get(legacyNameByInputName.get(t.name) ?? ""),
+      .map((t) =>
+        getByCurrentOrLegacyName({
+          byName: resultToolsByName,
+          name: t.name,
+          legacyNameByInputName,
+        }),
       )
       .filter((t): t is Tool => t !== undefined);
   }
@@ -1272,6 +1297,10 @@ class ToolModel {
 
     const confirmedToolIds: string[] = [];
     const toDelete: string[] = [];
+    // Accepted narrow gap: a provisional row cloned before the hashed trimmed
+    // slug format shipped carries a legacy-format name that never matches the
+    // freshly minted discovered names, so it is deleted here and recreated by
+    // the sync as a fresh install — its cloned policies are dropped.
     for (const tool of provisional) {
       if (discoveredToolNames.has(tool.name)) {
         confirmedToolIds.push(tool.id);

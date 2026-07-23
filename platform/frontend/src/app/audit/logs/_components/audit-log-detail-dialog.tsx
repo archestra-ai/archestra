@@ -16,6 +16,7 @@ import {
   formatResourceType,
   OUTCOME_BADGE_VARIANT,
   OUTCOME_LABEL,
+  resourceDisplayName,
 } from "./audit-log-action-labels";
 import {
   AuditLogDiffView,
@@ -178,18 +179,27 @@ function ActorBlock({ event }: { event: AuditLog }) {
 }
 
 function ResourceBlock({ event }: { event: AuditLog }) {
-  if (!event.resourceType && !event.resourceId) {
+  const name = resourceDisplayName(event);
+  if (!event.resourceType && !event.resourceId && !name) {
     return <span className="text-muted-foreground">—</span>;
   }
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {event.resourceType && (
-        <Badge variant="secondary">
-          {formatResourceType(event.resourceType)}
-        </Badge>
-      )}
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-2">
+        {event.resourceType && (
+          <Badge variant="secondary">
+            {formatResourceType(event.resourceType)}
+          </Badge>
+        )}
+        {name && <span>{name}</span>}
+      </div>
       {event.resourceId && (
-        <code className="break-all font-mono text-xs">{event.resourceId}</code>
+        <div className="flex items-center gap-1">
+          <code className="break-all font-mono text-xs text-muted-foreground">
+            {event.resourceId}
+          </code>
+          <CopyButton text={event.resourceId} size={12} />
+        </div>
       )}
     </div>
   );

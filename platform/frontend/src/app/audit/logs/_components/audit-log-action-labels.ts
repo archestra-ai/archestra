@@ -330,3 +330,23 @@ export function formatResourceType(resourceType: string): string {
     .toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
+
+/**
+ * Human-readable identity of the audited resource. Prefers the denormalized
+ * event-time `resourceName`; rows written before that column existed fall back
+ * to the identity captured inside the before/after snapshots.
+ */
+export function resourceDisplayName(event: {
+  resourceName?: string | null;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+}): string | null {
+  if (event.resourceName) return event.resourceName;
+  for (const key of ["name", "email"]) {
+    for (const snapshot of [event.after, event.before]) {
+      const value = snapshot?.[key];
+      if (typeof value === "string" && value.trim()) return value;
+    }
+  }
+  return null;
+}

@@ -9,7 +9,9 @@ import { AuditLogTable } from "./audit-log-table";
 
 /**
  * Contract: AuditLogTable — columns (When / Actor / Action / Outcome / Resource / Where),
- * resource id hidden in grid, detail dialog on row click, URL-driven filters + clear resets page.
+ * resource NAME shown in grid (denormalized, snapshot fallback) while the raw
+ * resource id stays hidden, detail dialog on row click, URL-driven filters
+ * (incl. the agent picker → resourceId) + clear resets page.
  */
 
 global.ResizeObserver = class ResizeObserver {
@@ -25,6 +27,7 @@ Element.prototype.releasePointerCapture = vi.fn();
 
 const mockUseAuditLogs = vi.fn();
 const mockUseMembersPaginated = vi.fn();
+const mockUseProfilesPaginated = vi.fn();
 
 vi.mock("next/navigation");
 
@@ -42,6 +45,11 @@ vi.mock("@/lib/member.query", () => ({
   useMembersPaginated: (...args: unknown[]) => mockUseMembersPaginated(...args),
 }));
 
+vi.mock("@/lib/agent.query", () => ({
+  useProfilesPaginated: (...args: unknown[]) =>
+    mockUseProfilesPaginated(...args),
+}));
+
 function makeEvent(overrides: Partial<AuditLog> = {}): AuditLog {
   return {
     id: "evt-1",
@@ -55,6 +63,7 @@ function makeEvent(overrides: Partial<AuditLog> = {}): AuditLog {
     outcome: "success",
     resourceType: "agent",
     resourceId: "agent-123",
+    resourceName: null,
     before: { name: "Old name" },
     after: { name: "New name" },
     httpMethod: "PATCH",
@@ -140,6 +149,7 @@ describe("AuditLogTable", () => {
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
     mockUseMembersPaginated.mockReturnValue({ data: { data: [] } });
+    mockUseProfilesPaginated.mockReturnValue({ data: { data: [] } });
   });
 
   it("renders rows returned from the query with actor, action, outcome and resource", () => {
@@ -232,6 +242,64 @@ describe("AuditLogTable", () => {
     expect(
       screen.queryByText("very-distinctive-agent-id-12345"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders the denormalized resource name next to the type badge", () => {
+    mockUseAuditLogs.mockReturnValue(
+      withRows([
+        makeEvent({ resourceName: "PotatoAI", before: null, after: null }),
+      ]),
+    );
+
+    renderTable();
+
+    expect(screen.getByText("Agent")).toBeInTheDocument();
+    expect(screen.getByText("PotatoAI")).toBeInTheDocument();
+  });
+
+  it("falls back to the snapshot name for rows written before resource_name existed", () => {
+    mockUseAuditLogs.mockReturnValue(
+      withRows([
+        makeEvent({
+          resourceName: null,
+          before: { name: "Legacy Snapshot Agent" },
+          after: null,
+        }),
+      ]),
+    );
+
+    renderTable();
+
+    expect(screen.getByText("Legacy Snapshot Agent")).toBeInTheDocument();
+  });
+
+  it("reads resourceId filter from URL params and passes to useAuditLogs", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("resourceId=agent-xyz") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+
+    mockUseAuditLogs.mockReturnValue(withEmpty());
+
+    renderTable();
+
+    expect(mockUseAuditLogs).toHaveBeenCalledWith(
+      expect.objectContaining({ resourceId: "agent-xyz" }),
+    );
+  });
+
+  it("requests both active and soft-deleted agents for the agent picker", () => {
+    mockUseAuditLogs.mockReturnValue(withEmpty());
+
+    renderTable();
+
+    expect(mockUseProfilesPaginated).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "active" }),
+    );
+    expect(mockUseProfilesPaginated).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "deleted" }),
+    );
   });
 
   it("reads action and resource filters from URL params and passes to useAuditLogs", () => {

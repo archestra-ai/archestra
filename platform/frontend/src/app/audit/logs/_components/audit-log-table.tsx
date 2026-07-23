@@ -19,6 +19,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useProfilesPaginated } from "@/lib/agent.query";
 import {
   type AuditActorType,
   type AuditEventName,
@@ -42,10 +43,12 @@ import {
   KNOWN_RESOURCE_TYPES,
   OUTCOME_BADGE_VARIANT,
   OUTCOME_LABEL,
+  resourceDisplayName,
 } from "./audit-log-action-labels";
 import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
 
 const ACTOR_FILTER_LIMIT = 100;
+const AGENT_FILTER_LIMIT = 100;
 const ALL_VALUE = "all";
 
 // TS7 (tsgo) trips instantiating ColumnDef over AuditLog because `action` is a
@@ -80,6 +83,7 @@ export function AuditLogTable() {
     | typeof ALL_VALUE
     | AuditEventName;
   const resourceTypeFromUrl = searchParams.get("resourceType") ?? ALL_VALUE;
+  const resourceIdFromUrl = searchParams.get("resourceId") ?? ALL_VALUE;
   const actorFromUrl = searchParams.get("actorId") ?? ALL_VALUE;
   const outcomeFromUrl = (searchParams.get("outcome") ?? ALL_VALUE) as
     | typeof ALL_VALUE
@@ -167,6 +171,14 @@ export function AuditLogTable() {
     [updateUrlParams],
   );
 
+  const handleAgentChange = useCallback(
+    (value: string) => {
+      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      updateUrlParams({ resourceId: value === ALL_VALUE ? null : value });
+    },
+    [updateUrlParams],
+  );
+
   const handleOutcomeChange = useCallback(
     (value: string) => {
       setPagination((prev) => ({ ...prev, pageIndex: 0 }));
@@ -190,6 +202,8 @@ export function AuditLogTable() {
     : undefined;
   const resourceType =
     resourceTypeFromUrl === ALL_VALUE ? undefined : resourceTypeFromUrl;
+  const resourceId =
+    resourceIdFromUrl === ALL_VALUE ? undefined : resourceIdFromUrl;
   const actorId = actorFromUrl === ALL_VALUE ? undefined : actorFromUrl;
   const outcome = (ALL_OUTCOMES as readonly string[]).includes(outcomeFromUrl)
     ? (outcomeFromUrl as AuditOutcome)
@@ -216,12 +230,31 @@ export function AuditLogTable() {
     outcome,
     actorType,
     resourceType,
+    resourceId,
     search: searchFromUrl ?? undefined,
   });
 
   const { data: membersResponse } = useMembersPaginated({
     limit: ACTOR_FILTER_LIMIT,
     offset: 0,
+  });
+
+  // Two lifecycle buckets: agents are soft-deleted, so a deleted agent's
+  // history stays reachable through the picker (the audit page is admin-only,
+  // which is also what the deleted bucket requires).
+  const { data: activeAgentsResponse } = useProfilesPaginated({
+    limit: AGENT_FILTER_LIMIT,
+    offset: 0,
+    sortBy: "name",
+    sortDirection: "asc",
+    status: "active",
+  });
+  const { data: deletedAgentsResponse } = useProfilesPaginated({
+    limit: AGENT_FILTER_LIMIT,
+    offset: 0,
+    sortBy: "name",
+    sortDirection: "asc",
+    status: "deleted",
   });
 
   const rows = response?.data ?? [];
@@ -236,6 +269,21 @@ export function AuditLogTable() {
       })) ?? [];
     return [{ value: ALL_VALUE, label: "All actors" }, ...items];
   }, [membersResponse]);
+
+  const agentOptions = useMemo(() => {
+    const active =
+      activeAgentsResponse?.data?.map((a) => ({
+        value: a.id,
+        label: a.name,
+      })) ?? [];
+    const deleted =
+      deletedAgentsResponse?.data?.map((a) => ({
+        value: a.id,
+        label: a.name,
+        description: "Deleted",
+      })) ?? [];
+    return [{ value: ALL_VALUE, label: "All agents" }, ...active, ...deleted];
+  }, [activeAgentsResponse, deletedAgentsResponse]);
 
   const actionOptions = useMemo(
     () => [
@@ -340,13 +388,23 @@ export function AuditLogTable() {
         header: "Resource",
         cell: ({ row }) => {
           const { resourceType: rt } = row.original;
-          if (!rt) {
+          const name = resourceDisplayName(row.original);
+          if (!rt && !name) {
             return <span className="text-xs text-muted-foreground">—</span>;
           }
           return (
-            <Badge variant="secondary" className="text-xs">
-              {formatResourceType(rt)}
-            </Badge>
+            <div className="flex items-center gap-2">
+              {rt && (
+                <Badge variant="secondary" className="text-xs">
+                  {formatResourceType(rt)}
+                </Badge>
+              )}
+              {name && (
+                <span className="text-xs">
+                  <TruncatedText message={name} maxLength={32} />
+                </span>
+              )}
+            </div>
           );
         },
       },
@@ -388,6 +446,7 @@ export function AuditLogTable() {
     outcome !== undefined ||
     actorType !== undefined ||
     resourceType !== undefined ||
+    resourceId !== undefined ||
     actorId !== undefined ||
     dateTimePicker.startDate !== undefined;
 
@@ -400,6 +459,7 @@ export function AuditLogTable() {
       outcome: null,
       actorType: null,
       resourceType: null,
+      resourceId: null,
       actorId: null,
       startDate: null,
       endDate: null,
@@ -453,6 +513,13 @@ export function AuditLogTable() {
           placeholder="Filter by resource"
           items={resourceOptions}
           className="w-[200px]"
+        />
+        <SearchableSelect
+          value={resourceId ?? ALL_VALUE}
+          onValueChange={handleAgentChange}
+          placeholder="Filter by agent"
+          items={agentOptions}
+          className="w-[220px]"
         />
         <SearchableSelect
           value={actorId ?? ALL_VALUE}

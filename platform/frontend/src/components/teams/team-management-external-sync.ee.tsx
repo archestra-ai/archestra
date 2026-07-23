@@ -28,7 +28,7 @@ import { Separator } from "@/components/ui/separator";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useIdentityProviderLatestIdTokenClaims,
-  useIdentityProviders,
+  useTeamSyncIdentityProviderOptions,
 } from "@/lib/auth/identity-provider.query.ee";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
@@ -53,7 +53,10 @@ export function TeamManagementExternalSyncSection({
 }: TeamManagementExternalSyncSectionProps) {
   const queryClient = useQueryClient();
   const appName = useAppName();
-  const { data: identityProviders = [] } = useIdentityProviders({
+  // Minimal team-sync projection (team:read) rather than the full provider
+  // configuration, so team admins without identityProvider:read can link
+  // groups to their team.
+  const { data: identityProviders = [] } = useTeamSyncIdentityProviderOptions({
     enabled: open,
   });
   const { data: canUpdateIdentityProviders = false } = useHasPermissions({
@@ -159,7 +162,7 @@ export function TeamManagementExternalSyncSection({
   }
 
   const selectedGroupsExpression =
-    selectedIdentityProvider?.teamSyncConfig?.groupsExpression?.trim();
+    selectedIdentityProvider?.groupsExpression?.trim();
 
   return (
     <div className="space-y-6">

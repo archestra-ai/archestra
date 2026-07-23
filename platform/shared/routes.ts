@@ -514,6 +514,7 @@ export const RouteId = {
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",
   GetIdentityProviders: "getIdentityProviders",
+  GetIdentityProviderTeamSyncOptions: "getIdentityProviderTeamSyncOptions",
   GetIdentityProvider: "getIdentityProvider",
   GetIdentityProviderLatestIdTokenClaims:
     "getIdentityProviderLatestIdTokenClaims",

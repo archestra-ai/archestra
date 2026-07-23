@@ -1360,11 +1360,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetIdentityProviders]: {
     identityProvider: ["read"],
   },
+  // Minimal projection (id, name, groups expression) for the team External
+  // Group Sync section: team admins link groups to their team without holding
+  // identityProvider:read. No configuration or secrets are exposed.
+  [RouteId.GetIdentityProviderTeamSyncOptions]: {
+    team: ["read"],
+  },
   [RouteId.GetIdentityProvider]: {
     identityProvider: ["read"],
   },
+  // Returns only the CALLER'S own decoded token claims (never another user's,
+  // never provider configuration), so team admins can find their group value
+  // while configuring external group sync.
   [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
-    identityProvider: ["read"],
+    team: ["read"],
   },
   // Installers need to know whether they must link a downstream IdP, but this
   // endpoint does not expose identity-provider configuration or secrets.

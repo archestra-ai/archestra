@@ -378,6 +378,82 @@ describe("identity provider routes", () => {
     });
   });
 
+  describe("GET /api/identity-providers/team-sync-options", () => {
+    test("returns id, name, and groups expression only — no configuration or secrets", async ({
+      makeIdentityProvider,
+    }) => {
+      await makeIdentityProvider(organizationId, {
+        providerId: "sync-options-provider",
+        oidcConfig: {
+          clientId: "test-client",
+          clientSecret: "test-secret",
+          issuer: "https://idp.example.com",
+          pkce: false,
+          discoveryEndpoint:
+            "https://idp.example.com/.well-known/openid-configuration",
+        },
+        teamSyncConfig: {
+          groupsExpression: "{{#each groups}}{{this}},{{/each}}",
+        },
+      });
+      await makeIdentityProvider(organizationId, {
+        providerId: "sync-options-no-template",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/identity-providers/team-sync-options",
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data =
+        response.json<
+          Array<{
+            id: string;
+            providerId: string;
+            groupsExpression: string | null;
+          }>
+        >();
+      expect(data).toHaveLength(2);
+      const withTemplate = data.find(
+        (p) => p.providerId === "sync-options-provider",
+      );
+      expect(withTemplate?.groupsExpression).toBe(
+        "{{#each groups}}{{this}},{{/each}}",
+      );
+      const withoutTemplate = data.find(
+        (p) => p.providerId === "sync-options-no-template",
+      );
+      expect(withoutTemplate?.groupsExpression).toBeNull();
+      // The projection must never leak provider configuration.
+      for (const provider of data) {
+        expect(Object.keys(provider).sort()).toEqual([
+          "groupsExpression",
+          "id",
+          "providerId",
+        ]);
+      }
+    });
+
+    test("excludes other organizations' providers", async ({
+      makeIdentityProvider,
+      makeOrganization,
+    }) => {
+      const otherOrg = await makeOrganization();
+      await makeIdentityProvider(otherOrg.id, {
+        providerId: "foreign-provider",
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/identity-providers/team-sync-options",
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual([]);
+    });
+  });
+
   describe("GET /api/identity-providers/public", () => {
     test("returns only id and providerId fields", async ({
       makeIdentityProvider,

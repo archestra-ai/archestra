@@ -214,15 +214,18 @@ export function TeamsList() {
       cell: ({ row }) => {
         const team = row.original;
         const canEditTeam = canUpdateTeams || isTeamAdminOf(team);
+        // Identity-provider readers who can't manage the team still get a
+        // view-only entry into the External Group Sync section.
+        const viewOnlyGroupSync = !canEditTeam && canReadIdentityProviders;
         const actions: TableRowAction[] = [
           {
-            icon: canEditTeam ? (
-              <Pencil className="h-4 w-4" />
-            ) : (
+            icon: viewOnlyGroupSync ? (
               <Eye className="h-4 w-4" />
+            ) : (
+              <Pencil className="h-4 w-4" />
             ),
-            label: canEditTeam ? "Edit" : "View group sync",
-            disabled: !canEditTeam && !canReadIdentityProviders,
+            label: viewOnlyGroupSync ? "View group sync" : "Edit",
+            disabled: !canEditTeam && !viewOnlyGroupSync,
             disabledTooltip: "You must be a team admin to manage this team",
             testId: `${E2eTestId.ManageMembersButton}-${team.name}`,
             onClick: () => openManagementDialog(team),

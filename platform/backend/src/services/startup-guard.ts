@@ -659,9 +659,9 @@ prompt_down_all() {
     *)
       line_reset
       if [ "$DOWN_COUNT" -eq 1 ]; then
-        printf '%s○%s %sSkipped — still configured; Claude may fail to reach it this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
+        printf '%s○%s %sSkipped — still configured; ${client.promptName} may fail to reach it this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
       else
-        printf '%s○%s %sSkipped — still configured; Claude may fail to reach them this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
+        printf '%s○%s %sSkipped — still configured; ${client.promptName} may fail to reach them this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
       fi
       ;;
   esac
@@ -803,7 +803,7 @@ if [ "$DISC_ALL" = "1" ]; then
 fi
 if [ "$SKIP_ALL" = "1" ]; then
   line_reset
-  printf '%s○%s %sSkipped — remotes stay configured; Claude may fail to reach them this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
+  printf '%s○%s %sSkipped — remotes stay configured; ${client.promptName} may fail to reach them this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
   printf '\\033[J'
   finish_guard
 fi

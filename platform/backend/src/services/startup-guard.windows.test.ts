@@ -73,6 +73,10 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain("DownMarker = ''");
     expect(script).toContain("Wait-ArchHealth");
     expect(script).toContain("-TimeoutSec 3");
+    // whitespace is normalized with the regex metaclass \s, not the literal
+    // letter 's' — so down markers still match a pretty-printed JSON body
+    expect(script).toContain("-replace '\\s', ''");
+    expect(script).not.toContain("-replace 's', ''");
     // Invoke-WebRequest's progress banner paints over the header rows —
     // silencing it is what keeps the logo from flickering on every fetch
     expect(script).toContain("$ProgressPreference = 'SilentlyContinue'");

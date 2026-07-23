@@ -187,7 +187,7 @@ function Invoke-ArchHealthFetch {
     $resp = Invoke-WebRequest -Uri $HealthUrl -Method Get -TimeoutSec 3 -UseBasicParsing -ErrorAction Stop
     # normalize whitespace so the down markers match regardless of how the
     # JSON is formatted (a pretty-printing proxy must not fail-open silently)
-    $Script:HealthBody = ([string]$resp.Content) -replace 's', ''
+    $Script:HealthBody = ([string]$resp.Content) -replace '\\s', ''
     return $true
   } catch {
     if ($_.Exception.PSObject.Properties['Response'] -and $_.Exception.Response) {

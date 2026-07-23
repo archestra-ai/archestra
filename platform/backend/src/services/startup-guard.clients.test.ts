@@ -84,6 +84,14 @@ describe.each([
     expect(script).toContain(`command ${client.binary} mcp remove`);
   });
 
+  test("every user-facing message names this client, never a hardcoded 'Claude'", () => {
+    const script = renderStartupGuardScript(CTX, client);
+    // the "Skipped — … may fail to reach …" lines and the down-summary prompt
+    // must use the client's own promptName, not Claude's
+    expect(script).toContain(`${client.promptName} may fail to reach`);
+    expect(script).not.toContain("Claude may fail to reach");
+  });
+
   test("install hooks the current shell's rc and tells the user how to arm it in this terminal", () => {
     const install = buildStartupGuardInstallSection(CTX, client);
     // The current shell's rc is chosen from $SHELL and hooked unconditionally

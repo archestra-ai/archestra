@@ -868,6 +868,40 @@ fi
 ok "Startup guard installed — new terminals check your ${ctx.appName} remotes before ${client.binary} starts."`;
 }
 
+/**
+ * The setup-script step that unshadows the client binary for THIS shell — emitted
+ * BEFORE the connect steps run the client CLI. A previous connect may have
+ * installed the guard's `<binary>()` wrapper into a profile that this shell has
+ * already sourced; left in place, it would splash/animate every time the connect
+ * steps below invoke `<binary>`. Dropping the wrapper function makes those calls
+ * reach the real `<binary>`.
+ *
+ * It is deliberately NON-destructive: it never deletes the installed guard files
+ * and never edits a shell profile. That is the whole point — the connect steps
+ * between here and the install section run under `set -euo pipefail`, so if any
+ * of them fails the script aborts before the install section is reached. Were
+ * this step to delete the persisted guard (as an earlier version did), that
+ * abort would strand the user with no startup screen at all. Leaving the on-disk
+ * guard untouched means a failed connect keeps the existing guard intact, while
+ * a successful connect refreshes it: {@link buildStartupGuardInstallSection}
+ * overwrites the guard file and rewrites the profile block idempotently, so it
+ * both de-duplicates and delivers updates on its own. Silent no-op when nothing
+ * is installed yet (first-ever connect).
+ */
+export function buildStartupGuardUnshadowSection(
+  client: StartupGuardClient,
+): string {
+  return `# A previous connect may have installed the ${client.binary} startup guard, whose
+# \`${client.binary}()\` wrapper this shell may already have sourced — it would splash
+# over the steps below. Drop it from this shell so those steps reach the real
+# \`${client.binary}\`. Deliberately non-destructive: it never deletes the installed
+# guard or edits a profile, so a failing step below (this script runs under
+# \`set -e\`) can never strand you without a startup screen. The install section at
+# the end overwrites the guard with the current version. No-op when nothing is
+# installed yet.
+unset -f ${client.binary} 2>/dev/null || true`;
+}
+
 // ===================================================================
 // Internal helpers
 // ===================================================================

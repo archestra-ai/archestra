@@ -5,6 +5,7 @@ import {
 import { describe, expect, test } from "vitest";
 import {
   buildWindowsClaudeCodeStartupGuardInstallSection,
+  buildWindowsClaudeCodeStartupGuardUnshadowSection,
   renderClaudeCodeStartupGuardPowerShell,
 } from "@/services/claude-code-startup-guard.windows";
 import type { StartupGuardContext } from "@/services/startup-guard";
@@ -292,5 +293,25 @@ describe("buildWindowsClaudeCodeStartupGuardInstallSection", () => {
     expect(section).toContain(
       `Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE '${CLAUDE_CODE_GUARD_SKIP_RELPATH}')`,
     );
+  });
+});
+
+describe("buildWindowsClaudeCodeStartupGuardUnshadowSection", () => {
+  test("unhooks the wrapper from the current session but is non-destructive", () => {
+    const unshadow = buildWindowsClaudeCodeStartupGuardUnshadowSection();
+    // irm|iex runs in the current session — dropping the loaded function is what
+    // stops a previously-installed guard from splashing during this connect
+    expect(unshadow).toContain(
+      "Remove-Item Function:claude -ErrorAction SilentlyContinue",
+    );
+    // …and it does NOTHING else. A connect step failing under 'Stop' runs between
+    // this step and the install section, so this step must never delete the
+    // persisted guard or edit a profile — otherwise a mid-connect abort would
+    // strand the user with no startup screen (the regression this pins against).
+    expect(unshadow).not.toContain("Remove-Item -Force");
+    expect(unshadow).not.toContain(CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH);
+    expect(unshadow).not.toContain(CLAUDE_CODE_GUARD_SKIP_RELPATH);
+    expect(unshadow).not.toContain(CLAUDE_CODE_GUARD_MARKER_START);
+    expect(unshadow).not.toContain("Set-Content");
   });
 });

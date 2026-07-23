@@ -7,7 +7,10 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
-import { buildWindowsClaudeCodeStartupGuardInstallSection } from "./claude-code-startup-guard.windows";
+import {
+  buildWindowsClaudeCodeStartupGuardInstallSection,
+  buildWindowsClaudeCodeStartupGuardUnshadowSection,
+} from "./claude-code-startup-guard.windows";
 import {
   claudeCodeOAuthNextStep,
   codexAttributionHeaderLines,
@@ -338,6 +341,15 @@ function psBareOrIndex(key: string): string {
 
 function claudeCodeSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
+
+  // Unshadow (see the POSIX renderer): drop the `claude` wrapper a previous
+  // connect installed so its guard can't splash over the steps below. Kept
+  // non-destructive on purpose — the reinstall at the end refreshes the on-disk
+  // guard, so a connect step failing under 'Stop' never strands the user without
+  // a startup screen.
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    sections.push(buildWindowsClaudeCodeStartupGuardUnshadowSection());
+  }
 
   if (ctx.mcp) {
     // Register at USER scope so the gateway is visible in every directory for

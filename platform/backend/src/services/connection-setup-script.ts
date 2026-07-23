@@ -17,6 +17,7 @@ import { renderWindowsSetupScript } from "./connection-setup-script.windows";
 import {
   buildStartupGuardContext,
   buildStartupGuardInstallSection,
+  buildStartupGuardUnshadowSection,
   type StartupGuardClient,
 } from "./startup-guard";
 import {
@@ -495,6 +496,8 @@ function indent(block: string, prefix: string): string {
 function claudeCodeSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
+  startupGuardUnshadowSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
+
   if (ctx.mcp) {
     // Register at USER scope so the gateway is visible in every directory for
     // this user. `claude mcp add` defaults to `local` (per-directory) scope,
@@ -531,6 +534,26 @@ fi`);
   startupGuardSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 
   return sections;
+}
+
+/**
+ * Prepend the guard-unshadow step, gated exactly like the install so the two
+ * always come as a pair. It runs before the connect steps invoke the client CLI
+ * so a guard wrapper installed by an earlier connect can never splash over this
+ * run. It is non-destructive (see {@link buildStartupGuardUnshadowSection}): the
+ * install section at the end is what refreshes the on-disk guard, and leaving
+ * the guard in place until then means a connect step failing under `set -e`
+ * never strands the user without a startup screen. Call this FIRST in a client's
+ * builder.
+ */
+function startupGuardUnshadowSection(
+  ctx: SetupScriptContext,
+  client: StartupGuardClient,
+  sections: string[],
+): void {
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    sections.push(buildStartupGuardUnshadowSection(client));
+  }
 }
 
 /**
@@ -720,6 +743,8 @@ export function codexAttributionHeaderLines(
 function codexSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
+  startupGuardUnshadowSection(ctx, CODEX_GUARD_CLIENT, sections);
+
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
@@ -785,6 +810,8 @@ fi`);
 
 function copilotSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
+
+  startupGuardUnshadowSection(ctx, COPILOT_GUARD_CLIENT, sections);
 
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}

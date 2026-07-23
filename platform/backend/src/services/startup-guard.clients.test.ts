@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { describe, expect, test } from "vitest";
 import {
   buildStartupGuardInstallSection,
+  buildStartupGuardUnshadowSection,
   renderStartupGuardScript,
   type StartupGuardClient,
   type StartupGuardContext,
@@ -81,6 +82,24 @@ describe.each([
     const script = renderStartupGuardScript(CTX, client);
     expect(script).toContain(`from ${client.promptName} now? (Y/n)`);
     expect(script).toContain(`command ${client.binary} mcp remove`);
+  });
+
+  test("unshadow step drops the wrapper but is non-destructive, silent, and valid bash", async () => {
+    const unshadow = buildStartupGuardUnshadowSection(client);
+    // It drops the wrapper from the running shell so re-connect's CLI calls
+    // reach the real binary instead of recursing into an installed guard…
+    expect(unshadow).toContain(`unset -f ${client.binary} 2>/dev/null || true`);
+    // …and does NOTHING else. A connect step failing under `set -e` runs between
+    // this step and the install section, so this step must never delete the
+    // persisted guard or edit a profile — otherwise a mid-connect abort would
+    // strand the user with no startup screen (the regression this pins against).
+    expect(unshadow).not.toContain("rm ");
+    expect(unshadow).not.toContain("rm -f");
+    expect(unshadow).not.toContain(`$HOME/${client.scriptRelpath}`);
+    expect(unshadow).not.toContain(`$HOME/${client.skipRelpath}`);
+    expect(unshadow).not.toContain(client.markerStart);
+    expect(unshadow).not.toContain("awk");
+    await expectValidBash(`set -euo pipefail\n${unshadow}`);
   });
 });
 

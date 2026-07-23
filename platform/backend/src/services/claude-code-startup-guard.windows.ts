@@ -773,6 +773,35 @@ foreach ($archProfilePath in $archProfiles) {
 Ok ${psq(`Startup guard installed — new PowerShell sessions check your ${ctx.appName} remotes before claude starts.`)}`;
 }
 
+/**
+ * PowerShell counterpart of {@link buildStartupGuardUnshadowSection}: unshadows
+ * `claude` before the connect steps run it. `irm <url> | iex` executes in the
+ * CURRENT PowerShell session — where the profile's `claude` wrapper is already
+ * loaded — so removing `Function:claude` here is what stops the old guard from
+ * splashing/animating over this run.
+ *
+ * It is deliberately NON-destructive: it never deletes the installed guard files
+ * and never edits a PowerShell profile. The connect steps between here and the
+ * install section run under `$ErrorActionPreference = 'Stop'`, so a failing step
+ * aborts the script before the install section is reached. Were this step to
+ * delete the persisted guard, that abort would strand the user with no startup
+ * screen. Leaving the on-disk guard in place means a failed connect keeps the
+ * existing guard intact; a successful connect refreshes it via
+ * {@link renderClaudeCodeStartupGuardInstallSection}, which overwrites the guard
+ * file and rewrites the profile block idempotently (de-dupes and delivers
+ * updates on its own). Silent no-op on the first-ever connect.
+ */
+export function buildWindowsClaudeCodeStartupGuardUnshadowSection(): string {
+  return `# A previous connect may have installed the claude startup guard. irm|iex runs
+# in the current session, where the profile's claude wrapper is already loaded —
+# drop it so the steps below reach the real claude. Deliberately non-destructive:
+# it never deletes the installed guard or edits a profile, so a failing step below
+# (this script runs under $ErrorActionPreference = 'Stop') can never strand you
+# without a startup screen. The install section at the end overwrites the guard
+# with the current version. Silent when nothing exists yet.
+Remove-Item Function:claude -ErrorAction SilentlyContinue`;
+}
+
 // ===================================================================
 // Internal helpers
 // ===================================================================

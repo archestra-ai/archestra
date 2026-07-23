@@ -47,6 +47,8 @@ const auditLogsTable = pgTable(
     outcome: text("outcome").$type<AuditOutcome>().notNull(),
     resourceType: text("resource_type"),
     resourceId: text("resource_id"),
+    /** Denormalized resource name as of event time; never updated on rename. */
+    resourceName: text("resource_name"),
     before: jsonb("before").$type<AuditableSnapshot>(),
     after: jsonb("after").$type<AuditableSnapshot>(),
     httpMethod: text("http_method"),

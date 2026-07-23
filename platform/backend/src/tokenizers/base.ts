@@ -7,6 +7,7 @@ import type {
   Groq,
   Minimax,
   Ollama,
+  OllamaNative,
   OpenAi,
   Openrouter,
   Vllm,
@@ -22,6 +23,7 @@ export type ProviderMessage =
   | Openrouter.Types.ChatCompletionsRequest["messages"][number]
   | Vllm.Types.ChatCompletionsRequest["messages"][number]
   | Ollama.Types.ChatCompletionsRequest["messages"][number]
+  | OllamaNative.Types.Messages[number]
   | Zhipuai.Types.ChatCompletionsRequest["messages"][number]
   | DeepSeek.Types.ChatCompletionsRequest["messages"][number]
   | Minimax.Types.ChatCompletionsRequest["messages"][number];
@@ -118,17 +120,14 @@ export abstract class BaseTokenizer implements Tokenizer {
       }
 
       if (Array.isArray(message.content)) {
-        const text = message.content.reduce(
-          (acc: string, block: { type?: string; text?: string }) => {
-            if (block.type === "text" && typeof block.text === "string") {
-              acc += block.text;
-            }
-            return acc;
-          },
-          "",
-        );
-
-        return text;
+        // Ollama's native messages type `content` as `string | unknown[]`, so
+        // blocks are narrowed here rather than assumed to be text parts.
+        return (message.content as unknown[]).reduce<string>((acc, block) => {
+          const part = block as { type?: unknown; text?: unknown };
+          return part?.type === "text" && typeof part.text === "string"
+            ? acc + part.text
+            : acc;
+        }, "");
       }
     }
 

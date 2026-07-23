@@ -58,7 +58,10 @@ import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { useFileDeletion } from "@/lib/chat/use-file-deletion";
 import { useDialogFlagUrlParam } from "@/lib/hooks/use-dialog-url-param";
-import { canManageProject } from "@/lib/projects/project-permissions";
+import {
+  canDeleteProject,
+  canManageProject,
+} from "@/lib/projects/project-permissions";
 import {
   useDeleteProject,
   useDeleteProjectFiles,
@@ -96,6 +99,7 @@ function ProjectDetail() {
   const { open: editOpen, setOpen: setEditOpen } =
     useDialogFlagUrlParam("edit");
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
+  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
 
   // Same as /chat: the Files sidebar owns the bottom edge, so the app shell's
   // version footer would float in the left column — hide it.
@@ -137,6 +141,12 @@ function ProjectDetail() {
   // with them, or another member's they oversee (edit / delete / sharing /
   // instructions), matching the backend's requireManageable.
   const canManage = canManageProject(project.viewerRole, !!isProjectAdmin);
+  const canDelete = canDeleteProject({
+    viewerRole: project.viewerRole,
+    visibility: project.visibility,
+    isProjectAdmin: !!isProjectAdmin,
+    canShareOrg: !!canShareOrg,
+  });
   // The oversight-only view (a foreign project surfaced purely via project:admin)
   // additionally hides chats: no composer, no chats list, no pin, no new
   // schedules. A project merely shared with the admin keeps its chats.
@@ -193,19 +203,19 @@ function ProjectDetail() {
                     </DropdownMenuItem>
                   )}
                   {canManage && (
-                    <>
-                      <DropdownMenuItem onSelect={() => setEditOpen(true)}>
-                        <Pencil className="h-4 w-4" />
-                        Edit details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={() => setConfirmDelete(true)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </>
+                    <DropdownMenuItem onSelect={() => setEditOpen(true)}>
+                      <Pencil className="h-4 w-4" />
+                      Edit details
+                    </DropdownMenuItem>
+                  )}
+                  {canManage && canDelete && (
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onSelect={() => setConfirmDelete(true)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>

@@ -12,7 +12,9 @@ type Gateway = NonNullable<
 type McpGatewayActionsProps = {
   agent: Gateway;
   canModify: boolean;
-  onConnect: (agent: Pick<Gateway, "id" | "name" | "agentType">) => void;
+  onConnect: (
+    agent: Pick<Gateway, "id" | "name" | "agentType" | "slug">,
+  ) => void;
   onEdit: (agent: Gateway) => void;
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;

@@ -188,25 +188,12 @@ else:
     }
   )
 
-  # App-recording video render service — its own process, matching staging's
-  # dedicated single-pod renderer. Opt-in: created only when a renderer URL is
-  # configured, which also makes the backend proxy render/status/download/cancel
-  # to it (app-recording-render-client). Unset ⇒ the backend renders in-process
-  # and this resource does not exist. The renderer takes its port from the URL
-  # (via ARCHESTRA_INTERNAL_API_BASE_URL, e.g. http://localhost:9100).
-  renderer_url = os.getenv('ARCHESTRA_APP_RECORDING_RENDERER_URL', '')
-  if renderer_url:
-    local_resource(
-      dev_resource_name + '-renderer',
-      serve_cmd='sh run-renderer-dev.sh',
-      labels=['dev'],
-      resource_deps=[dev_resource_name + '-backend'],
-      deps=['../.env', '../backend/dist/server.mjs', 'run-renderer-dev.sh'],
-      serve_env={
-        'ARCHESTRA_PROCESS_TYPE': 'renderer',
-        'ARCHESTRA_INTERNAL_API_BASE_URL': renderer_url,
-      },
-    )
+# App-recording video rendering runs in-process in local dev — the single `all`
+# backend renders in its own memory (InProcessRenderJobClient), the same path the
+# OSS single container uses. The dedicated single-replica render service is a
+# multi-replica staging/prod concern wired via Helm (archestra-renderer.yaml), not
+# a Tilt resource here: nothing local has to rerun the backend's own dist bundle
+# out-of-band to stand one up.
 
 # Port-forward for MCP servers using streamable-http transport
 # Docker Desktop / kind K8s don't expose NodePorts on localhost, so we use

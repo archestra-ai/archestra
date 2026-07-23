@@ -226,6 +226,7 @@ const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   openrouter: "openrouter:chatCompletions",
   vllm: "vllm:chatCompletions",
   ollama: "ollama:chatCompletions",
+  "ollama-native": "ollama-native:chat",
   zhipuai: "zhipuai:chatCompletions",
   deepseek: "deepseek:chatCompletions",
   minimax: "minimax:chatCompletions",

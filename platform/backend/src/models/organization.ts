@@ -1,6 +1,8 @@
 import {
   DEFAULT_THEME_ID,
+  MEMBER_ROLE_NAME,
   type OrganizationCustomFont,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { and, eq, isNull } from "drizzle-orm";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -35,6 +37,23 @@ class OrganizationModel {
    */
   static async getAppName(): Promise<string> {
     return (await OrganizationModel.getFirst())?.appName || "Archestra";
+  }
+
+  /**
+   * The role slug assigned to newly provisioned members that don't carry an
+   * explicit role (email/password self-signup, ChatOps auto-provisioning).
+   * Falls back to the built-in "member" role when unset. Org-wide mirror of the
+   * per-IdP SSO `roleMapping.defaultRole` fallback.
+   */
+  static async getDefaultMemberRole(organizationId: string): Promise<string> {
+    const [organization] = await db
+      .select({
+        defaultMemberRole: schema.organizationsTable.defaultMemberRole,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, organizationId))
+      .limit(1);
+    return organization?.defaultMemberRole || MEMBER_ROLE_NAME;
   }
 
   /**
@@ -233,6 +252,35 @@ class OrganizationModel {
   }
 
   /**
+   * Whether any organization's locked knowledge embedding config points at this
+   * provider + model pair. The provider comes from the org's embedding API key,
+   * which is how the knowledge base resolves the model row at embed time.
+   */
+  static async isKnowledgeEmbeddingModel(params: {
+    provider: SupportedProvider;
+    modelId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable)
+      .innerJoin(
+        schema.llmProviderApiKeysTable,
+        eq(
+          schema.organizationsTable.embeddingChatApiKeyId,
+          schema.llmProviderApiKeysTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.organizationsTable.embeddingModel, params.modelId),
+          eq(schema.llmProviderApiKeysTable.provider, params.provider),
+        ),
+      )
+      .limit(1);
+    return !!row;
+  }
+
+  /**
    * Get an organization by ID
    */
   static async getById(id: string): Promise<Organization | null> {
@@ -389,6 +437,7 @@ class OrganizationModel {
       footerText: org.footerText ?? null,
       defaultUserLimitCleanupInterval:
         org.defaultUserLimitCleanupInterval ?? null,
+      defaultMemberRole: org.defaultMemberRole ?? null,
       onboardingComplete: org.onboardingComplete,
       compressionScope: org.compressionScope,
       convertToolResultsToToon: org.convertToolResultsToToon,

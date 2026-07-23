@@ -38,6 +38,29 @@ beforeEach(() => {
   mockSentryCaptureException.mockClear();
 });
 
+describe("mapProviderError - aborted run", () => {
+  it("maps an AbortError to the Aborted card without reporting it", () => {
+    const result = mapProviderError(
+      new DOMException("This operation was aborted", "AbortError"),
+      "openrouter",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.Aborted);
+    expect(result.isRetryable).toBe(false);
+    expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.Aborted]);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a TimeoutError as a cancellation", () => {
+    const result = mapProviderError(
+      new DOMException("The operation timed out", "TimeoutError"),
+      "openrouter",
+    );
+
+    expect(result.code).not.toBe(ChatErrorCode.Aborted);
+  });
+});
+
 describe("mapProviderError - per-user provider auth required", () => {
   it("maps LlmProviderAuthRequiredError to a ProviderAuthRequired card with authAction", () => {
     const result = mapProviderError(

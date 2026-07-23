@@ -13,6 +13,7 @@ import { handleApiError } from "@/lib/utils";
 export const identityProviderKeys = {
   all: ["identity-provider"] as const,
   public: ["identity-provider", "public"] as const,
+  teamSyncOptions: ["identity-provider", "team-sync-options"] as const,
   details: () => [...identityProviderKeys.all, "details"] as const,
   latestIdTokenClaims: (id: string) =>
     [...identityProviderKeys.all, id, "latest-id-token-claims"] as const,
@@ -35,6 +36,29 @@ export function usePublicIdentityProviders() {
     retry: false, // Don't retry on auth pages to avoid repeated 401 errors
     throwOnError: false, // Don't throw errors to prevent crashes
     enabled: enterpriseCoreActive === true,
+  });
+}
+
+/**
+ * Get identity providers as minimal team-sync options (id, name, and groups
+ * extraction template — no configuration or secrets). Available with
+ * team:read, so team admins can link external groups without
+ * identityProvider:read. Automatically disabled without an enterprise license.
+ */
+export function useTeamSyncIdentityProviderOptions(params?: {
+  enabled?: boolean;
+}) {
+  const enterpriseCoreActive = useEnterpriseFeature("core");
+  return useQuery({
+    queryKey: identityProviderKeys.teamSyncOptions,
+    queryFn: async () => {
+      const { data } =
+        await archestraApiSdk.getIdentityProviderTeamSyncOptions();
+      return data ?? [];
+    },
+    retry: false,
+    throwOnError: false,
+    enabled: enterpriseCoreActive && (params?.enabled ?? true),
   });
 }
 

@@ -1,4 +1,9 @@
-import { archestraApiSdk, slugify } from "@archestra/shared";
+import {
+  APP_RECORDING_VIEWPORT_ASPECT,
+  archestraApiSdk,
+  healBundleMcpServers,
+  slugify,
+} from "@archestra/shared";
 import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
 
 /**
@@ -16,8 +21,10 @@ import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recordi
  * The submission is the standard fork workflow, so it needs nothing but the
  * `public_repo` scope the device flow asked for: fork the gallery repository,
  * branch the fork, commit the bundle (and a thumbnail — a canvas app's last
- * still, or a frame decoded from its video-stream capture), then open the pull
- * request on the gallery.
+ * still, or a frame decoded from its video-stream capture, framed onto the
+ * canonical 4:5 app viewport so it matches the whole viewport the gallery
+ * shows rather than the bare canvas), then open the pull request on the
+ * gallery.
  *
  * One app, one submission: the branch name is stable per participant+app,
  * and a duplicate is blocked while an open pull request from it exists or
@@ -416,44 +423,60 @@ export function buildGallerySubmissionPr(bundle: AppRecordingBundle): {
  * The complete submission package: the recording itself, plus a thumbnail when
  * one can be produced — a canvas app's last still frame, or (for a canvas
  * captured as an encoded video stream) its final frame decoded from the last
- * keyframe. The single source of the bytes for BOTH paths — the automatic PR
- * commits these, and the manual-submission fallback downloads these — so the
- * two are identical by construction. Async because decoding a video frame is.
+ * keyframe — framed onto the canonical 4:5 app viewport. The single source of
+ * the bytes for BOTH paths — the automatic PR commits these, and the manual-
+ * submission fallback downloads these — so the two are identical by
+ * construction. Async because framing (and decoding a video frame) is.
  */
 export async function buildGallerySubmissionFiles(
   bundle: AppRecordingBundle,
 ): Promise<GallerySubmissionFile[]> {
-  const files = staticSubmissionFiles(bundle);
-  // A canvas app captured as video carries no still frame — decode its final
-  // frame so the submission still ships a real screenshot. Best-effort: an
-  // undecodable stream (or a browser without WebCodecs) ships no thumbnail,
-  // exactly as a DOM app does, and the gallery derives one from replay.
-  if (!files.some((file) => file.name.startsWith("thumbnail."))) {
-    const decoded = await extractVideoThumbnail(bundle);
-    if (decoded) files.push(thumbnailFile(decoded));
-  }
+  const files: GallerySubmissionFile[] = [recordingFile(bundle)];
+  // Best-effort: an app with no decodable frame (a DOM app, an undecodable
+  // stream, a browser without WebCodecs) ships no thumbnail, and the gallery
+  // derives one from replay.
+  const thumbnail = await extractViewportThumbnail(bundle);
+  if (thumbnail) files.push(thumbnailFile(thumbnail));
   return files;
 }
 
 /**
- * The files that can be built synchronously — the recording JSON and, when the
- * recording has one, a legacy still-frame thumbnail. The oversize pre-flight
- * sizes these: a decoded video-stream thumbnail is a single small keyframe that
- * can never be the size culprit and isn't worth decoding before sign-in.
+ * Self-heal a bundle's connected-MCP list against the app as it stands NOW,
+ * right before it is submitted to the gallery: union the servers the recording
+ * already carries with every server the app is currently connected to (its
+ * assigned tools). A recording made before the connected list was captured —
+ * or one whose app has since gained servers — then advertises the app's full
+ * MCP surface on its gallery card, not only the servers that session happened
+ * to call.
+ *
+ * Deliberately best-effort and non-blocking: a from-scratch recording with no
+ * app, a deleted app, or a failed lookup submits the recording's existing list
+ * unchanged rather than failing the share. Never shrinks the list.
  */
-function staticSubmissionFiles(
+export async function healSubmissionMcpServers(
   bundle: AppRecordingBundle,
-): GallerySubmissionFile[] {
-  const files: GallerySubmissionFile[] = [
-    {
-      name: "recording.json",
-      bytes: new TextEncoder().encode(JSON.stringify(bundle)),
-      mimeType: "application/json",
-    },
-  ];
-  const still = extractStillThumbnail(bundle);
-  if (still) files.push(thumbnailFile(still));
-  return files;
+): Promise<AppRecordingBundle> {
+  const appId = bundle.app.id;
+  if (!appId) return bundle;
+  try {
+    const { data, error } = await archestraApiSdk.getAppTools({
+      path: { appId },
+    });
+    if (error || !data) return bundle;
+    return healBundleMcpServers(bundle, data);
+  } catch {
+    return bundle;
+  }
+}
+
+/** The recording JSON — the one submission file, and the only one big enough
+ * to matter to the oversize pre-flight (the thumbnail is a single frame). */
+function recordingFile(bundle: AppRecordingBundle): GallerySubmissionFile {
+  return {
+    name: "recording.json",
+    bytes: new TextEncoder().encode(JSON.stringify(bundle)),
+    mimeType: "application/json",
+  };
 }
 
 /** A thumbnail (ext + base64) as the submission file the PR commits. */
@@ -478,10 +501,9 @@ function thumbnailFile(thumbnail: {
 export function oversizedGallerySubmissionFile(
   bundle: AppRecordingBundle,
 ): string | null {
-  for (const file of staticSubmissionFiles(bundle)) {
-    if (file.bytes.byteLength > GITHUB_MAX_FILE_BYTES) {
-      return `This recording is ${mb(file.bytes.byteLength)}MB — GitHub refuses files over ${mb(GITHUB_MAX_FILE_BYTES)}MB. Re-record a shorter session.`;
-    }
+  const { bytes } = recordingFile(bundle);
+  if (bytes.byteLength > GITHUB_MAX_FILE_BYTES) {
+    return `This recording is ${mb(bytes.byteLength)}MB — GitHub refuses files over ${mb(GITHUB_MAX_FILE_BYTES)}MB. Re-record a shorter session.`;
   }
   return null;
 }
@@ -892,12 +914,33 @@ async function waitForForkRef(params: {
 }
 
 /**
+ * The recording's final frame framed onto the canonical 4:5 app viewport — the
+ * whole viewport the gallery shows, not the bare canvas. Prefers a canvas
+ * still (a genuine screenshot of the final state) and falls back to decoding
+ * the final frame of a video-stream capture; either source is centered over a
+ * neutral backdrop in a 4:5 box the same way the player's app stage frames it.
+ * Null when the recording carries no decodable frame (a DOM app, an
+ * undecodable stream, or a browser without the canvas/WebCodecs support this
+ * needs) — the gallery then derives one from replay.
+ */
+async function extractViewportThumbnail(
+  bundle: AppRecordingBundle,
+): Promise<{ ext: string; base64: string } | null> {
+  const still = extractStillFrame(bundle);
+  if (still) {
+    const framed = await stillFrameToViewportWebp(still);
+    if (framed) return framed;
+  }
+  return extractVideoThumbnail(bundle);
+}
+
+/**
  * Best effort: a canvas-drawing app's last recorded still is a genuine
  * screenshot of its final state. Null when the recording carries no
  * `kind:"canvas"` stills — a DOM app (no frames at all), or a canvas captured
  * as a video stream (see {@link extractVideoThumbnail}).
  */
-function extractStillThumbnail(
+function extractStillFrame(
   bundle: AppRecordingBundle,
 ): { ext: string; base64: string } | null {
   for (let i = bundle.recording.events.length - 1; i >= 0; i--) {
@@ -909,6 +952,29 @@ function extractStillThumbnail(
     return { ext: match[1] === "jpeg" ? "jpg" : match[1], base64: match[2] };
   }
   return null;
+}
+
+/** Decode a raw still frame and frame it onto the 4:5 viewport. Null when the
+ * frame can't be decoded here (invalid bytes, no createImageBitmap). */
+async function stillFrameToViewportWebp(still: {
+  ext: string;
+  base64: string;
+}): Promise<{ ext: string; base64: string } | null> {
+  if (typeof createImageBitmap === "undefined") return null;
+  const type = `image/${still.ext === "jpg" ? "jpeg" : still.ext}`;
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(
+      new Blob([base64ToBytes(still.base64) as BlobPart], { type }),
+    );
+  } catch {
+    return null;
+  }
+  try {
+    return await frameToViewportWebp(bitmap, bitmap.width, bitmap.height);
+  } finally {
+    bitmap.close();
+  }
 }
 
 type StoredVideoConfig = Extract<
@@ -994,7 +1060,11 @@ async function extractVideoThumbnail(
   const frame = await decodeFinalVideoFrame(decoderConfig, chunks.slice(start));
   if (!frame) return null;
   try {
-    return await frameToWebp(frame);
+    return await frameToViewportWebp(
+      frame,
+      frame.displayWidth,
+      frame.displayHeight,
+    );
   } finally {
     frame.close();
   }
@@ -1050,19 +1120,40 @@ function decodeFinalVideoFrame(
   });
 }
 
-/** A decoded frame → a WebP still (ext + base64, the submission's shape). */
-async function frameToWebp(
-  frame: VideoFrame,
+/**
+ * Draw a decoded frame (a canvas still bitmap or a video frame) centered into
+ * the smallest 4:5 box that contains it and encode the result as a WebP still
+ * (ext + base64, the submission's shape). The margins the framing adds are
+ * filled with a neutral backdrop, matching how the player's app stage seats a
+ * non-4:5 frame in the recorded viewport — so the thumbnail is the whole 4:5
+ * viewport rather than the bare canvas area. Null when a 2D context is
+ * unavailable (jsdom without the canvas backend) or encoding yields nothing.
+ */
+async function frameToViewportWebp(
+  source: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
 ): Promise<{ ext: string; base64: string } | null> {
-  const width = frame.displayWidth;
-  const height = frame.displayHeight;
-  if (!width || !height) return null;
+  if (!sourceWidth || !sourceHeight) return null;
+  const box = viewportBox(sourceWidth, sourceHeight);
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
+  canvas.width = box.width;
+  canvas.height = box.height;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
-  ctx.drawImage(frame, 0, 0, width, height);
+  // The real app viewport shows its own page background in this margin, which
+  // the recording never captures as pixels — a neutral dark backdrop is the
+  // faithful-enough stand-in (and no margin at all exists for a frame already
+  // at the 4:5 aspect, the common full-viewport-canvas case).
+  ctx.fillStyle = THUMBNAIL_BACKDROP;
+  ctx.fillRect(0, 0, box.width, box.height);
+  ctx.drawImage(
+    source,
+    Math.round((box.width - sourceWidth) / 2),
+    Math.round((box.height - sourceHeight) / 2),
+    sourceWidth,
+    sourceHeight,
+  );
   const blob = await new Promise<Blob | null>((resolve) => {
     canvas.toBlob((result) => resolve(result), "image/webp", 0.85);
   });
@@ -1072,6 +1163,37 @@ async function frameToWebp(
     base64: toBase64(new Uint8Array(await blob.arrayBuffer())),
   };
 }
+
+/**
+ * The smallest box at the canonical 4:5 viewport aspect that contains a
+ * `sourceWidth`×`sourceHeight` frame at its own resolution: the frame's own
+ * width or height binds (whichever the aspect makes the tight dimension) and
+ * the other grows to reach 4:5, so the frame is never scaled — only
+ * letterboxed. A frame already at 4:5 returns its own size unchanged.
+ *
+ * Exported for the framing unit test — the rasterization around it is browser
+ * plumbing, but this geometry is the behavior worth pinning.
+ */
+export function viewportBox(
+  sourceWidth: number,
+  sourceHeight: number,
+): { width: number; height: number } {
+  if (sourceWidth / sourceHeight >= APP_RECORDING_VIEWPORT_ASPECT) {
+    // Wider than 4:5 → width binds, pad top and bottom.
+    return {
+      width: sourceWidth,
+      height: Math.round(sourceWidth / APP_RECORDING_VIEWPORT_ASPECT),
+    };
+  }
+  // Taller than 4:5 → height binds, pad left and right.
+  return {
+    width: Math.round(sourceHeight * APP_RECORDING_VIEWPORT_ASPECT),
+    height: sourceHeight,
+  };
+}
+
+/** The backdrop the 4:5 framing paints behind a non-4:5 frame's letterbox. */
+const THUMBNAIL_BACKDROP = "#0b0b0f";
 
 function prBody(bundle: AppRecordingBundle): string {
   // The editor's final cut (cuts applied, idle compressed) when the bundle

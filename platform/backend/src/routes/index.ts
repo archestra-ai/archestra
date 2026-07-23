@@ -67,6 +67,7 @@ export { default as minimaxProxyRoutes } from "./proxy/routes/minimax";
 export { default as mistralProxyRoutes } from "./proxy/routes/mistral";
 export { default as modelRouterProxyRoutes } from "./proxy/routes/model-router";
 export { default as ollamaProxyRoutes } from "./proxy/routes/ollama";
+export { default as ollamaNativeProxyRoutes } from "./proxy/routes/ollama-native";
 export { default as openAiProxyRoutes } from "./proxy/routes/openai";
 export { default as openrouterProxyRoutes } from "./proxy/routes/openrouter";
 export { default as perplexityProxyRoutes } from "./proxy/routes/perplexity";

@@ -19,6 +19,7 @@ import Microsoft365CopilotChatCompletionInteraction from "./llmProviders/microso
 import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
 import MistralChatCompletionInteraction from "./llmProviders/mistral";
 import OllamaChatCompletionInteraction from "./llmProviders/ollama";
+import OllamaNativeChatInteraction from "./llmProviders/ollama-native";
 import OpenAiChatCompletionInteraction from "./llmProviders/openai";
 import OpenAiEmbeddingInteraction from "./llmProviders/openai-embedding";
 import OpenAiResponsesInteraction from "./llmProviders/openai-responses";
@@ -50,6 +51,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "gemini:generateContent": (i) => new GeminiGenerateContentInteraction(i),
   "mistral:chatCompletions": (i) => new MistralChatCompletionInteraction(i),
   "ollama:chatCompletions": (i) => new OllamaChatCompletionInteraction(i),
+  "ollama-native:chat": (i) => new OllamaNativeChatInteraction(i),
   "perplexity:chatCompletions": (i) =>
     new PerplexityChatCompletionInteraction(i),
   "vllm:chatCompletions": (i) => new VllmChatCompletionInteraction(i),

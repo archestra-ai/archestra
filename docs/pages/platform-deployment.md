@@ -869,15 +869,18 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - The session is an ordinary one for that user — role-based access control is unchanged
   - Example: `admin@example.com`
 
-- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
-  - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
-  - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
-  - Required when using different domains or subdomains for frontend and backend
+- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Scopes the session cookie to a domain so the frontend and backend can share it.
+  - Default: None. The cookie stays host-only, bound to the exact frontend host.
+  - Set this only when your frontend and backend are on different subdomains. Use the narrowest domain that covers both. For a frontend at `https://frontend.example.com` and a backend at `https://backend.example.com`, set `example.com`.
+  - The browser then sends the cookie to _every_ subdomain of that domain, not just those two. So `example.com` also reaches `other.example.com`.
+  - Warning: this is how one instance breaks another. If a second Archestra runs on a sibling subdomain (`staging.example.com`) and both use the default cookie prefix, their session cookies share a name and collide. The browser sends both, the server reads the wrong one, and login silently bounces back to the sign-in page.
+  - To run more than one instance under the same domain, give each a unique `ARCHESTRA_AUTH_COOKIE_PREFIX` (below). Do this even when only one instance sets a cookie domain — the shared cookie still leaks to the others.
 
 - **`ARCHESTRA_AUTH_COOKIE_PREFIX`** - Prefix for auth cookie names (`<prefix>.session_token`, etc.).
   - Default: `archestra`
-  - Browsers scope cookies to the host without the port, so multiple Archestra instances on different ports of the same host overwrite each other's session cookies. Give each instance a unique prefix to keep their sessions independent.
-  - Mainly useful for local development with parallel stacks; single-instance deployments can leave the default
+  - Give each instance that shares a host or domain with another a unique prefix, so their session cookies have distinct names and never collide.
+  - Two cases need this. Instances on different ports of one host: browsers ignore the port, so the cookies overwrite each other. Instances on sibling subdomains where one sets `ARCHESTRA_AUTH_COOKIE_DOMAIN`: that cookie leaks across the whole domain (see above).
+  - A single, isolated deployment can leave the default.
 
 - **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
   - Default: `false`
@@ -1016,6 +1019,12 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Set this to override the default if your Ollama server runs on a different host or port
   - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
 
+- **`ARCHESTRA_OLLAMA_NATIVE_BASE_URL`** - Base URL for the "Ollama (Native)" provider, which uses Ollama's native `/api/chat` endpoint.
+  - Default: `ARCHESTRA_OLLAMA_BASE_URL` with the `/v1` suffix stripped (`http://localhost:11434`)
+  - Set this only if the native endpoint runs on a different host than the OpenAI-compatible one
+  - This is the server **root** — do not include a `/v1` suffix
+  - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
+
 - **`ARCHESTRA_DEEPSEEK_BASE_URL`** - Override the DeepSeek API base URL.
   - Default: `https://api.deepseek.com`
   - Use this to point to your own proxy or other custom endpoints
@@ -1143,6 +1152,7 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `ARCHESTRA`, `GITHUB_COPILOT`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
   - These serve as fallback API keys when no organization default or profile-specific key is configured
   - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
+  - Note: there is no separate `OLLAMA_NATIVE` value — the "Ollama (Native)" provider reads `ARCHESTRA_CHAT_OLLAMA_API_KEY`, since both providers talk to the same server
   - Note: `ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY` holds a GitHub OAuth token (`gho_...`) of an account with a Copilot subscription, not a static API key
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 

@@ -76,8 +76,31 @@ const TRANSIENT_ERROR_PATTERNS: ReadonlyArray<{
   { pattern: "timeout expired", code: "timeout_expired" },
 ];
 
+/**
+ * Transient network syscall codes, matched against `error.code` directly.
+ * Message matching alone misses Node's multi-address connection failure: when
+ * a database host resolves to several addresses (e.g. IPv6 + IPv4) and all
+ * fail, net.connect throws an AggregateError whose message is EMPTY — the
+ * syscall code lives on `error.code` and the per-address errors in `errors`.
+ */
+const TRANSIENT_NETWORK_CODES = new Set(
+  TRANSIENT_ERROR_PATTERNS.filter(({ pattern, code }) => pattern === code).map(
+    ({ code }) => code,
+  ),
+);
+
 /** Maximum depth for cause-chain traversal to guard against circular references */
 const MAX_CAUSE_DEPTH = 5;
+
+/**
+ * SQLSTATE 57014 (query_canceled): raised when the pool's `statement_timeout`
+ * kills a query that ran too long (see createPool in database/index.ts).
+ */
+const QUERY_CANCELED_PG_CODE = "57014";
+
+/** Message emitted by PostgreSQL when statement_timeout cancels a query. */
+const STATEMENT_TIMEOUT_MESSAGE =
+  "canceling statement due to statement timeout";
 
 /**
  * Determine whether a database error is transient (i.e. retrying may succeed).
@@ -88,6 +111,37 @@ const MAX_CAUSE_DEPTH = 5;
  */
 export function isTransientDbError(error: unknown): boolean {
   return getTransientDbErrorCode(error) !== null;
+}
+
+/**
+ * Determine whether a database error is a statement timeout — PostgreSQL
+ * canceling a query that exceeded `statement_timeout`.
+ *
+ * Deliberately NOT part of {@link isTransientDbError}: a query that just
+ * burned the full statement timeout is slow because of query shape or
+ * database load, and retrying it immediately multiplies that load. It is
+ * surfaced here only so error tracking can group all statement timeouts
+ * under one stable fingerprint instead of one issue per SQL statement
+ * (the ORM wraps the cancellation per-query as "Failed query: <sql>").
+ */
+export function isDbStatementTimeoutError(error: unknown, depth = 0): boolean {
+  if (!(error instanceof Error)) return false;
+  if (depth > MAX_CAUSE_DEPTH) return false;
+
+  const errorCode = (error as Error & { code?: string }).code;
+  if (errorCode === QUERY_CANCELED_PG_CODE) return true;
+  if (error.message.includes(STATEMENT_TIMEOUT_MESSAGE)) return true;
+
+  if (error instanceof AggregateError) {
+    for (const subError of error.errors) {
+      if (isDbStatementTimeoutError(subError, depth + 1)) return true;
+    }
+  }
+
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (cause) return isDbStatementTimeoutError(cause, depth + 1);
+
+  return false;
 }
 
 /**
@@ -106,9 +160,11 @@ export function getTransientDbErrorCode(
   if (!(error instanceof Error)) return null;
   if (depth > MAX_CAUSE_DEPTH) return null;
 
-  // Check PostgreSQL error code (set by node-postgres on query errors)
-  const pgCode = (error as Error & { code?: string }).code;
-  if (pgCode && TRANSIENT_PG_CODES.has(pgCode)) return pgCode;
+  // Check PostgreSQL error code (set by node-postgres on query errors) and
+  // Node network syscall codes (the only signal on empty-message errors)
+  const errorCode = (error as Error & { code?: string }).code;
+  if (errorCode && TRANSIENT_PG_CODES.has(errorCode)) return errorCode;
+  if (errorCode && TRANSIENT_NETWORK_CODES.has(errorCode)) return errorCode;
 
   // Check error message for known transient patterns
   const message = error.message;
@@ -116,6 +172,15 @@ export function getTransientDbErrorCode(
     message.includes(pattern),
   );
   if (matched) return matched.code;
+
+  // A multi-address connection failure is an AggregateError holding one error
+  // per attempted address in `errors` (not `cause`) — check each of them.
+  if (error instanceof AggregateError) {
+    for (const subError of error.errors) {
+      const code = getTransientDbErrorCode(subError, depth + 1);
+      if (code) return code;
+    }
+  }
 
   // DrizzleQueryError wraps the underlying pg error as `cause`
   const cause = (error as Error & { cause?: unknown }).cause;

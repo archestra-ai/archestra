@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-06-22
+lastUpdated: 2026-07-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -120,6 +120,8 @@ You can enable TOON compression at:
 
 - organization level for all traffic
 - team level when only certain teams should use it
+
+A team-level opt-in works on its own. A team with compression enabled uses it even when the organization-wide setting is off. Choosing Disabled in LLM settings clears every team opt-in and turns compression off.
 
 See the upstream TOON format project for the format specification and benchmarks: [toon-format/toon](https://github.com/toon-format/toon).
 

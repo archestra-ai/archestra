@@ -65,6 +65,7 @@ type StagedMemberChanges = Map<string, StagedMemberChange>;
 type TeamManagementExternalSyncSectionComponent = ComponentType<{
   open: boolean;
   team: Team;
+  readOnly?: boolean;
 }>;
 type TeamManagementVaultFolderSectionComponent = ComponentType<{
   open: boolean;
@@ -87,6 +88,12 @@ type TeamManagementDialogProps =
        * "Manage your team token" on connection instructions).
        */
       initialSection?: TeamDialogSection;
+      /**
+       * View-only access for callers who can read identity-provider
+       * configuration but not manage the team: only the External Group Sync
+       * section is shown, without its mutation controls.
+       */
+      readOnly?: boolean;
     };
 
 const editNavItems = [
@@ -116,6 +123,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const editTeam = "team" in props ? props.team : null;
   const initialSection =
     "initialSection" in props ? props.initialSection : undefined;
+  const readOnly = ("readOnly" in props && props.readOnly) || false;
   const team = editTeam ?? createdTeam;
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState<TeamDialogSection>("team");
@@ -145,6 +153,10 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       return createNavItems;
     }
 
+    if (readOnly) {
+      return [editNavItems[1]];
+    }
+
     if (!canUpdateTeams) {
       return editNavItems;
     }
@@ -154,14 +166,23 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     }
 
     return [editNavItems[0], tokenNavItem, vaultFolderNavItem, editNavItems[1]];
-  }, [byosEnabled, canUpdateTeams, mode]);
-  const title = mode === "create" ? "Create Team" : "Edit Team";
+  }, [byosEnabled, canUpdateTeams, mode, readOnly]);
+  const title =
+    mode === "create"
+      ? "Create Team"
+      : readOnly
+        ? "External Group Sync"
+        : "Edit Team";
   const canEditDetails = mode === "create" || canUpdateTeams;
 
   useEffect(() => {
     if (!open) return;
     setActiveSection(
-      mode === "edit" && initialSection ? initialSection : "team",
+      readOnly
+        ? "external-groups"
+        : mode === "edit" && initialSection
+          ? initialSection
+          : "team",
     );
     setMemberChanges(new Map());
     if (mode === "create") {
@@ -175,19 +196,22 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     setName(editTeam?.name ?? "");
     setDescription(editTeam?.description ?? "");
     setLabels(editTeam?.labels ?? []);
-  }, [editTeam, initialSection, mode, open]);
+  }, [editTeam, initialSection, mode, open, readOnly]);
 
   useEffect(() => {
     const canShowActiveSection =
-      activeSection === "team" ||
+      (activeSection === "team" && !readOnly) ||
       activeSection === "external-groups" ||
-      (activeSection === "token" && canUpdateTeams) ||
-      (activeSection === "vault-folder" && canUpdateTeams && byosEnabled);
+      (activeSection === "token" && canUpdateTeams && !readOnly) ||
+      (activeSection === "vault-folder" &&
+        canUpdateTeams &&
+        byosEnabled &&
+        !readOnly);
 
     if (!canShowActiveSection) {
-      setActiveSection("team");
+      setActiveSection(readOnly ? "external-groups" : "team");
     }
-  }, [activeSection, byosEnabled, canUpdateTeams]);
+  }, [activeSection, byosEnabled, canUpdateTeams, readOnly]);
 
   const saveTeam = useMutation({
     mutationFn: async () => {
@@ -374,7 +398,11 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
         <TeamManagementVaultFolderSection open={open} team={team} />
       )}
       {activeSection === "external-groups" && mode === "edit" && team && (
-        <TeamManagementExternalSyncSection open={open} team={team} />
+        <TeamManagementExternalSyncSection
+          open={open}
+          team={team}
+          readOnly={readOnly}
+        />
       )}
     </TabbedDialogShell>
   );

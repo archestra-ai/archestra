@@ -107,7 +107,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { body: { name, description, labels }, user, organizationId },
+      {
+        body: { name, description, convertToolResultsToToon, labels },
+        user,
+        organizationId,
+      },
       reply,
     ) => {
       return reply.send(
@@ -116,6 +120,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description,
           organizationId,
           createdBy: user.id,
+          convertToolResultsToToon,
           labels,
         }),
       );
@@ -507,9 +512,18 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
       if (!canManageAllTeams) {
-        const isMember = await TeamModel.isUserInTeam(id, user.id);
-        if (!isMember) {
-          throw new ApiError(404, "Team not found");
+        // Group-sync mappings are identity-provider configuration, so a role
+        // that can read identity providers may view them without being on the
+        // team (mutations stay team-admin-gated below).
+        const { success: canReadIdentityProviders } = await hasPermission(
+          { identityProvider: ["read"] },
+          headers,
+        );
+        if (!canReadIdentityProviders) {
+          const isMember = await TeamModel.isUserInTeam(id, user.id);
+          if (!isMember) {
+            throw new ApiError(404, "Team not found");
+          }
         }
       }
 

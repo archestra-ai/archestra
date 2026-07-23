@@ -99,6 +99,32 @@ with several lines
 
     expect(result).toEqual([{ type: "reasoning", text: "Thinking" }]);
   });
+
+  it("should not treat a quoted closing tag as a prefilled reasoning block", () => {
+    // The orphan-closer rule exists for models prefilled with an opening tag.
+    // A message that merely mentions the tag while also using a real paired
+    // block must go to the paired parser, or everything before the quoted
+    // closer gets relabelled as reasoning.
+    const text =
+      "The </think> tag ends reasoning, e.g. <think>hidden</think> works";
+    const result = parseThinkingTags(text);
+
+    expect(result).toEqual([
+      { type: "text", text: "The </think> tag ends reasoning, e.g." },
+      { type: "reasoning", text: "hidden" },
+      { type: "text", text: "works" },
+    ]);
+  });
+
+  it("should still split a genuinely prefilled response with no opening tag", () => {
+    const text = "weighing the options</think>Here is the answer";
+    const result = parseThinkingTags(text);
+
+    expect(result).toEqual([
+      { type: "reasoning", text: "weighing the options" },
+      { type: "text", text: "Here is the answer" },
+    ]);
+  });
 });
 
 describe("hasThinkingTags", () => {
@@ -118,7 +144,71 @@ describe("hasThinkingTags", () => {
   });
 
   it("should match partial tags", () => {
-    // This is intentional - we just check for opening tag presence
+    // This is intentional - we just check for tag presence
     expect(hasThinkingTags("Incomplete <think>")).toBe(true);
+  });
+
+  it("should match a closing tag with no opening tag", () => {
+    // Ollama prefills the opening <think> when asked to suppress thinking, so a
+    // model that reasons anyway emits only the closer. Testing for "<think>"
+    // alone let the whole reasoning block render as the assistant's answer.
+    expect(hasThinkingTags("Reasoning...</think>\n\nAnswer")).toBe(true);
+  });
+});
+
+describe("parseThinkingTags with an unpaired closing tag", () => {
+  // Reproduced against Ollama 0.32.0: qwen3:4b with `think: false` returns its
+  // whole chain of thought as `content`, terminated by a bare </think>, then the
+  // real answer.
+  it("splits reasoning from the answer at the stray closer", () => {
+    const result = parseThinkingTags(
+      'Okay, the user said "hi". I should greet them.\n</think>\n\nHello! How can I assist you today?',
+    );
+
+    expect(result).toEqual([
+      {
+        type: "reasoning",
+        text: 'Okay, the user said "hi". I should greet them.',
+      },
+      { type: "text", text: "Hello! How can I assist you today?" },
+    ]);
+  });
+
+  it("treats the whole text as reasoning when nothing follows the closer", () => {
+    expect(parseThinkingTags("Still reasoning</think>")).toEqual([
+      { type: "reasoning", text: "Still reasoning" },
+    ]);
+  });
+
+  it("leaves a properly paired block to the normal parser", () => {
+    expect(parseThinkingTags("<think>Reasoning</think>Answer")).toEqual([
+      { type: "reasoning", text: "Reasoning" },
+      { type: "text", text: "Answer" },
+    ]);
+  });
+
+  it("renders a bare closer as text rather than nothing at all", () => {
+    // The orphan path produced [] for this, and [] is truthy, so it
+    // short-circuited the main parser's fallback — the message rendered as
+    // nothing, taking the copy/edit/feedback actions with it.
+    expect(parseThinkingTags("</think>")).toEqual([
+      { type: "text", text: "</think>" },
+    ]);
+  });
+
+  it("does not restructure text that discusses the closing tag twice", () => {
+    const text = "Use </think> to close it. Always write </think> at the end.";
+    expect(parseThinkingTags(text)).toEqual([{ type: "text", text }]);
+  });
+
+  it("does not split a code fence that contains a closing tag", () => {
+    // Splitting here would leave both halves with an unbalanced fence.
+    const text = "Here is an example:\n```\n</think>\n```\nDone.";
+    expect(parseThinkingTags(text)).toEqual([{ type: "text", text }]);
+  });
+
+  it("does not split an inline code span that contains a closing tag", () => {
+    const text = "The `</think>` tag closes reasoning.";
+    expect(parseThinkingTags(text)).toEqual([{ type: "text", text }]);
   });
 });

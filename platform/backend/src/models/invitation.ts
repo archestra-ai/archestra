@@ -1,4 +1,3 @@
-import { MEMBER_ROLE_NAME } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -9,6 +8,7 @@ import type {
 } from "@/types";
 import AgentModel from "./agent";
 import MemberModel from "./member";
+import OrganizationModel from "./organization";
 import SessionModel from "./session";
 import UserTokenModel from "./user-token";
 
@@ -97,7 +97,11 @@ class InvitationModel {
       }
 
       const { organizationId, role: specifiedRole } = invitation;
-      const role = specifiedRole || MEMBER_ROLE_NAME;
+      // An invitation without an explicit role (self-signup) inherits the org's
+      // configured default role, which itself falls back to "member".
+      const role =
+        specifiedRole ||
+        (await OrganizationModel.getDefaultMemberRole(organizationId));
 
       // The member table has no unique constraint on (userId, organizationId),
       // so a blind insert here would silently create a duplicate row when the

@@ -12,6 +12,7 @@ import {
 } from "@/agents/agent-system-prompt";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
+import config from "@/config";
 import {
   FileModel,
   MessageModel,
@@ -2472,7 +2473,7 @@ describe("POST /api/chat handler composition", () => {
     expect(attachments).toHaveLength(0);
   });
 
-  test("rejects an unsupported attachment with no sandbox and persists nothing", async () => {
+  test("accepts an unsupported attachment with no sandbox and stores it as a conversation attachment", async () => {
     const dataUrl = `data:application/zip;base64,${Buffer.from("PK zip bytes").toString("base64")}`;
     const response = await postMessage([
       {
@@ -2490,8 +2491,43 @@ describe("POST /api/chat handler composition", () => {
       },
     ]);
 
-    // The gate runs before extraction and before the active run is acquired,
-    // so the request is rejected and no attachment row is written.
+    // A file the model can't read is no longer rejected: it lands as a
+    // conversation attachment surfaced in the chat Files panel, and the model
+    // is told about it via a notice at materialize time.
+    expect(response.statusCode).toBe(200);
+    const attachments =
+      await ConversationAttachmentModel.findByConversationIdWithoutData(
+        conversationId,
+      );
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].originalName).toBe("archive.zip");
+    expect(attachments[0].mimeType).toBe("application/zip");
+  });
+
+  test("rejects an attachment over the storage byte limit and persists nothing", async () => {
+    // Just over the artifact/storage limit — too big for the sandbox AND for
+    // Files-panel storage, so the gate still rejects before any bytes persist.
+    const oversized = Buffer.alloc(
+      config.skillsSandbox.artifactBytesLimit + 1,
+      0x61,
+    );
+    const dataUrl = `data:application/zip;base64,${oversized.toString("base64")}`;
+    const response = await postMessage([
+      {
+        id: "msg-1",
+        role: "user",
+        parts: [
+          { type: "text", text: "process this" },
+          {
+            type: "file",
+            url: dataUrl,
+            mediaType: "application/zip",
+            filename: "huge.zip",
+          },
+        ],
+      },
+    ]);
+
     expect(response.statusCode).toBe(400);
     const attachments =
       await ConversationAttachmentModel.findByConversationIdWithoutData(

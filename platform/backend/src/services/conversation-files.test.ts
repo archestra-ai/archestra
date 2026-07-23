@@ -183,11 +183,14 @@ test("personal chat: projectFiles is empty even when the user has files in other
 
 test("project chat: projectFiles is every project file (any author, any chat), for any reader with access", async ({
   makeUser,
+  makeMember,
   makeOrganization,
   makeAgent,
 }) => {
   const org = await makeOrganization();
   const owner = await makeUser({});
+  // Org-wide sharing requires the member role's project:share-org.
+  await makeMember(owner.id, org.id);
   const member = await makeUser({ email: "files-member@test.com" });
   const agent = await makeAgent({ organizationId: org.id });
 

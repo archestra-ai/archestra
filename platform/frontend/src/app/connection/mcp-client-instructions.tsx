@@ -9,9 +9,7 @@ import {
   Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import type React from "react";
 import { useEffect, useState } from "react";
-import { CopyableCode } from "@/components/copyable-code";
 import {
   SECRET_PLACEHOLDER_TOKEN,
   SecretCopyButton,
@@ -88,9 +86,66 @@ export function McpClientInstructions({
   const serverName = deriveMcpServerName({ gatewayName, appName });
   const isQuick = client.mcp.kind === "custom" && client.mcp.quick === true;
 
+  // The generic client mirrors the LLM Proxy section: the endpoint terminal
+  // card first, then a bordered Authentication card with the mode tabs.
+  if (client.mcp.kind === "generic") {
+    return (
+      <div id="mcp-instructions" className="space-y-3">
+        <TerminalBlock code={mcpUrl} />
+        <div className="space-y-4 rounded-lg border bg-card p-4">
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">
+              Authentication
+            </div>
+            {tabs.length > 1 && (
+              <Tabs
+                value={authMethod}
+                onValueChange={(v) => setAuthMethod(v as AuthMethod)}
+              >
+                <TabsList>
+                  {tabs.map((t) =>
+                    t === "oauth" ? (
+                      <TabsTrigger key="oauth" value="oauth">
+                        OAuth 2.1
+                      </TabsTrigger>
+                    ) : (
+                      <TabsTrigger key="token" value="token">
+                        Static token
+                      </TabsTrigger>
+                    ),
+                  )}
+                </TabsList>
+              </Tabs>
+            )}
+            {authMethod === "oauth" ? (
+              <p className="text-xs text-muted-foreground">
+                Your MCP client registers and signs in automatically (OAuth 2.1
+                dynamic client registration) the first time it connects —
+                nothing to copy.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Send this token in the{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
+                    Authorization
+                  </code>{" "}
+                  header.
+                </p>
+                <GenericAuthRow
+                  gatewayId={gatewayId}
+                  placeholder={SECRET_PLACEHOLDER_TOKEN}
+                />
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div id="mcp-instructions" className="space-y-4">
-      {client.mcp.kind === "generic" && <Eyebrow>Authentication</Eyebrow>}
       {tabs.length > 1 ? (
         <Tabs
           value={authMethod}
@@ -179,15 +234,6 @@ function McpBody({
   gatewayId,
   isQuick,
 }: McpBodyProps) {
-  if (client.mcp.kind === "generic") {
-    return (
-      <div className="space-y-3">
-        <FieldRow label="URL" value={mcpUrl} />
-        {token && <GenericAuthRow gatewayId={gatewayId} placeholder={token} />}
-      </div>
-    );
-  }
-
   if (client.mcp.kind !== "custom") return null;
 
   const mcp = client.mcp;
@@ -342,7 +388,7 @@ const PERSONAL_TOKEN_ID = "__personal__";
  * which token (personal / team / org) to embed, and reveal the real value
  * on demand.
  */
-function GenericAuthRow({
+export function GenericAuthRow({
   gatewayId,
   placeholder,
   bare = false,
@@ -575,21 +621,6 @@ function TokenOption({
   );
 }
 
-function FieldRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid grid-cols-[140px_1fr] items-center gap-3 rounded-lg border bg-card px-4 py-3">
-      <div className="font-mono text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </div>
-      <CopyableCode
-        value={value}
-        variant="primary"
-        className="min-w-0 overflow-hidden"
-      />
-    </div>
-  );
-}
-
 export function ClientHeader({
   client,
   title,
@@ -610,14 +641,6 @@ export function ClientHeader({
           {subtitle}
         </div>
       </div>
-    </div>
-  );
-}
-
-export function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-      {children}
     </div>
   );
 }

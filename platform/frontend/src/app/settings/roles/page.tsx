@@ -3,6 +3,7 @@
 import { E2eTestId } from "@archestra/shared";
 import { Eye } from "lucide-react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
@@ -98,6 +99,17 @@ export default function RolesSettingsPage() {
   return (
     <ErrorBoundary>
       <SmallTeamTierBanner featureName="RBAC" />
+      <p className="mb-4 text-sm text-muted-foreground">
+        New users who join via email/password self-signup or ChatOps
+        auto-provisioning are assigned a default role. Change it in{" "}
+        <Link
+          href="/settings/organization"
+          className="font-medium underline underline-offset-4"
+        >
+          Organization → Auth
+        </Link>
+        .
+      </p>
       <RoleDebuggerCallout />
       <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
         <RolesListEnterprise />

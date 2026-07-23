@@ -591,11 +591,19 @@ describe("KnowledgeSettingsPage", () => {
       });
       fireEvent.click(providerTrigger);
 
+      // Anchored, because an unanchored substring is ambiguous: "Ollama"
+      // contains no "OpenAI" but "OpenAI-compatible" did. The accessible name
+      // repeats the label (the option renders an icon whose alt text is the
+      // provider name), so an exact string will not match either.
       expect(
-        screen.getByRole("option", { name: /OpenAI/i }),
+        screen.getByRole("option", { name: /^OpenAI\b/ }),
       ).not.toHaveAttribute("data-disabled");
+      // The two Ollama transports collapse to one "Ollama" entry. Embeddings
+      // only work over `/v1`, so this entry must resolve to that transport —
+      // collapsing to `ollama-native` (which reports supportsEmbeddings: false)
+      // would render it disabled and leave no way to add an Ollama embedding key.
       expect(
-        screen.getByRole("option", { name: /Ollama/i }),
+        screen.getByRole("option", { name: /^Ollama\b/ }),
       ).not.toHaveAttribute("data-disabled");
       expect(
         screen.getByRole("option", { name: /Anthropic/i }),

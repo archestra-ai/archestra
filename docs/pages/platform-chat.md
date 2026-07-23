@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-07-22
+lastUpdated: 2026-07-18
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -63,6 +63,8 @@ Expand any category to see the largest individual contributors (top tools by sch
 **Estimates, not exact counts.** The breakdown is computed before the request is sent, using the same character-per-token and bytes-per-token heuristics that drive auto-compaction. The provider's exact prompt size arrives afterward via per-step token usage and supersedes the estimate for the ring. The visualizer never mutates or truncates the request.
 
 When auto-compaction frees tokens, a note appears in the panel showing how many tokens were recovered. See [Context Compaction](#context-compaction) for how compaction works.
+
+Ollama models often run with a smaller context window than the model architecturally supports. Archestra detects the effective window and sizes the ring to it — see [Ollama Context Window](/docs/platform-supported-llm-providers#context-window).
 
 ### File Attachments
 

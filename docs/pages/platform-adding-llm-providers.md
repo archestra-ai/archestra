@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-07-22
+lastUpdated: 2026-07-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -297,6 +297,7 @@ Existing provider implementations for reference:
 - Cohere: `backend/src/routes/proxy/routes/cohere.ts`, `backend/src/routes/proxy/adapters/cohere.ts`
 - Gemini: `backend/src/routes/proxy/routes/gemini.ts`, `backend/src/routes/proxy/adapters/gemini.ts`
 - Bedrock: `backend/src/routes/proxy/routes/bedrock.ts`, `backend/src/routes/proxy/adapters/bedrock.ts` (uses AWS Signature V4 auth and Converse API)
+- Ollama (Native): `backend/src/routes/proxy/routes/ollama-native.ts`, `backend/src/routes/proxy/adapters/ollama-native.ts` (uses Ollama's `/api/chat` wire format on both sides with no model-router translation; streams NDJSON instead of SSE)
 
 **OpenAI-compatible implementations** (reuse OpenAI types/adapters with minor modifications):
 
@@ -307,11 +308,7 @@ Existing provider implementations for reference:
 - Ollama: `backend/src/routes/proxy/routes/ollama.ts`, `backend/src/routes/proxy/adapters/ollama.ts`
 - ZhipuAI: `backend/src/routes/proxy/routes/zhipuai.ts`, `backend/src/routes/proxy/adapters/zhipuai.ts`
 
-**Native (non-OpenAI-wire) self-hosted implementations:**
-
-- Ollama (Native): `backend/src/routes/proxy/routes/ollama-native.ts`, `backend/src/routes/proxy/adapters/ollama-native.ts` — the reference for a provider whose own wire format is used on **both** sides, with no translation. Worth reading if your provider is not OpenAI-compatible: it covers NDJSON streaming instead of SSE (including provider-specific mid-stream error framing via `formatStreamErrorFrame`), correlating tool results by name rather than by call id, an allowlisted options passthrough, and propagating the upstream HTTP status so failures don't collapse into a generic 500. Note that a passthrough schema on a Go upstream needs `dropCaseVariantDuplicates` in `types/llm-providers/ollama-native/api.ts`: Go's `encoding/json` matches struct fields case-insensitively, so a variant-cased duplicate key otherwise overrides anything the schema sanitized.
-
-> **Tip:** If adding support for an OpenAI-compatible provider (e.g., Together AI), use the Groq implementation as a starting point — it re-exports OpenAI's type definitions, message schemas, and tool schemas with minimal boilerplate. For providers that require custom query parameters on every request, see the Azure AI Foundry implementation for the `fetchWithVersion` pattern.
+> **Tip:** If adding support for an OpenAI-compatible provider (e.g., Together AI), use the Groq implementation as a starting point — it re-exports OpenAI's type definitions, message schemas, and tool schemas with minimal boilerplate. For providers that require custom query parameters on every request, see the Azure AI Foundry implementation for the `fetchWithVersion` pattern. For a provider that is not OpenAI-compatible, read the Ollama (Native) implementation: it covers NDJSON streaming with mid-stream error framing (`formatStreamErrorFrame`), correlating tool results by name rather than by call id, an allowlisted options passthrough, and propagating the upstream HTTP status so failures don't collapse into a generic 500. A passthrough schema on a Go upstream also needs `dropCaseVariantDuplicates` (see `types/llm-providers/ollama-native/api.ts`) — Go's `encoding/json` matches struct fields case-insensitively, so a variant-cased duplicate key otherwise overrides anything the schema sanitized.
 
 ## Smoke Testing
 

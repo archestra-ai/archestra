@@ -109,6 +109,26 @@ describe("classifyErrorForTracking", () => {
     });
   });
 
+  test("groups statement timeouts under one stable fingerprint", () => {
+    // The ORM wraps the cancellation per-query, so without a stable
+    // fingerprint every distinct SQL statement becomes its own issue.
+    const pgError = Object.assign(
+      new Error("canceling statement due to statement timeout"),
+      { code: "57014" },
+    );
+    const dbError = new Error(
+      'Failed query: select "id" from "agents" where "slug" = $1',
+      { cause: pgError },
+    );
+    const decision = classifyErrorForTracking(dbError);
+    expect(decision.report).toBe(true);
+    expect(decision.fingerprint).toEqual(["db-statement-timeout"]);
+    expect(decision.tags).toMatchObject({
+      error_type: "db_statement_timeout",
+      db_error_code: "57014",
+    });
+  });
+
   test("groups secrets-backend outages by the root condition", () => {
     const error = new ApiError(
       503,

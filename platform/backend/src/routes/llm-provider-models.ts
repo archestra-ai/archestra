@@ -26,6 +26,7 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   type ModelSyncState,
+  OrganizationModel,
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -389,6 +390,26 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             `num_ctx (${numCtx}) exceeds the model's context length of ${existing.contextLength}`,
           );
         }
+      }
+
+      // The knowledge base reads embedding dimensions from this row at embed
+      // time, so changing them — or clearing them, which turns the model back
+      // into a chat model — while an organization's embedding config points
+      // here would silently corrupt the existing index. Mirror the
+      // knowledge-settings lock: force changes through the drop-embedding flow.
+      if (
+        body.embeddingDimensions !== undefined &&
+        body.embeddingDimensions !== existing.embeddingDimensions &&
+        (await OrganizationModel.isKnowledgeEmbeddingModel({
+          provider: existing.provider,
+          modelId: existing.modelId,
+        }))
+      ) {
+        throw new ApiError(
+          400,
+          "This model is used as the knowledge base embedding model, so its embedding configuration cannot be changed. Drop the embedding configuration in Knowledge settings first — all documents will need to be re-embedded.",
+          "embedding_validation_failed",
+        );
       }
 
       const updated = await ModelModel.update(id, body);

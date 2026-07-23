@@ -2,6 +2,7 @@ import {
   DEFAULT_THEME_ID,
   MEMBER_ROLE_NAME,
   type OrganizationCustomFont,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { and, eq, isNull } from "drizzle-orm";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -248,6 +249,35 @@ class OrganizationModel {
       .select({ id: schema.organizationsTable.id })
       .from(schema.organizationsTable);
     return rows.map((row) => row.id);
+  }
+
+  /**
+   * Whether any organization's locked knowledge embedding config points at this
+   * provider + model pair. The provider comes from the org's embedding API key,
+   * which is how the knowledge base resolves the model row at embed time.
+   */
+  static async isKnowledgeEmbeddingModel(params: {
+    provider: SupportedProvider;
+    modelId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable)
+      .innerJoin(
+        schema.llmProviderApiKeysTable,
+        eq(
+          schema.organizationsTable.embeddingChatApiKeyId,
+          schema.llmProviderApiKeysTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.organizationsTable.embeddingModel, params.modelId),
+          eq(schema.llmProviderApiKeysTable.provider, params.provider),
+        ),
+      )
+      .limit(1);
+    return !!row;
   }
 
   /**

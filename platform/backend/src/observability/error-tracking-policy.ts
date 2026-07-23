@@ -1,5 +1,8 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
-import { getTransientDbErrorCode } from "@/database/retry";
+import {
+  getTransientDbErrorCode,
+  isDbStatementTimeoutError,
+} from "@/database/retry";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
 
 /**
@@ -45,6 +48,20 @@ export function classifyErrorForTracking(
       report: true,
       fingerprint: ["db-transient", transientDbErrorCode],
       tags: { error_type: "db_transient", db_error_code: transientDbErrorCode },
+    };
+  }
+
+  // Statement timeouts (PostgreSQL canceling a query that exceeded
+  // statement_timeout) happen under database load or against a slow query
+  // plan, and the ORM wraps each one per-query as "Failed query: <sql>" —
+  // fragmenting one load incident into an issue per SQL statement. They are
+  // deliberately not retried (see isDbStatementTimeoutError), but they should
+  // group into a single issue the same way transient connectivity does.
+  if (isDbStatementTimeoutError(error)) {
+    return {
+      report: true,
+      fingerprint: ["db-statement-timeout"],
+      tags: { error_type: "db_statement_timeout", db_error_code: "57014" },
     };
   }
 

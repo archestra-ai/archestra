@@ -127,6 +127,8 @@ export interface StartupGuardClient {
   disableEnvVar: string;
   /** ~/-relative guard script path (`STARTUP_GUARD_INSTALL[id].scriptRelpath`). */
   scriptRelpath: string;
+  /** ~/-relative PowerShell guard script path (Windows engine). */
+  psScriptRelpath: string;
   /** ~/-relative skip file (remembers already-disconnected remotes). */
   skipRelpath: string;
   /** Shell-profile wrapper marker block bounds. */
@@ -155,6 +157,40 @@ export interface StartupGuardClient {
    * / shell-profile export strip). Only emitted when a proxy is covered.
    */
   renderProxyDisconnect(ctx: StartupGuardContext): string;
+  /**
+   * The PowerShell equivalents of the disconnect actions, for the Windows guard
+   * engine (`startup-guard.windows.ts`). PowerShell is a separate language, so
+   * the bash fields above cannot be reused — but everything else on this
+   * descriptor (binary, label, promptName, install paths,
+   * nonInteractiveArgPatterns) is platform-agnostic and shared by both engines.
+   */
+  windows: StartupGuardWindowsClient;
+}
+
+/** The Windows/PowerShell half of a client's disconnect actions. */
+export interface StartupGuardWindowsClient {
+  /**
+   * PowerShell statements for the `'mcp'` case of `Invoke-ArchDisconnectActions`.
+   * May reference `$archRealExe` (the resolved real binary) and `$McpServerName`.
+   */
+  mcpDisconnect: string;
+  /**
+   * PowerShell statements for the `'skills'` case. May reference `$archRealExe`
+   * and `$SkillsMarketplaceName`.
+   */
+  skillsDisconnect: string;
+  /**
+   * Defines `function Disconnect-ArchProxy { … }` — the client-specific proxy
+   * reversal (settings.json strip / config.toml block strip / env removal).
+   */
+  renderProxyDisconnect(ctx: StartupGuardContext): string;
+  /**
+   * A single DarkGray note line printed after a proxy remote is disconnected
+   * (bedrock token reminder / codex-logout hint / copilot env note). Returns the
+   * empty string for no note. The engine emits it as a quoted PowerShell string
+   * literal, so it may contain arbitrary text (quotes included).
+   */
+  proxyDisconnectNote(ctx: StartupGuardContext): string;
 }
 
 /**

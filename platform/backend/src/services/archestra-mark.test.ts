@@ -3,7 +3,6 @@ import {
   ARCHESTRA_MARK,
   archestraMarkWithText,
 } from "@/services/archestra-mark";
-import { renderClaudeCodeStartupGuardPowerShell } from "@/services/claude-code-startup-guard.windows";
 import {
   renderSetupScript,
   type SetupScriptContext,
@@ -13,6 +12,7 @@ import {
   renderStartupGuardScript,
 } from "@/services/startup-guard";
 import { CLAUDE_CODE_GUARD_CLIENT } from "@/services/startup-guard.clients";
+import { renderStartupGuardPowerShell } from "@/services/startup-guard.windows";
 
 function setupCtx(
   platform: SetupScriptContext["platform"],
@@ -80,8 +80,9 @@ describe("the identical mark is reused across every /connection surface", () => 
   });
 
   test("Windows: the guard draws the same Unicode art (it's a BOM'd UTF-8 file)", () => {
-    const guard = renderClaudeCodeStartupGuardPowerShell(
+    const guard = renderStartupGuardPowerShell(
       buildStartupGuardContext(setupCtx("windows")),
+      CLAUDE_CODE_GUARD_CLIENT,
     );
     expect(guard).toContain(MARK_TOP_BORDER);
     expect(guard).toContain(MARK_GLYPH_ROW);

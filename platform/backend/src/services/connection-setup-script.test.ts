@@ -506,11 +506,33 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     );
   });
 
-  test("the PowerShell guard is still Claude-Code-only (codex/copilot Windows parity is a follow-up)", () => {
-    for (const clientId of ["codex", "copilot-cli"] as const) {
-      expect(renderSetupScript(fullContext(clientId, "windows"))).not.toContain(
-        "startup-guard",
+  test("codex and copilot get a PowerShell startup guard too (Windows parity)", () => {
+    for (const { clientId, binary, disableEnvVar } of [
+      {
+        clientId: "codex" as const,
+        binary: "codex",
+        disableEnvVar: "ARCHESTRA_CODEX_GUARD",
+      },
+      {
+        clientId: "copilot-cli" as const,
+        binary: "copilot",
+        disableEnvVar: "ARCHESTRA_COPILOT_GUARD",
+      },
+    ]) {
+      const script = renderSetupScript(fullContext(clientId, "windows"));
+      // the guard .ps1 is written and the client's own wrapper hooked
+      expect(script).toContain(`${binary}-startup-guard.ps1`);
+      expect(script).toContain(`function ${binary} {`);
+      expect(script).toContain(`if ($env:${disableEnvVar} -eq '0') { exit 0 }`);
+      // unshadow runs before the CLI, install (with in-session arming) after
+      const unshadowAt = script.indexOf(
+        `Remove-Item Function:${binary} -ErrorAction SilentlyContinue`,
       );
+      const firstCliAt = script.indexOf(`${binary} mcp `);
+      const installAt = script.indexOf("Invoke-Expression $archGuardBlock");
+      expect(unshadowAt).toBeGreaterThan(-1);
+      expect(unshadowAt).toBeLessThan(firstCliAt);
+      expect(unshadowAt).toBeLessThan(installAt);
     }
   });
 

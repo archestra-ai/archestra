@@ -13,9 +13,7 @@
   },
   "readme": null,
   "category": "Security",
-  "quality_score": 48,
   "programming_language": "Go",
-  "framework": null,
   "github_info": {
     "owner": "safedep",
     "repo": "vet",
@@ -29,35 +27,6 @@
     "ci_cd": true,
     "latest_commit_hash": "e4e9dc2590ef3b9b25ce775d57541c6d3d72ba75"
   },
-  "protocol_features": {
-    "implementing_tools": false,
-    "implementing_prompts": false,
-    "implementing_resources": false,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": false,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [
-    {
-      "name": "@modelcontextprotocol/sdk",
-      "importance": 10
-    },
-    {
-      "name": "express",
-      "importance": 8
-    },
-    {
-      "name": "mark3labs/mcp-go",
-      "importance": 9
-    },
-    {
-      "name": "axios",
-      "importance": 6
-    }
-  ],
   "user_config": {},
   "archestra_config": {
     "client_config_permutations": null,
@@ -66,8 +35,5 @@
       "required": false
     },
     "works_in_archestra": false
-  },
-  "evaluation_model": "gemini-2.5-flash",
-  "raw_dependencies": null,
-  "last_scraped_at": "2025-09-09T13:06:35.281Z"
+  }
 }

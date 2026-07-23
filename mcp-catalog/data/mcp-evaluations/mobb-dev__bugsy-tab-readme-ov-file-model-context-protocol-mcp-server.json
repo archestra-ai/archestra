@@ -17,7 +17,6 @@
   "user_config": {},
   "readme": null,
   "category": "AI Tools",
-  "quality_score": 19,
   "archestra_config": {
     "client_config_permutations": {
       "mobb-bugsy-server": {
@@ -72,30 +71,5 @@
     "ci_cd": false,
     "latest_commit_hash": null
   },
-  "programming_language": "TypeScript",
-  "framework": null,
-  "last_scraped_at": "2025-08-03T20:49:10.339Z",
-  "evaluation_model": "gemini-2.5-flash",
-  "protocol_features": {
-    "implementing_tools": false,
-    "implementing_prompts": false,
-    "implementing_resources": false,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": false,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [
-    {
-      "name": "@modelcontextprotocol/sdk",
-      "importance": 10
-    },
-    {
-      "name": "express",
-      "importance": 8
-    }
-  ],
-  "raw_dependencies": null
+  "programming_language": "TypeScript"
 }

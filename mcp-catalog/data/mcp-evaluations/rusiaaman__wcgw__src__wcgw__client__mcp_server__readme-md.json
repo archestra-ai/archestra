@@ -17,7 +17,6 @@
   "user_config": {},
   "readme": null,
   "category": "AI Tools",
-  "quality_score": 41,
   "archestra_config": {
     "client_config_permutations": {
       "modelcontextprotocol-server-filesystem": {
@@ -105,21 +104,5 @@
     "ci_cd": true,
     "latest_commit_hash": "02caebc4976cb6c5e4cb684865c626dea7226816"
   },
-  "programming_language": "Python",
-  "framework": null,
-  "last_scraped_at": "2025-08-04T10:54:12.855Z",
-  "evaluation_model": "gemini-2.5-flash",
-  "protocol_features": {
-    "implementing_tools": false,
-    "implementing_prompts": false,
-    "implementing_resources": false,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": false,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [],
-  "raw_dependencies": null
+  "programming_language": "Python"
 }

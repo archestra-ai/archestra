@@ -849,16 +849,21 @@ ${client.markerEnd}
 ${GUARD_PROFILE_EOF}
   echo "Updated $1"
 }
-archestra_guard_hooked=0
-if [ -f "$HOME/.zshrc" ]; then archestra_install_guard_block "$HOME/.zshrc"; archestra_guard_hooked=1; fi
-if [ -f "$HOME/.bashrc" ]; then archestra_install_guard_block "$HOME/.bashrc"; archestra_guard_hooked=1; fi
-if [ "$archestra_guard_hooked" = "0" ]; then
-  case "\${SHELL:-}" in
-    *zsh*) archestra_install_guard_block "$HOME/.zshrc" ;;
-    *) archestra_install_guard_block "$HOME/.bashrc" ;;
-  esac
-fi
-ok "Startup guard installed — new terminals check your ${ctx.appName} remotes before ${client.binary} starts."`;
+# Hook the CURRENT shell's rc first — creating it if needed — so the activation
+# hint below always resolves to a profile that carries the wrapper, then hook the
+# other rc too when it exists (covers users who switch shells). This script runs
+# in a child \`curl | bash\`, which cannot define the wrapper in the interactive
+# shell you launched it from, so the hint is how you arm it without a new terminal.
+case "\${SHELL:-}" in
+  *zsh*) archestra_guard_profile="$HOME/.zshrc" ;;
+  *)     archestra_guard_profile="$HOME/.bashrc" ;;
+esac
+archestra_install_guard_block "$archestra_guard_profile"
+if [ -f "$HOME/.zshrc" ] && [ "$archestra_guard_profile" != "$HOME/.zshrc" ]; then archestra_install_guard_block "$HOME/.zshrc"; fi
+if [ -f "$HOME/.bashrc" ] && [ "$archestra_guard_profile" != "$HOME/.bashrc" ]; then archestra_install_guard_block "$HOME/.bashrc"; fi
+ok "Startup guard installed for ${client.binary}."
+printf '   It runs automatically in new terminals. To arm it in THIS terminal now,\n'
+printf '   reload your shell:  %ssource %s%s   (or just open a new terminal).\n' "$ARCH_C_OK" "$archestra_guard_profile" "$ARCH_C_RESET"`;
 }
 
 /**

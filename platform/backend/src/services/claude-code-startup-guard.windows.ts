@@ -774,7 +774,14 @@ foreach ($archProfilePath in $archProfiles) {
   Set-Content -Path $archProfilePath -Value (($archKept + ($archGuardBlock -split "\`r?\`n")) -join [Environment]::NewLine)
   Write-Host ('Updated ' + $archProfilePath)
 }
-Ok ${psq(`Startup guard installed — new PowerShell sessions check your ${ctx.appName} remotes before claude starts.`)}`;
+# irm|iex ran this whole script in your CURRENT PowerShell session, so define the
+# wrapper here too — not only in profile.ps1 — and the startup check works
+# immediately in this window without opening a new session. The block is just the
+# function plus its comment markers, safe to evaluate. (The unshadow step above
+# removed any previously-loaded wrapper so the connect steps reached the real
+# claude; this re-arms it now that connect is done.)
+Invoke-Expression $archGuardBlock
+Ok ${psq(`Startup guard installed — active in this PowerShell session now, and in every new session.`)}`;
 }
 
 /**

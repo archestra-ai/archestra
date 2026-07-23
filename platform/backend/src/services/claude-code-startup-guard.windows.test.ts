@@ -294,6 +294,15 @@ describe("buildWindowsClaudeCodeStartupGuardInstallSection", () => {
       `Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE '${CLAUDE_CODE_GUARD_SKIP_RELPATH}')`,
     );
   });
+
+  test("defines the wrapper in the CURRENT session too, so the screen works without a new window", () => {
+    const section = buildWindowsClaudeCodeStartupGuardInstallSection(CTX);
+    // irm|iex runs in the caller's scope, so evaluating the block here defines
+    // `function claude` in the live session — not only in profile.ps1.
+    expect(section).toContain("Invoke-Expression $archGuardBlock");
+    // and the final message reflects that it is active immediately
+    expect(section).toContain("active in this PowerShell session now");
+  });
 });
 
 describe("buildWindowsClaudeCodeStartupGuardUnshadowSection", () => {

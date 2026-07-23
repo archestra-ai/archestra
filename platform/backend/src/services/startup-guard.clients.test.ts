@@ -84,6 +84,22 @@ describe.each([
     expect(script).toContain(`command ${client.binary} mcp remove`);
   });
 
+  test("install hooks the current shell's rc and tells the user how to arm it in this terminal", () => {
+    const install = buildStartupGuardInstallSection(CTX, client);
+    // The current shell's rc is chosen from $SHELL and hooked unconditionally
+    // (created if missing) so the source hint always lands on a hooked profile —
+    // a child `curl | bash` can't define the wrapper in the interactive shell.
+    expect(install).toContain('archestra_guard_profile="$HOME/.zshrc"');
+    expect(install).toContain('archestra_guard_profile="$HOME/.bashrc"');
+    expect(install).toContain(
+      'archestra_install_guard_block "$archestra_guard_profile"',
+    );
+    // …and the user is told to reload that exact profile (or open a new terminal).
+    expect(install).toContain("source %s");
+    expect(install).toContain('"$archestra_guard_profile"');
+    expect(install).toContain("or just open a new terminal");
+  });
+
   test("unshadow step drops the wrapper but is non-destructive, silent, and valid bash", async () => {
     const unshadow = buildStartupGuardUnshadowSection(client);
     // It drops the wrapper from the running shell so re-connect's CLI calls

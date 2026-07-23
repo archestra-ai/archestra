@@ -19,6 +19,7 @@ import {
   Gemini,
   GithubCopilot,
   Groq,
+  Kimi,
   Microsoft365Copilot,
   Minimax,
   Mistral,
@@ -80,6 +81,7 @@ export const InteractionRequestSchema = z.union([
   Zhipuai.API.ChatCompletionRequestSchema,
   DeepSeek.API.ChatCompletionRequestSchema,
   GithubCopilot.API.ChatCompletionRequestSchema,
+  Kimi.API.ChatCompletionRequestSchema,
   Microsoft365Copilot.API.ChatCompletionRequestSchema,
   Minimax.API.ChatCompletionRequestSchema,
   OpenAi.API.ResponsesRequestSchema,
@@ -125,6 +127,7 @@ export const InteractionResponseSchema = z.union([
   Zhipuai.API.ChatCompletionResponseSchema,
   DeepSeek.API.ChatCompletionResponseSchema,
   GithubCopilot.API.ChatCompletionResponseSchema,
+  Kimi.API.ChatCompletionResponseSchema,
   Microsoft365Copilot.API.ChatCompletionResponseSchema,
   Minimax.API.ChatCompletionResponseSchema,
   OpenAi.API.ResponsesResponseSchema,
@@ -421,6 +424,17 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .nullable()
       .optional(),
     response: withErrorResponse(DeepSeek.API.ChatCompletionResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["kimi:chatCompletions"]),
+    request: withReadFallback(Kimi.API.ChatCompletionRequestSchema),
+    processedRequest: withReadFallback(Kimi.API.ChatCompletionRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Kimi.API.ChatCompletionResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

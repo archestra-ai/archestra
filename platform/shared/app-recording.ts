@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseFullToolName } from "./utils";
 
 // =============================================================================
 // App session recording — the strict, shared bundle contract
@@ -383,14 +384,28 @@ const AppRecordingMessageEditSchema = z
   .strict();
 
 /**
- * The viewer's chat edits: hide the AI-enhanced consolidation (replaying the
- * original conversation instead), drop captured messages from the replay, or
- * override a user message's text. All keyed by the captured messages'
- * immutable ids — the capture itself never changes, so clearing an entry
- * restores the original message.
+ * The viewer's chat edits: opt in to the AI-enhanced consolidation (the player
+ * replays the original conversation as-is by default), drop captured messages
+ * from the replay, or override a user message's text. All keyed by the captured
+ * messages' immutable ids — the capture itself never changes, so clearing an
+ * entry restores the original message.
  */
 const AppRecordingChatEditsSchema = z
   .object({
+    /**
+     * Opt in to replaying the AI-enhanced consolidation (the single
+     * consolidated prompt and closing response) in place of the original
+     * conversation. Absent/false → the captured chat replays verbatim, which
+     * is the default. The AI enhancement is still drafted and packed into the
+     * bundle for the gallery regardless of this flag — it only governs what the
+     * PLAYER replays.
+     */
+    enhancementEnabled: z.boolean().optional(),
+    /**
+     * @deprecated Superseded by `enhancementEnabled` once the default flipped
+     * to the original chat. Kept in this strict schema only so recordings
+     * stored with it still validate; it is no longer read anywhere.
+     */
     enhancementDisabled: z.boolean().optional(),
     // Same anti-abuse ceiling as cuts: far above any real editing session.
     removedMessageIds: z.array(z.string()).max(500).optional(),
@@ -580,11 +595,80 @@ export const AppRecordingBundleSchema = z
          * bundles saved before these fields keep validating. */
         mcpServers: z.array(z.string()).max(50).optional(),
         appVersionCount: z.number().int().nonnegative().optional(),
+        /** The LLM model that built the app, as a display name (e.g. "Claude
+         * Sonnet") — not a provider id. Set once at record time from the
+         * chat's active model; absent when it couldn't be resolved. */
+        model: z.string().max(200).optional(),
+        /** Count of the builder's own chat messages that produced the app —
+         * every `role: "user"` entry in `recording.transcript`, including any
+         * pre-recording history it carries. Distinct from `appVersionCount`
+         * (app versions, not prompts). */
+        userPromptCount: z.number().int().nonnegative().optional(),
+        /** The gallery submitter's public GitHub identity, stamped at share
+         * time after sign-in. Only the login and public display name — NEVER
+         * an email, even though GitHub's user endpoint returns one alongside
+         * them. */
+        github: z
+          .object({
+            login: z.string().max(100),
+            name: z.string().max(200).nullable(),
+          })
+          .strict()
+          .optional(),
+        /** The recording's duration as shown by the editor's final cut
+         * (cuts applied, idle time-lapse compressed) — what a gallery viewer
+         * should see as "how long this demo is". `recording.durationMs`
+         * stays the raw, uncut capture length; this is the one gallery
+         * submissions should display and derive a thumbnail's timing from.
+         * Absent on bundles saved before this field existed. */
+        finalCutDurationMs: z.number().int().nonnegative().optional(),
       })
       .strict(),
   })
   .strict();
 export type AppRecordingBundle = z.infer<typeof AppRecordingBundleSchema>;
+
+/**
+ * The distinct MCP servers an app is connected to, derived from its assigned
+ * tools. Each tool's `name` is a fully-qualified `<server>__<tool>`; the server
+ * half is the name — the same convention the captured tool calls use, so a
+ * recording's connected-server list and its observed-server list speak the same
+ * vocabulary. Sorted and de-duplicated.
+ */
+export function connectedMcpServerNames(
+  appTools: { name: string }[] | undefined | null,
+): string[] {
+  const names = new Set<string>();
+  for (const tool of appTools ?? []) {
+    const server = parseFullToolName(tool.name).serverName;
+    if (server) names.add(server);
+  }
+  return [...names].sort();
+}
+
+/**
+ * Self-heal a recording's connected-MCP list: union whatever the bundle already
+ * records with the app's currently-connected servers. A recording captured
+ * before the connected list was part of the bundle — or one whose app has since
+ * been wired to more servers — then lists every server the app is connected to,
+ * not only those the recorded session happened to call. Never shrinks (a server
+ * the session used but the app has since disconnected is kept), and returns the
+ * same bundle instance when nothing new is added, so an already-complete list
+ * is left untouched.
+ */
+export function healBundleMcpServers(
+  bundle: AppRecordingBundle,
+  appTools: { name: string }[] | undefined | null,
+): AppRecordingBundle {
+  const existing = bundle.meta.mcpServers ?? [];
+  const merged = new Set(existing);
+  for (const server of connectedMcpServerNames(appTools)) merged.add(server);
+  if (merged.size === existing.length) return bundle;
+  return {
+    ...bundle,
+    meta: { ...bundle.meta, mcpServers: [...merged].sort() },
+  };
+}
 
 // =============================================================================
 // Validation + redaction — shared by recorder, player, and downloader

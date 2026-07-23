@@ -10,54 +10,80 @@ describe("GET /api/skills", () => {
   test("forAgentId restricts the list to the agent's environment", async ({
     makeAgent,
   }) => {
-    const env = await EnvironmentModel.create({
+    const staging = await EnvironmentModel.create({
       organizationId: ctx.organizationId,
       name: "Staging",
     });
-    const envAgent = await makeAgent({
+    const production = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "Production",
+    });
+    const stagingAgent = await makeAgent({
       name: "Env Agent",
       organizationId: ctx.organizationId,
-      environmentId: env.id,
+      environmentId: staging.id,
     });
     const defaultAgent = await makeAgent({
       name: "Default Agent",
       organizationId: ctx.organizationId,
     });
 
+    // no environments = available to agents in every environment
     await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: manifestNamed("default-env-skill") },
+      payload: { content: manifestNamed("everywhere-skill") },
     });
     await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
       payload: {
         content: manifestNamed("staging-skill"),
-        environmentId: env.id,
+        environmentIds: [staging.id],
+      },
+    });
+    // a skill can be assigned to more than one environment
+    await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: manifestNamed("staging-and-prod-skill"),
+        environmentIds: [staging.id, production.id],
+      },
+    });
+    await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: manifestNamed("prod-only-skill"),
+        environmentIds: [production.id],
       },
     });
 
-    const staging = await ctx.app.inject({
+    const stagingList = await ctx.app.inject({
       method: "GET",
-      url: `/api/skills?forAgentId=${envAgent.id}`,
+      url: `/api/skills?forAgentId=${stagingAgent.id}`,
     });
-    expect(staging.statusCode).toBe(200);
-    expect(staging.json().data.map((s: { name: string }) => s.name)).toEqual([
-      "staging-skill",
-    ]);
+    expect(stagingList.statusCode).toBe(200);
+    expect(
+      stagingList
+        .json()
+        .data.map((s: { name: string }) => s.name)
+        .sort(),
+    ).toEqual(["everywhere-skill", "staging-and-prod-skill", "staging-skill"]);
 
+    // a Default-environment agent sees only unassigned skills
     const dflt = await ctx.app.inject({
       method: "GET",
       url: `/api/skills?forAgentId=${defaultAgent.id}`,
     });
     expect(dflt.json().data.map((s: { name: string }) => s.name)).toEqual([
-      "default-env-skill",
+      "everywhere-skill",
     ]);
 
     // without the filter, the management surface lists every environment
     const all = await ctx.app.inject({ method: "GET", url: "/api/skills" });
-    expect(all.json().data).toHaveLength(2);
+    expect(all.json().data).toHaveLength(4);
   });
 
   test("lists skills with a file count that includes SKILL.md", async () => {

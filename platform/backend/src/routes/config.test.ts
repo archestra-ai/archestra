@@ -121,6 +121,7 @@ describe("config routes", () => {
 
     expect(Object.keys(payload.providerBaseUrls).sort()).toEqual([
       "anthropic",
+      "archestra",
       "azure",
       "bedrock",
       "cerebras",
@@ -129,6 +130,7 @@ describe("config routes", () => {
       "gemini",
       "github-copilot",
       "groq",
+      "kimi",
       "microsoft-365-copilot",
       "minimax",
       "mistral",

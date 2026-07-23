@@ -487,11 +487,14 @@ export class ModelsDevClient {
       zhipuai: ["zhipuai/"],
       deepseek: ["deepseek/"],
       minimax: ["minimax/"],
+      kimi: ["moonshotai/"],
       azure: ["azure/"],
       // Not synced via models.dev (subscription-dependent /models endpoint)
       "github-copilot": [],
       // Not synced via models.dev (single static pseudo-model)
       "microsoft-365-copilot": [],
+      // Not synced via models.dev (upstream is another Archestra instance)
+      archestra: [],
     };
 
     const getSourcePriority = (model: CreateModel): number => {

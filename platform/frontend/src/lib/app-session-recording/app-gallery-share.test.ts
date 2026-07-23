@@ -11,6 +11,7 @@ import {
   rememberGallerySubmission,
   submitRecordingToAppGallery,
   takeCachedGithubToken,
+  viewportBox,
 } from "./app-gallery-share";
 
 /**
@@ -21,11 +22,37 @@ import {
  * stub fetch and pin that wire sequence, including the duplicate guards.
  */
 
+let toBlobSpy: ReturnType<typeof vi.spyOn> | null = null;
+
 afterEach(() => {
   // vitest is not configured to auto-unstub globals, so put the real fetch
   // back explicitly instead of leaning on every later test re-stubbing it.
   vi.unstubAllGlobals();
+  // Restore the specific canvas spy rather than vi.restoreAllMocks(), which
+  // would also drop the global getContext mock the test setup installs.
+  toBlobSpy?.mockRestore();
+  toBlobSpy = null;
 });
+
+/**
+ * jsdom has no image decoder or canvas encoder, so the thumbnail-framing path
+ * (createImageBitmap → draw into a 4:5 canvas → toBlob) can't run for real.
+ * Stub the two boundaries so the framing code executes deterministically: the
+ * 4:5 geometry itself is pinned by the viewportBox unit tests. The stubbed
+ * WebP bytes stand in for the encoded thumbnail.
+ */
+function stubCanvasEncoding(webpBytes: string) {
+  vi.stubGlobal("createImageBitmap", async () => ({
+    width: 800,
+    height: 800,
+    close: () => {},
+  }));
+  toBlobSpy = vi
+    .spyOn(HTMLCanvasElement.prototype, "toBlob")
+    .mockImplementation(function toBlob(callback: BlobCallback) {
+      callback(new Blob([webpBytes], { type: "image/webp" }));
+    });
+}
 
 function makeBundle(
   events: AppRecordingBundle["recording"]["events"] = [],
@@ -174,12 +201,18 @@ describe("submitRecordingToAppGallery", () => {
     expect(preflight?.url).toContain("head=sam%3Asubmission%2Fpr_review_queue");
     expect(preflight?.url).toContain("state=all");
 
-    // The committed file is the bundle itself, byte for byte — and a fresh
-    // branch uploads without an update sha.
+    // The committed file is the bundle itself, byte for byte, with the
+    // submitter's GitHub identity stamped on (the mocked /user has no
+    // public name, so it lands as null) — and a fresh branch uploads
+    // without an update sha.
     const upload = calls.find((c) => c.method === "PUT") as {
       body: { content: string; branch: string };
     };
-    expect(JSON.parse(atob(upload.body.content))).toEqual(makeBundle());
+    const expected = makeBundle();
+    expect(JSON.parse(atob(upload.body.content))).toEqual({
+      ...expected,
+      meta: { ...expected.meta, github: { login: "sam", name: null } },
+    });
     expect(upload.body).not.toHaveProperty("sha");
 
     // The PR names the participant's branch as head and carries the metadata.
@@ -199,7 +232,35 @@ describe("submitRecordingToAppGallery", () => {
     expect(pr.body).toContain("MCP servers: github");
   });
 
-  test("commits the last canvas frame as the thumbnail when one exists", async () => {
+  test("the submitter's GitHub identity is stamped as login+name only — an email in the /user response is never uploaded", async () => {
+    stubGithub({
+      respond: (method, url) =>
+        method === "GET" && url.endsWith("/user")
+          ? Response.json({
+              login: "sam",
+              name: "Sam Real Name",
+              email: "sam@example.com",
+            })
+          : null,
+    });
+
+    await submit();
+
+    const upload = calls.find((c) => c.method === "PUT") as {
+      body: { content: string };
+    };
+    const uploaded = JSON.parse(atob(upload.body.content));
+    expect(uploaded.meta.github).toEqual({
+      login: "sam",
+      name: "Sam Real Name",
+    });
+    // Not merely absent from `meta.github` — nowhere in the uploaded bytes.
+    expect(atob(upload.body.content)).not.toContain("sam@example.com");
+    expect(atob(upload.body.content)).not.toContain("@example.com");
+  });
+
+  test("commits the last canvas frame, framed to the 4:5 viewport, as the thumbnail", async () => {
+    stubCanvasEncoding("framed-webp");
     const bundle = makeBundle([
       {
         kind: "canvas",
@@ -222,12 +283,15 @@ describe("submitRecordingToAppGallery", () => {
     expect(uploads[1].url).toContain(
       "/contents/apps/sam_pr_review_queue/thumbnail.webp",
     );
+    // The committed bytes are the re-encoded (4:5-framed) frame, not the raw
+    // canvas capture — the framing runs before upload.
     expect(atob((uploads[1].body as { content: string }).content)).toBe(
-      "final-frame",
+      "framed-webp",
     );
   });
 
   test("uploads are byte-identical to the manual-submission package", async () => {
+    stubCanvasEncoding("framed-webp");
     const bundle = makeBundle([
       {
         kind: "canvas",
@@ -240,7 +304,15 @@ describe("submitRecordingToAppGallery", () => {
     await submit({ bundle });
 
     const uploads = calls.filter((c) => c.method === "PUT");
-    const files = buildGallerySubmissionFiles(bundle);
+    // The automatic path stamps the submitter's GitHub identity onto the
+    // bundle before serializing it (the dialog does the same for the manual
+    // download) — mirror that here so this compares against what the
+    // upload actually serialized.
+    const stamped: AppRecordingBundle = {
+      ...bundle,
+      meta: { ...bundle.meta, github: { login: "sam", name: null } },
+    };
+    const files = await buildGallerySubmissionFiles(stamped);
     // Same files, same order, same bytes — the manual fallback's downloads
     // must match what the automatic path commits, byte for byte.
     expect(
@@ -714,5 +786,33 @@ describe("fetchSubmittedPrState", () => {
     await expect(fetchSubmittedPrState("not a pull request url")).resolves.toBe(
       "unknown",
     );
+  });
+});
+
+describe("viewportBox", () => {
+  const ASPECT = 4 / 5;
+
+  test("pads a wider-than-4:5 frame top and bottom, never scaling it", () => {
+    // 800×400 (2:1) is wider than 4:5, so its width binds and the box grows
+    // taller to reach 4:5.
+    expect(viewportBox(800, 400)).toEqual({ width: 800, height: 1000 });
+    expect(800 / 1000).toBe(ASPECT);
+  });
+
+  test("pads a taller-than-4:5 frame left and right, never scaling it", () => {
+    // 400×800 (1:2) is taller than 4:5, so its height binds and the box grows
+    // wider to reach 4:5.
+    expect(viewportBox(400, 800)).toEqual({ width: 640, height: 800 });
+    expect(640 / 800).toBe(ASPECT);
+  });
+
+  test("leaves a frame already at the 4:5 aspect unchanged", () => {
+    expect(viewportBox(800, 1000)).toEqual({ width: 800, height: 1000 });
+  });
+
+  test("treats a square frame as wider than 4:5", () => {
+    // A square is wider than 4:5, so it letterboxes top and bottom.
+    expect(viewportBox(600, 600)).toEqual({ width: 600, height: 750 });
+    expect(600 / 750).toBe(ASPECT);
   });
 });

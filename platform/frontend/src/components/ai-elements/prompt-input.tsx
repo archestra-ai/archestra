@@ -1356,13 +1356,19 @@ export const PromptInputSpeechButton = ({
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(
     null,
   );
+  const [isInsecureContext, setIsInsecureContext] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {
-    if (
-      typeof window !== "undefined" &&
-      ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)
-    ) {
+    // Chrome exposes the SpeechRecognition constructor on insecure origins,
+    // but microphone access still requires a secure context, so the button
+    // would render and then silently fail on click.
+    if (!window.isSecureContext) {
+      setIsInsecureContext(true);
+      return;
+    }
+
+    if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
       const SpeechRecognition =
         window.SpeechRecognition || window.webkitSpeechRecognition;
       const speechRecognition = new SpeechRecognition();
@@ -1428,6 +1434,10 @@ export const PromptInputSpeechButton = ({
       recognition.start();
     }
   }, [recognition, isListening]);
+
+  if (isInsecureContext) {
+    return null;
+  }
 
   return (
     <PromptInputButton

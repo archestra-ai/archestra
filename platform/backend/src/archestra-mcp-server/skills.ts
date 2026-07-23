@@ -15,6 +15,7 @@ import {
 import logger from "@/logging";
 import {
   AgentModel,
+  SkillEnvironmentModel,
   SkillModel,
   SkillTeamModel,
   SkillVersionModel,
@@ -364,19 +365,23 @@ const registry = defineArchestraTools([
       // skill owned by its author needs no further scope authorization beyond
       // the skill:create permission already enforced on this tool.
       //
-      // The skill inherits the calling agent's environment so the authoring
-      // agent can see (and load) what it just created — skills are only
-      // visible within their environment.
+      // The skill inherits the calling agent's environment (if any) so the
+      // authoring agent can see (and load) what it just created; a
+      // Default-environment agent yields an unrestricted skill, available in
+      // every environment.
+      const agentEnvironmentId = await AgentModel.findEnvironmentId(
+        context.agent.id,
+      );
       const skill = await SkillModel.createWithFiles({
         skill: {
           ...toSkillInsertFields(parsed),
           organizationId: ctx.organizationId,
           authorId: ctx.userId,
-          environmentId: await AgentModel.findEnvironmentId(context.agent.id),
           sourceType: "manual",
           scope: "personal",
         },
         files: toSkillFiles(args.files ?? []),
+        environmentIds: agentEnvironmentId ? [agentEnvironmentId] : [],
       });
       if (!skill) {
         return errorResult(`A skill named "${parsed.name}" already exists.`);
@@ -742,9 +747,9 @@ async function canRunSkillSandbox(
  * leaking an inaccessible skill's existence.
  *
  * Skills are environment-scoped: when `agentId` is provided, only skills
- * visible from that agent's environment resolve (strict match, null = Default,
- * built-in skills exempt) — a cross-environment skill is indistinguishable
- * from a nonexistent one.
+ * visible from that agent's environment resolve (skills with no environment
+ * assignments and built-in skills are visible everywhere) — a
+ * cross-environment skill is indistinguishable from a nonexistent one.
  */
 async function findAccessibleSkill(
   ctx: SkillReadContext,
@@ -752,10 +757,21 @@ async function findAccessibleSkill(
   agentId?: string,
 ) {
   let candidates = await SkillModel.findAllByName(ctx.organizationId, name);
-  if (agentId !== undefined) {
-    const environmentId = await AgentModel.findEnvironmentId(agentId);
+  if (agentId !== undefined && candidates.length > 0) {
+    const [environmentId, environmentIdsBySkill] = await Promise.all([
+      AgentModel.findEnvironmentId(agentId),
+      SkillEnvironmentModel.getEnvironmentIdsForSkills(
+        candidates.map((skill) => skill.id),
+      ),
+    ]);
     candidates = candidates.filter((skill) =>
-      skillVisibleInEnvironment(skill, environmentId),
+      skillVisibleInEnvironment(
+        {
+          sourceType: skill.sourceType,
+          environmentIds: environmentIdsBySkill.get(skill.id) ?? [],
+        },
+        environmentId,
+      ),
     );
   }
   if (candidates.length === 0) return null;

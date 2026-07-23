@@ -73,6 +73,13 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const draft = await draftRecordingEnhancement({
         appName: body.appName,
         conversationId: conversation.id,
+        // The model this chat is actually on — tried first so the draft follows
+        // whatever provider the builder picked in chat, with the agent / org
+        // default as the fallback.
+        chatModel: {
+          modelId: conversation.modelId ?? null,
+          chatApiKeyId: conversation.chatApiKeyId ?? null,
+        },
         agent:
           conversation.agentId && agentLlm
             ? { id: conversation.agentId, ...agentLlm }

@@ -8,6 +8,7 @@ import { getSkillPermissionChecker } from "@/auth/skill-permissions";
 import logger from "@/logging";
 import {
   AgentModel,
+  SkillEnvironmentModel,
   SkillModel,
   SkillTeamModel,
   SkillVersionModel,
@@ -101,11 +102,18 @@ export async function injectSkillActivation({
   }
 
   // Skills are environment-scoped like tools and connectors: a slash command
-  // must not activate a skill from another environment (strict match, null =
-  // Default; built-in skills exempt).
+  // must not activate a skill from another environment (skills with no
+  // environment assignments and built-in skills are visible everywhere).
   if (agentId !== undefined) {
-    const environmentId = await AgentModel.findEnvironmentId(agentId);
-    if (!skillVisibleInEnvironment(skill, environmentId)) {
+    const [environmentId, environmentIdsBySkill] = await Promise.all([
+      AgentModel.findEnvironmentId(agentId),
+      SkillEnvironmentModel.getEnvironmentIdsForSkills([skill.id]),
+    ]);
+    const skillEnvironments = {
+      sourceType: skill.sourceType,
+      environmentIds: environmentIdsBySkill.get(skill.id) ?? [],
+    };
+    if (!skillVisibleInEnvironment(skillEnvironments, environmentId)) {
       logger.warn(
         { organizationId, agentId, skillId: skill.id },
         "[Skills] Slash-command skill is outside the agent's environment; sending message unchanged",

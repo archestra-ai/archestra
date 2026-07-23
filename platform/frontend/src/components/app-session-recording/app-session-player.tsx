@@ -93,6 +93,7 @@ import {
 import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
 import { useMcpSandboxDomain } from "@/lib/config/config.query";
+import { DEFAULT_APP_LOGO } from "@/lib/hooks/use-app-name";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { cn } from "@/lib/utils";
 
@@ -830,6 +831,39 @@ export function AppSessionPlayer({
   );
 }
 
+/**
+ * The official "Powered by Archestra.AI" lockup composited into every
+ * downloaded session video, pinned to the exported frame's bottom-left corner
+ * (the chat pane's own bottom-left — see ReplayComposer) for the whole video.
+ *
+ * The brand logo tile beside the "Archestra.AI" wordmark in the brand's
+ * monospace face. The "Powered by" kicker reuses the wordmark's exact type —
+ * same font, size, weight, colour and line-height — and shares its left edge,
+ * so it reads as part of the mark rather than a bolt-on. Purely decorative, so
+ * it is hidden from assistive tech, and only ever mounted while filming.
+ */
+export function RecordingExportWatermark() {
+  return (
+    <div
+      aria-hidden="true"
+      className="flex w-fit select-none items-center gap-3 font-mono text-foreground"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={DEFAULT_APP_LOGO}
+        alt=""
+        width={56}
+        height={56}
+        className="size-14 shrink-0"
+      />
+      <span className="flex flex-col text-2xl font-semibold leading-tight tracking-tight">
+        <span>Powered by</span>
+        <span>Archestra.AI</span>
+      </span>
+    </div>
+  );
+}
+
 function PlayerSurface({
   conversationId,
   recording,
@@ -1148,9 +1182,9 @@ function PlayerSurface({
     },
     [applyEdits, cuts, chatEdits],
   );
-  const toggleEnhancementDisabled = useCallback(() => {
-    commitChatEdits({ enhancementDisabled: !chatEdits?.enhancementDisabled });
-  }, [commitChatEdits, chatEdits?.enhancementDisabled]);
+  const toggleEnhancement = useCallback(() => {
+    commitChatEdits({ enhancementEnabled: !chatEdits?.enhancementEnabled });
+  }, [commitChatEdits, chatEdits?.enhancementEnabled]);
   // Removals address whole messages OR single parts of one (an agent turn's
   // prose bubble, one tool row), so both take a list of ids and land as one
   // undoable step.
@@ -2195,7 +2229,7 @@ function PlayerSurface({
               // display-only, the stored toggle state is untouched.
               forceEnhancementOff={tourStepKey === "chat-message"}
               highlightFirstMessage={tourStepKey === "chat-message"}
-              onToggleEnhancement={toggleEnhancementDisabled}
+              onToggleEnhancement={toggleEnhancement}
               onRemove={removeChatMessage}
               onRestore={restoreChatMessage}
               onDone={() => setChatEditing(false)}
@@ -3926,7 +3960,11 @@ function ReplayChatPane({
           )}
         </ConversationContent>
       </Conversation>
-      <ReplayComposer text={composerText} sending={isSending} />
+      <ReplayComposer
+        text={composerText}
+        sending={isSending}
+        filming={filming}
+      />
     </div>
   );
 }
@@ -3990,7 +4028,7 @@ function ReplayChatEditPane({
   const tourMessageId = transcript.find(hasEditableProse)?.id;
   const hasPrompt = !!enhancement?.prompt.trim();
   const enhancementOn =
-    hasPrompt && !chat?.enhancementDisabled && !forceEnhancementOff;
+    hasPrompt && !!chat?.enhancementEnabled && !forceEnhancementOff;
   const firstUserId = transcript.find((message) => message.role === "user")?.id;
 
   return (
@@ -4467,11 +4505,27 @@ function ReplayEditableRow({
 function ReplayComposer({
   text,
   sending,
+  filming,
 }: {
   text: string | null;
   sending: boolean;
+  /** A video export is running — an idle composer carries the brand watermark. */
+  filming?: boolean;
 }) {
   const active = text != null;
+  // While filming, the composer slot carries the export watermark for the whole
+  // video: the official Archestra.AI lockup pinned to the chat pane's bottom-
+  // left — the exported frame's left bottom corner. It stands in the chat's own
+  // flow (never overlapping the replayed messages above) and replaces the
+  // replayed typing entirely — the recorded user messages still post as chat
+  // bubbles above, so nothing is lost and the mark stays put for every frame.
+  if (filming) {
+    return (
+      <div className="shrink-0 pb-5 pl-6 pt-2">
+        <RecordingExportWatermark />
+      </div>
+    );
+  }
   return (
     <div className="shrink-0 p-3">
       {/* Mirrors the real chat composer: a bordered input group with the message
@@ -4865,14 +4919,6 @@ export function buildPlayback(recording: PlaybackRecording): {
       cut.toMs >= rawDataEnd - TRIM_EDGE_EPS_MS && cut.fromMs < rawDataEnd,
   );
   const withinEnd = (t: number) => !tailCut || t <= tailCut.fromMs;
-  // A chat message that happened during a removed stretch must not replay AT
-  // ALL — without this it would burst in at the cut's collapse instant. App
-  // events are different: they DO collapse to that instant, because replaying
-  // them (invisibly, in one beat) is what keeps the app's state correct after
-  // the cut. Only the open interval is removed, so boundary-exact messages
-  // survive.
-  const inCut = (t: number) =>
-    cuts.some((cut) => cut.fromMs < t && t < cut.toMs);
 
   const sorted = [...anchors].sort((a, b) => a - b);
   const compressedAt = new Map<number, number>();
@@ -4976,12 +5022,16 @@ export function buildPlayback(recording: PlaybackRecording): {
     segments: keptSegments.length
       ? keptSegments
       : source.segments.slice(0, 1).map((segment) => ({ ...segment, atMs: 0 })),
-    transcript: source.transcript
-      .filter((message) => withinEnd(message.atMs) && !inCut(message.atMs))
-      .map((message) => ({
-        ...message,
-        atMs: map(message.atMs),
-      })),
+    // A cut removes ONLY the app replay in its range (events, frames, segments
+    // — filtered/collapsed above); the chat is never trimmed. Every captured
+    // message still replays: one inside a removed stretch collapses onto the
+    // cut's instant the same way the app events there do, and the reveal
+    // cascade streams that collapsed run in quickly — so the conversation plays
+    // in full, only sped up across the cut rather than losing what was said.
+    transcript: source.transcript.map((message) => ({
+      ...message,
+      atMs: map(message.atMs),
+    })),
     // The full compressed span — the last anchor, which may be a message that
     // lands just after the app interaction ends.
     duration: compressed,
@@ -5094,7 +5144,7 @@ export function uncutRecording(
 function finalVersionOnly(recording: PlaybackRecording): PlaybackRecording {
   const enhancementOn =
     !!recording.enhancement?.prompt.trim() &&
-    !recording.edits?.chat?.enhancementDisabled;
+    !!recording.edits?.chat?.enhancementEnabled;
   const last = recording.segments[recording.segments.length - 1];
   if (!enhancementOn || !last || recording.segments.length < 2)
     return recording;
@@ -5165,10 +5215,11 @@ export function consolidatedTranscript(
 }
 
 /**
- * The transcript the replay presents: the enhancement's consolidation (unless
- * the viewer disabled it), minus removed messages, with manual user-text
- * overrides applied. Pure presentation layered over the immutable capture —
- * clearing the chat edits restores the original conversation.
+ * The transcript the replay presents: the original captured conversation by
+ * default, or the enhancement's consolidation only when the viewer opted into
+ * it, minus removed messages, with manual user-text overrides applied. Pure
+ * presentation layered over the immutable capture — clearing the chat edits
+ * restores the original conversation.
  */
 export function presentedTranscript(
   transcript: AppRecordingBundle["recording"]["transcript"],
@@ -5199,7 +5250,7 @@ export function presentedTranscript(
     .filter((message) => message.parts.length > 0);
   return consolidatedTranscript(
     edited,
-    chat?.enhancementDisabled ? undefined : enhancement,
+    chat?.enhancementEnabled ? enhancement : undefined,
   );
 }
 

@@ -12,7 +12,6 @@ import {
 } from "drizzle-orm/pg-core";
 import type { SkillGithubSyncInterval, SkillSourceType } from "@/types/skill";
 import type { ResourceVisibilityScope } from "@/types/visibility";
-import environmentsTable from "./environment";
 import githubAppConfigsTable from "./github-app-config";
 import githubPatsTable from "./github-pat";
 import usersTable from "./user";
@@ -24,7 +23,9 @@ import usersTable from "./user";
  * (`personal`/`team`/`org`) like agents. It holds the catalog metadata
  * (`name`/`description`, surfaced to the model) plus the SKILL.md markdown
  * body (`content`, loaded on activation). Bundled resource files live in the
- * `skill_files` table; team assignments live in `skill_team`.
+ * `skill_files` table; team assignments live in `skill_team`; environment
+ * assignments live in `skill_environment` (no rows = available in every
+ * environment).
  *
  * @see https://agentskills.io/specification
  */
@@ -46,17 +47,6 @@ const skillsTable = pgTable(
       .$type<ResourceVisibilityScope>()
       .notNull()
       .default("personal"),
-    /**
-     * Environment the skill belongs to; `null` is the org Default environment.
-     * Agents only see skills in their own environment (strict match, mirroring
-     * tool/connector isolation), except `built_in` skills which are visible
-     * everywhere. ON DELETE SET NULL — deleting an environment falls the skill
-     * back to the Default environment, same as agents.
-     */
-    environmentId: uuid("environment_id").references(
-      () => environmentsTable.id,
-      { onDelete: "set null" },
-    ),
     /** Short identifier surfaced in the skill catalog. */
     name: text("name").notNull(),
     /** One-line summary the model uses to decide when to activate. */
@@ -163,7 +153,6 @@ const skillsTable = pgTable(
   (table) => [
     index("skills_organization_id_idx").on(table.organizationId),
     index("skills_scope_idx").on(table.scope),
-    index("skills_environment_id_idx").on(table.environmentId),
     // the sync worker's check-due scan touches only synced skills.
     index("skills_github_sync_due_idx")
       .on(table.lastSyncedAt)

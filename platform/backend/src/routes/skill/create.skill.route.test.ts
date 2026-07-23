@@ -1,4 +1,8 @@
-import { ADMIN_ROLE_NAME, EDITOR_ROLE_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  EDITOR_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
 import { EnvironmentModel, SkillModel, SkillTeamModel } from "@/models";
 import { MAX_SKILL_FILE_BYTES } from "@/skills/github-import";
 import { describe, expect, test, useRouteTestApp } from "@/test";
@@ -25,20 +29,83 @@ describe("POST /api/skills", () => {
     expect(body.files).toEqual([]);
   });
 
-  test("persists an explicit environment assignment", async () => {
-    const env = await EnvironmentModel.create({
+  test("persists explicit environment assignments (one or several)", async () => {
+    const staging = await EnvironmentModel.create({
       organizationId: ctx.organizationId,
       name: "Staging",
+    });
+    const production = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "Production",
     });
 
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: MANIFEST, environmentId: env.id },
+      payload: {
+        content: MANIFEST,
+        environmentIds: [staging.id, production.id],
+      },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().environmentId).toBe(env.id);
+    expect(
+      response
+        .json()
+        .environments.map((e: { id: string; name: string }) => e.name)
+        .sort(),
+    ).toEqual(["Production", "Staging"]);
+  });
+
+  test("omitting environments creates a skill available everywhere", async () => {
+    const response = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: { content: MANIFEST },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().environments).toEqual([]);
+  });
+
+  test("assigning a restricted environment requires skill:deploy-to-restricted", async ({
+    makeMember,
+  }) => {
+    const open = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "Open",
+    });
+    const restricted = await EnvironmentModel.create({
+      organizationId: ctx.organizationId,
+      name: "Restricted",
+      restricted: true,
+    });
+    // members hold skill:create but not skill:deploy-to-restricted
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+
+    // one restricted environment anywhere in the set rejects the whole create
+    const denied = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: MANIFEST,
+        environmentIds: [open.id, restricted.id],
+      },
+    });
+    expect(denied.statusCode).toBe(403);
+
+    // an unrestricted set is fine for the same user
+    const allowed = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills",
+      payload: {
+        content: manifestNamed("open-env-skill"),
+        environmentIds: [open.id],
+      },
+    });
+    expect(allowed.statusCode).toBe(200);
   });
 
   test("rejects an environment from another organization", async ({
@@ -53,7 +120,7 @@ describe("POST /api/skills", () => {
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/skills",
-      payload: { content: MANIFEST, environmentId: foreignEnv.id },
+      payload: { content: MANIFEST, environmentIds: [foreignEnv.id] },
     });
 
     expect(response.statusCode).toBe(404);

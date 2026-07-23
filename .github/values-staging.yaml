@@ -69,8 +69,8 @@ archestra:
     # device flow. The client id is a public identifier by design (device flow
     # is secretless), so neither value is a secret. Swap both for the real
     # org OAuth app + gallery repository when it exists.
-    ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID: "Ov23li4dlceOvXupmaU3"
-    ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO: "piercypixel/app-gallery-test"
+    ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID: "Ov23liqkaqAROe7B7ZZ4"
+    ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO: "archestra-ai/apps-gallery"
     # Offload video rendering to the dedicated single-replica renderer Service
     # (see renderer.enabled above), so a render's status polls and download land
     # on the one pod that holds its in-memory job instead of scattering across

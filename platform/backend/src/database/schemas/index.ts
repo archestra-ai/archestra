@@ -149,6 +149,7 @@ export { default as serviceAccountTokensTable } from "./service-account-token";
 export { default as sessionsTable } from "./session";
 export { default as siteNotificationsTable } from "./site-notification";
 export { default as skillsTable } from "./skill";
+export { default as skillEnvironmentsTable } from "./skill-environment";
 export { default as skillFilesTable } from "./skill-file";
 export { default as skillSandboxesTable } from "./skill-sandbox";
 export { default as skillSandboxCommandsTable } from "./skill-sandbox-command";

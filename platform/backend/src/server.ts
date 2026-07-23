@@ -92,6 +92,7 @@ import { registerTaskHandlers } from "@/task-queue/handlers";
 import {
   Anthropic,
   ApiError,
+  Archestra,
   Cerebras,
   Cohere,
   DeepSeek,
@@ -230,6 +231,12 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(DeepSeek.API.ChatCompletionResponseSchema, {
     id: "DeepSeekChatCompletionResponse",
   });
+  z.globalRegistry.add(Archestra.API.ChatCompletionRequestSchema, {
+    id: "ArchestraChatCompletionRequest",
+  });
+  z.globalRegistry.add(Archestra.API.ChatCompletionResponseSchema, {
+    id: "ArchestraChatCompletionResponse",
+  });
   z.globalRegistry.add(Minimax.API.ChatCompletionRequestSchema, {
     id: "MinimaxChatCompletionRequest",
   });
@@ -306,6 +313,7 @@ export async function registerApiRoutes(fastify: FastifyInstanceWithZod) {
 export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   // LLM Proxy routes (all providers)
   fastify.register(routes.anthropicProxyRoutes);
+  fastify.register(routes.archestraProxyRoutes);
   fastify.register(routes.openAiProxyRoutes);
   fastify.register(routes.geminiProxyRoutes);
   fastify.register(routes.azureProxyRoutes);
@@ -316,6 +324,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.deepseekProxyRoutes);
   fastify.register(routes.githubCopilotProxyRoutes);
   fastify.register(routes.groqProxyRoutes);
+  fastify.register(routes.kimiProxyRoutes);
   fastify.register(routes.microsoft365CopilotProxyRoutes);
   fastify.register(routes.minimaxProxyRoutes);
   fastify.register(routes.modelRouterProxyRoutes);

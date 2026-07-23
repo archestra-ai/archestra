@@ -334,7 +334,9 @@ export function formatResourceType(resourceType: string): string {
 /**
  * Human-readable identity of the audited resource. Prefers the denormalized
  * event-time `resourceName`; rows written before that column existed fall back
- * to the identity captured inside the before/after snapshots.
+ * to the identity captured inside the before/after snapshots. Keep the
+ * key/snapshot precedence in sync with the backend's write-time
+ * `extractAuditResourceName` (backend/src/middleware/audit-log-hook.ts).
  */
 export function resourceDisplayName(event: {
   resourceName?: string | null;
@@ -345,7 +347,9 @@ export function resourceDisplayName(event: {
   for (const key of ["name", "email"]) {
     for (const snapshot of [event.after, event.before]) {
       const value = snapshot?.[key];
-      if (typeof value === "string" && value.trim()) return value;
+      if (typeof value !== "string") continue;
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
     }
   }
   return null;

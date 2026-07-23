@@ -11,7 +11,7 @@ import { vi } from "vitest";
  * - before captured in preHandler (null for non-success after), after null for
  *   non-success or DELETE; fetched for success POST/PUT/PATCH.
  * - resource_name denormalized from the after ?? before snapshot (`name`,
- *   falling back to `email`); frozen at write time.
+ *   falling back to `email`), trimmed; frozen at write time.
  * - Denylist, method filter, and unauthenticated requests produce no rows.
  * - fetchById / create failures log and never break the response.
  */
@@ -598,6 +598,32 @@ describe("registerAuditLogHook", () => {
       const rows = await getRows();
       expect(rows).toHaveLength(1);
       expect(rows[0].resourceName).toBeNull();
+    });
+
+    test("surrounding whitespace is trimmed before the name is stored", async () => {
+      const registry = (await import(
+        "./audit-log-registry"
+      )) as typeof import("./audit-log-registry");
+      const routeCfg = registry.AUDITABLE_ROUTES["/api/things/:id"];
+      const origFetch = routeCfg.fetchById;
+      routeCfg.fetchById = async (id: string) => ({
+        id,
+        name: "  Padded Name  ",
+      });
+      try {
+        await app.inject({
+          method: "PATCH",
+          url: `/api/things/${KNOWN_RESOURCE_ID}`,
+          payload: {},
+        });
+        await settle();
+
+        const rows = await getRows();
+        expect(rows).toHaveLength(1);
+        expect(rows[0].resourceName).toBe("Padded Name");
+      } finally {
+        routeCfg.fetchById = origFetch;
+      }
     });
   });
 

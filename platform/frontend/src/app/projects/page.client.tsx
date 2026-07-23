@@ -40,7 +40,10 @@ import {
   parseProjectScope,
   toApiProjectScope,
 } from "@/lib/projects/project-list-scope";
-import { canManageProject } from "@/lib/projects/project-permissions";
+import {
+  canDeleteProject,
+  canManageProject,
+} from "@/lib/projects/project-permissions";
 import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
   useCreateProject,
@@ -310,6 +313,7 @@ function ProjectCard({
   onDelete: (project: ProjectListItem) => void;
 }) {
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
+  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
   return (
     // `relative` + the title link's stretched `::after` (after:inset-0) makes the
     // whole card a single click target for the project. Interactive children
@@ -345,6 +349,12 @@ function ProjectCard({
             pinned={!!project.pinnedAt}
             canPin={project.viewerRole !== "admin"}
             canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}
+            canDelete={canDeleteProject({
+              viewerRole: project.viewerRole,
+              visibility: project.visibility,
+              isProjectAdmin: !!isProjectAdmin,
+              canShareOrg: !!canShareOrg,
+            })}
             onTogglePin={() => onTogglePin(project)}
             onEdit={() => onEdit(project)}
             onDelete={() => onDelete(project)}

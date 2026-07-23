@@ -3,10 +3,10 @@
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { McpGatewayConnectInstructionsDialog } from "@/components/agent-connect-instructions-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
@@ -199,8 +199,6 @@ function McpGateways({
   type GatewayData =
     archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
-  const router = useRouter();
-
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(
     searchParams.get("create") === "true",
   );
@@ -209,14 +207,10 @@ function McpGateways({
     name: string;
   } | null>(null);
   const openToolsFromUrl = searchParams.get("openTools") === "true";
-  const navigateToConnection = useCallback(
-    (agentId: string) => {
-      router.push(
-        `/connection?gatewayId=${encodeURIComponent(agentId)}&from=table`,
-      );
-    },
-    [router],
-  );
+  const [connectingGateway, setConnectingGateway] = useState<Pick<
+    GatewayData,
+    "id" | "name" | "agentType" | "slug"
+  > | null>(null);
   const editId = searchParams.get("edit");
   const { data: editFromUrl } = useProfile(editId ?? undefined);
   const editDialog = useDialogUrlParam<GatewayData>({
@@ -431,7 +425,7 @@ function McpGateways({
           <McpGatewayActions
             agent={agent}
             canModify={canModify}
-            onConnect={(a) => navigateToConnection(a.id)}
+            onConnect={setConnectingGateway}
             onEdit={editDialog.open}
             onDelete={setDeletingGatewayId}
             onRestore={(agentId) => {
@@ -606,6 +600,13 @@ function McpGateways({
               agentType="mcp_gateway"
               onOpenChange={(open) => {
                 if (!open) setPostCreateGateway(null);
+              }}
+            />
+
+            <McpGatewayConnectInstructionsDialog
+              gateway={connectingGateway}
+              onOpenChange={(open) => {
+                if (!open) setConnectingGateway(null);
               }}
             />
 

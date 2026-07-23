@@ -89,12 +89,19 @@ export async function applyA2AContextCompaction(params: {
       agentLlm.provider,
       agentLlm.modelName,
     ).catch(() => null);
-    if (!modelRow?.contextLength) {
+    // The window the turn actually runs with, not the architectural ceiling:
+    // for Ollama an admin-pinned `num_ctx` is what Archestra sends on every
+    // request, so compacting against the ceiling would never fire while Ollama
+    // silently truncated the prompt.
+    const effectiveContextLength = modelRow
+      ? ModelModel.resolveEffectiveContextLength(modelRow)
+      : null;
+    if (!effectiveContextLength) {
       return { messages: applied.view, created: null };
     }
 
     const budgetTokens = Math.floor(
-      modelRow.contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD,
+      effectiveContextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD,
     );
     const originalTokenEstimate = estimateMessagesTokens(applied.view);
     if (originalTokenEstimate < budgetTokens) {

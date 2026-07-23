@@ -8,15 +8,15 @@ import { TeamManagementExternalSyncSection } from "./team-management-external-sy
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 
-const { useIdentityProvidersMock } = vi.hoisted(() => ({
-  useIdentityProvidersMock: vi.fn(),
+const { useTeamSyncIdentityProviderOptionsMock } = vi.hoisted(() => ({
+  useTeamSyncIdentityProviderOptionsMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/auth/identity-provider.query.ee", () => ({
   useIdentityProviderLatestIdTokenClaims: vi.fn(() => ({ data: null })),
-  useIdentityProviders: useIdentityProvidersMock,
+  useTeamSyncIdentityProviderOptions: useTeamSyncIdentityProviderOptionsMock,
 }));
 
 vi.mock("@/lib/hooks/use-app-name");
@@ -25,7 +25,7 @@ describe("TeamManagementExternalSyncSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useAppName).mockReturnValue("Test App");
-    useIdentityProvidersMock.mockReturnValue({ data: [] });
+    useTeamSyncIdentityProviderOptionsMock.mockReturnValue({ data: [] });
   });
 
   it("links users with identityProvider:create to identity provider setup", () => {
@@ -62,9 +62,49 @@ describe("TeamManagementExternalSyncSection", () => {
       screen.queryByRole("link", { name: "Add an identity provider" }),
     ).not.toBeInTheDocument();
   });
+
+  it("renders providers from the team-sync options projection with mapping controls", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    useTeamSyncIdentityProviderOptionsMock.mockReturnValue({
+      data: [
+        {
+          id: "idp-1",
+          providerId: "keycloak",
+          groupsExpression: "{{#each groups}}{{this}},{{/each}}",
+        },
+      ],
+    });
+
+    renderSection();
+
+    expect(screen.getByText("keycloak")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Group Extraction Template"),
+    ).toHaveDisplayValue("{{#each groups}}{{this}},{{/each}}");
+    expect(screen.getByText("Add External Group Mapping")).toBeInTheDocument();
+  });
+
+  it("hides the mapping controls in read-only mode", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    useTeamSyncIdentityProviderOptionsMock.mockReturnValue({
+      data: [{ id: "idp-1", providerId: "keycloak", groupsExpression: null }],
+    });
+
+    renderSection({ readOnly: true });
+
+    expect(screen.getByText("keycloak")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Add External Group Mapping"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
+  });
 });
 
-function renderSection() {
+function renderSection({ readOnly = false }: { readOnly?: boolean } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -74,7 +114,11 @@ function renderSection() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <TeamManagementExternalSyncSection open={false} team={makeTeam()} />
+      <TeamManagementExternalSyncSection
+        open={false}
+        team={makeTeam()}
+        readOnly={readOnly}
+      />
     </QueryClientProvider>,
   );
 }

@@ -254,6 +254,9 @@ export const RouteId = {
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
   OllamaEmbeddingsWithDefaultAgent: "ollamaEmbeddingsWithDefaultAgent",
   OllamaEmbeddingsWithAgent: "ollamaEmbeddingsWithAgent",
+  // Proxy Routes - Ollama Native (/api/chat)
+  OllamaNativeChatWithDefaultAgent: "ollamaNativeChatWithDefaultAgent",
+  OllamaNativeChatWithAgent: "ollamaNativeChatWithAgent",
   // Proxy Routes - Zhipu AI
   ZhipuaiChatCompletionsWithDefaultAgent:
     "zhipuaiChatCompletionsWithDefaultAgent",
@@ -407,6 +410,7 @@ export const RouteId = {
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   GetVirtualApiKey: "getVirtualApiKey",
+  GetVirtualApiKeyValue: "getVirtualApiKeyValue",
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
@@ -513,6 +517,7 @@ export const RouteId = {
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",
   GetIdentityProviders: "getIdentityProviders",
+  GetIdentityProviderTeamSyncOptions: "getIdentityProviderTeamSyncOptions",
   GetIdentityProvider: "getIdentityProvider",
   GetIdentityProviderLatestIdTokenClaims:
     "getIdentityProviderLatestIdTokenClaims",

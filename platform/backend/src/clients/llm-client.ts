@@ -12,6 +12,7 @@ import type { InteractionSource } from "@archestra/shared";
 import {
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
+  isProviderApiKeyOptional,
   PROVIDER_BASE_URL_HEADER,
   providerRequiresPerUserCredential,
   requiresOpenAiResponsesApi,
@@ -23,6 +24,7 @@ import {
 } from "@archestra/shared";
 import { context, propagation } from "@opentelemetry/api";
 import type { streamText } from "ai";
+import { createOllama } from "ollama-ai-provider-v2";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -62,6 +64,20 @@ const KEYLESS_PROVIDER_API_KEY_PLACEHOLDER = "EMPTY";
  * Type representing a model that can be passed to streamText/generateText
  */
 export type LLMModel = Parameters<typeof streamText>[0]["model"];
+
+/**
+ * Marks native Ollama `think` as explicitly chosen by an admin rather than
+ * defaulted by ollama-ai-provider-v2. Set by `buildOllamaNativeProviderOptions`
+ * as a request header; consumed and removed by `createOllamaNativeFetch` before
+ * the request is sent, so neither the Archestra proxy nor Ollama ever sees it.
+ *
+ * It is a header rather than a field in the `options` bag because
+ * ollama-ai-provider-v2 parses `providerOptions.ollama` through a closed Zod
+ * object whose `options` shape lists ten fixed keys — Zod strips everything
+ * else, so a marker riding in that bag never reaches the wrapper. Headers pass
+ * through `combineHeaders` untouched by any schema.
+ */
+export const OLLAMA_THINK_EXPLICIT_HEADER = "x-archestra-ollama-think";
 
 /**
  * Check if API key is required for the given provider
@@ -271,13 +287,16 @@ export async function createLLMModelForAgent(params: {
   // Check if Bedrock with IAM auth (doesn't require API key)
   const isBedrockWithIamAuth =
     provider === "bedrock" && isBedrockIamAuthEnabled();
-  // vLLM and Ollama typically don't require API keys
-  const isVllm = provider === "vllm";
-  const isOllama = provider === "ollama";
-  const isAzureWithEntra =
-    provider === "azure" && isAzureOpenAiEntraIdEnabled();
-  const isAnthropicWithWif =
-    provider === "anthropic" && anthropicWorkloadIdentity.isEnabled();
+  // Self-hosted providers (vLLM, both Ollama transports) never require a key,
+  // and Azure/Anthropic are keyless under Entra ID / workload identity. This is
+  // the same predicate `resolveProviderApiKey` uses to decide it may return an
+  // undefined key, so the two must agree — a hardcoded provider list here drifts
+  // and rejects keyless setups the resolver deliberately allowed.
+  const isApiKeyOptional = isProviderApiKeyOptional({
+    provider,
+    azureEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+    anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+  });
 
   logger.info(
     {
@@ -285,10 +304,7 @@ export async function createLLMModelForAgent(params: {
       provider,
       isGeminiWithVertexAi,
       isBedrockWithIamAuth,
-      isVllm,
-      isOllama,
-      isAzureWithEntra,
-      isAnthropicWithWif,
+      isApiKeyOptional,
     },
     "Using LLM provider API key",
   );
@@ -297,10 +313,7 @@ export async function createLLMModelForAgent(params: {
     !apiKey &&
     !isGeminiWithVertexAi &&
     !isBedrockWithIamAuth &&
-    !isVllm &&
-    !isOllama &&
-    !isAzureWithEntra &&
-    !isAnthropicWithWif
+    !isApiKeyOptional
   ) {
     // Per-user credentials need the acting user's own linked account; surface
     // a typed error so callers can prompt them to connect rather than showing
@@ -615,6 +628,23 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     // No apiKeyRequiredMessage — key is optional
   },
 
+  // Native Ollama transport: talks `/api/chat` via ollama-ai-provider-v2 so
+  // num_ctx/num_predict/top_k/think are sent (the `/v1` path discards them). The
+  // `/api` suffix makes the client POST to `<proxy>/ollama-native/<agent>/api/chat`.
+  "ollama-native": {
+    createModel: ({ modelName, baseURL, headers, fetch }) =>
+      createOllama({
+        baseURL,
+        headers,
+        // The package always emits `think`, defaulting it to false — see
+        // createOllamaNativeFetch.
+        fetch: createOllamaNativeFetch(fetch),
+      }).chat(modelName),
+    defaultBaseUrl: config.llm["ollama-native"].baseUrl,
+    proxiedPathSuffix: "/api",
+    // No apiKeyRequiredMessage — key is optional
+  },
+
   // --- Special providers ---
 
   gemini: {
@@ -698,6 +728,108 @@ function createTracedFetch(): typeof globalThis.fetch {
       dispatcher,
     } as RequestInit);
   };
+}
+
+/**
+ * Wraps fetch to reconcile `think` on native Ollama `/api/chat` requests.
+ *
+ * ollama-ai-provider-v2 emits `think: ollamaOptions?.think ?? false`, so a caller
+ * that says nothing still sends an explicit `think: false`. That is not a no-op:
+ * it disables thinking, and a qwen3-class model then returns its entire chain of
+ * thought as message `content` — closed by a bare `</think>` with no opening tag
+ * — which renders as the assistant's answer. The OpenAI-compatible `/v1` provider
+ * sends no `think` field at all, which is why it behaves correctly.
+ *
+ * The package offers no way to omit the field, so `buildOllamaNativeProviderOptions`
+ * marks a deliberate choice with the OLLAMA_THINK_EXPLICIT_HEADER request header.
+ * Here that header is consumed and removed: with it, `think` stands as
+ * configured; without it, `think` is dropped so Ollama applies the model's own
+ * default.
+ *
+ * The header is always stripped, including on the pass-through paths below — the
+ * request goes to Archestra's own LLM proxy first, and an internal marker must
+ * not travel any further than this wrapper.
+ *
+ * This wraps Archestra's own client only. Callers that POST to
+ * `/v1/ollama-native/…` themselves never pass through here and keep whatever
+ * `think` they sent.
+ */
+function createOllamaNativeFetch(
+  providedFetch?: typeof globalThis.fetch,
+): typeof globalThis.fetch {
+  const baseFetch = providedFetch ?? globalThis.fetch;
+
+  return (input, init) => {
+    const { hasExplicitThink, headers } = takeThinkMarkerHeader(init?.headers);
+    const forwarded: RequestInit | undefined =
+      init === undefined ? undefined : { ...init, headers };
+
+    if (typeof init?.body !== "string") {
+      return baseFetch(input, forwarded);
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(init.body);
+      if (typeof parsed !== "object" || parsed === null) {
+        return baseFetch(input, forwarded);
+      }
+      body = parsed as Record<string, unknown>;
+    } catch {
+      // Not JSON we understand — forward verbatim rather than guessing.
+      return baseFetch(input, forwarded);
+    }
+
+    if (!hasExplicitThink && "think" in body) {
+      delete body.think;
+    }
+
+    // The package emits an `options` bag even when every key resolved to
+    // nothing; an empty object is noise upstream.
+    const options = body.options;
+    if (
+      typeof options === "object" &&
+      options !== null &&
+      Object.keys(options).length === 0
+    ) {
+      delete body.options;
+    }
+
+    return baseFetch(input, { ...forwarded, body: JSON.stringify(body) });
+  };
+}
+
+/**
+ * Splits the internal think marker out of a request's headers, returning the
+ * headers to actually send. `HeadersInit` has three shapes and the AI SDK uses
+ * more than one of them, so normalize to a plain object rather than assuming.
+ */
+function takeThinkMarkerHeader(headers: HeadersInit | undefined): {
+  hasExplicitThink: boolean;
+  headers: Record<string, string>;
+} {
+  const out: Record<string, string> = {};
+  let hasExplicitThink = false;
+
+  const take = (key: string, value: string) => {
+    if (key.toLowerCase() === OLLAMA_THINK_EXPLICIT_HEADER) {
+      hasExplicitThink = true;
+      return;
+    }
+    out[key] = value;
+  };
+
+  if (headers instanceof Headers) {
+    headers.forEach((value, key) => {
+      take(key, value);
+    });
+  } else if (Array.isArray(headers)) {
+    for (const [key, value] of headers) take(key, value);
+  } else if (headers) {
+    for (const [key, value] of Object.entries(headers)) take(key, value);
+  }
+
+  return { hasExplicitThink, headers: out };
 }
 
 /**

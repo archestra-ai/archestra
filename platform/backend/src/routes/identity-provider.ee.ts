@@ -19,6 +19,7 @@ import {
   InsertIdentityProviderSchema,
   PublicIdentityProviderSchema,
   SelectIdentityProviderSchema,
+  TeamSyncIdentityProviderOptionSchema,
   UpdateIdentityProviderSchema,
 } from "@/types";
 
@@ -65,6 +66,38 @@ const identityProviderRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId }, reply) => {
       return reply.send(await IdentityProviderModel.findAll(organizationId));
+    },
+  );
+
+  /**
+   * Minimal provider projection for the team External Group Sync section:
+   * lets team admins pick a provider and see how group identifiers are
+   * extracted without holding identityProvider:read. Exposes no provider
+   * configuration or secrets (gated on team:read in the permission map).
+   */
+  fastify.get(
+    `${IDENTITY_PROVIDERS_API_PREFIX}/team-sync-options`,
+    {
+      schema: {
+        operationId: RouteId.GetIdentityProviderTeamSyncOptions,
+        description:
+          "Get identity providers as minimal team-sync options (id, name, and " +
+          "groups extraction template) for linking external groups to teams",
+        tags: ["Identity Providers"],
+        response: constructResponseSchema(
+          z.array(TeamSyncIdentityProviderOptionSchema),
+        ),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      const providers = await IdentityProviderModel.findAll(organizationId);
+      return reply.send(
+        providers.map((provider) => ({
+          id: provider.id,
+          providerId: provider.providerId,
+          groupsExpression: provider.teamSyncConfig?.groupsExpression ?? null,
+        })),
+      );
     },
   );
 

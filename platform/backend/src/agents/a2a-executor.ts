@@ -47,6 +47,7 @@ import {
   ProviderError,
 } from "@/routes/chat/errors";
 import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
+import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
@@ -415,6 +416,35 @@ export async function executeA2AMessage(
     // message with no text or attachments), the context is used as-is. Callers
     // without context (delegation, scheduled, A2A v1) fall back to a plain
     // `prompt` for text, or a single `messages` turn when attachments survive.
+    // Request the model's real output ceiling (clamped by the operator
+    // ceiling), or a safe fallback when unknown. Without this, providers that
+    // inject a small default max (e.g. Anthropic's ~4096) truncated large
+    // tool-call payloads.
+    const maxOutputTokens = resolveAgentMaxOutputTokens({
+      outputLength: modelRow?.outputLength ?? null,
+      ceiling: config.chat.maxOutputTokensCeiling,
+      provider,
+      contextLength: modelRow
+        ? ModelModel.resolveEffectiveContextLength(modelRow)
+        : null,
+    });
+
+    // Send the per-model generation parameters (num_ctx,
+    // num_predict, top_k, think, …) on native Ollama turns, mirroring the
+    // interactive chat route. Ollama reads the output cap from
+    // `options.num_predict`; the top-level `maxOutputTokens` above is discarded
+    // by the native endpoint, so the budget has to be folded in here too.
+    const ollamaTurn =
+      provider === "ollama-native"
+        ? buildOllamaNativeProviderOptions({
+            configured: modelRow?.configuredParameters,
+            maxOutputTokens,
+            effectiveContextLength: modelRow
+              ? ModelModel.resolveEffectiveContextLength(modelRow)
+              : null,
+          })
+        : undefined;
+
     const baseConfig = {
       model,
       system: systemPrompt,
@@ -429,10 +459,9 @@ export async function executeA2AMessage(
       onStepFinish: (step: StepResult<ToolSet>) =>
         recordUnavailableToolCallStep(repeatTracker, step),
       abortSignal,
-      // Request the model's real output ceiling (clamped by the operator
-      // ceiling), or a safe fallback when unknown. Without this, providers that
-      // inject a small default max (e.g. Anthropic's ~4096) truncated large
-      // tool-call payloads.
+      // Per-transport shape for the output budget resolved above.
+      // - Native Ollama discards the top-level `maxOutputTokens` and reads the
+      //   cap from `options.num_predict`, so it rides along in providerOptions.
       // OpenAI transport quirks, mirroring routes/chat/routes.ts:
       // - Responses-routed models keep maxOutputTokens (mapped to
       //   max_output_tokens) and run with store:false so the SDK resends the
@@ -443,28 +472,26 @@ export async function executeA2AMessage(
       //   instead: the SDK maps maxOutputTokens to the legacy max_tokens for
       //   model names its reasoning heuristic doesn't recognize (e.g. the bare
       //   `chat-latest` alias), and newer models reject max_tokens outright.
-      ...(provider === "openai" && !requiresOpenAiResponsesApi(selectedModel)
+      ...(ollamaTurn
         ? {
-            providerOptions: {
-              openai: {
-                maxCompletionTokens: resolveAgentMaxOutputTokens({
-                  outputLength: modelRow?.outputLength ?? null,
-                  contextLength: modelRow?.contextLength ?? null,
-                  ceiling: config.chat.maxOutputTokensCeiling,
-                }),
-              },
-            },
+            maxOutputTokens,
+            providerOptions: ollamaTurn.providerOptions,
+            // Carries the explicit-thinking marker to the fetch wrapper, which
+            // strips it before the request leaves this process.
+            ...(ollamaTurn.headers ? { headers: ollamaTurn.headers } : {}),
           }
-        : {
-            maxOutputTokens: resolveAgentMaxOutputTokens({
-              outputLength: modelRow?.outputLength ?? null,
-              contextLength: modelRow?.contextLength ?? null,
-              ceiling: config.chat.maxOutputTokensCeiling,
+        : provider === "openai" && !requiresOpenAiResponsesApi(selectedModel)
+          ? {
+              providerOptions: {
+                openai: { maxCompletionTokens: maxOutputTokens },
+              },
+            }
+          : {
+              maxOutputTokens,
+              ...(provider === "openai"
+                ? { providerOptions: { openai: { store: false } } }
+                : {}),
             }),
-            ...(provider === "openai"
-              ? { providerOptions: { openai: { store: false } } }
-              : {}),
-          }),
       // Per-step context guard: cap oversized tool results and keep the
       // accumulated step history inside the model's context window, compacting
       // the older prefix into an LLM summary when it overflows. Overrides only
@@ -472,7 +499,9 @@ export async function executeA2AMessage(
       // persisted/streamed UIMessage) keeps the full tool outputs.
       prepareStep: createStepContextGuard({
         model,
-        contextLength: modelRow?.contextLength ?? null,
+        contextLength: modelRow
+          ? ModelModel.resolveEffectiveContextLength(modelRow)
+          : null,
         systemPrompt,
         abortSignal,
         logContext: { agentId: agent.id, sessionId },

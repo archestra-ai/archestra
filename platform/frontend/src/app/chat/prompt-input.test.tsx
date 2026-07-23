@@ -377,7 +377,9 @@ describe("ArchestraPromptInput", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("should render disabled file upload button when model does not support files", () => {
+    it("should render enabled file upload button even when the model has no file modalities", () => {
+      // A file the model can't read still lands in the conversation's Files
+      // panel, so uploads stay offered regardless of modalities or sandbox.
       render(
         <ArchestraPromptInput
           {...defaultProps}
@@ -386,17 +388,12 @@ describe("ArchestraPromptInput", () => {
         />,
       );
 
-      // Should find the disabled file upload button wrapper
-      const disabledButton = screen.getByTestId(
-        E2eTestId.ChatDisabledFileUploadButton,
-      );
-      expect(disabledButton).toBeInTheDocument();
-
-      // Tooltip should show message about model not supporting files
-      const tooltip = getFileUploadTooltip("does not support file uploads");
-      expect(tooltip).toHaveTextContent(
-        "This model does not support file uploads",
-      );
+      expect(
+        screen.getByTestId(E2eTestId.ChatFileUploadButton),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByTestId(E2eTestId.ChatDisabledFileUploadButton),
+      ).not.toBeInTheDocument();
     });
 
     it("should render enabled file upload button for text-only models", () => {

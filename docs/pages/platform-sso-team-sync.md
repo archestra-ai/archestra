@@ -4,7 +4,7 @@ category: Administration
 subcategory: Identity Providers
 description: "Automatically add and remove users from Archestra teams based on IdP group membership"
 order: 7
-lastUpdated: 2026-05-05
+lastUpdated: 2026-07-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -120,7 +120,11 @@ After configuring how groups are extracted:
 
 Users with organization-level team management can configure any team. Team members
 with the **Admin** role can manage members, roles, and external group mappings for
-their own team without access to identity provider settings.
+their own team without access to identity provider settings — the section shows
+them each provider's name and group extraction template, but no provider
+configuration. Roles with read access to identity providers can view any team's
+mappings — the Teams page shows a **View group sync** action — without being able
+to change them.
 
 ### Group identifier matching
 

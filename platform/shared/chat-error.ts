@@ -336,6 +336,12 @@ export enum ChatErrorCode {
    * same rejection until the tools or the model change.
    */
   ToolsUnsupported = "tools_unsupported",
+  /**
+   * The run was cancelled through its caller's AbortSignal — a user stop, a
+   * muted chatops thread, or a superseding follow-up message. Not a provider
+   * failure, and NOT retryable: the caller asked for the run to end.
+   */
+  Aborted = "aborted",
   /** Catch-all for unrecognized errors */
   Unknown = "unknown",
 }
@@ -381,6 +387,7 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "Connect your account to use this model.",
   [ChatErrorCode.ToolsUnsupported]:
     "This model doesn't support tools, but the request included some. Remove the agent's tools or switch to a model that supports tool calling.",
+  [ChatErrorCode.Aborted]: "The request was cancelled.",
   [ChatErrorCode.Unknown]: "An unexpected error occurred. Please try again.",
 };
 

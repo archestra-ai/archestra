@@ -102,8 +102,10 @@ export async function extractInlineAttachments(args: {
 /**
  * Policy describing which uploaded attachments this turn may accept, evaluated
  * before any bytes are persisted. A file is acceptable when the model can ingest
- * its type, OR it is an inlineable text document within the inline budget, OR a
- * sandbox is available to stage it (within the sandbox artifact size limit).
+ * its type, OR it is an inlineable text document within the inline budget, OR it
+ * fits the sandbox artifact size limit — files the model can't read still land
+ * as conversation attachments the user reaches from the chat Files panel (and,
+ * when a sandbox is available, are additionally staged there for the model).
  */
 export type InlineAttachmentPolicy = {
   ingestibleMimeTypes: Set<string>;
@@ -137,6 +139,9 @@ export function assertInlineAttachmentsAcceptable(args: {
         ingestibleMimeTypes: policy.ingestibleMimeTypes,
         sandboxAvailable: policy.sandboxAvailable,
         sandboxByteLimit: policy.sandboxByteLimit,
+        // Chat uploads always have a landing surface: the attachment row shows
+        // in the conversation's Files panel even when the model can't read it.
+        fileStorageFallback: true,
       });
       if (reason) {
         throw new ApiError(400, rejectionMessage(reason, inspected, policy));

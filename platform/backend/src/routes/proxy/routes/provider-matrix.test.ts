@@ -45,6 +45,7 @@ import { microsoft365CopilotAdapterFactory } from "../adapters/microsoft-365-cop
 import { minimaxAdapterFactory } from "../adapters/minimax";
 import { mistralAdapterFactory } from "../adapters/mistral";
 import { ollamaAdapterFactory } from "../adapters/ollama";
+import { ollamaNativeAdapterFactory } from "../adapters/ollama-native";
 import { openaiAdapterFactory } from "../adapters/openai";
 import { openrouterAdapterFactory } from "../adapters/openrouter";
 import { perplexityAdapterFactory } from "../adapters/perplexity";
@@ -67,6 +68,7 @@ import microsoft365CopilotProxyRoutes from "./microsoft-365-copilot";
 import minimaxProxyRoutes from "./minimax";
 import mistralProxyRoutes from "./mistral";
 import ollamaProxyRoutes from "./ollama";
+import ollamaNativeProxyRoutes from "./ollama-native";
 import openAiProxyRoutes from "./openai";
 import openrouterProxyRoutes from "./openrouter";
 import perplexityProxyRoutes from "./perplexity";
@@ -1814,6 +1816,28 @@ const providerConfigsByProvider = {
     supportsStreamingToolCalls: true,
     supportsCompression: true,
   }),
+  // Present to satisfy the `Record<SupportedProvider, …>` exhaustiveness guard.
+  // The native provider uses an NDJSON `/api/chat` transport over a raw-fetch
+  // client, which this OpenAI-SDK-mock harness does not model — so it is filtered
+  // out of the executed matrix below and covered instead by the dedicated
+  // adapters/ollama-native.test.ts unit suite. `family`/`requestBuilder` are
+  // placeholders that are never invoked.
+  "ollama-native": makeConfig({
+    providerName: "Ollama (Native)",
+    providerSlug: "ollama-native",
+    provider: "ollama-native",
+    family: "openai",
+    routePlugin: ollamaNativeProxyRoutes,
+    adapterFactory: ollamaNativeAdapterFactory,
+    endpoint: (agentId) => `/v1/ollama-native/${agentId}/api/chat`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("llama3.2"),
+    model: "llama3.2",
+    optimizedModel: "llama3.2:1b",
+  }),
   zhipuai: makeConfig({
     providerName: "Zhipu AI",
     providerSlug: "zhipuai",
@@ -1999,7 +2023,12 @@ const azureResponsesConfig = makeConfig({
 });
 
 const providerConfigs = [
-  ...Object.values(providerConfigsByProvider),
+  // ollama-native speaks NDJSON /api/chat over a raw-fetch client, not an OpenAI
+  // SDK client, so this harness cannot exercise it. It is covered directly by
+  // adapters/ollama-native.test.ts.
+  ...Object.values(providerConfigsByProvider).filter(
+    (config) => config.provider !== "ollama-native",
+  ),
   azureResponsesConfig,
 ] satisfies ProviderTestConfig[];
 

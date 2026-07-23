@@ -56,6 +56,11 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
     "Callers without organization-level team management (`team:create`) can only read members of teams they are a member of.",
   list_teams:
     "Callers without organization-level team management (`team:create`) only see teams they are a member of.",
+  // Sharing gates on `project:update`, then the handler restricts to the
+  // project's owner (or a `project:admin`) and org-wide visibility changes to
+  // callers holding `project:share-org`.
+  set_project_share:
+    "Beyond `project:update`, the caller must own the project (or hold `project:admin`), and moving a project into or out of organization-wide visibility additionally requires `project:share-org`.",
 };
 
 // === Script entry point ===

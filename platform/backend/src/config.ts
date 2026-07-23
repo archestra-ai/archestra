@@ -254,6 +254,36 @@ export function resolveRenderBaseUrl(params: {
   );
 }
 
+/**
+ * Base URL for the `ollama-native` transport.
+ *
+ * Same Ollama server as the OpenAI-compatible provider, different endpoint: the
+ * native API is rooted at `/`, not `/v1`. So the native URL defaults from
+ * `ARCHESTRA_OLLAMA_BASE_URL` with any trailing slashes and `/v1` suffix
+ * stripped, letting a deployment configure one variable and get both providers.
+ *
+ * @public — exported for testability
+ */
+export function deriveOllamaNativeBaseUrl(params: {
+  nativeBaseUrl: string | undefined;
+  ollamaBaseUrl: string | undefined;
+}): string {
+  return stripOllamaV1Suffix(
+    params.nativeBaseUrl ?? params.ollamaBaseUrl ?? "http://localhost:11434",
+  );
+}
+
+/**
+ * Strip a trailing `/v1` (and any trailing slashes) so an OpenAI-compatible
+ * Ollama URL becomes the native root. Shared with the model fetcher, which
+ * normalizes the same way.
+ *
+ * @public — exported for testability
+ */
+export function stripOllamaV1Suffix(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+}
+
 const hackathonRecorderRenderBaseUrl = resolveRenderBaseUrl({
   // Undocumented on purpose, like the rest of the Apps Hackathon recorder (a
   // temporary, hackathon-only feature — see the recorder flag below). Do not add
@@ -1618,11 +1648,23 @@ const config = {
       baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
     },
     ollama: {
-      enabled: Boolean(
-        process.env.ARCHESTRA_OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
-      ),
+      // Always on: unlike vLLM (which has no usable default endpoint, hence
+      // `Boolean(env)` above), Ollama falls back to localhost, so there is
+      // always a base URL to try. Stated literally — `Boolean(env ?? literal)`
+      // read as a real check while being unconditionally true.
+      enabled: true,
       baseUrl:
         process.env.ARCHESTRA_OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
+    },
+    // Ollama native `/api/chat` transport. Same server as `ollama`, different
+    // endpoint (root, no `/v1`), so it defaults from the Ollama base URL with the
+    // `/v1` suffix stripped. Lets Archestra send/display num_ctx, num_predict,
+    // top_k, think, etc. that the OpenAI-compatible `/v1` endpoint discards.
+    "ollama-native": {
+      baseUrl: deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: process.env.ARCHESTRA_OLLAMA_NATIVE_BASE_URL,
+        ollamaBaseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
+      }),
     },
     zhipuai: {
       baseUrl:
@@ -1765,6 +1807,9 @@ const config = {
       apiKey: process.env.ARCHESTRA_CHAT_VLLM_API_KEY || "",
     },
     ollama: {
+      apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
+    },
+    "ollama-native": {
       apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
     },
     cohere: {

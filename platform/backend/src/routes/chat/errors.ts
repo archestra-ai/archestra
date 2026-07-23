@@ -1392,6 +1392,7 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   openrouter: openAiCompatibleErrorHandler,
   vllm: providerErrorHandler(parseOpenAIError, mapVllmErrorToCode),
   ollama: providerErrorHandler(parseOpenAIError, mapOllamaErrorToCode),
+  "ollama-native": providerErrorHandler(parseOpenAIError, mapOllamaErrorToCode),
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
   kimi: openAiCompatibleErrorHandler,
@@ -1584,6 +1585,18 @@ export function mapProviderError(
   provider: SupportedProvider,
 ): ChatErrorResponse {
   logger.debug({ provider }, "[ChatErrorMapper] Mapping provider error");
+
+  // A deliberate cancellation — the caller's own AbortSignal fired (a user
+  // stop, a muted chatops thread, or a superseding follow-up message) and the
+  // in-flight provider call threw an AbortError. Not a provider failure, so
+  // return the structured "cancelled" response without any error reporting.
+  if (isAbortError(error)) {
+    return {
+      code: ChatErrorCode.Aborted,
+      message: ChatErrorMessages[ChatErrorCode.Aborted],
+      isRetryable: false,
+    };
+  }
 
   // Oversized request caught pre-flight (a large inline attachment) → an
   // actionable size error instead of the provider's generic rejection. The
@@ -1929,6 +1942,14 @@ export function mapProviderError(
     },
     usageLimitError,
   );
+}
+
+// Matches by name rather than DOMException instanceof: the AbortError may be
+// the DOMException Node's AbortController produces, undici's flavor, or an AI
+// SDK re-throw, but all carry name "AbortError". Deliberately excludes
+// "TimeoutError" (AbortSignal.timeout) — a timeout is not a cancellation.
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 function isStreamTerminatedError(error: unknown): boolean {

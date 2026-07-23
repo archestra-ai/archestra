@@ -68412,9 +68412,18 @@
               "type": "string"
             },
             "in": "query",
+            "name": "resourceId",
+            "required": false,
+            "description": "Filter by resource ID (e.g. a specific agent's ID)"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
             "name": "search",
             "required": false,
-            "description": "Case-insensitive search across actor email, actor name, HTTP path, and resource ID"
+            "description": "Case-insensitive search across actor email, actor name, HTTP path, resource ID, and resource name"
           },
           {
             "schema": {
@@ -68645,6 +68654,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "resourceName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "before": {
                             "nullable": true,
                             "type": "object",
@@ -68700,6 +68713,7 @@
                           "outcome",
                           "resourceType",
                           "resourceId",
+                          "resourceName",
                           "before",
                           "after",
                           "httpMethod",
@@ -69207,6 +69221,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "resourceName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "before": {
                       "nullable": true,
                       "type": "object",
@@ -69262,6 +69280,7 @@
                     "outcome",
                     "resourceType",
                     "resourceId",
+                    "resourceName",
                     "before",
                     "after",
                     "httpMethod",

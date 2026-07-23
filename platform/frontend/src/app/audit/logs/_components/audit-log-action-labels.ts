@@ -259,12 +259,15 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "agent",
   "agentTool",
   "apiKey",
+  "app",
   "auth",
   "chatOpsBinding",
   "chatOpsConfig",
   "connector",
+  "defaultUserLimit",
   "environment",
   "githubAppConfig",
+  "githubPat",
   "identityProvider",
   "internalMcpCatalog",
   "invitation",
@@ -273,6 +276,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "llmModel",
   "llmOauthClient",
   "llmProviderApiKey",
+  "mcpOauthClient",
   "mcpServer",
   "mcpServerInstallationRequest",
   "member",
@@ -280,6 +284,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "organization",
   "role",
   "scheduleTrigger",
+  "serviceAccount",
   "skill",
   "team",
   "teamToken",
@@ -298,7 +303,9 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   chatOpsBinding: "ChatOps channel binding",
   chatOpsConfig: "ChatOps configuration",
   githubAppConfig: "GitHub App configuration",
+  githubPat: "GitHub PAT",
   internalMcpCatalog: "Internal MCP catalog",
+  mcpOauthClient: "MCP OAuth client",
   llmModel: "LLM model",
   llmOauthClient: "LLM OAuth client",
   llmProviderApiKey: "LLM provider key",
@@ -329,4 +336,28 @@ export function formatResourceType(resourceType: string): string {
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * Human-readable identity of the audited resource. Prefers the denormalized
+ * event-time `resourceName`; rows written before that column existed fall back
+ * to the identity captured inside the before/after snapshots. Keep the
+ * key/snapshot precedence in sync with the backend's write-time
+ * `extractAuditResourceName` (backend/src/middleware/audit-log-hook.ts).
+ */
+export function resourceDisplayName(event: {
+  resourceName?: string | null;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+}): string | null {
+  if (event.resourceName) return event.resourceName;
+  for (const key of ["name", "email"]) {
+    for (const snapshot of [event.after, event.before]) {
+      const value = snapshot?.[key];
+      if (typeof value !== "string") continue;
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+    }
+  }
+  return null;
 }

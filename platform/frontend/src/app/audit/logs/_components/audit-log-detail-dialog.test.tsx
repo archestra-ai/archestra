@@ -28,6 +28,7 @@ function makeEvent(overrides: Partial<AuditLog> = {}): AuditLog {
     outcome: "success",
     resourceType: "agent",
     resourceId: "agent-123",
+    resourceName: null,
     before: { name: "Old" },
     after: { name: "New" },
     httpMethod: "PATCH",
@@ -123,11 +124,37 @@ describe("AuditLogDetailDialog", () => {
   it("copies the shareable event URL from the copy-link button in the dialog title", async () => {
     const shareUrl = "https://app.example.com/audit/logs?event=evt-1";
     renderDialog(makeEvent({ requestId: null }), shareUrl);
-    // With requestId null the title copy-link button is the only copy button.
+    // The resource block has its own copy button — scope to the dialog title.
     await userEvent.click(
-      screen.getByRole("button", { name: /Copy to clipboard/i }),
+      within(screen.getByRole("heading", { name: /Event details/i })).getByRole(
+        "button",
+        { name: /Copy to clipboard/i },
+      ),
     );
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(shareUrl);
+  });
+
+  it("shows the resource name alongside the type badge, keeping the ID visible", () => {
+    renderDialog(makeEvent({ resourceName: "PotatoAI" }));
+    expect(screen.getByText("PotatoAI")).toBeInTheDocument();
+    expect(screen.getByText("agent-123")).toBeInTheDocument();
+  });
+
+  it("falls back to the snapshot name for rows without resource_name", () => {
+    renderDialog(
+      makeEvent({
+        resourceName: null,
+        before: { name: "Legacy Before" },
+        after: { name: "Legacy After" },
+      }),
+    );
+    // Post-state is preferred; scope to the Resource row since the diff view
+    // renders the snapshot values too.
+    const resourceRow = screen.getByText("Resource").nextElementSibling;
+    expect(resourceRow).not.toBeNull();
+    expect(
+      within(resourceRow as HTMLElement).getByText("Legacy After"),
+    ).toBeInTheDocument();
   });
 
   it("shows only the occurred timestamp, never a separate recorded one", () => {

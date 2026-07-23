@@ -19782,7 +19782,11 @@ export type GetAuditLogsData = {
          */
         resourceType?: string;
         /**
-         * Case-insensitive search across actor email, actor name, HTTP path, and resource ID
+         * Filter by resource ID (e.g. a specific agent's ID)
+         */
+        resourceId?: string;
+        /**
+         * Case-insensitive search across actor email, actor name, HTTP path, resource ID, and resource name
          */
         search?: string;
         sortDirection?: 'asc' | 'desc';
@@ -19876,6 +19880,7 @@ export type GetAuditLogsResponses = {
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
+            resourceName: string | null;
             before: {
                 [key: string]: unknown;
             } | null;
@@ -19995,6 +20000,7 @@ export type GetAuditLogResponses = {
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
+        resourceName: string | null;
         before: {
             [key: string]: unknown;
         } | null;

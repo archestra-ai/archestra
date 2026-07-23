@@ -136,6 +136,10 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
       outcome,
       resourceType: cfg?.resourceType ?? null,
       resourceId: id,
+      resourceName: extractAuditResourceName(
+        after,
+        request.auditBefore ?? null,
+      ),
       // auditBefore is stored pre-sanitized by the preHandler hook.
       before: request.auditBefore ?? null,
       after: sanitizeAuditSnapshot(after),
@@ -489,6 +493,35 @@ async function resolveAfterState(params: {
     logger.error({ err }, "audit: fetchById (post) failed");
     return null;
   });
+}
+
+/** Cap stored resource names — entity name columns are unbounded text. */
+const AUDIT_RESOURCE_NAME_MAX_LENGTH = 512;
+
+/**
+ * Denormalized human-readable identity of the audited resource, frozen at
+ * event time (never updated on later renames). Prefers the post-state (an
+ * update row carries the resulting name), falls back to the prior state
+ * (deletes), then to the snapshot's `email` for entities addressed by email
+ * rather than name (invitations). Keep the key/snapshot precedence in sync
+ * with the frontend's legacy-row fallback `resourceDisplayName`
+ * (frontend/src/app/audit/logs/_components/audit-log-action-labels.ts).
+ * @public — shared with the Archestra MCP tool dispatch's audit writer so
+ * names resolve identically on both surfaces.
+ */
+export function extractAuditResourceName(
+  after: Record<string, unknown> | null,
+  before: Record<string, unknown> | null,
+): string | null {
+  for (const key of ["name", "email"]) {
+    for (const snapshot of [after, before]) {
+      const value = snapshot?.[key];
+      if (typeof value !== "string") continue;
+      const trimmed = value.trim();
+      if (trimmed) return trimmed.slice(0, AUDIT_RESOURCE_NAME_MAX_LENGTH);
+    }
+  }
+  return null;
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   formatResourceType,
   OUTCOME_BADGE_VARIANT,
   OUTCOME_LABEL,
+  resourceDisplayName,
 } from "./audit-log-action-labels";
 import {
   AuditLogDiffView,
@@ -178,18 +179,38 @@ function ActorBlock({ event }: { event: AuditLog }) {
 }
 
 function ResourceBlock({ event }: { event: AuditLog }) {
-  if (!event.resourceType && !event.resourceId) {
+  const name = resourceDisplayName(event);
+  if (!event.resourceType && !event.resourceId && !name) {
     return <span className="text-muted-foreground">—</span>;
   }
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {event.resourceType && (
-        <Badge variant="secondary">
-          {formatResourceType(event.resourceType)}
+    <div className="space-y-1">
+      {(event.resourceType || name) && (
+        // Same "Type: name" single-text-flow chip as the table's Resource
+        // column (incl. mid-word break-all and the flatter rounding), with
+        // the full untruncated name.
+        <Badge
+          variant="secondary"
+          className="max-w-full rounded-md whitespace-normal"
+        >
+          <span className="break-all font-normal">
+            {event.resourceType && (
+              <span className="font-semibold">
+                {formatResourceType(event.resourceType)}
+              </span>
+            )}
+            {event.resourceType && name ? ": " : ""}
+            {name && <span>{name}</span>}
+          </span>
         </Badge>
       )}
       {event.resourceId && (
-        <code className="break-all font-mono text-xs">{event.resourceId}</code>
+        <div className="flex items-center gap-1">
+          <code className="break-all font-mono text-xs text-muted-foreground">
+            {event.resourceId}
+          </code>
+          <CopyButton text={event.resourceId} size={12} />
+        </div>
       )}
     </div>
   );

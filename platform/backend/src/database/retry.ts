@@ -93,6 +93,16 @@ const TRANSIENT_NETWORK_CODES = new Set(
 const MAX_CAUSE_DEPTH = 5;
 
 /**
+ * SQLSTATE 57014 (query_canceled): raised when the pool's `statement_timeout`
+ * kills a query that ran too long (see createPool in database/index.ts).
+ */
+const QUERY_CANCELED_PG_CODE = "57014";
+
+/** Message emitted by PostgreSQL when statement_timeout cancels a query. */
+const STATEMENT_TIMEOUT_MESSAGE =
+  "canceling statement due to statement timeout";
+
+/**
  * Determine whether a database error is transient (i.e. retrying may succeed).
  *
  * Checks the error itself and, for DrizzleQueryError wrappers, recursively
@@ -101,6 +111,37 @@ const MAX_CAUSE_DEPTH = 5;
  */
 export function isTransientDbError(error: unknown): boolean {
   return getTransientDbErrorCode(error) !== null;
+}
+
+/**
+ * Determine whether a database error is a statement timeout — PostgreSQL
+ * canceling a query that exceeded `statement_timeout`.
+ *
+ * Deliberately NOT part of {@link isTransientDbError}: a query that just
+ * burned the full statement timeout is slow because of query shape or
+ * database load, and retrying it immediately multiplies that load. It is
+ * surfaced here only so error tracking can group all statement timeouts
+ * under one stable fingerprint instead of one issue per SQL statement
+ * (the ORM wraps the cancellation per-query as "Failed query: <sql>").
+ */
+export function isDbStatementTimeoutError(error: unknown, depth = 0): boolean {
+  if (!(error instanceof Error)) return false;
+  if (depth > MAX_CAUSE_DEPTH) return false;
+
+  const errorCode = (error as Error & { code?: string }).code;
+  if (errorCode === QUERY_CANCELED_PG_CODE) return true;
+  if (error.message.includes(STATEMENT_TIMEOUT_MESSAGE)) return true;
+
+  if (error instanceof AggregateError) {
+    for (const subError of error.errors) {
+      if (isDbStatementTimeoutError(subError, depth + 1)) return true;
+    }
+  }
+
+  const cause = (error as Error & { cause?: unknown }).cause;
+  if (cause) return isDbStatementTimeoutError(cause, depth + 1);
+
+  return false;
 }
 
 /**

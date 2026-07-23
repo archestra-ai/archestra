@@ -4,14 +4,16 @@ import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuditLog } from "@/lib/audit-log/audit-log.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { ALL_ACTOR_TYPES, ALL_OUTCOMES } from "./audit-log-action-labels";
 import { AuditLogTable } from "./audit-log-table";
 
 /**
  * Contract: AuditLogTable — columns (When / Actor / Action / Outcome / Resource / Where),
- * resource NAME shown in grid (denormalized, snapshot fallback) while the raw
- * resource id stays hidden, detail dialog on row click, URL-driven filters
- * (incl. the agent picker → resourceId) + clear resets page.
+ * resource NAME shown in grid (denormalized, snapshot fallback) for the
+ * high-signal picker types only, while the raw resource id stays hidden,
+ * detail dialog on row click, URL-driven filters (incl. the entity picker →
+ * resourceId) + clear resets page.
  */
 
 global.ResizeObserver = class ResizeObserver {
@@ -28,8 +30,14 @@ Element.prototype.releasePointerCapture = vi.fn();
 const mockUseAuditLogs = vi.fn();
 const mockUseMembersPaginated = vi.fn();
 const mockUseProfilesPaginated = vi.fn();
+const mockUseMcpServers = vi.fn();
+const mockUseRolesPaginated = vi.fn();
+const mockUseEnvironments = vi.fn();
+const mockUseApps = vi.fn();
+const mockUseSkillsPaginated = vi.fn();
 
 vi.mock("next/navigation");
+vi.mock("@/lib/teams/team.query");
 
 vi.mock("@/lib/audit-log/audit-log.query", async () => {
   const actual = await vi.importActual<
@@ -48,6 +56,26 @@ vi.mock("@/lib/member.query", () => ({
 vi.mock("@/lib/agent.query", () => ({
   useProfilesPaginated: (...args: unknown[]) =>
     mockUseProfilesPaginated(...args),
+}));
+
+vi.mock("@/lib/mcp/mcp-server.query", () => ({
+  useMcpServers: (...args: unknown[]) => mockUseMcpServers(...args),
+}));
+
+vi.mock("@/lib/role.query", () => ({
+  useRolesPaginated: (...args: unknown[]) => mockUseRolesPaginated(...args),
+}));
+
+vi.mock("@/lib/environment.query", () => ({
+  useEnvironments: (...args: unknown[]) => mockUseEnvironments(...args),
+}));
+
+vi.mock("@/lib/app.query", () => ({
+  useApps: (...args: unknown[]) => mockUseApps(...args),
+}));
+
+vi.mock("@/lib/skills/skill.query", () => ({
+  useSkillsPaginated: (...args: unknown[]) => mockUseSkillsPaginated(...args),
 }));
 
 function makeEvent(overrides: Partial<AuditLog> = {}): AuditLog {
@@ -150,6 +178,14 @@ describe("AuditLogTable", () => {
     );
     mockUseMembersPaginated.mockReturnValue({ data: { data: [] } });
     mockUseProfilesPaginated.mockReturnValue({ data: { data: [] } });
+    mockUseMcpServers.mockReturnValue({ data: [] });
+    vi.mocked(useTeams).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useTeams>);
+    mockUseRolesPaginated.mockReturnValue({ data: { data: [] } });
+    mockUseEnvironments.mockReturnValue({ data: { environments: [] } });
+    mockUseApps.mockReturnValue({ data: { data: [] } });
+    mockUseSkillsPaginated.mockReturnValue({ data: { data: [] } });
   });
 
   it("renders rows returned from the query with actor, action, outcome and resource", () => {
@@ -258,6 +294,24 @@ describe("AuditLogTable", () => {
     expect(screen.getByText("PotatoAI")).toBeInTheDocument();
   });
 
+  it("shows a bare type chip, without the name, for types outside the picker set", () => {
+    mockUseAuditLogs.mockReturnValue(
+      withRows([
+        makeEvent({
+          resourceType: "apiKey",
+          resourceName: "Distinctive Key Name",
+          before: null,
+          after: null,
+        }),
+      ]),
+    );
+
+    renderTable();
+
+    expect(screen.getByText("API key")).toBeInTheDocument();
+    expect(screen.queryByText("Distinctive Key Name")).not.toBeInTheDocument();
+  });
+
   it("falls back to the snapshot name for rows written before resource_name existed", () => {
     mockUseAuditLogs.mockReturnValue(
       withRows([
@@ -290,7 +344,7 @@ describe("AuditLogTable", () => {
     );
   });
 
-  it("requests both active and soft-deleted agents for the agent picker", () => {
+  it("requests both active and soft-deleted agents for the entity picker", () => {
     mockUseAuditLogs.mockReturnValue(withEmpty());
 
     renderTable();
@@ -301,6 +355,31 @@ describe("AuditLogTable", () => {
     expect(mockUseProfilesPaginated).toHaveBeenCalledWith(
       expect.objectContaining({ status: "deleted" }),
     );
+  });
+
+  it("entity picker lists non-agent entities and applies resourceId on pick", async () => {
+    const push = vi.fn();
+    vi.mocked(useRouter).mockReturnValue({
+      push,
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    mockUseAuditLogs.mockReturnValue(withEmpty());
+    mockUseMcpServers.mockReturnValue({
+      data: [{ id: "mcp-1", name: "context7" }],
+    });
+
+    renderTable();
+
+    // role=combobox is not a name-from-content role, so the trigger has no
+    // accessible name — reach it through its visible label instead.
+    await userEvent.click(screen.getByText("All entities"));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /context7/i }),
+    );
+
+    expect(push).toHaveBeenCalled();
+    const url = String(push.mock.calls[push.mock.calls.length - 1][0]);
+    expect(url).toContain("resourceId=mcp-1");
   });
 
   it("reads action and resource filters from URL params and passes to useAuditLogs", () => {

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfilesPaginated } from "@/lib/agent.query";
+import { useApps } from "@/lib/app.query";
 import {
   type AuditActorType,
   type AuditEventName,
@@ -28,9 +29,14 @@ import {
   useAuditLog,
   useAuditLogs,
 } from "@/lib/audit-log/audit-log.query";
+import { useEnvironments } from "@/lib/environment.query";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMembersPaginated } from "@/lib/member.query";
+import { useRolesPaginated } from "@/lib/role.query";
+import { useSkillsPaginated } from "@/lib/skills/skill.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { formatDate } from "@/lib/utils";
 import {
   ACTION_BADGE_VARIANT,
@@ -48,9 +54,22 @@ import {
 import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
 
 const ACTOR_FILTER_LIMIT = 100;
-const AGENT_FILTER_LIMIT = 100;
+const ENTITY_FILTER_LIMIT = 100;
 const RESOURCE_NAME_TRUNCATE_LENGTH = 64;
 const ALL_VALUE = "all";
+
+// The high-signal types whose names render in the Resource column and whose
+// entities populate the "Filter by entity" picker. Every other type keeps a
+// bare type chip in the list; its full identity lives in the detail dialog.
+const LIST_NAME_RESOURCE_TYPES: ReadonlySet<string> = new Set([
+  "agent",
+  "app",
+  "environment",
+  "mcpServer",
+  "role",
+  "skill",
+  "team",
+]);
 
 // TS7 (tsgo) trips instantiating ColumnDef over AuditLog because `action` is a
 // large string-literal union, failing with a spurious "two unrelated ColumnDef
@@ -172,7 +191,7 @@ export function AuditLogTable() {
     [updateUrlParams],
   );
 
-  const handleAgentChange = useCallback(
+  const handleEntityChange = useCallback(
     (value: string) => {
       setPagination((prev) => ({ ...prev, pageIndex: 0 }));
       updateUrlParams({ resourceId: value === ALL_VALUE ? null : value });
@@ -244,18 +263,35 @@ export function AuditLogTable() {
   // history stays reachable through the picker (the audit page is admin-only,
   // which is also what the deleted bucket requires).
   const { data: activeAgentsResponse } = useProfilesPaginated({
-    limit: AGENT_FILTER_LIMIT,
+    limit: ENTITY_FILTER_LIMIT,
     offset: 0,
     sortBy: "name",
     sortDirection: "asc",
     status: "active",
   });
   const { data: deletedAgentsResponse } = useProfilesPaginated({
-    limit: AGENT_FILTER_LIMIT,
+    limit: ENTITY_FILTER_LIMIT,
     offset: 0,
     sortBy: "name",
     sortDirection: "asc",
     status: "deleted",
+  });
+
+  // The remaining LIST_NAME_RESOURCE_TYPES entities for the entity picker.
+  const { data: mcpServers } = useMcpServers();
+  const { data: teams } = useTeams();
+  const { data: rolesResponse } = useRolesPaginated({
+    limit: ENTITY_FILTER_LIMIT,
+    offset: 0,
+  });
+  const { data: environmentList } = useEnvironments();
+  const { data: appsResponse } = useApps({
+    limit: ENTITY_FILTER_LIMIT,
+    offset: 0,
+  });
+  const { data: skillsResponse } = useSkillsPaginated({
+    limit: ENTITY_FILTER_LIMIT,
+    offset: 0,
   });
 
   const rows = response?.data ?? [];
@@ -271,20 +307,50 @@ export function AuditLogTable() {
     return [{ value: ALL_VALUE, label: "All actors" }, ...items];
   }, [membersResponse]);
 
-  const agentOptions = useMemo(() => {
-    const active =
-      activeAgentsResponse?.data?.map((a) => ({
-        value: a.id,
-        label: a.name,
-      })) ?? [];
-    const deleted =
-      deletedAgentsResponse?.data?.map((a) => ({
-        value: a.id,
-        label: a.name,
-        description: "Deleted",
-      })) ?? [];
-    return [{ value: ALL_VALUE, label: "All agents" }, ...active, ...deleted];
-  }, [activeAgentsResponse, deletedAgentsResponse]);
+  const entityOptions = useMemo(() => {
+    // The type goes into `description`: SearchableSelect renders it as a
+    // subtitle and matches it in search, so typing "team" finds all teams.
+    const toOptions = (
+      items: Array<{ id: string; name: string }> | undefined,
+      resourceType: string,
+    ) =>
+      (items ?? [])
+        .map((item) => ({
+          value: item.id,
+          label: item.name,
+          description: formatResourceType(resourceType),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+
+    const deletedAgents = toOptions(deletedAgentsResponse?.data, "agent").map(
+      (option) => ({ ...option, description: "Agent (deleted)" }),
+    );
+    // External catalog apps carry no id (and are not audited) — only owned
+    // apps can be picked.
+    const ownedApps = appsResponse?.data?.filter(
+      (app) => app.source === "owned",
+    );
+    return [
+      { value: ALL_VALUE, label: "All entities" },
+      ...toOptions(activeAgentsResponse?.data, "agent"),
+      ...deletedAgents,
+      ...toOptions(mcpServers, "mcpServer"),
+      ...toOptions(teams, "team"),
+      ...toOptions(rolesResponse?.data, "role"),
+      ...toOptions(environmentList?.environments, "environment"),
+      ...toOptions(ownedApps, "app"),
+      ...toOptions(skillsResponse?.data, "skill"),
+    ];
+  }, [
+    activeAgentsResponse,
+    deletedAgentsResponse,
+    mcpServers,
+    teams,
+    rolesResponse,
+    environmentList,
+    appsResponse,
+    skillsResponse,
+  ]);
 
   const actionOptions = useMemo(
     () => [
@@ -389,7 +455,10 @@ export function AuditLogTable() {
         header: "Resource",
         cell: ({ row }) => {
           const { resourceType: rt } = row.original;
-          const name = resourceDisplayName(row.original);
+          const name =
+            rt && LIST_NAME_RESOURCE_TYPES.has(rt)
+              ? resourceDisplayName(row.original)
+              : null;
           if (!rt && !name) {
             return <span className="text-xs text-muted-foreground">—</span>;
           }
@@ -526,9 +595,9 @@ export function AuditLogTable() {
         />
         <SearchableSelect
           value={resourceId ?? ALL_VALUE}
-          onValueChange={handleAgentChange}
-          placeholder="Filter by agent"
-          items={agentOptions}
+          onValueChange={handleEntityChange}
+          placeholder="Filter by entity"
+          items={entityOptions}
           className="w-[220px]"
         />
         <SearchableSelect

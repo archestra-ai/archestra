@@ -78,7 +78,7 @@ const auditLogsTable = pgTable(
       table.resourceType,
       table.resourceId,
     ),
-    // resourceId filter without a resourceType (the UI's agent picker) — the
+    // resourceId filter without a resourceType (the UI's resource picker) — the
     // index above can't serve it past the org prefix.
     index("audit_logs_org_resource_id_created_at_idx").on(
       table.organizationId,

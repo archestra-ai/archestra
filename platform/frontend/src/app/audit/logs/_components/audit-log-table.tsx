@@ -59,7 +59,7 @@ const RESOURCE_NAME_TRUNCATE_LENGTH = 64;
 const ALL_VALUE = "all";
 
 // The high-signal types whose names render in the Resource column and whose
-// entities populate the "Filter by entity" picker. Every other type keeps a
+// entities populate the "Filter by resource" picker. Every other type keeps a
 // bare type chip in the list; its full identity lives in the detail dialog.
 const LIST_NAME_RESOURCE_TYPES: ReadonlySet<string> = new Set([
   "agent",

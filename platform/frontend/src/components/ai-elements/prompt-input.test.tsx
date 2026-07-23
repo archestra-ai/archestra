@@ -5,6 +5,7 @@ import {
   PromptInput,
   PromptInputBody,
   type PromptInputProps,
+  PromptInputSpeechButton,
   PromptInputTextarea,
 } from "./prompt-input";
 
@@ -74,5 +75,27 @@ describe("PromptInputTextarea Enter handling", () => {
     await user.keyboard("{Enter}");
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("PromptInputSpeechButton", () => {
+  it("renders the mic button in a secure context", () => {
+    vi.stubGlobal("isSecureContext", true);
+
+    render(<PromptInputSpeechButton />);
+
+    expect(
+      screen.getByRole("button", { name: "Start voice input" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the mic button in an insecure context where the mic cannot work", () => {
+    vi.stubGlobal("isSecureContext", false);
+
+    render(<PromptInputSpeechButton />);
+
+    expect(
+      screen.queryByRole("button", { name: "Start voice input" }),
+    ).not.toBeInTheDocument();
   });
 });

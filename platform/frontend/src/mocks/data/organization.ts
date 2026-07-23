@@ -40,6 +40,7 @@ export function makeOrganization(
     defaultUserLimitValue: null,
     defaultUserLimitModel: null,
     defaultUserLimitCleanupInterval: "1h",
+    defaultMemberRole: null,
     defaultAgentId: null,
     favicon: null,
     appName: null,

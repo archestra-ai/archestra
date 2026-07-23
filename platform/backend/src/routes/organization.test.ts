@@ -125,6 +125,41 @@ describe("organization routes", () => {
     });
   });
 
+  describe("PATCH /api/organization/auth-settings - default member role", () => {
+    test("persists a valid custom default role", async ({ makeCustomRole }) => {
+      const role = await makeCustomRole(organizationId);
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { defaultMemberRole: role.role },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().defaultMemberRole).toBe(role.role);
+    });
+
+    test("accepts a predefined role", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { defaultMemberRole: "admin" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().defaultMemberRole).toBe("admin");
+    });
+
+    test("rejects a role that does not exist in the org", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { defaultMemberRole: "nonexistent-role" },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
   describe("PATCH /api/organization/mcp-settings - online catalog", () => {
     test("defaults onlineMcpCatalogEnabled to true for a new organization", async () => {
       const response = await app.inject({

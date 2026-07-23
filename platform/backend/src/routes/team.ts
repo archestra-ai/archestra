@@ -107,7 +107,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { body: { name, description, labels }, user, organizationId },
+      {
+        body: { name, description, convertToolResultsToToon, labels },
+        user,
+        organizationId,
+      },
       reply,
     ) => {
       return reply.send(
@@ -116,6 +120,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description,
           organizationId,
           createdBy: user.id,
+          convertToolResultsToToon,
           labels,
         }),
       );

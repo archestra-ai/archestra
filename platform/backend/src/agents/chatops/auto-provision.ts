@@ -1,7 +1,4 @@
-import {
-  AUTO_PROVISIONED_INVITATION_STATUS,
-  MEMBER_ROLE_NAME,
-} from "@archestra/shared";
+import { AUTO_PROVISIONED_INVITATION_STATUS } from "@archestra/shared";
 import config from "@/config";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -19,7 +16,7 @@ const INVITATION_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 /**
  * Auto-provision an Archestra user + member from a Slack/Teams interaction.
  *
- * Creates a `user` row and a `member` row (role: member, no team).
+ * Creates a `user` row and a `member` row (org default role, no team).
  * Does NOT create an `account` row — the user has no login credentials yet.
  * Also creates an `invitation` record that powers the signup-completion link.
  *
@@ -41,6 +38,9 @@ export async function autoProvisionUser(params: {
     throw new Error("No organization found for auto-provisioning");
   }
 
+  // Org-configured default role for new users (falls back to "member").
+  const defaultRole = await OrganizationModel.getDefaultMemberRole(org.id);
+
   try {
     // Create user record (no account — no password/login yet)
     const userId = crypto.randomUUID();
@@ -54,7 +54,7 @@ export async function autoProvisionUser(params: {
     });
 
     // Create member record linking user to organization
-    await MemberModel.create(userId, org.id, MEMBER_ROLE_NAME);
+    await MemberModel.create(userId, org.id, defaultRole);
 
     // Create personal default chat agent for the new member
     try {
@@ -88,7 +88,7 @@ export async function autoProvisionUser(params: {
       id: invitationId,
       organizationId: org.id,
       email: normalizedEmail,
-      role: MEMBER_ROLE_NAME,
+      role: defaultRole,
       status: `${AUTO_PROVISIONED_INVITATION_STATUS}:${provider}`,
       expiresAt: new Date(Date.now() + INVITATION_EXPIRY_MS),
       inviterId: userId, // Self-referencing — auto-provisioned

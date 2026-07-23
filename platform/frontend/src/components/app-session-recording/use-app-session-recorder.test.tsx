@@ -34,8 +34,14 @@ vi.mock("@/lib/app-session-recording/app-recording.query", () => ({
 vi.mock("@/lib/hooks/use-mobile", () => ({
   useIsMobile: vi.fn(() => false),
 }));
+// The app's assigned tools drive the bundle's connected-MCP-server list. Two
+// tools across two servers, one server (`slack`) never called during the
+// recordings below — it must still be listed as connected.
 vi.mock("@/lib/app.query", () => ({
   useApp: () => ({ data: { id: "app", name: "Test App" } }),
+  useAppTools: () => ({
+    data: [{ name: "github__create_issue" }, { name: "slack__post_message" }],
+  }),
 }));
 vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { name: "Tester" } } }),
@@ -248,6 +254,10 @@ describe("useAppSessionRecorder", () => {
     });
     expect(bundle?.app).toEqual({ id: APP_ID, name: "Test App" });
     expect(bundle?.meta.authorName).toBe("Tester");
+    // Every MCP server the app is connected to is listed, whether or not this
+    // session called it — this recording made no MCP calls, yet both assigned
+    // servers appear.
+    expect(bundle?.meta.mcpServers).toEqual(["github", "slack"]);
     // How many prompts it took to build the app — every user message in the
     // captured transcript (TRANSCRIPT has exactly one).
     expect(bundle?.meta.userPromptCount).toBe(1);

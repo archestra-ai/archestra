@@ -405,6 +405,108 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
 }
 
 
+/* ── Apps Hackathon recorder flair ──
+   Draws the eye to the hackathon recorder cluster and its "submit to
+   Archestra" (GitHub PR) button. Two composable effects:
+   • .hackathon-glitter — a periodic linear glint that sweeps across the
+     surface once every few seconds, then rests (slight, not a constant shine).
+   • .hackathon-edge-shimmer — a soft highlight that travels around the border.
+   Colors derive from theme tokens so white-label + dark mode are respected,
+   and both self-disable under prefers-reduced-motion. */
+
+.hackathon-glitter {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.hackathon-glitter::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: -50%;
+  width: 50%;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, white 75%, var(--primary)) 50%,
+    transparent
+  );
+  opacity: 0;
+  transform: translateX(0) skewX(-16deg);
+  /* Sweep occupies only the first ~20% of the cycle, so the surface rests
+     between glints — a periodic glitter rather than a continuous shine. */
+  animation: hackathon-glitter-sweep 5s ease-in-out infinite;
+}
+
+@keyframes hackathon-glitter-sweep {
+  0% {
+    transform: translateX(0) skewX(-16deg);
+    opacity: 0;
+  }
+  4% {
+    opacity: 0.5;
+  }
+  20% {
+    transform: translateX(320%) skewX(-16deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(320%) skewX(-16deg);
+    opacity: 0;
+  }
+}
+
+@property --hackathon-edge-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.hackathon-edge-shimmer {
+  position: relative;
+}
+
+.hackathon-edge-shimmer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: conic-gradient(
+    from var(--hackathon-edge-angle),
+    transparent 0deg,
+    color-mix(in oklab, var(--primary) 70%, white) 40deg,
+    transparent 90deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: hackathon-edge-shimmer 4s linear infinite;
+}
+
+@keyframes hackathon-edge-shimmer {
+  to {
+    --hackathon-edge-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hackathon-glitter::after,
+  .hackathon-edge-shimmer::before {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+
 /* ── Feedback pop-up ──
    Friendly greeting: the hand waves twice when the pop-up opens, then rests. */
 

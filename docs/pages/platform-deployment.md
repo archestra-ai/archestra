@@ -869,15 +869,18 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - The session is an ordinary one for that user — role-based access control is unchanged
   - Example: `admin@example.com`
 
-- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
-  - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
-  - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
-  - Required when using different domains or subdomains for frontend and backend
+- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Scopes the session cookie to a domain so the frontend and backend can share it.
+  - Default: None. The cookie stays host-only, bound to the exact frontend host.
+  - Set this only when your frontend and backend are on different subdomains. Use the narrowest domain that covers both. For a frontend at `https://frontend.example.com` and a backend at `https://backend.example.com`, set `example.com`.
+  - The browser then sends the cookie to _every_ subdomain of that domain, not just those two. So `example.com` also reaches `other.example.com`.
+  - Warning: this is how one instance breaks another. If a second Archestra runs on a sibling subdomain (`staging.example.com`) and both use the default cookie prefix, their session cookies share a name and collide. The browser sends both, the server reads the wrong one, and login silently bounces back to the sign-in page.
+  - To run more than one instance under the same domain, give each a unique `ARCHESTRA_AUTH_COOKIE_PREFIX` (below). Do this even when only one instance sets a cookie domain — the shared cookie still leaks to the others.
 
 - **`ARCHESTRA_AUTH_COOKIE_PREFIX`** - Prefix for auth cookie names (`<prefix>.session_token`, etc.).
   - Default: `archestra`
-  - Browsers scope cookies to the host without the port, so multiple Archestra instances on different ports of the same host overwrite each other's session cookies. Give each instance a unique prefix to keep their sessions independent.
-  - Mainly useful for local development with parallel stacks; single-instance deployments can leave the default
+  - Give each instance that shares a host or domain with another a unique prefix, so their session cookies have distinct names and never collide.
+  - Two cases need this. Instances on different ports of one host: browsers ignore the port, so the cookies overwrite each other. Instances on sibling subdomains where one sets `ARCHESTRA_AUTH_COOKIE_DOMAIN`: that cookie leaks across the whole domain (see above).
+  - A single, isolated deployment can leave the default.
 
 - **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
   - Default: `false`

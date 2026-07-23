@@ -1,6 +1,10 @@
 "use client";
 
-import { DEFAULT_APP_DESCRIPTION, DEFAULT_APP_NAME } from "@archestra/shared";
+import {
+  DEFAULT_APP_DESCRIPTION,
+  DEFAULT_APP_NAME,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import {
@@ -12,6 +16,7 @@ import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RoleSelect } from "@/components/ui/role-select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useOnUnmount } from "@/lib/hooks/use-lifecycle";
@@ -110,6 +115,9 @@ export default function OrganizationSettingsPage() {
     boolean | null
   >(null);
   const [showTwoFactor, setShowTwoFactor] = useState<boolean | null>(null);
+  const [defaultMemberRole, setDefaultMemberRole] = useState<string | null>(
+    null,
+  );
 
   // Derived values (use local state if changed, otherwise org data)
   const effectiveAppName = appName ?? organization?.appName ?? "";
@@ -139,6 +147,9 @@ export default function OrganizationSettingsPage() {
     animateChatPlaceholders ?? organization?.animateChatPlaceholders ?? true;
   const effectiveShowTwoFactor =
     showTwoFactor ?? organization?.showTwoFactor ?? false;
+  // Null column means "fall back to member", so surface member as selected.
+  const effectiveDefaultMemberRole =
+    defaultMemberRole ?? organization?.defaultMemberRole ?? MEMBER_ROLE_NAME;
   const liveChatLinkValidationErrors = effectiveChatLinks.map((link) =>
     validateChatLink(link),
   );
@@ -183,7 +194,8 @@ export default function OrganizationSettingsPage() {
     slimChatErrorUi !== null ||
     chatPlaceholders !== null ||
     animateChatPlaceholders !== null ||
-    showTwoFactor !== null;
+    showTwoFactor !== null ||
+    defaultMemberRole !== null;
 
   const handleSaveFields = async () => {
     const data: Record<string, unknown> = {};
@@ -228,21 +240,24 @@ export default function OrganizationSettingsPage() {
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
     setShowTwoFactor(null);
+    setDefaultMemberRole(null);
   };
 
   const handleSaveAuthFields = async () => {
-    if (showTwoFactor === null) {
+    if (showTwoFactor === null && defaultMemberRole === null) {
       return;
     }
 
     const updatedOrganization = await updateAuthSettingsMutation.mutateAsync({
-      showTwoFactor,
+      ...(showTwoFactor !== null && { showTwoFactor }),
+      ...(defaultMemberRole !== null && { defaultMemberRole }),
     });
     if (!updatedOrganization) {
       return;
     }
 
     setShowTwoFactor(null);
+    setDefaultMemberRole(null);
   };
 
   if (isLoadingAppearance) {
@@ -432,6 +447,22 @@ export default function OrganizationSettingsPage() {
             />
           </Card>
 
+          <Card>
+            <SettingsCardHeader
+              title="Default Role for New Users"
+              description="Role assigned to users who join via email/password self-signup or ChatOps auto-provisioning. SSO users are governed by their identity provider's role mapping."
+              action={
+                <RoleSelect
+                  id="defaultMemberRole"
+                  value={effectiveDefaultMemberRole}
+                  onValueChange={(role) => setDefaultMemberRole(role)}
+                  data-testid="default-member-role-select"
+                  className="w-40"
+                />
+              }
+            />
+          </Card>
+
           <OrganizationTokenSection />
         </SettingsSectionStack>
       </div>
@@ -457,7 +488,10 @@ export default function OrganizationSettingsPage() {
             await saveAppearance?.(currentUITheme || DEFAULT_THEME);
             setHasThemeChanges(false);
           }
-          if (hasFieldChanges && showTwoFactor !== null) {
+          if (
+            hasFieldChanges &&
+            (showTwoFactor !== null || defaultMemberRole !== null)
+          ) {
             await handleSaveAuthFields();
           }
           if (
@@ -491,6 +525,7 @@ export default function OrganizationSettingsPage() {
           setChatPlaceholders(null);
           setAnimateChatPlaceholders(null);
           setShowTwoFactor(null);
+          setDefaultMemberRole(null);
         }}
         disabledSave={
           hasLiveChatLinkValidationErrors ||

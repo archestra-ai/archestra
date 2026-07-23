@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetMcpServerCategoriesData, GetMcpServerCategoriesResponses, GetMcpServerData, GetMcpServerErrors, GetMcpServerQualityBadgeData, GetMcpServerQualityBadgeErrors, GetMcpServerQualityBadgeResponses, GetMcpServerResponses, SearchMcpServerCatalogData, SearchMcpServerCatalogResponses } from './types.gen';
+import type { GetMcpServerCategoriesData, GetMcpServerCategoriesResponses, GetMcpServerData, GetMcpServerErrors, GetMcpServerResponses, SearchMcpServerCatalogData, SearchMcpServerCatalogResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -31,13 +31,6 @@ export const searchMcpServerCatalog = <ThrowOnError extends boolean = false>(opt
  * Retrieve detailed information about a specific MCP server by its name identifier
  */
 export const getMcpServer = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerResponses, GetMcpServerErrors, ThrowOnError>({ url: '/server/{name}', ...options });
-
-/**
- * Get quality badge
- *
- * Get an SVG quality badge for an MCP server
- */
-export const getMcpServerQualityBadge = <ThrowOnError extends boolean = false>(options: Options<GetMcpServerQualityBadgeData, ThrowOnError>) => (options.client ?? client).get<GetMcpServerQualityBadgeResponses, GetMcpServerQualityBadgeErrors, ThrowOnError>({ url: '/badge/quality/{org}/{repo}', ...options });
 
 /**
  * Get available categories

@@ -213,6 +213,43 @@ describe("LlmProviderApiKeyDropdown", () => {
       expect(onSelectKey).toHaveBeenCalledWith("copilot-key");
     });
 
+    it("keeps a subscription-shaped key visible when no subscription entry backs it", async () => {
+      const user = userEvent.setup();
+
+      // An org-scoped ChatGPT-subscription key: it looks like a subscription but
+      // `useSubscriptions` only surfaces the viewer's own personal one, so no
+      // Subscriptions row represents it. It must stay in the OpenAI group rather
+      // than being stripped with nowhere to select it.
+      renderDropdown({
+        availableKeys: [
+          {
+            id: "org-chatgpt",
+            name: "Shared ChatGPT",
+            provider: "openai",
+            scope: "org",
+            userId: null,
+            isChatgptSubscription: true,
+            teamName: null,
+          },
+        ] as LlmProviderApiKey[],
+        selectedApiKeyId: "org-chatgpt",
+        onSelectKey: () => {},
+        triggerVariant: "button",
+        showSubscriptions: true,
+      });
+
+      await user.click(screen.getByRole("button", { name: /shared chatgpt/i }));
+
+      expect(
+        screen.getByRole("option", { name: /shared chatgpt/i }),
+      ).toBeInTheDocument();
+      // The ChatGPT subscription row still offers sign-in — the org key does not
+      // back the viewer's personal subscription.
+      expect(
+        screen.getByTestId(getSubscriptionPickerOptionTestId("openai")),
+      ).toHaveTextContent("Sign in");
+    });
+
     it("does not repeat a connected subscription in the provider groups", async () => {
       const user = userEvent.setup();
 

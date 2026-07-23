@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
+import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { CreateLlmProviderApiKeyDialog } from "./create-llm-provider-api-key-dialog";
 
 const mutateAsync = vi.fn();
@@ -10,7 +10,21 @@ const mutateAsync = vi.fn();
 vi.mock("@/components/llm-provider-api-key-form", () => ({
   LLM_PROVIDER_API_KEY_PLACEHOLDER: "••••••••••••••••",
   serializeExtraHeaders: () => null,
-  PROVIDER_CONFIG: { anthropic: { name: "Anthropic" } },
+  PROVIDER_CONFIG: {
+    anthropic: { name: "Anthropic" },
+    archestra: { name: "Archestra", baseUrlRequired: true },
+  },
+  // Mirrors the real helper's formula (provider opts in via PROVIDER_CONFIG,
+  // an admin-configured providerBaseUrls entry satisfies it) against this
+  // file's own stub PROVIDER_CONFIG, so getIsCreateFormValid's own wiring is
+  // what's under test here — not re-deriving the requirement from scratch.
+  isBaseUrlRequiredForProvider: ({
+    provider,
+    providerBaseUrls,
+  }: {
+    provider: string;
+    providerBaseUrls: Record<string, string | null> | null | undefined;
+  }) => provider === "archestra" && !providerBaseUrls?.[provider],
   LlmProviderApiKeyForm: ({
     form,
   }: {
@@ -21,6 +35,8 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
       <input id="chat-api-key-name" {...form.register("name")} />
       <label htmlFor="chat-api-key-value">API Key</label>
       <input id="chat-api-key-value" {...form.register("apiKey")} />
+      <label htmlFor="chat-api-key-base-url">Base URL</label>
+      <input id="chat-api-key-base-url" {...form.register("baseUrl")} />
     </div>
   ),
 }));
@@ -51,6 +67,9 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useProviderBaseUrls).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useProviderBaseUrls>);
   });
 
   it("confirms with the model list, then closes and reports success on Done", async () => {
@@ -93,6 +112,91 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     await user.click(doneButton);
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("reports success exactly once when the confirmation screen is dismissed via Escape instead of Done", async () => {
+    // BUG 2: closing through any path other than the "Done" button (X,
+    // Escape, outside click) must still call onSuccess — otherwise the
+    // first-run chat onboarding silently skips its next step.
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const onSuccess = vi.fn();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={onOpenChange}
+        onSuccess={onSuccess}
+        title="Add API Key"
+        description="Shared dialog"
+      />,
+    );
+
+    await user.type(screen.getByLabelText("API Key"), "sk-test");
+    await user.click(screen.getByRole("button", { name: /test & create/i }));
+    await screen.findByRole("button", { name: /^done$/i });
+
+    await user.keyboard("{Escape}");
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("disables submit until a required Base URL is filled, for a provider that needs one", async () => {
+    // BUG 1: getIsCreateFormValid must account for base-URL requiredness —
+    // otherwise the button stays enabled while the (possibly hidden) field
+    // blocks the submit with no visible error.
+    const user = userEvent.setup();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+        defaultValues={{ provider: "archestra" }}
+      />,
+    );
+
+    await user.type(screen.getByLabelText("API Key"), "arch-test");
+    expect(
+      screen.getByRole("button", { name: /test & create/i }),
+    ).toBeDisabled();
+
+    await user.type(
+      screen.getByLabelText("Base URL"),
+      "https://my-archestra/v1",
+    );
+    expect(
+      screen.getByRole("button", { name: /test & create/i }),
+    ).not.toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: /test & create/i }));
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ baseUrl: "https://my-archestra/v1" }),
+    );
+  });
+
+  it("does not require a Base URL once an admin-configured override exists", async () => {
+    vi.mocked(useProviderBaseUrls).mockReturnValue({
+      data: { archestra: "https://configured.example.com" },
+    } as unknown as ReturnType<typeof useProviderBaseUrls>);
+    const user = userEvent.setup();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        title="Add API Key"
+        description="Shared dialog"
+        defaultValues={{ provider: "archestra" }}
+      />,
+    );
+
+    await user.type(screen.getByLabelText("API Key"), "arch-test");
+    expect(
+      screen.getByRole("button", { name: /test & create/i }),
+    ).not.toBeDisabled();
   });
 
   it("falls back to the provider name when the name field is empty", async () => {

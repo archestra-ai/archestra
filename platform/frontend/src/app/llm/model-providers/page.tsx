@@ -68,7 +68,7 @@ import {
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { UseSubscriptionDialog } from "@/components/use-subscription-dialog";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
+import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -123,9 +123,10 @@ export default function ApiKeysPage() {
   const currentUserId = session?.user?.id;
   const apiKeyQueriesEnabled =
     !permissionsPending && canReadLlmProviderApiKeys === true;
-  const { data: allApiKeys = [] } = useLlmProviderApiKeys({
-    enabled: apiKeyQueriesEnabled,
-  });
+  const { data: allApiKeys = [], isPending: isAllApiKeysPending } =
+    useLlmProviderApiKeys({
+      enabled: apiKeyQueriesEnabled,
+    });
   const { data: queriedApiKeys = [], isPending } = useLlmProviderApiKeys({
     search: search || undefined,
     provider:
@@ -140,6 +141,7 @@ export default function ApiKeysPage() {
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicWifEnabled = useFeature("anthropicWifEnabled");
+  const { data: providerBaseUrls } = useProviderBaseUrls();
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -321,7 +323,10 @@ export default function ApiKeysPage() {
 
   // Validation for edit form
   const editFormValues = editForm.watch();
-  const isEditValid = isEditApiKeyFormValid(editFormValues);
+  const isEditValid = isEditApiKeyFormValid({
+    values: editFormValues,
+    providerBaseUrls,
+  });
 
   const headerActions = (
     <div className="flex items-center gap-2">
@@ -530,6 +535,12 @@ export default function ApiKeysPage() {
             row.original.scope === "personal" &&
             !!currentUserId &&
             row.original.userId === currentUserId;
+          // Admins see other users' personal subscription keys as inventory
+          // (getVisibleKeys), but authorizeApiKeyAccess unconditionally 403s a
+          // non-owner's edit/delete on a personal key. No role permission grants
+          // this, so it is disabled rather than permission-gated.
+          const isOtherUsersPersonalKey =
+            row.original.scope === "personal" && !isOwnPersonalKey;
           return (
             <TableRowActions
               itemName={row.original.name}
@@ -537,11 +548,14 @@ export default function ApiKeysPage() {
                 {
                   icon: <Pencil className="h-4 w-4" />,
                   label: "Edit",
-                  permissions: isOwnPersonalKey
-                    ? undefined
-                    : { llmProviderApiKey: ["update"] },
-                  disabled: isSystem,
-                  disabledTooltip: "System keys cannot be edited",
+                  permissions:
+                    isOwnPersonalKey || isOtherUsersPersonalKey
+                      ? undefined
+                      : { llmProviderApiKey: ["update"] },
+                  disabled: isSystem || isOtherUsersPersonalKey,
+                  disabledTooltip: isOtherUsersPersonalKey
+                    ? "Personal credentials can only be changed by their owner"
+                    : "System keys cannot be edited",
                   onClick: () => openEditDialog(row.original),
                   testId: `${E2eTestId.EditChatApiKeyButton}-${row.original.name}`,
                 },
@@ -549,13 +563,16 @@ export default function ApiKeysPage() {
                   icon: <Trash2 className="h-4 w-4" />,
                   label: "Delete",
                   variant: "destructive",
-                  permissions: isOwnPersonalKey
-                    ? undefined
-                    : { llmProviderApiKey: ["delete"] },
-                  disabled: isSystem || isInUse,
+                  permissions:
+                    isOwnPersonalKey || isOtherUsersPersonalKey
+                      ? undefined
+                      : { llmProviderApiKey: ["delete"] },
+                  disabled: isSystem || isInUse || isOtherUsersPersonalKey,
                   disabledTooltip: isInUse
                     ? `${keyUsage}. Remove it from Settings > Knowledge before deleting.`
-                    : "System keys cannot be deleted",
+                    : isOtherUsersPersonalKey
+                      ? "Personal credentials can only be changed by their owner"
+                      : "System keys cannot be deleted",
                   onClick: () => openDeleteDialog(row.original),
                   testId: `${E2eTestId.DeleteChatApiKeyButton}-${row.original.name}`,
                 },
@@ -579,8 +596,11 @@ export default function ApiKeysPage() {
   // With zero keys, strip every list affordance (header actions, search, filter,
   // table) and show only the centered two-door chooser — mirroring the Skills
   // empty state so first-run reads as a clean choice, not a populated table.
+  // Gated on the UNFILTERED query's own pending state: gating on the filtered
+  // query's `isPending` let a search/provider filter that resolves first flash
+  // (or stick with) the chooser over a populated but not-yet-loaded inventory.
   const showEmptyState =
-    apiKeyQueriesEnabled && !isPending && allApiKeys.length === 0;
+    apiKeyQueriesEnabled && !isAllApiKeysPending && allApiKeys.length === 0;
 
   return (
     <PageLayout
@@ -607,6 +627,7 @@ export default function ApiKeysPage() {
               <SubscriptionsPanel
                 keys={allApiKeys}
                 onDisconnect={openDeleteDialog}
+                onEdit={openEditDialog}
               />
             )}
 
@@ -674,6 +695,7 @@ export default function ApiKeysPage() {
               <SubscriptionsPanel
                 keys={allApiKeys}
                 onDisconnect={openDeleteDialog}
+                onEdit={openEditDialog}
               />
             )}
           </>

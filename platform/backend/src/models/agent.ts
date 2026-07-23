@@ -315,6 +315,45 @@ class AgentModel {
       organizationRows.map((row) => [row.id, row]),
     );
 
+    // Every model that could become an agent's effective one — its own pin or
+    // the organization default it may fall through to. A model's provider
+    // decides whether a model-only (null-key) selection still wins, so the
+    // provider must be resolved before the effective pair is chosen.
+    const candidateModelIds = [
+      ...new Set(
+        agents
+          .flatMap((a) => [
+            a.modelId,
+            organizationDefaultsMap.get(a.organizationId)?.defaultModelId ??
+              null,
+          ])
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const modelRows =
+      candidateModelIds.length > 0
+        ? await db
+            .select({
+              id: schema.modelsTable.id,
+              provider: schema.modelsTable.provider,
+              // The human-facing model identifier (e.g. "gpt-4"), distinct from
+              // the row's UUID `id`.
+              modelName: schema.modelsTable.modelId,
+            })
+            .from(schema.modelsTable)
+            .where(inArray(schema.modelsTable.id, candidateModelIds))
+        : [];
+    const modelProviderMap = new Map(modelRows.map((r) => [r.id, r.provider]));
+    const modelNameMap = new Map(modelRows.map((r) => [r.id, r.modelName]));
+
+    // A per-user provider (GitHub / Microsoft Copilot) resolves its credential
+    // to the acting user's own account, so a model of that provider needs no
+    // stored key to run — a model-only selection is not a half pin for it.
+    const requiresPerUserModel = (modelId: string): boolean => {
+      const provider = modelProviderMap.get(modelId);
+      return provider != null && providerRequiresPerUserCredential(provider);
+    };
+
     const effectiveLlm = (
       agent: Agent,
     ): { apiKeyId: string | null; modelId: string | null } => {
@@ -325,11 +364,24 @@ class AgentModel {
       if (agent.llmApiKeyId !== null && agent.modelId !== null) {
         return { apiKeyId: agent.llmApiKeyId, modelId: agent.modelId };
       }
+      // Per-user exception: a model-only pin on a per-user provider — key
+      // nulled by ON DELETE SET NULL, or never keyed — still wins by model
+      // alone, because the send resolves the acting user's own credential (the
+      // frontend resolver completes the level with a placeholder key;
+      // resolveConfiguredAgentLlm honors the model with no stored key).
+      if (agent.modelId !== null && requiresPerUserModel(agent.modelId)) {
+        return { apiKeyId: null, modelId: agent.modelId };
+      }
       const organization = organizationDefaultsMap.get(agent.organizationId);
       const orgApiKeyId = organization?.defaultLlmApiKeyId ?? null;
       const orgModelId = organization?.defaultModelId ?? null;
       if (orgApiKeyId !== null && orgModelId !== null) {
         return { apiKeyId: orgApiKeyId, modelId: orgModelId };
+      }
+      // Same per-user exception for the inherited organization default: a
+      // Copilot model whose default key was deleted still runs per-user.
+      if (orgModelId !== null && requiresPerUserModel(orgModelId)) {
+        return { apiKeyId: null, modelId: orgModelId };
       }
       return { apiKeyId: null, modelId: null };
     };
@@ -341,15 +393,8 @@ class AgentModel {
           .filter((id): id is string => id !== null),
       ),
     ];
-    const modelIds = [
-      ...new Set(
-        agents
-          .map((a) => effectiveLlm(a).modelId)
-          .filter((id): id is string => id !== null),
-      ),
-    ];
 
-    const [keyRows, modelRows, chatgptSubscriptionKeyIds] = await Promise.all([
+    const [keyRows, chatgptSubscriptionKeyIds] = await Promise.all([
       apiKeyIds.length > 0
         ? db
             .select({
@@ -359,24 +404,10 @@ class AgentModel {
             .from(schema.llmProviderApiKeysTable)
             .where(inArray(schema.llmProviderApiKeysTable.id, apiKeyIds))
         : Promise.resolve([]),
-      modelIds.length > 0
-        ? db
-            .select({
-              id: schema.modelsTable.id,
-              provider: schema.modelsTable.provider,
-              // The human-facing model identifier (e.g. "gpt-4"), distinct from
-              // the row's UUID `id`.
-              modelName: schema.modelsTable.modelId,
-            })
-            .from(schema.modelsTable)
-            .where(inArray(schema.modelsTable.id, modelIds))
-        : Promise.resolve([]),
       LlmProviderApiKeyModel.getChatgptSubscriptionKeyIds(apiKeyIds),
     ]);
 
     const keyProviderMap = new Map(keyRows.map((r) => [r.id, r.provider]));
-    const modelProviderMap = new Map(modelRows.map((r) => [r.id, r.provider]));
-    const modelNameMap = new Map(modelRows.map((r) => [r.id, r.modelName]));
 
     for (const agent of agents) {
       const { apiKeyId, modelId } = effectiveLlm(agent);

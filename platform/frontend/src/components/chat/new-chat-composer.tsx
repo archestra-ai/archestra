@@ -5,10 +5,18 @@ import ArchestraPromptInput from "@/app/chat/prompt-input";
 import { useDefaultAgentId, useInternalAgents } from "@/lib/agent.query";
 import { useMemberDefaultModel } from "@/lib/chat/chat.query";
 import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
+import {
+  agentRequiresPerUserConnect,
+  resolveEffectiveDefaultLlm,
+} from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
-import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import {
+  useAvailableLlmProviderApiKeys,
+  useLlmProviderApiKeys,
+} from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
+import { asSubscriptionProvider, useSubscriptions } from "@/lib/subscriptions";
 import { ViewTransition } from "@/lib/view-transition";
 
 /**
@@ -76,6 +84,47 @@ export function NewChatComposer({
     return model?.capabilities?.inputModalities ?? null;
   }, [modelId, chatModels]);
 
+  // The viewer's own subscription connections (available-keys endpoint — the
+  // same source the /chat composer uses). Connection state, NOT model
+  // availability, decides whether a pinned subscription is usable: an
+  // org-default subscription must not be silently swapped for an unrelated
+  // same-provider key the viewer happens to hold.
+  const { data: availableKeysForSubscriptions = [] } =
+    useAvailableLlmProviderApiKeys();
+  const chatSubscriptions = useSubscriptions(availableKeysForSubscriptions);
+
+  // Hold the agent's/org's pinned subscription model when the viewer hasn't
+  // connected their own account, mirroring the /chat page: keep it selected
+  // (no auto-swap) and surface the connect prompt instead of a silent switch.
+  const perUserConnect = useMemo(() => {
+    const agent = internalAgents.find((a) => a.id === agentId);
+    const subscriptionProvider = asSubscriptionProvider(
+      agent?.resolvedLlmProvider,
+    );
+    const subscriptionConnected = subscriptionProvider
+      ? (chatSubscriptions.find((e) => e.provider === subscriptionProvider)
+          ?.connected ?? false)
+      : true;
+    return {
+      needsConnect: agentRequiresPerUserConnect({
+        agent,
+        orgDefaultModelId: organization?.defaultModelId,
+        selectedModelId: modelId,
+        isModelAvailable: chatModels.some((m) => m.dbId === modelId),
+        subscriptionConnected,
+      }),
+      modelName: agent?.resolvedLlmModelName ?? undefined,
+      provider: agent?.resolvedLlmProvider ?? undefined,
+    };
+  }, [
+    internalAgents,
+    agentId,
+    organization?.defaultModelId,
+    modelId,
+    chatModels,
+    chatSubscriptions,
+  ]);
+
   if (!agentId) return null;
 
   return (
@@ -117,17 +166,23 @@ export function NewChatComposer({
           isModelsLoading={isModelsLoading}
           inputModalities={inputModalities}
           agentLlmApiKeyId={
-            (
-              internalAgents.find((a) => a.id === agentId) as
-                | Record<string, unknown>
-                | undefined
-            )?.llmApiKeyId as string | null
+            resolveEffectiveDefaultLlm({
+              agent: internalAgents.find((a) => a.id === agentId),
+              organization: organization ?? null,
+            }).apiKeyId
           }
           isPlaywrightSetupVisible={false}
           selectorAgentId={agentId}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
+          agentRequiresPerUserConnect={perUserConnect.needsConnect}
+          agentModelDisplayName={
+            perUserConnect.needsConnect ? perUserConnect.modelName : undefined
+          }
+          agentModelProvider={
+            perUserConnect.needsConnect ? perUserConnect.provider : undefined
+          }
         />
       </div>
     </ViewTransition>

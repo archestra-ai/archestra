@@ -274,6 +274,37 @@ describe("ModelSelector coverage matrix", () => {
     expect(onModelChange).not.toHaveBeenCalled();
   });
 
+  // The sign-in rows start a personal device flow, so only chat opts in. In the
+  // agent-config picker (no `showSubscriptions`) they must not appear, or an
+  // admin editing an agent would connect their own account from inside it.
+  describe("subscriptions group gating", () => {
+    it("renders the Subscriptions sign-in rows when showSubscriptions is set", () => {
+      setQuery({ modelsByProvider: { openai: [model()] } });
+      renderSelector({
+        selectedModel: "m1",
+        variant: "default",
+        showSubscriptions: true,
+      });
+
+      fireEvent.click(screen.getByTestId("dialog-toggle"));
+
+      expect(screen.getByText("Subscriptions")).toBeInTheDocument();
+      expect(screen.getByText("GitHub Copilot")).toBeInTheDocument();
+      // One sign-in badge per unconnected subscription (all three here).
+      expect(screen.getAllByText("Sign in")).toHaveLength(3);
+    });
+
+    it("hides the Subscriptions group without showSubscriptions", () => {
+      setQuery({ modelsByProvider: { openai: [model()] } });
+      renderSelector({ selectedModel: "m1", variant: "default" });
+
+      fireEvent.click(screen.getByTestId("dialog-toggle"));
+
+      expect(screen.queryByText("Subscriptions")).not.toBeInTheDocument();
+      expect(screen.queryByText("Sign in")).not.toBeInTheDocument();
+    });
+  });
+
   describe("current model outside the available list", () => {
     it("offers sign-in when the held model is backed by an unconnected subscription", () => {
       setQuery({ modelsByProvider: { openai: [model()] } });

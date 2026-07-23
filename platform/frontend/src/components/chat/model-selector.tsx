@@ -140,6 +140,14 @@ interface ModelSelectorProps {
     provider: SubscriptionProvider;
     apiKeyId: string;
   }) => void;
+  /**
+   * Lift the three subscriptions into their own "Subscriptions" group, each with
+   * an in-place sign-in when the viewer has no credential of their own. Opt-in:
+   * only chat offers sign-in, so the agent-config picker (which selects a model
+   * for an already-chosen key) leaves it off and never starts a device flow for
+   * the admin's personal account nested inside the agent dialog.
+   */
+  showSubscriptions?: boolean;
 }
 
 /** Map our provider names to logo provider names
@@ -169,6 +177,39 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   "microsoft-365-copilot": "microsoft-365-copilot",
   archestra: "archestra",
 };
+
+/**
+ * models.dev only ships a generic fallback for M365 Copilot, so its subscription
+ * rows render this local brand asset (the same one the key dropdown uses)
+ * instead of `ModelSelectorLogo`. Other providers keep their models.dev logo.
+ */
+const MICROSOFT_365_COPILOT_ICON = "/icons/microsoft-365-copilot.png";
+
+function SubscriptionProviderLogo({
+  provider,
+  className,
+}: {
+  provider: SupportedProvider;
+  className?: string;
+}) {
+  if (provider === "microsoft-365-copilot") {
+    return (
+      <img
+        src={MICROSOFT_365_COPILOT_ICON}
+        alt="Microsoft 365 Copilot logo"
+        width={16}
+        height={16}
+        className={cn("size-4 shrink-0 dark:invert", className)}
+      />
+    );
+  }
+  return (
+    <ModelSelectorLogo
+      provider={providerToLogoProvider[provider]}
+      className={className}
+    />
+  );
+}
 
 /**
  * The inline "clear selection" X inside the selector trigger. Deliberately not
@@ -604,6 +645,7 @@ export const ModelSelector = memo(function ModelSelector({
   fallbackModelName,
   fallbackModelProvider,
   onSubscriptionConnected,
+  showSubscriptions = false,
 }: ModelSelectorProps) {
   const { modelsByProvider, isLoading, isPlaceholderData } =
     useLlmModelsByProvider({
@@ -625,6 +667,9 @@ export const ModelSelector = memo(function ModelSelector({
    * so it counts only while the selected credential IS the ChatGPT subscription.
    */
   const subscriptionModelProviders = useMemo(() => {
+    // Off in agent-config pickers: without the Subscriptions group these
+    // providers fall back to plain provider groups rather than vanishing.
+    if (!showSubscriptions) return new Set<SupportedProvider>();
     const providers = new Set<SupportedProvider>([
       "github-copilot",
       "microsoft-365-copilot",
@@ -634,7 +679,7 @@ export const ModelSelector = memo(function ModelSelector({
       providers.add("openai");
     }
     return providers;
-  }, [subscriptions, apiKeyId]);
+  }, [subscriptions, apiKeyId, showSubscriptions]);
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
@@ -849,6 +894,7 @@ export const ModelSelector = memo(function ModelSelector({
               onClose={() => handleOpenChange(false)}
               subscriptions={subscriptions}
               subscriptionModelProviders={subscriptionModelProviders}
+              showSubscriptions={showSubscriptions}
               onSignInToSubscription={(provider) => {
                 // Sign-in happens in place; close the picker so the device-flow
                 // dialog isn't trapped under it.
@@ -859,7 +905,7 @@ export const ModelSelector = memo(function ModelSelector({
           </ModelSelectorContent>
         )}
       </ModelSelectorRoot>
-      {signInProvider && (
+      {showSubscriptions && signInProvider && (
         <UseSubscriptionDialog
           open
           onOpenChange={(next) => {
@@ -900,6 +946,7 @@ function ModelSelectorDialogBody({
   onClose,
   subscriptions,
   subscriptionModelProviders,
+  showSubscriptions,
   onSignInToSubscription,
 }: {
   modelsByProvider: Record<SupportedProvider, LlmModel[]>;
@@ -919,6 +966,8 @@ function ModelSelectorDialogBody({
   onClose: () => void;
   subscriptions: SubscriptionEntry[];
   subscriptionModelProviders: Set<SupportedProvider>;
+  /** Render the "Subscriptions" group with its sign-in rows (chat only). */
+  showSubscriptions: boolean;
   onSignInToSubscription: (provider: SubscriptionProvider) => void;
 }) {
   const [filters, setFilters] = useState<ModelFilters>(INITIAL_FILTERS);
@@ -985,7 +1034,9 @@ function ModelSelectorDialogBody({
   const apiKeyProviders = filteredProviders.filter(
     (provider) => !subscriptionModelProviders.has(provider),
   );
-  const notConnected = subscriptions.filter((entry) => !entry.connected);
+  const notConnected = showSubscriptions
+    ? subscriptions.filter((entry) => !entry.connected)
+    : [];
 
   const renderModelOption = (provider: SupportedProvider, model: LlmModel) => (
     <ModelOption
@@ -1045,9 +1096,9 @@ function ModelSelectorDialogBody({
                   onSignInToSubscription(currentModelSignInEntry.provider)
                 }
               >
-                {selectedModelLogo && (
-                  <ModelSelectorLogo provider={selectedModelLogo} />
-                )}
+                <SubscriptionProviderLogo
+                  provider={currentModelSignInEntry.provider}
+                />
                 <ModelSelectorName>
                   {selectedModelDisplayName}{" "}
                   <span className="text-xs text-muted-foreground">
@@ -1142,7 +1193,7 @@ function SubscriptionSignInOption({
       disabled={entry.signInUnavailable}
       onSelect={() => onSignIn(entry.provider)}
     >
-      <ModelSelectorLogo provider={providerToLogoProvider[entry.provider]} />
+      <SubscriptionProviderLogo provider={entry.provider} />
       <ModelSelectorName>
         {entry.title}{" "}
         <span className="text-xs text-muted-foreground">{entry.subtitle}</span>

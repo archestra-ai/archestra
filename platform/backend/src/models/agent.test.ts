@@ -292,6 +292,78 @@ describe("AgentModel", () => {
       expect(halfPinned?.llmProviderRequiresPerUserCredential).toBe(true);
       expect(halfPinned?.resolvedLlmModelName).toBe("gpt-5");
     });
+
+    test("resolves a per-user model-only pin to the pinned Copilot model", async ({
+      makeOrganization,
+    }) => {
+      // A per-user provider (GitHub Copilot) resolves its credential per user at
+      // send time, so a model-only pin (its key nulled by ON DELETE SET NULL, or
+      // never keyed) still wins by model alone — unlike a non-per-user model-only
+      // pin, which is skipped. With no org default the pinned Copilot model is
+      // exactly what the agent runs on, so the metadata must report it.
+      const org = await makeOrganization();
+      const copilotModel = await ModelModel.create({
+        externalId: "github-copilot/gpt-4",
+        provider: "github-copilot",
+        modelId: "gpt-4",
+        inputModalities: null,
+        outputModalities: null,
+      });
+      const agent = await AgentModel.create({
+        name: "Copilot Model-Only Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+        modelId: copilotModel.id,
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.resolvedLlmProvider).toBe("github-copilot");
+      expect(fetched?.llmProviderRequiresPerUserCredential).toBe(true);
+      expect(fetched?.resolvedLlmModelName).toBe("gpt-4");
+
+      // Same metadata on list responses, not just findById.
+      const listed = (await AgentModel.findAll()).find(
+        (a) => a.id === agent.id,
+      );
+      expect(listed?.resolvedLlmProvider).toBe("github-copilot");
+      expect(listed?.llmProviderRequiresPerUserCredential).toBe(true);
+      expect(listed?.resolvedLlmModelName).toBe("gpt-4");
+    });
+
+    test("resolves an org-default per-user model whose key was removed", async ({
+      makeOrganization,
+    }) => {
+      // The org default is set as a complete (model, key) pair, but its key can
+      // later be deleted — ON DELETE SET NULL nulls default_llm_api_key_id while
+      // default_model_id persists. For a per-user provider the model-only org
+      // default still runs per-user (same as the agent-level pin), so an agent
+      // inheriting it must report the Copilot model and the per-user flag.
+      const org = await makeOrganization();
+      const copilotModel = await ModelModel.create({
+        externalId: "github-copilot/gpt-4",
+        provider: "github-copilot",
+        modelId: "gpt-4",
+        inputModalities: null,
+        outputModalities: null,
+      });
+      await db
+        .update(schema.organizationsTable)
+        .set({ defaultModelId: copilotModel.id, defaultLlmApiKeyId: null })
+        .where(eq(schema.organizationsTable.id, org.id));
+
+      const agent = await AgentModel.create({
+        name: "Org Default Copilot Agent",
+        organizationId: org.id,
+        scope: "org",
+        teams: [],
+      });
+
+      const fetched = await AgentModel.findById(agent.id);
+      expect(fetched?.resolvedLlmProvider).toBe("github-copilot");
+      expect(fetched?.llmProviderRequiresPerUserCredential).toBe(true);
+      expect(fetched?.resolvedLlmModelName).toBe("gpt-4");
+    });
   });
 
   describe("sandboxAvailable", () => {

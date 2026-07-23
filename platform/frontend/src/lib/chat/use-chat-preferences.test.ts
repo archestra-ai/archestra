@@ -6,6 +6,7 @@ import {
   deriveModelSource,
   getSavedAgent,
   resolveAutoSelectedModel,
+  resolveEffectiveDefaultLlm,
   resolveInitialModel,
   resolveModelForAgent,
   saveAgent,
@@ -534,5 +535,68 @@ describe("deriveModelSource", () => {
         orgModelId: null,
       }),
     ).toBeNull();
+  });
+});
+
+describe("resolveEffectiveDefaultLlm", () => {
+  test("uses the agent's own pair when it pins BOTH a model and a key", () => {
+    expect(
+      resolveEffectiveDefaultLlm({
+        agent: { modelId: "uuid-agent", llmApiKeyId: "key-agent" },
+        organization: {
+          defaultModelId: "uuid-org",
+          defaultLlmApiKeyId: "key-org",
+        },
+      }),
+    ).toEqual({ modelId: "uuid-agent", apiKeyId: "key-agent" });
+  });
+
+  test("falls through to the org default when the agent half-pins a model only", () => {
+    expect(
+      resolveEffectiveDefaultLlm({
+        agent: { modelId: "uuid-agent", llmApiKeyId: null },
+        organization: {
+          defaultModelId: "uuid-org",
+          defaultLlmApiKeyId: "key-org",
+        },
+      }),
+    ).toEqual({ modelId: "uuid-org", apiKeyId: "key-org" });
+  });
+
+  test("falls through to the org default when the agent half-pins a key only", () => {
+    expect(
+      resolveEffectiveDefaultLlm({
+        agent: { modelId: null, llmApiKeyId: "key-agent" },
+        organization: {
+          defaultModelId: "uuid-org",
+          defaultLlmApiKeyId: "key-org",
+        },
+      }),
+    ).toEqual({ modelId: "uuid-org", apiKeyId: "key-org" });
+  });
+
+  test("org default key may be null when the org pins a model without a key", () => {
+    expect(
+      resolveEffectiveDefaultLlm({
+        agent: null,
+        organization: { defaultModelId: "uuid-org", defaultLlmApiKeyId: null },
+      }),
+    ).toEqual({ modelId: "uuid-org", apiKeyId: null });
+  });
+
+  test("nulls when the org pins no default model", () => {
+    expect(
+      resolveEffectiveDefaultLlm({
+        agent: { modelId: null, llmApiKeyId: null },
+        organization: { defaultModelId: null, defaultLlmApiKeyId: "key-org" },
+      }),
+    ).toEqual({ modelId: null, apiKeyId: null });
+  });
+
+  test("nulls when nothing is configured", () => {
+    expect(resolveEffectiveDefaultLlm({})).toEqual({
+      modelId: null,
+      apiKeyId: null,
+    });
   });
 });

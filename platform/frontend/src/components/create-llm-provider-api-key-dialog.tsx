@@ -12,10 +12,12 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { FormDialog } from "@/components/form-dialog";
 import {
+  isBaseUrlRequiredForProvider,
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
   PROVIDER_CONFIG,
+  type ProviderBaseUrls,
   serializeExtraHeaders,
 } from "@/components/llm-provider-api-key-form";
 import { Button } from "@/components/ui/button";
@@ -26,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
+import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { useLlmModels } from "@/lib/llm-models.query";
 import {
   useCreateLlmProviderApiKey,
@@ -74,6 +76,7 @@ export function CreateLlmProviderApiKeyDialog({
 }: CreateLlmProviderApiKeyDialogProps) {
   const createMutation = useCreateLlmProviderApiKey();
   const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
+  const { data: providerBaseUrls } = useProviderBaseUrls();
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicWifEnabled = useFeature("anthropicWifEnabled");
@@ -111,18 +114,23 @@ export function CreateLlmProviderApiKeyDialog({
     azureOpenAiEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
     anthropicWifEnabled: anthropicWifEnabled === true,
     byosEnabled: Boolean(byosEnabled),
+    providerBaseUrls,
     values: formValues,
   });
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) setCreatedKey(null);
+    if (!nextOpen) {
+      // Any close path (Done, the X button, Escape, outside click) while the
+      // post-create confirmation is showing means the key was already
+      // created — report success exactly once, regardless of how the dialog
+      // was dismissed.
+      if (createdKey) onSuccess?.();
+      setCreatedKey(null);
+    }
     onOpenChange(nextOpen);
   };
 
-  const handleDone = () => {
-    handleOpenChange(false);
-    onSuccess?.();
-  };
+  const handleDone = () => handleOpenChange(false);
 
   // Close this dialog, then let the parent open the Use Subscription dialog.
   const handleSwitchToSubscription = onUseSubscription
@@ -330,25 +338,39 @@ function getIsCreateFormValid(params: {
   azureOpenAiEntraIdEnabled: boolean;
   anthropicWifEnabled: boolean;
   byosEnabled: boolean;
+  providerBaseUrls: ProviderBaseUrls;
   values: LlmProviderApiKeyFormValues;
 }) {
   const {
     azureOpenAiEntraIdEnabled,
     anthropicWifEnabled,
     byosEnabled,
+    providerBaseUrls,
     values,
   } = params;
 
+  // Mirrors the form field's own validator: a required Base URL can be folded
+  // into the collapsed Advanced settings accordion, so the button must stay
+  // disabled until it is filled rather than let the submit silently block on
+  // a field the user can't see.
+  const baseUrlOk =
+    !isBaseUrlRequiredForProvider({
+      provider: values.provider,
+      providerBaseUrls,
+    }) || Boolean(values.baseUrl);
+
   if (values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4") {
     return Boolean(
-      values.awsAccessKeyId &&
+      baseUrlOk &&
+        values.awsAccessKeyId &&
         values.awsSecretAccessKey &&
         (values.scope !== "team" || values.teamId),
     );
   }
 
   return Boolean(
-    values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
+    baseUrlOk &&
+      values.apiKey !== LLM_PROVIDER_API_KEY_PLACEHOLDER &&
       (values.scope !== "team" || values.teamId) &&
       (byosEnabled
         ? values.vaultSecretPath && values.vaultSecretKey

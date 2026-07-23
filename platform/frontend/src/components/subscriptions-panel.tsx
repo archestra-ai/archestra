@@ -1,7 +1,7 @@
 "use client";
 
 import { getSubscriptionPickerOptionTestId } from "@archestra/shared";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Pencil } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
@@ -25,10 +25,13 @@ import {
 export function SubscriptionsPanel({
   keys,
   onDisconnect,
+  onEdit,
 }: {
   keys: LlmProviderApiKey[];
   /** Opens the existing delete confirmation for the backing key. */
   onDisconnect: (key: LlmProviderApiKey) => void;
+  /** Opens the rename-only "Edit Subscription" dialog for the backing key. */
+  onEdit?: (key: LlmProviderApiKey) => void;
 }) {
   const subscriptions = useSubscriptions(keys);
   const [signInProvider, setSignInProvider] =
@@ -49,6 +52,16 @@ export function SubscriptionsPanel({
             key={entry.provider}
             entry={entry}
             onSignIn={() => setSignInProvider(entry.provider)}
+            onEdit={
+              onEdit
+                ? () => {
+                    const backingKey = keys.find(
+                      (key) => key.id === entry.apiKeyId,
+                    );
+                    if (backingKey) onEdit(backingKey);
+                  }
+                : undefined
+            }
             onDisconnect={() => {
               const backingKey = keys.find((key) => key.id === entry.apiKeyId);
               if (backingKey) onDisconnect(backingKey);
@@ -74,10 +87,14 @@ export function SubscriptionsPanel({
 function SubscriptionCard({
   entry,
   onSignIn,
+  onEdit,
   onDisconnect,
 }: {
   entry: SubscriptionEntry;
   onSignIn: () => void;
+  /** Renaming is the only editable field — the credential itself is re-minted
+      by signing in again, never edited in place. Omitted hides the affordance. */
+  onEdit?: () => void;
   onDisconnect: () => void;
 }) {
   const config = PROVIDER_CONFIG[entry.provider];
@@ -107,9 +124,21 @@ function SubscriptionCard({
               <CheckCircle2 className="h-3.5 w-3.5" />
               Connected
             </span>
-            <Button variant="ghost" size="sm" onClick={onDisconnect}>
-              Disconnect
-            </Button>
+            <div className="flex items-center gap-1">
+              {onEdit && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Rename ${entry.title}`}
+                  onClick={onEdit}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={onDisconnect}>
+                Disconnect
+              </Button>
+            </div>
           </div>
         ) : entry.signInUnavailable ? (
           <p className="text-xs text-muted-foreground">

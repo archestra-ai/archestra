@@ -157,6 +157,7 @@ import {
   agentRequiresPerUserConnect,
   agentToolsUnavailableForModel,
   deriveModelSource,
+  resolveEffectiveDefaultLlm,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useConfig } from "@/lib/config/config.query";
@@ -796,6 +797,35 @@ export function ChatPageContent({
     [chatSubscriptions],
   );
 
+  // The key backing the agent's effective default — the agent's own when it
+  // pins a complete (model, key) pair, else the organization default pair's
+  // key. Passed to the key selector so a pinned subscription key is listed
+  // and shown as the selection, instead of the selector substituting some
+  // other visible key of the same provider (e.g. a plain org key).
+  const effectiveDefaultLlmApiKeyId = useCallback(
+    (agent?: { modelId?: string | null; llmApiKeyId?: string | null } | null) =>
+      resolveEffectiveDefaultLlm({ agent, organization }).apiKeyId,
+    [organization],
+  );
+
+  // The conversation's `agent` projection carries no modelId, so resolve the
+  // full agent row (which does) from internalAgents; fall back to the raw key
+  // when the agent isn't in that list (built-in or non-"agent" type) so a
+  // pinned key the viewer can't otherwise see is not lost.
+  const conversationAgentLlmApiKeyId = useMemo(() => {
+    const convAgent = internalAgents.find(
+      (a) => a.id === conversation?.agentId,
+    );
+    return convAgent
+      ? effectiveDefaultLlmApiKeyId(convAgent)
+      : (conversation?.agent?.llmApiKeyId ?? null);
+  }, [
+    internalAgents,
+    conversation?.agentId,
+    conversation?.agent?.llmApiKeyId,
+    effectiveDefaultLlmApiKeyId,
+  ]);
+
   const initialPerUserConnect = useMemo(() => {
     const agent = internalAgents.find((a) => a.id === initialAgentId);
     return {
@@ -935,6 +965,25 @@ export function ChatPageContent({
   const updateConversationMutation = useUpdateConversation();
   const updateConversationMutateRef = useRef(updateConversationMutation.mutate);
   updateConversationMutateRef.current = updateConversationMutation.mutate;
+
+  // Land the chat on a just-connected subscription key — shared by the sign-in
+  // dialog (Enter path) and the CTA banners above the composers. The pinned
+  // model stays; without this the conversation keeps whatever key it was
+  // created with (e.g. a stale same-provider org key) and the next send still
+  // uses the wrong credential.
+  const applyChatApiKeyId = useCallback(
+    (apiKeyId: string) => {
+      if (conversationId) {
+        updateConversationMutateRef.current({
+          id: conversationId,
+          chatApiKeyId: apiKeyId,
+        });
+      } else {
+        setInitialApiKeyId(apiKeyId);
+      }
+    },
+    [conversationId, setInitialApiKeyId],
+  );
 
   // Handle model change — use refs for chatModels and conversation to keep
   // callback reference stable. A new callback reference would re-trigger
@@ -2915,6 +2964,7 @@ export function ChatPageContent({
                             {blockedSubscriptionEntry && (
                               <SubscriptionSignInCta
                                 entry={blockedSubscriptionEntry}
+                                onConnected={applyChatApiKeyId}
                               />
                             )}
                             <ArchestraPromptInput
@@ -2942,9 +2992,7 @@ export function ChatPageContent({
                               contextWindow={contextWindow}
                               lastCompaction={contextCompaction?.lastCompaction}
                               inputModalities={selectedModelInputModalities}
-                              agentLlmApiKeyId={
-                                conversation?.agent?.llmApiKeyId ?? null
-                              }
+                              agentLlmApiKeyId={conversationAgentLlmApiKeyId}
                               submitDisabled={isPlaywrightSetupVisible}
                               isContextCompacting={isContextCompacting}
                               onCompactConversation={handleCompactConversation}
@@ -3082,6 +3130,7 @@ export function ChatPageContent({
                             {blockedSubscriptionEntry && (
                               <SubscriptionSignInCta
                                 entry={blockedSubscriptionEntry}
+                                onConnected={applyChatApiKeyId}
                               />
                             )}
                             <ArchestraPromptInput
@@ -3105,13 +3154,11 @@ export function ChatPageContent({
                               }
                               isModelsLoading={isModelsLoading}
                               inputModalities={selectedModelInputModalities}
-                              agentLlmApiKeyId={
-                                (
-                                  internalAgents.find(
-                                    (a) => a.id === initialAgentId,
-                                  ) as Record<string, unknown> | undefined
-                                )?.llmApiKeyId as string | null
-                              }
+                              agentLlmApiKeyId={effectiveDefaultLlmApiKeyId(
+                                internalAgents.find(
+                                  (a) => a.id === initialAgentId,
+                                ),
+                              )}
                               submitDisabled={isPlaywrightSetupVisible}
                               isPlaywrightSetupVisible={
                                 isPlaywrightSetupVisible
@@ -3187,7 +3234,10 @@ export function ChatPageContent({
             providers={[blockedSubscriptionEntry.provider]}
             title="Sign in to your subscription"
             description="This model runs on a subscription you haven't connected yet. Sign in to send your message."
-            onConnected={() => setSubscriptionSignInOpen(false)}
+            onConnected={(apiKeyId) => {
+              setSubscriptionSignInOpen(false);
+              applyChatApiKeyId(apiKeyId);
+            }}
           />
         )}
 

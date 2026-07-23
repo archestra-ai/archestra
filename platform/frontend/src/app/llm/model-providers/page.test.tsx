@@ -5,6 +5,11 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockUseLlmProviderApiKeys = vi.fn();
+// Captures the columns DataTable is rendered with, so the "actions" cell can
+// be invoked directly against a fabricated row without rendering the other
+// columns (Provider/Storage/etc. lean on real provider config not worth
+// stubbing here).
+const mockDataTable = vi.fn();
 
 vi.mock("next/image", () => ({
   default: ({
@@ -109,6 +114,7 @@ vi.mock("@/components/form-dialog", () => ({
 vi.mock("@/components/llm-provider-api-key-form", () => ({
   LLM_PROVIDER_API_KEY_PLACEHOLDER: "__placeholder__",
   LlmProviderApiKeyForm: () => null,
+  isBaseUrlRequiredForProvider: () => false,
   PROVIDER_CONFIG: {
     anthropic: { icon: "/anthropic.svg", name: "Anthropic" },
     gemini: { icon: "/gemini.svg", name: "Gemini" },
@@ -133,13 +139,39 @@ vi.mock("@/components/search-input", () => ({
 }));
 
 vi.mock("@/components/table-row-actions", () => ({
-  TableRowActions: () => null,
+  TableRowActions: ({
+    actions,
+  }: {
+    actions: Array<{
+      label: string;
+      disabled?: boolean;
+      disabledTooltip?: string;
+      testId?: string;
+      onClick?: () => void;
+    }>;
+  }) => (
+    <div>
+      {actions.map((action) => (
+        <button
+          key={action.label}
+          type="button"
+          data-testid={action.testId}
+          disabled={action.disabled}
+          title={action.disabled ? action.disabledTooltip : action.label}
+          onClick={action.onClick}
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/ui/data-table", () => ({
-  DataTable: ({ isLoading }: { isLoading: boolean }) => (
-    <div data-loading={isLoading} />
-  ),
+  DataTable: (props: { isLoading: boolean }) => {
+    mockDataTable(props);
+    return <div data-loading={props.isLoading} />;
+  },
 }));
 
 vi.mock("@/components/ui/dialog", () => ({
@@ -186,7 +218,7 @@ vi.mock("@/components/ui/select", () => ({
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
+import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { useOrganization } from "@/lib/organization.query";
 import ApiKeysPage from "./page";
 
@@ -206,6 +238,9 @@ describe("ApiKeysPage", () => {
     vi.mocked(useFeature).mockReturnValue(
       false as unknown as ReturnType<typeof useFeature>,
     );
+    vi.mocked(useProviderBaseUrls).mockReturnValue({
+      data: null,
+    } as unknown as ReturnType<typeof useProviderBaseUrls>);
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "user-1" } },
     } as unknown as ReturnType<typeof useSession>);
@@ -278,5 +313,76 @@ describe("ApiKeysPage", () => {
 
     expect(screen.getByTestId(E2eTestId.AddChatApiKeyButton)).toBeEnabled();
     expect(screen.getByTestId(E2eTestId.UseSubscriptionButton)).toBeEnabled();
+  });
+
+  it("disables edit/delete for another user's personal key even for an admin", () => {
+    // The backend's authorizeApiKeyAccess 403s any non-owner touching a
+    // personal key, admin or not — the row-action gate has to match that,
+    // not the viewer's role permissions.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    const otherUsersPersonalKey = {
+      id: "k1",
+      name: "Copilot",
+      provider: "github-copilot",
+      scope: "personal",
+      userId: "user-2",
+      userName: "Bob",
+      isSystem: false,
+      secretStorageType: "database",
+    };
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [otherUsersPersonalKey],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    const actionsColumn = mockDataTable.mock.calls[0][0].columns.find(
+      (column: { id?: string }) => column.id === "actions",
+    );
+    render(actionsColumn.cell({ row: { original: otherUsersPersonalKey } }));
+
+    const editButton = screen.getByTestId(
+      `${E2eTestId.EditChatApiKeyButton}-Copilot`,
+    );
+    const deleteButton = screen.getByTestId(
+      `${E2eTestId.DeleteChatApiKeyButton}-Copilot`,
+    );
+    expect(editButton).toBeDisabled();
+    expect(deleteButton).toBeDisabled();
+    expect(editButton).toHaveAttribute(
+      "title",
+      "Personal credentials can only be changed by their owner",
+    );
+    expect(deleteButton).toHaveAttribute(
+      "title",
+      "Personal credentials can only be changed by their owner",
+    );
+  });
+
+  it("keeps the table visible when the filtered query resolves before the unfiltered one", () => {
+    // Regression: showEmptyState used to key off the FILTERED query's
+    // isPending against the UNFILTERED query's data, so a filtered query
+    // that resolves first could flash the empty-state chooser over a
+    // populated but still-loading inventory.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    mockUseLlmProviderApiKeys.mockImplementation(
+      (args: { search?: string }) => {
+        const isFilteredQuery = "search" in args;
+        return isFilteredQuery
+          ? { data: [], isPending: false }
+          : { data: [], isPending: true };
+      },
+    );
+
+    render(<ApiKeysPage />);
+
+    expect(screen.getByTestId(E2eTestId.ChatApiKeysTable)).toBeInTheDocument();
   });
 });

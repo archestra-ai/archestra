@@ -242,6 +242,35 @@ export function resolveModelForAgent(params: {
   return resolveInitialModel({ ...params.context, agent: params.agent });
 }
 
+// ===== Effective default LLM =====
+
+/**
+ * The (model, key) pair the agent's effective default runs on: the agent's own
+ * pair only when it pins BOTH a model and a key, else the organization default
+ * pair when the org pins a default model, else nothing. Mirrors the
+ * complete-level rule of `resolveModelSelection` (a level needs both ids to
+ * win), so a half-pinned agent — model or key alone — falls through to the org
+ * default instead of contributing a dead half-pin. The resolved key backs the
+ * chat key selector so a pinned subscription key stays selected rather than the
+ * selector substituting another visible key of the same provider.
+ */
+export function resolveEffectiveDefaultLlm(params: {
+  agent?: AgentInfo | null;
+  organization?: OrganizationInfo | null;
+}): { modelId: string | null; apiKeyId: string | null } {
+  const { agent, organization } = params;
+  if (agent?.modelId != null && agent?.llmApiKeyId != null) {
+    return { modelId: agent.modelId, apiKeyId: agent.llmApiKeyId };
+  }
+  if (organization?.defaultModelId != null) {
+    return {
+      modelId: organization.defaultModelId,
+      apiKeyId: organization.defaultLlmApiKeyId ?? null,
+    };
+  }
+  return { modelId: null, apiKeyId: null };
+}
+
 // ===== Per-user-credential agent gating =====
 
 /**

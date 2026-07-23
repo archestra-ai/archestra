@@ -38,11 +38,7 @@ import {
 } from "@/components/ui/popover";
 import { UseSubscriptionDialog } from "@/components/use-subscription-dialog";
 import type { LlmProviderApiKey } from "@/lib/llm-provider-api-keys.query";
-import {
-  isSubscriptionKey,
-  type SubscriptionEntry,
-  useSubscriptions,
-} from "@/lib/subscriptions";
+import { type SubscriptionEntry, useSubscriptions } from "@/lib/subscriptions";
 import { cn } from "@/lib/utils";
 
 type DropdownLlmProviderApiKey = Pick<
@@ -121,14 +117,26 @@ export function LlmProviderApiKeyDropdown({
   const [signInProvider, setSignInProvider] = useState<
     SubscriptionEntry["provider"] | null
   >(null);
-  // A subscription key is rendered by the Subscriptions group, so drop it from
-  // the provider groups below — the same credential must not appear twice.
+  // A key is dropped from the provider groups only when a Subscriptions entry
+  // actually represents it, so the same credential never appears twice. A
+  // subscription-shaped key that no entry backs — an org/team-scoped
+  // ChatGPT-subscription key, or a second personal one — stays listed in its
+  // provider group rather than vanishing with nowhere to select it.
+  const subscriptionKeyIds = useMemo(
+    () =>
+      new Set(
+        subscriptions
+          .map((entry) => entry.apiKeyId)
+          .filter((id): id is string => id != null),
+      ),
+    [subscriptions],
+  );
   const apiKeyOnly = useMemo(
     () =>
       showSubscriptions
-        ? availableKeys.filter((key) => !isSubscriptionKey(key))
+        ? availableKeys.filter((key) => !subscriptionKeyIds.has(key.id))
         : availableKeys,
-    [availableKeys, showSubscriptions],
+    [availableKeys, showSubscriptions, subscriptionKeyIds],
   );
   const keysByProvider = useMemo(
     () => groupKeysByProvider(apiKeyOnly),
@@ -291,15 +299,7 @@ export function LlmProviderApiKeyDropdown({
                   ))}
                 </CommandGroup>
               )}
-              {showSubscriptions && availableProviders.length > 0 && (
-                <div className="px-3 pt-2 pb-1 text-xs font-medium text-muted-foreground">
-                  <GroupHeadingWithDescription
-                    title="API keys"
-                    description="A stored key — everyone it's shared with uses the same credential"
-                  />
-                </div>
-              )}
-              {availableProviders.map((provider) => (
+              {availableProviders.map((provider, index) => (
                 <CommandGroup
                   key={provider}
                   data-testid={
@@ -307,7 +307,23 @@ export function LlmProviderApiKeyDropdown({
                       ? getChatApiKeySelectorProviderGroupTestId(provider)
                       : undefined
                   }
-                  heading={<ProviderGroupHeading provider={provider} />}
+                  // The "API keys" section label rides in the first provider
+                  // group's heading rather than a raw div, so cmdk's search
+                  // filtering hides it with the group instead of leaving it
+                  // floating over no results.
+                  heading={
+                    showSubscriptions && index === 0 ? (
+                      <span className="flex flex-col gap-2">
+                        <GroupHeadingWithDescription
+                          title="API keys"
+                          description="A stored key — everyone it's shared with uses the same credential"
+                        />
+                        <ProviderGroupHeading provider={provider} />
+                      </span>
+                    ) : (
+                      <ProviderGroupHeading provider={provider} />
+                    )
+                  }
                 >
                   {keysByProvider[provider]?.map((key) => (
                     <CommandItem

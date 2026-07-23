@@ -197,6 +197,7 @@ const PromptInputContent = ({
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
+  agentModelProvider,
   sandboxAvailable,
   prefillText,
   onPrefillApplied,
@@ -881,6 +882,7 @@ const PromptInputContent = ({
             onResetModelOverride={onResetModelOverride}
             agentRequiresPerUserConnect={agentRequiresPerUserConnect}
             agentModelDisplayName={agentModelDisplayName}
+            agentModelProvider={agentModelProvider}
             textareaRef={textareaRef}
             contextWindow={contextWindow}
             lastCompaction={lastCompaction}
@@ -965,6 +967,7 @@ const ArchestraPromptInput = ({
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
+  agentModelProvider,
   prefillText,
   onPrefillApplied,
 }: ArchestraPromptInputProps) => {
@@ -1059,6 +1062,7 @@ const ArchestraPromptInput = ({
           onResetModelOverride={onResetModelOverride}
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
+          agentModelProvider={agentModelProvider}
           sandboxAvailable={sandboxAvailable}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}

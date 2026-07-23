@@ -323,6 +323,30 @@ describe("LlmProviderApiKeyForm", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("auto-expands Advanced settings once a submit attempt leaves the required Base URL empty", async () => {
+    // BUG 1 (part b): onboarding folds Base URL into a collapsed accordion —
+    // a submit attempt that fails on it must surface the error, not leave it
+    // invisible behind "Advanced settings".
+    renderForm({
+      variant: "onboarding",
+      defaults: { provider: "archestra" },
+    });
+
+    expect(
+      screen.queryByText("Base URL is required for this provider"),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      await form.handleSubmit(() => {})();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Base URL is required for this provider"),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("keeps the credential when the provider is unchanged", async () => {
     renderForm();
 

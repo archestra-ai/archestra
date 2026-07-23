@@ -28,6 +28,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -342,6 +343,30 @@ const PROVIDER_CONFIG: Record<
 
 export { PROVIDER_CONFIG };
 
+export type ProviderBaseUrls = ReturnType<typeof useProviderBaseUrls>["data"];
+
+/**
+ * Whether the Base URL field is required for `provider`: PROVIDER_CONFIG opts a
+ * provider in, but a server-configured entry in `providerBaseUrls` (from
+ * `useProviderBaseUrls`) satisfies the requirement, so the field becomes
+ * optional. Exported so the create/edit submit-button validity checks mirror
+ * exactly what the field's own validator (below) enforces — divergence here is
+ * how a required Base URL folded into the collapsed Advanced settings
+ * accordion left "Test & Create"/"Save" enabled while the hidden field itself
+ * silently blocked the submit.
+ */
+export function isBaseUrlRequiredForProvider({
+  provider,
+  providerBaseUrls,
+}: {
+  provider: CreateLlmProviderApiKeyBody["provider"];
+  providerBaseUrls: ProviderBaseUrls;
+}): boolean {
+  return Boolean(
+    PROVIDER_CONFIG[provider].baseUrlRequired && !providerBaseUrls?.[provider],
+  );
+}
+
 export const LLM_PROVIDER_API_KEY_PLACEHOLDER = "••••••••••••••••";
 
 interface LlmProviderApiKeyFormProps {
@@ -451,8 +476,10 @@ export function LlmProviderApiKeyForm({
   const defaultKeyName = isOpenaiChatgptSub
     ? CHATGPT_SUBSCRIPTION_LABEL
     : providerConfig.name;
-  const isBaseUrlRequired =
-    providerConfig.baseUrlRequired && !providerBaseUrls?.[provider];
+  const isBaseUrlRequired = isBaseUrlRequiredForProvider({
+    provider,
+    providerBaseUrls,
+  });
 
   const allowedProviderSet = useMemo(
     () =>
@@ -690,6 +717,24 @@ export function LlmProviderApiKeyForm({
     // hide the API key field after switching providers.
     form.setValue("openaiAuthMethod", "api-key");
   }, [form, isEditMode, provider]);
+
+  // Onboarding folds Base URL (and its own requiredness validation, above)
+  // into a collapsed Advanced settings accordion. Auto-expand it once a
+  // submit attempt leaves an error on a field inside it — otherwise a
+  // required-but-hidden Base URL blocks the submit with no visible sign why.
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+  const submitCount = form.formState.submitCount;
+  const baseUrlError = form.formState.errors.baseUrl;
+  const inferenceBaseUrlError = form.formState.errors.inferenceBaseUrl;
+  useEffect(() => {
+    if (
+      isOnboarding &&
+      submitCount > 0 &&
+      (baseUrlError || inferenceBaseUrlError)
+    ) {
+      setAdvancedSettingsOpen(true);
+    }
+  }, [isOnboarding, submitCount, baseUrlError, inferenceBaseUrlError]);
 
   const vaultSecretSelector =
     scope === "team" ? (
@@ -1162,7 +1207,11 @@ export function LlmProviderApiKeyForm({
           </div>
         )}
 
-        <AdvancedFieldsWrapper collapsed={isOnboarding}>
+        <AdvancedFieldsWrapper
+          collapsed={isOnboarding}
+          open={advancedSettingsOpen}
+          onOpenChange={setAdvancedSettingsOpen}
+        >
           {!hideScopeAndPrimary && (
             <>
               <VisibilitySelector
@@ -1410,19 +1459,31 @@ export function LlmProviderApiKeyForm({
  * Default flows render them inline; the onboarding create flow folds them into a
  * collapsed "Advanced settings" accordion so the first-run view is provider + key
  * only. A fragment (not a wrapping element) preserves the parent's `space-y-4`.
+ * `open`/`onOpenChange` control the accordion so the caller can force it open
+ * (e.g. on a hidden field's submit error) while still letting the user toggle
+ * it freely afterward.
  */
 function AdvancedFieldsWrapper({
   collapsed,
+  open,
+  onOpenChange,
   children,
 }: {
   collapsed: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   children: ReactNode;
 }) {
   if (!collapsed) {
     return <>{children}</>;
   }
   return (
-    <Accordion type="single" collapsible>
+    <Accordion
+      type="single"
+      collapsible
+      value={open ? "advanced" : ""}
+      onValueChange={(value) => onOpenChange(value === "advanced")}
+    >
       <AccordionItem value="advanced" className="border-none">
         <AccordionTrigger
           data-testid={E2eTestId.AddApiKeyAdvancedToggle}

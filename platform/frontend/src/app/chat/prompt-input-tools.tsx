@@ -317,6 +317,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                         suppressAutoSelect={agentRequiresPerUserConnect}
                         fallbackModelName={agentModelDisplayName}
                         fallbackModelProvider={agentModelProvider}
+                        showSubscriptions
+                        onSubscriptionConnected={({ provider, apiKeyId }) =>
+                          onProviderChange?.(provider, apiKeyId)
+                        }
                       />
                     </div>
                   </>
@@ -471,6 +475,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 suppressAutoSelect={agentRequiresPerUserConnect}
                 fallbackModelName={agentModelDisplayName}
                 fallbackModelProvider={agentModelProvider}
+                showSubscriptions
                 onSubscriptionConnected={({ provider, apiKeyId }) =>
                   onProviderChange?.(provider, apiKeyId)
                 }

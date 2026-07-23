@@ -3,7 +3,7 @@ title: Adding LLM Providers
 category: Development
 order: 2
 description: Developer guide for implementing new LLM provider support in Archestra Platform
-lastUpdated: 2026-04-29
+lastUpdated: 2026-07-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -297,6 +297,7 @@ Existing provider implementations for reference:
 - Cohere: `backend/src/routes/proxy/routes/cohere.ts`, `backend/src/routes/proxy/adapters/cohere.ts`
 - Gemini: `backend/src/routes/proxy/routes/gemini.ts`, `backend/src/routes/proxy/adapters/gemini.ts`
 - Bedrock: `backend/src/routes/proxy/routes/bedrock.ts`, `backend/src/routes/proxy/adapters/bedrock.ts` (uses AWS Signature V4 auth and Converse API)
+- Ollama (Native): `backend/src/routes/proxy/routes/ollama-native.ts`, `backend/src/routes/proxy/adapters/ollama-native.ts`
 
 **OpenAI-compatible implementations** (reuse OpenAI types/adapters with minor modifications):
 

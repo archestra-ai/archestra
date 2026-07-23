@@ -135,6 +135,7 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   openrouter: "openrouter",
   vllm: "vllm",
   ollama: "ollama-cloud", // models.dev uses ollama-cloud for the Ollama provider
+  "ollama-native": "ollama-cloud",
   zhipuai: "zhipuai",
   deepseek: "deepseek",
   minimax: "minimax",

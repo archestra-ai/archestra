@@ -1,4 +1,5 @@
 import {
+  BUILT_IN_AGENT_IDS,
   ChatErrorCode,
   CLAUDE_CLIENT_FILTER,
   CLAUDE_CLIENT_ID,
@@ -1339,6 +1340,107 @@ describe("InteractionModel", () => {
       expect(Number(session?.totalCost)).toBeCloseTo(7, 5);
       expect(Number(session?.totalBilledCost)).toBeCloseTo(2, 5);
       expect(Number(session?.totalSubscriptionCost)).toBeCloseTo(5, 5);
+    });
+  });
+
+  describe("getSessions Archestra Chat session identity (T-894)", () => {
+    // A new Archestra Chat fires two LLM calls that share one session_id (the
+    // conversation id): the user's turn under their agent (source "chat") and
+    // the auto title-generation call under the built-in title subagent
+    // (source "chat:title_generation"). The sessions listing must treat this as
+    // ONE session, not two, and attribute it to the user's agent.
+    async function seedChatPlusTitleGen(sessionId: string) {
+      const chatAgent = await AgentModel.create({
+        name: "My Assistant",
+        teams: [],
+        scope: "org",
+      });
+      const titleAgent = await AgentModel.create({
+        name: "Chat Title Generation Subagent",
+        teams: [],
+        scope: "org",
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION },
+      });
+      const base = {
+        sessionId,
+        sessionSource: "header",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Reply with just hello" }],
+        },
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions" as const,
+      };
+      await InteractionModel.create({
+        ...base,
+        profileId: chatAgent.id,
+        source: "chat",
+      });
+      await InteractionModel.create({
+        ...base,
+        profileId: titleAgent.id,
+        source: "chat:title_generation",
+      });
+      return { chatAgent, titleAgent };
+    }
+
+    test("collapses the chat and its title-generation subagent into a single session attributed to the primary agent", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const sessionId = "t894-session-collapse";
+      const { chatAgent } = await seedChatPlusTitleGen(sessionId);
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId },
+      );
+
+      // One chat => one session (previously it split into two because the
+      // GROUP BY keyed on profile_id/agent name).
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.pagination.total).toBe(1);
+      // Both interactions are counted within that one session.
+      expect(sessions.data[0].requestCount).toBe(2);
+      // Attributed to the user's (non-built-in) agent — id AND name from the
+      // same agent, never the built-in title subagent.
+      expect(sessions.data[0].profileId).toBe(chatAgent.id);
+      expect(sessions.data[0].profileName).toBe("My Assistant");
+    });
+
+    test("badges the auxiliary chat call as a subagent and the user turn as main in the session detail list", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const sessionId = "t894-session-badges";
+      await seedChatPlusTitleGen(sessionId);
+
+      const result = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId },
+      );
+
+      const bySource = new Map(
+        result.data.map((i) => [
+          i.source,
+          i as unknown as { source: string | null; requestType: string },
+        ]),
+      );
+      expect(bySource.get("chat")?.requestType).toBe("main");
+      expect(bySource.get("chat:title_generation")?.requestType).toBe(
+        "subagent",
+      );
     });
   });
 

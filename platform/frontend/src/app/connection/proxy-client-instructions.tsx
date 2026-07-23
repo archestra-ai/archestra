@@ -2,6 +2,7 @@
 
 import {
   EXTERNAL_AGENT_ID_HEADER,
+  isModelRouterSupportedProvider,
   isSupportedProvider,
   providerDisplayNames,
   type SupportedProvider,
@@ -71,6 +72,7 @@ const PROVIDER_ICONS: Record<
   cerebras: { bg: "#ff4d1c", fg: "#fff", glyph: "◆" },
   openrouter: { bg: "#1e1b4b", fg: "#fff", glyph: "↯" },
   ollama: { bg: "#fff1ea", fg: "#1e1b4b", glyph: "◎" },
+  "ollama-native": { bg: "#fff1ea", fg: "#1e1b4b", glyph: "◎" },
   vllm: { bg: "#fafaff", fg: "#1e1b4b", glyph: "◇" },
   cohere: { bg: "#ff7759", fg: "#fff", glyph: "c" },
   mistral: { bg: "#ff7000", fg: "#fff", glyph: "M" },
@@ -96,6 +98,7 @@ const PROVIDER_ORIGINAL_URLS: Record<SupportedProvider, string> = {
   cerebras: "https://api.cerebras.ai/v1/",
   openrouter: "https://openrouter.ai/api/v1/",
   ollama: "http://localhost:11434/v1/",
+  "ollama-native": "http://localhost:11434/",
   vllm: "http://<host>:8000/v1/",
   cohere: "https://api.cohere.com/v2/",
   mistral: "https://api.mistral.ai/v1/",
@@ -511,7 +514,12 @@ function ModelRouterInstructions() {
   const { data: availableKeys } = useAvailableLlmProviderApiKeys();
   const providersWithKeys = useMemo(() => {
     const configured = new Set((availableKeys ?? []).map((k) => k.provider));
-    return ALL_PROVIDERS.filter((p) => configured.has(p));
+    // Not every provider is reachable through the router — `ollama-native`
+    // speaks Ollama's own `/api/chat` wire, which the router cannot translate.
+    // A virtual key mapped to such a provider could never serve a routed model.
+    return ALL_PROVIDERS.filter(
+      (p) => configured.has(p) && isModelRouterSupportedProvider(p),
+    );
   }, [availableKeys]);
   const [pickedProvider, setPickedProvider] =
     useState<SupportedProvider | null>(null);

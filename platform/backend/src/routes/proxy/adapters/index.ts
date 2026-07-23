@@ -16,6 +16,7 @@ export { microsoft365CopilotAdapterFactory } from "./microsoft-365-copilot";
 export { minimaxAdapterFactory } from "./minimax";
 export { mistralAdapterFactory } from "./mistral";
 export { ollamaAdapterFactory } from "./ollama";
+export { ollamaNativeAdapterFactory } from "./ollama-native";
 export {
   makeOpenAiCompatibleEmbeddingsAdapterFactory,
   openAiEmbeddingsAdapterFactory,

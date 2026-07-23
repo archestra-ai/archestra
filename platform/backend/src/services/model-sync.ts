@@ -380,7 +380,7 @@ function inferEmbeddingDimensions(
   // authoritative path above wins whenever capabilities are reported. Match the
   // base name so an optional `:tag` suffix is ignored, and gate to Ollama so a
   // same-named model on another provider isn't mis-tagged.
-  if (provider === "ollama") {
+  if (provider === "ollama" || provider === "ollama-native") {
     const base = id.split(":")[0];
     if (base === "mxbai-embed-large" || base === "bge-m3") {
       return 1024;
@@ -408,6 +408,7 @@ export function resolveModelCapabilities(params: {
   const inferredCapabilities = inferModelCapabilities({
     provider,
     modelId,
+    fetched,
   });
 
   // Priority per field: fetcher -> models.dev -> hardcoded inference.
@@ -530,8 +531,9 @@ function parseModalities<T>(
 function inferModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
+  fetched?: FetchedModelCapabilities;
 }): ProviderModelCapabilities {
-  const { provider, modelId } = params;
+  const { provider, modelId, fetched } = params;
 
   if (provider === "azure") {
     return inferAzureCapabilities(modelId);
@@ -541,7 +543,33 @@ function inferModelCapabilities(params: {
     return inferGeminiCapabilities(modelId);
   }
 
+  if (provider === "ollama" || provider === "ollama-native") {
+    return inferOllamaCapabilities(fetched);
+  }
+
   return emptyCapabilities();
+}
+
+/**
+ * Ollama's endpoints report no modalities, and models.dev only covers the
+ * `ollama/` namespace — so a locally built or fine-tuned model stored `null` for
+ * both. The edit dialog requires at least one input modality, so those rows made
+ * the form invalid on open and every save silently failed validation with the
+ * message rendered off-screen. Local Ollama models are text-in/text-out, apart
+ * from embedding models which produce vectors rather than a modality.
+ */
+function inferOllamaCapabilities(
+  fetched?: FetchedModelCapabilities,
+): ProviderModelCapabilities {
+  const isEmbeddingModel =
+    typeof fetched?.embeddingDimensions === "number" &&
+    fetched.embeddingDimensions > 0;
+
+  return {
+    ...emptyCapabilities(),
+    inputModalities: ["text"],
+    outputModalities: isEmbeddingModel ? [] : ["text"],
+  };
 }
 
 function inferAzureCapabilities(modelId: string): ProviderModelCapabilities {

@@ -17,6 +17,7 @@ export const SupportedProvidersSchema = z.enum([
   "openrouter",
   "vllm",
   "ollama",
+  "ollama-native",
   "zhipuai",
   "deepseek",
   "minimax",
@@ -49,6 +50,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "openrouter:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
+  "ollama-native:chat",
   "zhipuai:chatCompletions",
   "deepseek:chatCompletions",
   "minimax:chatCompletions",
@@ -89,7 +91,8 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   xai: "xAI",
   openrouter: "OpenRouter",
   vllm: "vLLM",
-  ollama: "Ollama",
+  ollama: "Ollama (OpenAI-compatible)",
+  "ollama-native": "Ollama (Native)",
   zhipuai: "Zhipu AI",
   deepseek: "DeepSeek",
   minimax: "MiniMax",
@@ -107,6 +110,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
  */
 const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
   "ollama",
+  "ollama-native",
   "vllm",
 ]);
 
@@ -179,6 +183,46 @@ export function isSelfHostedProvider(provider: SupportedProvider): boolean {
   return PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider);
 }
 
+/**
+ * Providers reachable through the OpenAI-compatible Model Router — either
+ * because they already speak the OpenAI wire, or because the router translates
+ * for them. Single source of truth: the router builds its own lookup from this
+ * list, and the connection UI hides the router option for anything absent, so a
+ * provider cannot appear to support the router while 404ing on it.
+ *
+ * `ollama-native` is deliberately absent: it speaks Ollama's `/api/chat` wire,
+ * which the router has no translation for.
+ */
+export const MODEL_ROUTER_SUPPORTED_PROVIDERS = [
+  // OpenAI-wire
+  "openai",
+  "azure",
+  "cerebras",
+  "deepseek",
+  "groq",
+  "minimax",
+  "mistral",
+  "ollama",
+  "openrouter",
+  "perplexity",
+  "vllm",
+  "xai",
+  "zhipuai",
+  // Translated by the router
+  "anthropic",
+  "bedrock",
+  "cohere",
+  "gemini",
+] as const satisfies ReadonlyArray<SupportedProvider>;
+
+export function isModelRouterSupportedProvider(
+  provider: SupportedProvider,
+): boolean {
+  return (MODEL_ROUTER_SUPPORTED_PROVIDERS as readonly string[]).includes(
+    provider,
+  );
+}
+
 export function getProvidersWithOptionalApiKey(params?: {
   azureEntraIdEnabled?: boolean;
   anthropicWifEnabled?: boolean;
@@ -247,6 +291,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   openrouter: "https://openrouter.ai/api/v1",
   vllm: "",
   ollama: "http://localhost:11434/v1",
+  "ollama-native": "http://localhost:11434",
   zhipuai: "https://api.z.ai/api/paas/v4",
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
@@ -336,6 +381,12 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "deepseek/deepseek-v4-pro",
   ],
   ollama: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
+  "ollama-native": [
+    "gpt-oss:120b",
+    "llama4:maverick",
+    "llama4:scout",
+    "qwen3:235b",
+  ],
   vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
   zhipuai: ["glm-5.1", "glm-5", "glm-4.7", "glm-4"],
   deepseek: ["deepseek-v4-pro", "deepseek-v4", "deepseek-v3", "deepseek-chat"],
@@ -390,6 +441,7 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   groq: "openai/gpt-oss-120b",
   xai: "grok-4.3",
   ollama: "llama3.2",
+  "ollama-native": "llama3.2",
   vllm: "default",
   cerebras: "zai-glm-4.7",
   mistral: "mistral-medium-2604",
@@ -490,3 +542,20 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     perplexity: null,
     nvidia: null,
   };
+
+/**
+ * Absolute ceiling for a configured Ollama `num_ctx`, sitting comfortably above
+ * the largest advertised context window in circulation. This is only a guard
+ * against a runaway typo; the meaningful limit is the model's own
+ * `contextLength`, which the update route enforces per row — except on rows
+ * whose architectural length is unknown (proxy-discovered models), where this
+ * is the only ceiling.
+ *
+ * Shared so the models-page form can mirror the server rule rather than letting
+ * an out-of-range value reach the backend and come back as a bare 400.
+ */
+export const MAX_CONFIGURABLE_NUM_CTX = 10_000_000;
+
+/** Ollama only ever honours a handful of stop sequences. */
+export const MAX_STOP_SEQUENCES = 16;
+export const MAX_STOP_SEQUENCE_LENGTH = 256;

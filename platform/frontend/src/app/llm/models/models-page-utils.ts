@@ -1,6 +1,238 @@
-import { compareModelsForDisplay } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  compareModelsForDisplay,
+  MAX_CONFIGURABLE_NUM_CTX,
+} from "@archestra/shared";
 
 export type ModelsPageModelTypeFilter = "all" | "chat" | "embedding";
+
+/** The generated update-route payload shape — never re-declared by hand. */
+type ConfiguredParametersBody =
+  archestraApiTypes.UpdateModelData["body"]["configuredParameters"];
+
+/**
+ * String-typed form fields for the native Ollama configured parameters.
+ *
+ * `seed` is deliberately absent: it is not a knob worth exposing per model, and
+ * a fixed seed is rarely what anyone wants across every turn. It still exists in
+ * the backend schema, and {@link buildConfiguredParameters} carries any persisted
+ * value through untouched rather than dropping it on the next save.
+ */
+export interface ConfiguredParametersFormValues {
+  num_ctx: string;
+  num_predict: string;
+  top_k: string;
+  top_p: string;
+  repeat_penalty: string;
+  temperature: string;
+  stop: string;
+  reasoning_effort: "" | "none" | "low" | "medium" | "high";
+}
+
+/** The subset of a model row these helpers read. */
+type ConfiguredParametersModel = {
+  contextLength?: number | null;
+  configuredParameters?: ConfiguredParametersBody;
+};
+
+export const EMPTY_CONFIGURED_PARAMETERS: ConfiguredParametersFormValues = {
+  num_ctx: "",
+  num_predict: "",
+  top_k: "",
+  top_p: "",
+  repeat_penalty: "",
+  temperature: "",
+  stop: "",
+  reasoning_effort: "",
+};
+
+/**
+ * Bounds for each numeric parameter, mirroring the backend
+ * `ConfiguredParametersSchema`. Without a client-side rule the backend's 400 is
+ * the only feedback, and that 400 is easy to mistake for success.
+ */
+type NumericParameterRule = {
+  min?: number;
+  max?: number;
+  integer?: boolean;
+};
+
+export const OLLAMA_NATIVE_PARAM_RULES: Record<
+  keyof Omit<ConfiguredParametersFormValues, "reasoning_effort" | "stop">,
+  NumericParameterRule
+> = {
+  // The max mirrors the server backstop. It is the only ceiling when the row's
+  // architectural `contextLength` is null — the common case for a freshly
+  // pulled Ollama model — and without it those values reached the backend and
+  // returned a bare 400, which is what this table exists to prevent.
+  num_ctx: { min: 1, max: MAX_CONFIGURABLE_NUM_CTX, integer: true },
+  num_predict: { min: -2, integer: true },
+  temperature: { min: 0 },
+  top_p: { min: 0, max: 1 },
+  top_k: { min: 0, integer: true },
+  repeat_penalty: { min: 0 },
+};
+
+/**
+ * Validate one numeric parameter field, returning `true` or a message in the
+ * shape react-hook-form's `rules.validate` expects.
+ *
+ * `contextLength` additionally caps `num_ctx`: asking for more context than the
+ * model architecturally has is rejected by the update route, and catching it
+ * here explains the limit instead of surfacing a bare 400.
+ */
+export function validateConfiguredParameter(params: {
+  name: keyof typeof OLLAMA_NATIVE_PARAM_RULES;
+  value: string;
+  contextLength?: number | null;
+}): true | string {
+  const { name, value, contextLength } = params;
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return "Must be a number";
+
+  const rule = OLLAMA_NATIVE_PARAM_RULES[name];
+  if (rule.integer && !Number.isInteger(parsed)) {
+    return "Must be a whole number";
+  }
+  if (rule.min !== undefined && parsed < rule.min) {
+    return `Must be ${rule.min} or greater`;
+  }
+  if (rule.max !== undefined && parsed > rule.max) {
+    return `Must be ${rule.max} or less`;
+  }
+  if (
+    name === "num_ctx" &&
+    contextLength !== null &&
+    contextLength !== undefined &&
+    parsed > contextLength
+  ) {
+    return `Cannot exceed the model's context length of ${contextLength}`;
+  }
+  return true;
+}
+
+/**
+ * Model row → form values. Inverse of {@link buildConfiguredParameters}; the
+ * pair must round-trip, or reopening the dialog silently rewrites the saved
+ * configuration.
+ */
+export function getConfiguredParameterDefaults(
+  model: ConfiguredParametersModel,
+): ConfiguredParametersFormValues {
+  const cp = model.configuredParameters;
+  if (!cp) return { ...EMPTY_CONFIGURED_PARAMETERS };
+  const numToStr = (v: number | null | undefined) =>
+    v === null || v === undefined ? "" : String(v);
+  return {
+    num_ctx: numToStr(cp.num_ctx),
+    num_predict: numToStr(cp.num_predict),
+    top_k: numToStr(cp.top_k),
+    top_p: numToStr(cp.top_p),
+    repeat_penalty: numToStr(cp.repeat_penalty),
+    temperature: numToStr(cp.temperature),
+    stop: cp.stop?.join("\n") ?? "",
+    reasoning_effort: cp.reasoning_effort ?? "",
+  };
+}
+
+/**
+ * Parse the string-typed form fields into a ConfiguredParameters payload.
+ * Empty fields are omitted so they inherit Ollama's own default; an entirely
+ * empty form clears the override (null).
+ *
+ * The update route replaces `configuredParameters` wholesale rather than
+ * merging, which is what makes "clear a field" work — and also what makes a
+ * dropped field destructive. Field-level validation therefore has to run before
+ * this: an unparseable value must never reach here and quietly vanish.
+ *
+ * `stop` is newline-delimited. Comma-delimiting split any stop sequence
+ * containing a comma in two on the next unrelated save.
+ *
+ * `persisted` carries forward fields the form no longer renders — today just
+ * `seed`. Because the route replaces the object wholesale, omitting it here
+ * would delete a saved seed the moment anything else was edited.
+ */
+export function buildConfiguredParameters(
+  values: ConfiguredParametersFormValues,
+  persisted?: ConfiguredParametersBody,
+): ConfiguredParametersBody {
+  const result: NonNullable<ConfiguredParametersBody> = {};
+  const num = (s: string): number | undefined => {
+    const trimmed = s.trim();
+    if (!trimmed) return undefined;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  const numCtx = num(values.num_ctx);
+  if (numCtx !== undefined) result.num_ctx = numCtx;
+  const numPredict = num(values.num_predict);
+  if (numPredict !== undefined) result.num_predict = numPredict;
+  const topK = num(values.top_k);
+  if (topK !== undefined) result.top_k = topK;
+  const topP = num(values.top_p);
+  if (topP !== undefined) result.top_p = topP;
+  const repeatPenalty = num(values.repeat_penalty);
+  if (repeatPenalty !== undefined) result.repeat_penalty = repeatPenalty;
+  const temperature = num(values.temperature);
+  if (temperature !== undefined) result.temperature = temperature;
+  // Only blank lines are dropped. Trimming each line would silently rewrite a
+  // stop sequence whose trailing space is the point of it ("Human: ").
+  const stop = values.stop.split("\n").filter((line) => line.trim().length > 0);
+  if (stop.length > 0) result.stop = stop;
+  if (values.reasoning_effort)
+    result.reasoning_effort = values.reasoning_effort;
+
+  // Carried forward only alongside something else. `seed` has no form field, so
+  // writing it unconditionally made an otherwise-emptied form return `{seed}`
+  // instead of null — leaving no way to clear a saved seed through the UI.
+  if (
+    Object.keys(result).length > 0 &&
+    persisted?.seed !== undefined &&
+    persisted.seed !== null
+  ) {
+    result.seed = persisted.seed;
+  }
+
+  return Object.keys(result).length > 0 ? result : null;
+}
+
+/** The subset of a model row {@link resolveDisplayContextLength} reads. */
+type DisplayContextLengthModel = {
+  contextLength?: number | null;
+  effectiveContextLength?: number | null;
+};
+
+/**
+ * Pick the context window to show for a model.
+ *
+ * `contextLength` is the model's architectural window and remains the ceiling
+ * `num_ctx` is validated against, so it is not what to display: an Ollama
+ * Modelfile or a configured `num_ctx` can cap the window far below it, and the
+ * chat context ring already shows that enforced value. Showing the
+ * architectural number here would over-promise and make the two screens
+ * disagree.
+ *
+ * `isCapped` is true only when both numbers are known and the enforced window
+ * is smaller — the case worth explaining to the user.
+ */
+export function resolveDisplayContextLength(model: DisplayContextLengthModel): {
+  display: number | null;
+  architectural: number | null;
+  isCapped: boolean;
+} {
+  const architectural = model.contextLength ?? null;
+  const effective = model.effectiveContextLength ?? null;
+  return {
+    display: effective ?? architectural,
+    architectural,
+    isCapped:
+      effective !== null && architectural !== null && effective < architectural,
+  };
+}
 
 export type ModelsPageAvailableApiKey = {
   readonly id: string;
@@ -19,6 +251,32 @@ export type ModelsPageFilterableModel = {
   isFree: boolean;
   isBest?: boolean | null;
 };
+
+/**
+ * Whether this model row is the one the knowledge base resolves for embeddings:
+ * the org's configured embedding model ID under the embedding API key's
+ * provider. While that holds, its embedding configuration is locked (changes
+ * must go through the drop-embedding flow in Knowledge settings); the backend
+ * enforces the same lock.
+ */
+export function isKnowledgeBaseEmbeddingModel(params: {
+  model: { modelId: string; provider: string };
+  embeddingModel: string | null | undefined;
+  embeddingChatApiKeyId: string | null | undefined;
+  availableApiKeys: readonly ModelsPageAvailableApiKey[];
+}): boolean {
+  const { model, embeddingModel, embeddingChatApiKeyId, availableApiKeys } =
+    params;
+  if (!embeddingModel || !embeddingChatApiKeyId) {
+    return false;
+  }
+  const embeddingKeyProvider = availableApiKeys.find(
+    (key) => key.id === embeddingChatApiKeyId,
+  )?.provider;
+  return (
+    embeddingModel === model.modelId && embeddingKeyProvider === model.provider
+  );
+}
 
 export function canFilterFreeModelsForApiKey(params: {
   availableApiKeys: readonly ModelsPageAvailableApiKey[];

@@ -4405,7 +4405,7 @@ export const getAvailableLlmProviderApiKeys = <ThrowOnError extends boolean = fa
  *
  * Authorization:
  *
- * `llmProviderApiKey:delete`: Remove LLM provider API keys
+ * None (no additional RBAC permission required)
  */
 export const deleteLlmProviderApiKey = <ThrowOnError extends boolean = false>(options: Options<DeleteLlmProviderApiKeyData, ThrowOnError>) => (options.client ?? client).delete<DeleteLlmProviderApiKeyResponses, DeleteLlmProviderApiKeyErrors, ThrowOnError>({ url: '/api/llm-provider-api-keys/{id}', ...options });
 
@@ -4431,7 +4431,7 @@ export const getLlmProviderApiKey = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `llmProviderApiKey:update`: Modify LLM provider API key configuration and visibility
+ * None (no additional RBAC permission required)
  */
 export const updateLlmProviderApiKey = <ThrowOnError extends boolean = false>(options: Options<UpdateLlmProviderApiKeyData, ThrowOnError>) => (options.client ?? client).patch<UpdateLlmProviderApiKeyResponses, UpdateLlmProviderApiKeyErrors, ThrowOnError>({
     url: '/api/llm-provider-api-keys/{id}',

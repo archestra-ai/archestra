@@ -218738,7 +218738,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Update an LLM provider API key (name, API key value, visibility, or team)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:update`: Modify LLM provider API key configuration and visibility",
+        "description": "Update an LLM provider API key (name, API key value, visibility, or team)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -219174,10 +219174,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmProviderApiKey:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -219185,7 +219184,7 @@
         "tags": [
           "LLM Provider API Keys"
         ],
-        "description": "Delete an LLM provider API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProviderApiKey:delete`: Remove LLM provider API keys",
+        "description": "Delete an LLM provider API key\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -219448,10 +219447,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "llmProviderApiKey:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },

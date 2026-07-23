@@ -46,6 +46,7 @@ import {
   useTokens,
 } from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
+import { generateUuid } from "@/lib/uuid";
 import {
   AgentEmailDisabledMessage,
   EmailNotConfiguredMessage,
@@ -92,10 +93,10 @@ export function A2AConnectionInstructions({
 
   // messageId is required by the A2A protocol and must be unique per message,
   // so each example gets a real UUID (fresh per dialog open).
-  const [sendExampleMessageId] = useState(() => crypto.randomUUID());
-  const [streamExampleMessageId] = useState(() => crypto.randomUUID());
-  const [replyExampleMessageId] = useState(() => crypto.randomUUID());
-  const [approvalExampleMessageId] = useState(() => crypto.randomUUID());
+  const [sendExampleMessageId] = useState(() => generateUuid());
+  const [streamExampleMessageId] = useState(() => generateUuid());
+  const [replyExampleMessageId] = useState(() => generateUuid());
+  const [approvalExampleMessageId] = useState(() => generateUuid());
 
   // Mirror the /connection page's base-URL fallback chain so the A2A panel
   // honors the same admin curation (descriptions, default flag, hidden URLs).

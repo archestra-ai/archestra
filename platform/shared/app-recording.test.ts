@@ -4,6 +4,8 @@ import {
   APPS_HACKATHON_CLOSES_AT_MS,
   APPS_HACKATHON_OPENS_AT_MS,
   type AppRecordingBundle,
+  connectedMcpServerNames,
+  healBundleMcpServers,
   isAppsHackathonOpen,
   normalizeCuts,
   pruneTrailingTrimEvents,
@@ -234,13 +236,20 @@ describe("validateRecordingBundle", () => {
       edits: {
         cuts: [],
         chat: {
-          enhancementDisabled: true,
+          enhancementEnabled: true,
           removedMessageIds: ["m1"],
           editedMessages: [{ id: "m1", text: "sharper ask" }],
         },
       },
     });
     expect(validateRecordingBundle(edited).ok).toBe(true);
+
+    // Recordings stored with the superseded `enhancementDisabled` flag still
+    // validate under the strict schema.
+    const legacy = bundle({
+      edits: { cuts: [], chat: { enhancementDisabled: true } },
+    });
+    expect(validateRecordingBundle(legacy).ok).toBe(true);
   });
 
   it("accepts captured audio events (config + chunk)", () => {
@@ -458,5 +467,78 @@ describe("pruneTrailingTrimEvents", () => {
       2_000, // durationMs < 3000
     );
     expect(pruneTrailingTrimEvents(b)).toBe(b);
+  });
+});
+
+describe("connectedMcpServerNames", () => {
+  it("derives distinct, sorted server names from full tool names", () => {
+    expect(
+      connectedMcpServerNames([
+        { name: "slack__post_message" },
+        { name: "github__create_issue" },
+        { name: "github__list_prs" }, // same server, listed once
+      ]),
+    ).toEqual(["github", "slack"]);
+  });
+
+  it("keeps a server whose name itself contains the separator", () => {
+    // parseFullToolName splits on the LAST separator, so `a__b` is the server.
+    expect(connectedMcpServerNames([{ name: "a__b__tool" }])).toEqual(["a__b"]);
+  });
+
+  it("ignores unqualified tool names and empty input", () => {
+    expect(connectedMcpServerNames([{ name: "bare_tool" }])).toEqual([]);
+    expect(connectedMcpServerNames([])).toEqual([]);
+    expect(connectedMcpServerNames(null)).toEqual([]);
+    expect(connectedMcpServerNames(undefined)).toEqual([]);
+  });
+});
+
+describe("healBundleMcpServers", () => {
+  it("seeds an old bundle that recorded no servers from the app's tools", () => {
+    // A recording from before the connected-list was captured: meta carries no
+    // mcpServers at all.
+    const old = bundle();
+    expect(old.meta.mcpServers).toBeUndefined();
+    const healed = healBundleMcpServers(old, [
+      { name: "github__create_issue" },
+      { name: "slack__post_message" },
+    ]);
+    expect(healed.meta.mcpServers).toEqual(["github", "slack"]);
+  });
+
+  it("unions with the recorded list and never shrinks it", () => {
+    // `linear` was used by the session but the app is no longer wired to it —
+    // it must survive; `notion`, newly connected, is added.
+    const recorded = bundle({
+      meta: {
+        authorName: "Tester",
+        createdAt: "2026-01-01T00:01:00.000Z",
+        platform: "archestra",
+        mcpServers: ["github", "linear"],
+      },
+    });
+    const healed = healBundleMcpServers(recorded, [
+      { name: "github__create_issue" },
+      { name: "notion__create_page" },
+    ]);
+    expect(healed.meta.mcpServers).toEqual(["github", "linear", "notion"]);
+  });
+
+  it("returns the same instance when the tools add nothing new", () => {
+    const recorded = bundle({
+      meta: {
+        authorName: "Tester",
+        createdAt: "2026-01-01T00:01:00.000Z",
+        platform: "archestra",
+        mcpServers: ["github", "slack"],
+      },
+    });
+    // Every connected server is already listed — no rebuild, same reference.
+    expect(healBundleMcpServers(recorded, [{ name: "github__list_prs" }])).toBe(
+      recorded,
+    );
+    // A missing/deleted app (no tools) heals to nothing and is left untouched.
+    expect(healBundleMcpServers(recorded, null)).toBe(recorded);
   });
 });

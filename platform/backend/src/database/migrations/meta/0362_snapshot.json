@@ -1,5 +1,5 @@
 {
-  "id": "3ef5451e-f5a2-4a14-addd-6bea6d371819",
+  "id": "c6442a53-eefa-4350-82e7-7acff1ad8cad",
   "prevId": "c152db46-5438-4088-b6f5-83432f8bfc3f",
   "version": "7",
   "dialect": "postgresql",
@@ -10821,12 +10821,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "configured_parameters": {
-          "name": "configured_parameters",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
         "discovered_via_llm_proxy": {
           "name": "discovered_via_llm_proxy",
           "type": "boolean",
@@ -11959,6 +11953,12 @@
         "default_user_limit_cleanup_interval": {
           "name": "default_user_limit_cleanup_interval",
           "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_member_role": {
+          "name": "default_member_role",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

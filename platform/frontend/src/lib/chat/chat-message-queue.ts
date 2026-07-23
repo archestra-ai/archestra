@@ -12,6 +12,7 @@
 import type { ChatSkillMetadata } from "@archestra/shared";
 import { useSyncExternalStore } from "react";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
+import { generateUuid } from "@/lib/uuid";
 
 export interface QueuedChatMessage {
   id: string;
@@ -46,7 +47,7 @@ class ChatMessageQueueStore {
   ): QueuedChatMessage {
     const queued: QueuedChatMessage = {
       ...message,
-      id: crypto.randomUUID(),
+      id: generateUuid(),
       queuedAt: new Date().toISOString(),
     };
     this.setQueue(conversationId, [...this.get(conversationId), queued]);

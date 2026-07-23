@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.15](https://github.com/archestra-ai/archestra/compare/platform-v1.3.14...platform-v1.3.15) (2026-07-22)
+
+
+### Features
+
+* apps-gallery submission — final-cut duration, submitter identit… ([#6765](https://github.com/archestra-ai/archestra/issues/6765)) ([59a4534](https://github.com/archestra-ai/archestra/commit/59a4534b83abeda372077832668a8e816d7d3fec))
+
+
+### Bug Fixes
+
+* **frontend:** guard crypto.randomUUID for insecure contexts ([#6788](https://github.com/archestra-ai/archestra/issues/6788)) ([2dbc423](https://github.com/archestra-ai/archestra/commit/2dbc4235825c3569b7b841ee4d39e337039398dd))
+
 ## [1.3.14](https://github.com/archestra-ai/archestra/compare/platform-v1.3.13...platform-v1.3.14) (2026-07-22)
 
 

@@ -33,6 +33,7 @@
   "https://n8n.io/mcp-server/http",
   "https://windmill.dev/api/mcp/gateway",
   "https://mcp.posthog.com/mcp",
+  "https://mcp.xmemory.ai",
   "https://github.com/Linked-API/linkedapi-mcp",
   "https://github.com/duaraghav8/MCPJungle",
   "https://github.com/glenngillen/mcpmcp-server",

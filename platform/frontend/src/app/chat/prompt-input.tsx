@@ -885,7 +885,11 @@ const PromptInputContent = ({
             contextWindow={contextWindow}
             lastCompaction={lastCompaction}
           />
-          <div ref={trailingRef} className="flex items-center gap-2">
+          {/* shrink-0: the send/mic cluster is a fixed unit and must never
+              compress. When the toolbar runs out of room the collapse hook
+              folds the inline tools into a menu (freeing space for the pinned
+              recorder pill) rather than squeezing the send button. */}
+          <div ref={trailingRef} className="flex shrink-0 items-center gap-2">
             <PromptInputSpeechButton
               textareaRef={textareaRef}
               onTranscriptionChange={handleTranscriptionChange}

@@ -5,12 +5,11 @@ import {
   type ContextWindowBreakdown,
   chatUploadRejectionReason,
   E2eTestId,
-  getAcceptedFileTypes,
   getMediaType,
   getModelReadableMimeTypes,
   INLINE_TEXT_MAX_BYTES,
+  type ModelInputModality,
   parseSandboxCommand,
-  supportsFileUploads,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
 import { XIcon } from "lucide-react";
@@ -121,6 +120,12 @@ export interface ArchestraPromptInputProps
   status: ChatStatus;
   // Tools integration props
   agentId: string;
+  /**
+   * Input modalities supported by the selected model. Only used to mirror the
+   * backend ingest policy in validateFile — the composer accepts any file type
+   * (a file the model can't read lands in the conversation's Files panel).
+   */
+  inputModalities?: ModelInputModality[] | null;
   // Ref for autofocus
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   /** Per-category breakdown of the assembled request (for context usage panel) */
@@ -184,7 +189,6 @@ const PromptInputContent = ({
   maxContextLength,
   contextWindow,
   lastCompaction,
-  inputModalities,
   agentLlmApiKeyId,
   submitDisabled = false,
   isContextCompacting = false,
@@ -227,16 +231,12 @@ const PromptInputContent = ({
     string | null
   >(null);
 
-  // Derive file upload capabilities from model input modalities. When the agent
-  // has a sandbox available, any file type is allowed (it is staged for
-  // run_command), so uploads are offered even for a non-multimodal model and the
-  // OS picker is unrestricted.
-  const showFileUploadButton =
-    allowFileUploads &&
-    (supportsFileUploads(inputModalities) || sandboxAvailable);
-  const acceptedFileTypes = sandboxAvailable
-    ? undefined
-    : getAcceptedFileTypes(inputModalities);
+  // Any file type can be attached regardless of model modalities or sandbox:
+  // a file the model can't read is still stored and surfaced in the
+  // conversation's Files panel (and staged into the sandbox when one is
+  // available), so uploads are gated only by the org-level toggle and the OS
+  // picker is unrestricted.
+  const showFileUploadButton = allowFileUploads;
 
   // Chat placeholders from organization settings
   const { data: orgData } = useOrganization();
@@ -598,11 +598,9 @@ const PromptInputContent = ({
       message: string;
     }) => {
       if (err.code === "accept") {
-        toast.error(
-          !showFileUploadButton
-            ? "This model does not support file uploads"
-            : "File format is not supported by this model",
-        );
+        // Only reachable when uploads are disabled entirely (the composer sets
+        // no accept filter otherwise — any file type is attachable).
+        toast.error("File uploads are disabled");
       } else if (err.code === "max_file_size") {
         toast.error(
           `File is too large. Maximum size is ${CHAT_ATTACHMENT_MAX_MB} MB.`,
@@ -611,7 +609,7 @@ const PromptInputContent = ({
         toast.error("Too many files attached.");
       }
     },
-    [showFileUploadButton],
+    [],
   );
 
   const submitStatus = status === "error" ? "ready" : status;
@@ -817,9 +815,7 @@ const PromptInputContent = ({
         globalDrop
         multiple
         onSubmit={handleWrappedSubmit}
-        accept={
-          showFileUploadButton ? acceptedFileTypes : "application/x-empty"
-        }
+        accept={showFileUploadButton ? undefined : "application/x-empty"}
         maxFileSize={CHAT_ATTACHMENT_MAX_BYTES}
         onError={handleFileError}
       >
@@ -872,7 +868,6 @@ const PromptInputContent = ({
             tokensUsed={tokensUsed}
             cachedTokens={cachedTokens}
             maxContextLength={maxContextLength}
-            inputModalities={inputModalities}
             agentLlmApiKeyId={agentLlmApiKeyId}
             selectorAgentId={selectorAgentId}
             onAgentChange={onAgentChange}
@@ -987,16 +982,22 @@ const ArchestraPromptInput = ({
         ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities),
         sandboxAvailable,
         sandboxByteLimit,
+        // Mirrors the backend gate: a file the model can't read is still
+        // accepted and lands in the conversation's Files panel.
+        fileStorageFallback: true,
       });
       switch (reason) {
         case null:
           return null;
+        // With the Files-panel fallback the only reachable reason is
+        // "too_large_for_sandbox" (generic over-the-limit); the other cases
+        // stay for exhaustiveness over the shared union.
         case "text_too_large":
-          return `"${file.name}" is too large to include as text (max ${formatBytes(INLINE_TEXT_MAX_BYTES)}). Enable the sandbox to work with larger files.`;
+          return `"${file.name}" is too large to include as text (max ${formatBytes(INLINE_TEXT_MAX_BYTES)}).`;
         case "too_large_for_sandbox":
           return `"${file.name}" exceeds the maximum size of ${formatBytes(sandboxByteLimit)}.`;
         case "unsupported_type":
-          return `This model can't read "${file.name}". Enable the sandbox to use any file type.`;
+          return `This model can't read "${file.name}".`;
       }
     },
     [inputModalities, sandboxAvailable, sandboxByteLimit],
@@ -1050,7 +1051,6 @@ const ArchestraPromptInput = ({
           maxContextLength={maxContextLength}
           contextWindow={contextWindow}
           lastCompaction={lastCompaction}
-          inputModalities={inputModalities}
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}
           isContextCompacting={isContextCompacting}

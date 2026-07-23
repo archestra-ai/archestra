@@ -23,6 +23,7 @@ export const actions = [
   "deploy-to-restricted",
   "manage",
   "read-all",
+  "share-org",
 ] as const;
 
 export const resources = [

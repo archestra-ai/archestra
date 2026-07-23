@@ -92542,6 +92542,7 @@
                                     "tool_call_output_truncated",
                                     "provider_auth_required",
                                     "tools_unsupported",
+                                    "aborted",
                                     "unknown"
                                   ]
                                 },
@@ -93321,6 +93322,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -94071,6 +94073,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -94862,6 +94865,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -97389,6 +97393,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -98782,6 +98787,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -100488,6 +100494,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -101262,6 +101269,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -102028,6 +102036,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -102804,6 +102813,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -128294,6 +128304,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -129277,6 +129288,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -129971,6 +129983,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -130654,6 +130667,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -131337,6 +131351,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -131888,6 +131903,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -132450,6 +132466,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -134963,6 +134980,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -138187,6 +138205,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -138749,6 +138768,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -139311,6 +139331,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -139873,6 +139894,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -140435,6 +140457,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -140997,6 +141020,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -141559,6 +141583,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -142121,6 +142146,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -142672,6 +142698,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -143774,6 +143801,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -144336,6 +144364,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -144898,6 +144927,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -147636,6 +147666,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -150369,6 +150400,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -153107,6 +153139,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -153669,6 +153702,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -154465,6 +154499,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -155448,6 +155483,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -157532,6 +157568,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -158515,6 +158552,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -159209,6 +159247,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -159892,6 +159931,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -160575,6 +160615,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -161126,6 +161167,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -161688,6 +161730,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -164201,6 +164244,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -167425,6 +167469,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -167987,6 +168032,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -168549,6 +168595,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -169111,6 +169158,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -169673,6 +169721,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -170235,6 +170284,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -170797,6 +170847,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -171359,6 +171410,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -171910,6 +171962,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -173012,6 +173065,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -173574,6 +173628,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -174136,6 +174191,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -176874,6 +176930,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -179607,6 +179664,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -182345,6 +182403,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -182907,6 +182966,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -183703,6 +183763,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -184686,6 +184747,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -254792,7 +254854,8 @@
                                   "execute",
                                   "deploy-to-restricted",
                                   "manage",
-                                  "read-all"
+                                  "read-all",
+                                  "share-org"
                                 ]
                               }
                             }
@@ -255151,7 +255214,8 @@
                           "execute",
                           "deploy-to-restricted",
                           "manage",
-                          "read-all"
+                          "read-all",
+                          "share-org"
                         ]
                       }
                     }
@@ -255208,7 +255272,8 @@
                             "execute",
                             "deploy-to-restricted",
                             "manage",
-                            "read-all"
+                            "read-all",
+                            "share-org"
                           ]
                         }
                       }
@@ -255554,7 +255619,8 @@
                             "execute",
                             "deploy-to-restricted",
                             "manage",
-                            "read-all"
+                            "read-all",
+                            "share-org"
                           ]
                         }
                       }
@@ -255865,7 +255931,8 @@
                           "execute",
                           "deploy-to-restricted",
                           "manage",
-                          "read-all"
+                          "read-all",
+                          "share-org"
                         ]
                       }
                     }
@@ -255943,7 +256010,8 @@
                             "execute",
                             "deploy-to-restricted",
                             "manage",
-                            "read-all"
+                            "read-all",
+                            "share-org"
                           ]
                         }
                       }
@@ -279161,6 +279229,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -302857,7 +302926,8 @@
                         "execute",
                         "deploy-to-restricted",
                         "manage",
-                        "read-all"
+                        "read-all",
+                        "share-org"
                       ]
                     }
                   }
@@ -306405,6 +306475,282 @@
           "kind": "static",
           "permissions": [
             "llmVirtualKey:delete"
+          ]
+        }
+      }
+    },
+    "/api/llm-virtual-keys/{id}/value": {
+      "get": {
+        "operationId": "getVirtualApiKeyValue",
+        "tags": [
+          "Virtual API Keys"
+        ],
+        "description": "Get the raw value of a virtual API key. Only the key's author can reveal it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmVirtualKey:read`: View LLM virtual keys",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "llmVirtualKey:read"
           ]
         }
       }
@@ -311606,6 +311952,282 @@
         }
       }
     },
+    "/api/identity-providers/team-sync-options": {
+      "get": {
+        "operationId": "getIdentityProviderTeamSyncOptions",
+        "tags": [
+          "Identity Providers"
+        ],
+        "description": "Get identity providers as minimal team-sync options (id, name, and groups extraction template) for linking external groups to teams\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "providerId": {
+                        "type": "string"
+                      },
+                      "groupsExpression": {
+                        "nullable": true,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "providerId",
+                      "groupsExpression"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "team:read"
+          ]
+        }
+      }
+    },
     "/api/identity-providers/idp-logout-url": {
       "get": {
         "operationId": "getIdentityProviderIdpLogoutUrl",
@@ -312154,7 +312776,7 @@
         "tags": [
           "Identity Providers"
         ],
-        "description": "Get decoded claims from the current user's latest identity-provider tokens\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`identityProvider:read`: View identity provider configurations (SSO)",
+        "description": "Get decoded claims from the current user's latest identity-provider tokens\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`team:read`: View teams and their members",
         "parameters": [
           {
             "schema": {
@@ -312441,7 +313063,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "identityProvider:read"
+            "team:read"
           ]
         }
       }

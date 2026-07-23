@@ -26070,7 +26070,7 @@ export type GetChatConversationsResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -26233,7 +26233,7 @@ export type CreateChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -26477,7 +26477,7 @@ export type GetChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -26643,7 +26643,7 @@ export type UpdateChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -27242,7 +27242,7 @@ export type ForkChatConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -27590,7 +27590,7 @@ export type CompactChatConversationResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -28023,7 +28023,7 @@ export type GetSharedConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -28185,7 +28185,7 @@ export type ForkSharedConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -28349,7 +28349,7 @@ export type GenerateChatConversationTitleResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -28512,7 +28512,7 @@ export type UpdateChatMessageResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -36025,7 +36025,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -36220,7 +36220,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -36331,7 +36331,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -36440,7 +36440,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -36549,7 +36549,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -36635,7 +36635,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -36723,7 +36723,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -37235,7 +37235,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -37793,7 +37793,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -37881,7 +37881,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -37969,7 +37969,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -38057,7 +38057,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -38145,7 +38145,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -38233,7 +38233,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -38321,7 +38321,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -38409,7 +38409,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -38495,7 +38495,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -38667,7 +38667,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -38755,7 +38755,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -38843,7 +38843,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -39572,7 +39572,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -40301,7 +40301,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -41030,7 +41030,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -41118,7 +41118,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -41273,7 +41273,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -41468,7 +41468,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 conversationId: string;
                 error: {
-                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                     message: string;
                     isRetryable: boolean;
                     sessionId?: string;
@@ -41975,7 +41975,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -42170,7 +42170,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -42281,7 +42281,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -42390,7 +42390,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -42499,7 +42499,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -42585,7 +42585,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -42673,7 +42673,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -43185,7 +43185,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -43743,7 +43743,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -43831,7 +43831,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -43919,7 +43919,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -44007,7 +44007,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -44095,7 +44095,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -44183,7 +44183,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -44271,7 +44271,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -44359,7 +44359,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -44445,7 +44445,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -44617,7 +44617,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -44705,7 +44705,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -44793,7 +44793,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -45522,7 +45522,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -46251,7 +46251,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -46980,7 +46980,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -47068,7 +47068,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -47223,7 +47223,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -47418,7 +47418,7 @@ export type GetInteractionResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -66141,7 +66141,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all' | 'share-org'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -66165,7 +66165,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all' | 'share-org'>;
         };
     };
     path?: never;
@@ -66249,7 +66249,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all' | 'share-org'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -66435,7 +66435,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all' | 'share-org'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -66450,7 +66450,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all' | 'share-org'>;
         };
     };
     path: {
@@ -66539,7 +66539,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all' | 'share-org'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -72160,7 +72160,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
             id: string;
             conversationId: string;
             error: {
-                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'unknown';
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
                 message: string;
                 isRetryable: boolean;
                 sessionId?: string;
@@ -78873,7 +78873,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'read-all' | 'share-org'>;
     };
 };
 
@@ -79761,6 +79761,91 @@ export type UpdateVirtualApiKeyResponses = {
 };
 
 export type UpdateVirtualApiKeyResponse = UpdateVirtualApiKeyResponses[keyof UpdateVirtualApiKeyResponses];
+
+export type GetVirtualApiKeyValueData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/llm-virtual-keys/{id}/value';
+};
+
+export type GetVirtualApiKeyValueErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetVirtualApiKeyValueError = GetVirtualApiKeyValueErrors[keyof GetVirtualApiKeyValueErrors];
+
+export type GetVirtualApiKeyValueResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        value: string;
+    };
+};
+
+export type GetVirtualApiKeyValueResponse = GetVirtualApiKeyValueResponses[keyof GetVirtualApiKeyValueResponses];
 
 export type VllmEmbeddingsWithDefaultAgentData = {
     body: {
@@ -81370,6 +81455,91 @@ export type CreateIdentityProviderResponses = {
 };
 
 export type CreateIdentityProviderResponse = CreateIdentityProviderResponses[keyof CreateIdentityProviderResponses];
+
+export type GetIdentityProviderTeamSyncOptionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/identity-providers/team-sync-options';
+};
+
+export type GetIdentityProviderTeamSyncOptionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetIdentityProviderTeamSyncOptionsError = GetIdentityProviderTeamSyncOptionsErrors[keyof GetIdentityProviderTeamSyncOptionsErrors];
+
+export type GetIdentityProviderTeamSyncOptionsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        providerId: string;
+        groupsExpression: string | null;
+    }>;
+};
+
+export type GetIdentityProviderTeamSyncOptionsResponse = GetIdentityProviderTeamSyncOptionsResponses[keyof GetIdentityProviderTeamSyncOptionsResponses];
 
 export type GetIdentityProviderIdpLogoutUrlData = {
     body?: never;

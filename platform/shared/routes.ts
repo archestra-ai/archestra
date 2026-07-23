@@ -410,6 +410,7 @@ export const RouteId = {
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   GetVirtualApiKey: "getVirtualApiKey",
+  GetVirtualApiKeyValue: "getVirtualApiKeyValue",
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
@@ -516,6 +517,7 @@ export const RouteId = {
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",
   GetIdentityProviders: "getIdentityProviders",
+  GetIdentityProviderTeamSyncOptions: "getIdentityProviderTeamSyncOptions",
   GetIdentityProvider: "getIdentityProvider",
   GetIdentityProviderLatestIdTokenClaims:
     "getIdentityProviderLatestIdTokenClaims",

@@ -4,10 +4,8 @@ import {
   CONTEXT_WINDOW_CATEGORIES,
   ContextWindowBreakdownSchema,
   chatUploadRejectionReason,
-  getAcceptedFileTypes,
   getMediaType,
   getModelReadableMimeTypes,
-  getSupportedFileTypesDescription,
   hasPersistableAssistantContent,
   hasRenderableAssistantContent,
   INLINE_TEXT_MAX_BYTES,
@@ -15,7 +13,6 @@ import {
   isInlineableTextMimeType,
   OUTPUT_MODALITY_OPTIONS,
   parseSandboxCommand,
-  supportsFileUploads,
 } from "./chat";
 
 const VALID_BREAKDOWN = {
@@ -171,31 +168,10 @@ describe("chat file upload helpers", () => {
   ];
 
   test("treats text modality as supporting the inlineable text document types", () => {
-    expect(getAcceptedFileTypes(["text"])).toBe(
-      TEXT_MODALITY_MIME_TYPES.join(","),
-    );
-    expect(supportsFileUploads(["text"])).toBe(true);
-    expect(getSupportedFileTypesDescription(["text"])).not.toBeNull();
-  });
-
-  test("deduplicates mime types across modalities", () => {
-    expect(getAcceptedFileTypes(["text", "text", "pdf"])).toBe(
-      [...TEXT_MODALITY_MIME_TYPES, "application/pdf"].join(","),
-    );
-  });
-
-  test("returns no file types when modalities are missing", () => {
-    expect(getAcceptedFileTypes(null)).toBeUndefined();
-    expect(getAcceptedFileTypes(undefined)).toBeUndefined();
-    expect(getAcceptedFileTypes([])).toBeUndefined();
-    expect(supportsFileUploads(null)).toBe(false);
-    expect(getSupportedFileTypesDescription(undefined)).toBeNull();
-  });
-
-  test("joins per-modality descriptions for multiple upload modalities", () => {
-    expect(getSupportedFileTypesDescription(["image", "pdf", "audio"])).toBe(
-      "images, PDFs, audio",
-    );
+    const readable = getModelReadableMimeTypes(["text"]);
+    for (const mimeType of TEXT_MODALITY_MIME_TYPES) {
+      expect(readable.has(mimeType)).toBe(true);
+    }
   });
 
   test("uses explicit file media types when present", () => {
@@ -341,6 +317,39 @@ describe("chatUploadRejectionReason", () => {
       chatUploadRejectionReason({
         ...base,
         sandboxAvailable: true,
+        mimeType: "application/zip",
+        byteLength: base.sandboxByteLimit + 1,
+      }),
+    ).toBe("too_large_for_sandbox");
+  });
+
+  test("file-storage fallback accepts an unsupported type without a sandbox", () => {
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        fileStorageFallback: true,
+        mimeType: "application/zip",
+        byteLength: 1_000,
+      }),
+    ).toBeNull();
+  });
+
+  test("file-storage fallback accepts oversized text without a sandbox", () => {
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        fileStorageFallback: true,
+        mimeType: "text/csv",
+        byteLength: INLINE_TEXT_MAX_BYTES + 1,
+      }),
+    ).toBeNull();
+  });
+
+  test("file-storage fallback still rejects a file over the storage limit", () => {
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        fileStorageFallback: true,
         mimeType: "application/zip",
         byteLength: base.sandboxByteLimit + 1,
       }),

@@ -577,6 +577,60 @@ test("an over-limit non-ingestible attachment is reported as unavailable, not st
   expect(part.text).not.toContain("data:");
 });
 
+test("a non-ingestible attachment without a sandbox points at the Files panel, never the sandbox", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  // A zip: accepted at ingest (Files-panel fallback), unreadable by the model.
+  const bytes = Buffer.from("PKzip-ish", "utf8");
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "bundle.zip",
+    mimeType: "application/zip",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "application/zip",
+          filename: "bundle.zip",
+        },
+      ],
+    },
+  ];
+
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    sandboxAvailable: false,
+  });
+
+  const part = expectPresent(output[0].parts?.[0]);
+  expect(part.type).toBe("text");
+  // The file landed in the conversation's Files panel; the model is told so
+  // (and that it can't read the contents) rather than "the file was rejected".
+  expect(part.text).toContain("Files panel");
+  expect(part.text).toContain(JSON.stringify("bundle.zip"));
+  // Never point a sandbox-less agent at the sandbox or run_command.
+  expect(part.text).not.toContain("/home/sandbox/attachments");
+  expect(part.text).not.toContain("run_command");
+  expect(part.text).not.toContain("data:");
+});
+
 test("inlined text-document also gets a sandbox pointer when the sandbox is available for the agent", async ({
   makeAgent,
   makeConversation,

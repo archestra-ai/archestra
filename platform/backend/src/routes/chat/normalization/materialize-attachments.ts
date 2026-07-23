@@ -310,9 +310,10 @@ function unavailableBinaryDocPart(
  * deduplicated by the runtime) and tell the model to list it. Over the limit the
  * file is not staged, so the model is told it is unavailable this turn rather
  * than pointed at a session-authed URL it cannot fetch from the sandbox. When
- * the sandbox is not usable at all, there is no fallback surface, so the model is
- * told the file could not be processed (so it can relay that to the user) — never
- * pointed at a sandbox or `run_command` it cannot reach.
+ * the sandbox is not usable, the attachment still lives in the conversation's
+ * Files panel, so the model is told the file is saved there for the user even
+ * though it can't read the contents — never pointed at a sandbox or
+ * `run_command` it cannot reach.
  *
  * `originalName` is client-controlled, so it is JSON-encoded to keep a crafted
  * filename from breaking out of this platform-generated notice.
@@ -329,14 +330,14 @@ function referenceSandboxFilePart(
   if (!sandboxAvailable) {
     return {
       type: "text",
-      text: `[Attachment ${label} can't be read by this model and no code sandbox is available to process it this turn. Let the user know the file could not be used.]`,
+      text: `[Attachment ${label} can't be read by this model and no code sandbox is available to process it this turn. It is saved in this conversation's Files panel, where the user can view and download it. Let the user know you can't read its contents.]`,
     };
   }
 
   if (sizeBytes > limit) {
     return {
       type: "text",
-      text: `[Attachment ${label} can't be shown to this model and is too large (limit ${limit} bytes) to use in your sandbox this turn.]`,
+      text: `[Attachment ${label} can't be shown to this model and is too large (limit ${limit} bytes) to use in your sandbox this turn. The user can still download it from this conversation's Files panel.]`,
     };
   }
 

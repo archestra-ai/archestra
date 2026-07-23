@@ -195,6 +195,42 @@ describe("getTransientDbErrorCode", () => {
     expect(getTransientDbErrorCode("not an error")).toBeNull();
     expect(getTransientDbErrorCode(null)).toBeNull();
   });
+
+  // A DB host resolving to several addresses (e.g. IPv6 + IPv4) where every
+  // connect fails: net.connect throws AggregateError with an EMPTY message,
+  // the syscall code on `code`, and one error per address in `errors`.
+  test("detects a multi-address connection failure (AggregateError, empty message)", () => {
+    const aggregate = Object.assign(
+      new AggregateError(
+        [
+          new Error("connect ECONNREFUSED ::1:5432"),
+          new Error("connect ECONNREFUSED 127.0.0.1:5432"),
+        ],
+        "",
+      ),
+      { code: "ECONNREFUSED" },
+    );
+    expect(getTransientDbErrorCode(aggregate)).toBe("ECONNREFUSED");
+
+    const drizzleWrapped = new Error("Failed query: select 1", {
+      cause: aggregate,
+    });
+    expect(getTransientDbErrorCode(drizzleWrapped)).toBe("ECONNREFUSED");
+    expect(isTransientDbError(drizzleWrapped)).toBe(true);
+  });
+
+  test("traverses AggregateError sub-errors when no code is set on the aggregate", () => {
+    const aggregate = new AggregateError(
+      [new Error("connect ETIMEDOUT 10.0.0.1:5432")],
+      "",
+    );
+    expect(getTransientDbErrorCode(aggregate)).toBe("ETIMEDOUT");
+  });
+
+  test("returns null for an AggregateError of non-transient errors", () => {
+    const aggregate = new AggregateError([new Error("duplicate key")], "");
+    expect(getTransientDbErrorCode(aggregate)).toBeNull();
+  });
 });
 
 describe("withDbRetry", () => {
@@ -213,6 +249,25 @@ describe("withDbRetry", () => {
     const fn = vi
       .fn()
       .mockRejectedValueOnce(new Error("connect ECONNREFUSED 10.2.124.50:5432"))
+      .mockResolvedValue("recovered");
+
+    const result = await withDbRetry(fn, { maxRetries: 3 });
+    expect(result).toBe("recovered");
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  test("retries a multi-address connection failure (AggregateError) and succeeds", async () => {
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new AggregateError(
+          [
+            new Error("connect ECONNREFUSED ::1:5432"),
+            new Error("connect ECONNREFUSED 127.0.0.1:5432"),
+          ],
+          "",
+        ),
+      )
       .mockResolvedValue("recovered");
 
     const result = await withDbRetry(fn, { maxRetries: 3 });

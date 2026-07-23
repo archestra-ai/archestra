@@ -119,7 +119,15 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete", "admin", "read-all"],
+  project: [
+    "read",
+    "create",
+    "update",
+    "delete",
+    "share-org",
+    "admin",
+    "read-all",
+  ],
   file: ["manage"],
   log: ["read"],
 
@@ -237,7 +245,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete", "share-org"],
   file: ["manage"],
   log: ["read"],
 
@@ -312,7 +320,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Other
   chat: ["read", "create", "update", "delete"],
-  project: ["read", "create", "update", "delete"],
+  project: ["read", "create", "update", "delete", "share-org"],
   file: ["manage"],
   log: [],
 
@@ -526,6 +534,8 @@ export const permissionDescriptions: Record<string, string> = {
   "project:create": "Create projects",
   "project:update": "Edit project descriptions, instructions, and sharing",
   "project:delete": "Delete projects",
+  "project:share-org":
+    "Share projects with the entire organization, and change the sharing of or delete a project that is already org-wide. Without it, projects can still be shared with teams. Additive: sharing still requires project:update and deleting still requires project:delete.",
   "project:admin":
     "Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
   "project:read-all":
@@ -1151,6 +1161,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetVirtualApiKey]: {
     llmVirtualKey: ["read"],
   },
+  // Reveals the raw key value; restricted to the key's author in the handler.
+  [RouteId.GetVirtualApiKeyValue]: {
+    llmVirtualKey: ["read"],
+  },
   [RouteId.CreateVirtualApiKey]: {
     llmVirtualKey: ["create"],
   },
@@ -1353,11 +1367,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetIdentityProviders]: {
     identityProvider: ["read"],
   },
+  // Minimal projection (id, name, groups expression) for the team External
+  // Group Sync section: team admins link groups to their team without holding
+  // identityProvider:read. No configuration or secrets are exposed.
+  [RouteId.GetIdentityProviderTeamSyncOptions]: {
+    team: ["read"],
+  },
   [RouteId.GetIdentityProvider]: {
     identityProvider: ["read"],
   },
+  // Returns only the CALLER'S own decoded token claims (never another user's,
+  // never provider configuration), so team admins can find their group value
+  // while configuring external group sync.
   [RouteId.GetIdentityProviderLatestIdTokenClaims]: {
-    identityProvider: ["read"],
+    team: ["read"],
   },
   // Installers need to know whether they must link a downstream IdP, but this
   // endpoint does not expose identity-provider configuration or secrets.

@@ -851,6 +851,63 @@ describe("team routes", () => {
       expect(response.json()).toEqual([]);
     });
 
+    test("allows identity-provider readers to list external groups without team access", async ({
+      makeTeam,
+    }) => {
+      const team = await makeTeam(organizationId, adminUser.id);
+      // The caller is not a team manager and not a team member — they only
+      // hold identityProvider:read (group sync is IdP configuration).
+      vi.mocked(hasPermission).mockImplementation(async (permissions) =>
+        "identityProvider" in permissions
+          ? { success: true, error: null }
+          : { success: false, error: null },
+      );
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/teams/${team.id}/external-groups`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual([]);
+    });
+
+    test("hides external groups from callers with neither team access nor identity-provider read", async ({
+      makeTeam,
+    }) => {
+      const team = await makeTeam(organizationId, adminUser.id);
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/teams/${team.id}/external-groups`,
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    test("identity-provider read alone does not allow adding a mapping", async ({
+      makeTeam,
+    }) => {
+      const team = await makeTeam(organizationId, adminUser.id);
+      vi.mocked(hasPermission).mockImplementation(async (permissions) =>
+        "identityProvider" in permissions
+          ? { success: true, error: null }
+          : { success: false, error: null },
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/teams/${team.id}/external-groups`,
+        payload: { groupIdentifier: "engineering" },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
     test("adds an external group mapping", async ({ makeTeam }) => {
       const team = await makeTeam(organizationId, adminUser.id);
 

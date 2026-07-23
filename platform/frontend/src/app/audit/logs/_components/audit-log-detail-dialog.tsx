@@ -185,14 +185,18 @@ function ResourceBlock({ event }: { event: AuditLog }) {
   }
   return (
     <div className="space-y-1">
-      <div className="flex flex-wrap items-center gap-2">
-        {event.resourceType && (
-          <Badge variant="secondary">
-            {formatResourceType(event.resourceType)}
-          </Badge>
-        )}
-        {name && <span>{name}</span>}
-      </div>
+      {(event.resourceType || name) && (
+        // Same "Type: name" chip as the table's Resource column.
+        <Badge variant="secondary" className="max-w-full whitespace-normal">
+          {event.resourceType && (
+            <span className="font-semibold">
+              {formatResourceType(event.resourceType)}
+              {name ? ":" : ""}
+            </span>
+          )}
+          {name && <span className="break-words font-normal">{name}</span>}
+        </Badge>
+      )}
       {event.resourceId && (
         <div className="flex items-center gap-1">
           <code className="break-all font-mono text-xs text-muted-foreground">

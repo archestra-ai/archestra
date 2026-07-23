@@ -392,19 +392,28 @@ export function AuditLogTable() {
           if (!rt && !name) {
             return <span className="text-xs text-muted-foreground">—</span>;
           }
+          // One chip holding "Type: name" — allowed to wrap so long names
+          // grow the row instead of bleeding into the next column.
           return (
-            <div className="flex items-center gap-2">
+            <Badge
+              variant="secondary"
+              className="max-w-full whitespace-normal text-xs"
+            >
               {rt && (
-                <Badge variant="secondary" className="text-xs">
+                <span className="font-semibold">
                   {formatResourceType(rt)}
-                </Badge>
-              )}
-              {name && (
-                <span className="text-xs">
-                  <TruncatedText message={name} maxLength={32} />
+                  {name ? ":" : ""}
                 </span>
               )}
-            </div>
+              {name && (
+                <TruncatedText
+                  message={name}
+                  maxLength={64}
+                  noWrap={false}
+                  className="break-words font-normal"
+                />
+              )}
+            </Badge>
           );
         },
       },

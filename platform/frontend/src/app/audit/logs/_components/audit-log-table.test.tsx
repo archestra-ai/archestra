@@ -160,7 +160,8 @@ describe("AuditLogTable", () => {
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
     expect(screen.getByText("Agent updated")).toBeInTheDocument();
     expect(screen.getByText("Success")).toBeInTheDocument();
-    expect(screen.getByText("Agent")).toBeInTheDocument();
+    // The resource chip reads "Agent: <name>"; the type prefix carries the colon.
+    expect(screen.getByText("Agent:")).toBeInTheDocument();
   });
 
   it("action column renders the human label, not the raw dotted name", () => {
@@ -238,7 +239,7 @@ describe("AuditLogTable", () => {
 
     renderTable();
 
-    expect(screen.getByText("Agent")).toBeInTheDocument();
+    expect(screen.getByText("Agent:")).toBeInTheDocument();
     expect(
       screen.queryByText("very-distinctive-agent-id-12345"),
     ).not.toBeInTheDocument();
@@ -253,7 +254,7 @@ describe("AuditLogTable", () => {
 
     renderTable();
 
-    expect(screen.getByText("Agent")).toBeInTheDocument();
+    expect(screen.getByText("Agent:")).toBeInTheDocument();
     expect(screen.getByText("PotatoAI")).toBeInTheDocument();
   });
 

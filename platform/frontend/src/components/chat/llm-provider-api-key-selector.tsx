@@ -1,16 +1,71 @@
 "use client";
 
-import type {
-  ResourceVisibilityScope,
-  SupportedProvider,
+import {
+  CHATGPT_SUBSCRIPTION_LABEL,
+  type ResourceVisibilityScope,
+  type SupportedProvider,
 } from "@archestra/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
+import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
+import { useSession } from "@/lib/auth/auth.query";
 import { useUpdateConversation } from "@/lib/chat/chat.query";
 import {
   type LlmProviderApiKey,
   useAvailableLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
+
+type SubscriptionConnectOption = {
+  id: string;
+  name: string;
+  provider: "openai" | "github-copilot" | "microsoft-365-copilot";
+  scope: "personal";
+  isChatgptSubscription?: boolean;
+  connectRequired: true;
+  defaultValues: Partial<LlmProviderApiKeyFormValues>;
+};
+
+const SUBSCRIPTION_CONNECT_OPTIONS: SubscriptionConnectOption[] = [
+  {
+    id: "connect-subscription-openai",
+    name: CHATGPT_SUBSCRIPTION_LABEL,
+    provider: "openai",
+    scope: "personal",
+    isChatgptSubscription: true,
+    connectRequired: true,
+    defaultValues: {
+      name: CHATGPT_SUBSCRIPTION_LABEL,
+      provider: "openai",
+      scope: "personal",
+      openaiAuthMethod: "chatgpt-subscription",
+    },
+  },
+  {
+    id: "connect-subscription-github-copilot",
+    name: "GitHub Copilot",
+    provider: "github-copilot",
+    scope: "personal",
+    connectRequired: true,
+    defaultValues: {
+      name: "GitHub Copilot",
+      provider: "github-copilot",
+      scope: "personal",
+    },
+  },
+  {
+    id: "connect-subscription-microsoft-365-copilot",
+    name: "Microsoft 365 Copilot",
+    provider: "microsoft-365-copilot",
+    scope: "personal",
+    connectRequired: true,
+    defaultValues: {
+      name: "Microsoft 365 Copilot",
+      provider: "microsoft-365-copilot",
+      scope: "personal",
+    },
+  },
+];
 
 interface LlmProviderApiKeySelectorProps {
   /** Conversation ID for persisting selection (optional for initial chat) */
@@ -31,6 +86,10 @@ interface LlmProviderApiKeySelectorProps {
   isModelsLoading?: boolean;
   /** Agent's configured LLM API key ID - included in available keys even if user lacks direct access */
   agentLlmApiKeyId?: string | null;
+  /** Keep an unconnected subscription pinned instead of selecting a fallback key. */
+  suppressAutoSelect?: boolean;
+  /** Increment to open the pinned subscription's connection dialog. */
+  connectRequestToken?: number;
 }
 
 /**
@@ -47,22 +106,84 @@ export function LlmProviderApiKeySelector({
   onOpenChange,
   isModelsLoading = false,
   agentLlmApiKeyId,
+  suppressAutoSelect = false,
+  connectRequestToken = 0,
 }: LlmProviderApiKeySelectorProps) {
   // Fetch ALL API keys (not filtered by provider) so user can switch providers
   // Include agent's configured key even if user doesn't have direct access
-  const { data: availableKeys = [], isLoading: isLoadingKeys } =
+  const { data: fetchedAvailableKeys = [], isLoading: isLoadingKeys } =
     useAvailableLlmProviderApiKeys({
       includeKeyId: agentLlmApiKeyId ?? undefined,
     });
+  const { data: session, isPending: isSessionLoading } = useSession();
+  const availableKeys = useMemo(
+    () =>
+      fetchedAvailableKeys.filter(
+        (key) =>
+          !isPersonalSubscription(key) || key.userId === session?.user.id,
+      ),
+    [fetchedAvailableKeys, session?.user.id],
+  );
+  const subscriptionOptions = useMemo(
+    () =>
+      SUBSCRIPTION_CONNECT_OPTIONS.filter(
+        (option) =>
+          !availableKeys.some((key) => subscriptionMatchesKey(option, key)),
+      ),
+    [availableKeys],
+  );
+  const displayedKeys = useMemo(
+    () => [...availableKeys, ...subscriptionOptions],
+    [availableKeys, subscriptionOptions],
+  );
+  const pinnedSubscriptionOption = useMemo(() => {
+    if (!agentLlmApiKeyId) return null;
+    const pinnedCredential = fetchedAvailableKeys.find(
+      (key) => key.id === agentLlmApiKeyId && isPersonalSubscription(key),
+    );
+    if (!pinnedCredential) return null;
+    return (
+      subscriptionOptions.find((option) =>
+        subscriptionMatchesKey(option, pinnedCredential),
+      ) ?? null
+    );
+  }, [agentLlmApiKeyId, fetchedAvailableKeys, subscriptionOptions]);
+  const selectedKeyId =
+    currentConversationChatApiKeyId === agentLlmApiKeyId &&
+    pinnedSubscriptionOption
+      ? pinnedSubscriptionOption.id
+      : (currentConversationChatApiKeyId ??
+        pinnedSubscriptionOption?.id ??
+        null);
 
   // Combined loading state - wait for both API keys and models
-  const isLoading = isLoadingKeys || isModelsLoading;
+  const isLoading = isLoadingKeys || isSessionLoading || isModelsLoading;
   const updateConversationMutation = useUpdateConversation();
   const [open, setOpen] = useState(false);
+  const [subscriptionToConnect, setSubscriptionToConnect] =
+    useState<SubscriptionConnectOption | null>(null);
+  const [connectedProviderToSelect, setConnectedProviderToSelect] = useState<
+    SubscriptionConnectOption["provider"] | null
+  >(null);
+  const handledConnectRequestRef = useRef(0);
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
     onOpenChange?.(newOpen);
   };
+
+  useEffect(() => {
+    if (
+      connectRequestToken === 0 ||
+      connectRequestToken === handledConnectRequestRef.current ||
+      !pinnedSubscriptionOption
+    ) {
+      return;
+    }
+    handledConnectRequestRef.current = connectRequestToken;
+    setSubscriptionToConnect(pinnedSubscriptionOption);
+    setOpen(false);
+    onOpenChange?.(false);
+  }, [connectRequestToken, onOpenChange, pinnedSubscriptionOption]);
   // Track which provider we last auto-selected for to prevent infinite loops.
   // Using the provider value (not a boolean) so we can re-run auto-select when
   // the provider genuinely changes (e.g., user picks a model from a different provider)
@@ -108,7 +229,7 @@ export function LlmProviderApiKeySelector({
   // biome-ignore lint/correctness/useExhaustiveDependencies: adding updateConversationMutation as a dependency would cause a infinite loop
   useEffect(() => {
     // Skip if loading or no keys available
-    if (isLoading || availableKeys.length === 0) return;
+    if (suppressAutoSelect || isLoading || availableKeys.length === 0) return;
 
     const providerKey = currentProvider ?? null;
 
@@ -148,6 +269,14 @@ export function LlmProviderApiKeySelector({
     if (keyToSelectValid) {
       // Mark as handled BEFORE calling callbacks to prevent loops
       autoSelectedForProviderRef.current = providerKey;
+      subscriptionDebug("credential auto-select", {
+        conversationId: conversationId ?? null,
+        currentProvider: currentProvider ?? null,
+        previousChatApiKeyId: currentConversationChatApiKeyId,
+        nextChatApiKeyId: keyToSelect.id,
+        nextProvider: keyToSelect.provider,
+        suppressAutoSelect,
+      });
 
       if (conversationId) {
         updateConversationMutation.mutate({
@@ -168,9 +297,65 @@ export function LlmProviderApiKeySelector({
     providerKeys,
     keysByScope,
     onApiKeyChange,
+    suppressAutoSelect,
   ]);
 
+  const applyKeyChange = useCallback(
+    (keyId: string) => {
+      // Find the selected key to get its provider
+      const selectedKey = availableKeys.find((k) => k.id === keyId);
+      const selectedKeyProvider = selectedKey?.provider;
+
+      if (conversationId) {
+        // For existing conversations, let onProviderChange handle both the API key
+        // update and model selection in a single mutation to avoid race conditions.
+        if (selectedKeyProvider && onProviderChange) {
+          onProviderChange(selectedKeyProvider, keyId);
+        } else {
+          updateConversationMutation.mutate({
+            id: conversationId,
+            chatApiKeyId: keyId,
+          });
+        }
+      } else {
+        // For initial (no conversation) state, update key state and notify parent
+        if (onApiKeyChange) {
+          onApiKeyChange(keyId);
+        }
+        if (selectedKeyProvider && onProviderChange) {
+          onProviderChange(selectedKeyProvider, keyId);
+        }
+      }
+    },
+    [
+      availableKeys,
+      conversationId,
+      onApiKeyChange,
+      onProviderChange,
+      updateConversationMutation,
+    ],
+  );
+
+  useEffect(() => {
+    if (!connectedProviderToSelect) return;
+    const connectedKey = availableKeys.find((key) =>
+      subscriptionMatchesProvider(connectedProviderToSelect, key),
+    );
+    if (!connectedKey) return;
+
+    applyKeyChange(connectedKey.id);
+    setConnectedProviderToSelect(null);
+  }, [availableKeys, applyKeyChange, connectedProviderToSelect]);
+
   const handleSelectKey = (keyId: string) => {
+    const connectOption = subscriptionOptions.find(
+      (option) => option.id === keyId,
+    );
+    if (connectOption) {
+      setSubscriptionToConnect(connectOption);
+      handleOpenChange(false);
+      return;
+    }
     if (keyId === currentConversationChatApiKeyId) {
       handleOpenChange(false);
       return;
@@ -180,53 +365,75 @@ export function LlmProviderApiKeySelector({
     handleOpenChange(false);
   };
 
-  const applyKeyChange = (keyId: string) => {
-    // Find the selected key to get its provider
-    const selectedKey = availableKeys.find((k) => k.id === keyId);
-    const selectedKeyProvider = selectedKey?.provider;
-
-    if (conversationId) {
-      // For existing conversations, let onProviderChange handle both the API key
-      // update and model selection in a single mutation to avoid race conditions.
-      if (selectedKeyProvider && onProviderChange) {
-        onProviderChange(selectedKeyProvider, keyId);
-      } else {
-        updateConversationMutation.mutate({
-          id: conversationId,
-          chatApiKeyId: keyId,
-        });
-      }
-    } else {
-      // For initial (no conversation) state, update key state and notify parent
-      if (onApiKeyChange) {
-        onApiKeyChange(keyId);
-      }
-      if (selectedKeyProvider && onProviderChange) {
-        onProviderChange(selectedKeyProvider, keyId);
-      }
-    }
-  };
-
   // Don't render until models are loaded (prevents flashing)
   if (isModelsLoading) {
     return null;
   }
 
-  // If no keys available for this provider
-  if (!isLoading && availableKeys.length === 0) {
-    return null;
-  }
-
   return (
-    <LlmProviderApiKeyDropdown
-      availableKeys={availableKeys}
-      selectedApiKeyId={currentConversationChatApiKeyId}
-      disabled={disabled}
-      open={open}
-      onOpenChange={handleOpenChange}
-      onSelectKey={handleSelectKey}
-      currentProvider={currentProvider}
-      showChatTestIds
-    />
+    <>
+      <LlmProviderApiKeyDropdown
+        availableKeys={displayedKeys}
+        selectedApiKeyId={selectedKeyId}
+        disabled={disabled}
+        open={open}
+        onOpenChange={handleOpenChange}
+        onSelectKey={handleSelectKey}
+        currentProvider={currentProvider}
+        searchPlaceholder="Search credentials..."
+        showChatTestIds
+      />
+      {subscriptionToConnect && (
+        <CreateLlmProviderApiKeyDialog
+          open
+          onOpenChange={(dialogOpen) => {
+            if (!dialogOpen) setSubscriptionToConnect(null);
+          }}
+          title={`Connect ${subscriptionToConnect.name}`}
+          description={`Connect your ${subscriptionToConnect.name} subscription`}
+          defaultValues={subscriptionToConnect.defaultValues}
+          allowedProviders={[subscriptionToConnect.provider]}
+          onSuccess={() =>
+            setConnectedProviderToSelect(subscriptionToConnect.provider)
+          }
+        />
+      )}
+    </>
   );
+}
+
+function isPersonalSubscription(key: LlmProviderApiKey) {
+  return (
+    isChatgptSubscription(key) ||
+    key.provider === "github-copilot" ||
+    key.provider === "microsoft-365-copilot"
+  );
+}
+
+function subscriptionMatchesKey(
+  option: SubscriptionConnectOption,
+  key: LlmProviderApiKey,
+) {
+  return subscriptionMatchesProvider(option.provider, key);
+}
+
+function subscriptionMatchesProvider(
+  provider: SubscriptionConnectOption["provider"],
+  key: LlmProviderApiKey,
+) {
+  return provider === "openai"
+    ? isChatgptSubscription(key)
+    : key.provider === provider;
+}
+
+function isChatgptSubscription(key: LlmProviderApiKey) {
+  return (
+    key.provider === "openai" &&
+    (key.isChatgptSubscription === true ||
+      key.name.trim().toLowerCase() === "chatgpt subscription")
+  );
+}
+
+function subscriptionDebug(event: string, data: Record<string, unknown>) {
+  console.info(`[subscription-debug] ${event}`, data);
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockUseLlmProviderApiKeys = vi.fn();
@@ -73,7 +73,19 @@ vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
 }));
 
 vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
-  CreateLlmProviderApiKeyDialog: () => null,
+  CreateLlmProviderApiKeyDialog: (props: {
+    open: boolean;
+    title: string;
+    defaultValues?: unknown;
+    allowedProviders?: unknown;
+  }) =>
+    props.open ? (
+      <div data-testid="create-dialog">
+        {props.title}
+        {JSON.stringify(props.defaultValues)}
+        {JSON.stringify(props.allowedProviders)}
+      </div>
+    ) : null,
 }));
 
 vi.mock("@/components/delete-confirm-dialog", () => ({
@@ -98,6 +110,14 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
   PROVIDER_CONFIG: {
     anthropic: { icon: "/anthropic.svg", name: "Anthropic" },
     gemini: { icon: "/gemini.svg", name: "Gemini" },
+    "github-copilot": {
+      icon: "/github-copilot.png",
+      name: "GitHub Copilot",
+    },
+    "microsoft-365-copilot": {
+      icon: "/microsoft-365-copilot.png",
+      name: "Microsoft 365 Copilot",
+    },
     openai: { icon: "/openai.svg", name: "OpenAI" },
   },
 }));
@@ -115,9 +135,30 @@ vi.mock("@/components/table-row-actions", () => ({
 }));
 
 vi.mock("@/components/ui/data-table", () => ({
-  DataTable: ({ isLoading }: { isLoading: boolean }) => (
-    <div data-loading={isLoading} />
-  ),
+  DataTable: ({
+    isLoading,
+    data,
+    columns,
+  }: {
+    isLoading: boolean;
+    data: Array<{ id: string; name: string }>;
+    columns: Array<{
+      id?: string;
+      cell?: (context: { row: { original: unknown } }) => React.ReactNode;
+    }>;
+  }) => {
+    const actions = columns.find((column) => column.id === "actions");
+    return (
+      <div data-loading={isLoading}>
+        {data.map((row) => (
+          <div key={row.id}>
+            <span>{row.name}</span>
+            {actions?.cell?.({ row: { original: row } })}
+          </div>
+        ))}
+      </div>
+    );
+  },
 }));
 
 vi.mock("@/components/ui/dialog", () => ({
@@ -224,5 +265,63 @@ describe("ApiKeysPage", () => {
       provider: undefined,
       search: undefined,
     });
+  });
+
+  it("always shows the three personal subscription credentials", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+
+    render(<ApiKeysPage />);
+
+    expect(screen.getByText("ChatGPT")).toBeInTheDocument();
+    expect(screen.getByText("GitHub Copilot")).toBeInTheDocument();
+    expect(screen.getByText("Microsoft 365 Copilot")).toBeInTheDocument();
+    expect(screen.getAllByText("Connect")).toHaveLength(3);
+  });
+
+  it("represents a connected subscription once and removes its connect action", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    const chatGptCredential = {
+      id: "chatgpt-key",
+      name: "Existing ChatGPT credential",
+      provider: "openai",
+      scope: "personal",
+      isChatgptSubscription: true,
+    };
+    mockUseLlmProviderApiKeys.mockReturnValue({
+      data: [chatGptCredential],
+      isPending: false,
+    });
+
+    render(<ApiKeysPage />);
+
+    expect(screen.getAllByText("ChatGPT")).toHaveLength(1);
+    expect(
+      screen.queryByText("Existing ChatGPT credential"),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("Connect")).toHaveLength(2);
+  });
+
+  it("opens Connect with provider-specific subscription defaults", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    render(<ApiKeysPage />);
+
+    fireEvent.click(screen.getAllByText("Connect")[0]);
+
+    expect(screen.getByTestId("create-dialog")).toHaveTextContent(
+      "Connect ChatGPT",
+    );
+    expect(screen.getByTestId("create-dialog")).toHaveTextContent(
+      '"openaiAuthMethod":"chatgpt-subscription"',
+    );
+    expect(screen.getByTestId("create-dialog")).toHaveTextContent('["openai"]');
   });
 });

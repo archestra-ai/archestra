@@ -17,6 +17,7 @@ import {
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -992,6 +993,10 @@ export function AgentDialog({
     () => availableApiKeys.find((k) => k.id === llmApiKeyId),
     [availableApiKeys, llmApiKeyId],
   );
+  const selectedApiKeyIsSubscription =
+    selectedApiKey !== undefined &&
+    (selectedApiKey.isChatgptSubscription === true ||
+      providerRequiresPerUserCredential(selectedApiKey.provider));
 
   // The selected model's row: source of the derived provider (like prompt
   // input's initialProvider/currentProvider) and of the capability gating
@@ -2400,11 +2405,23 @@ export function AgentDialog({
                           </Alert>
                         ) : (
                           <>
-                            <p className="text-sm text-muted-foreground">
-                              {selectedApiKey && selectedApiKey.scope !== "org"
-                                ? "Selected key will be available to everyone who has access to this agent."
-                                : null}
-                            </p>
+                            {selectedApiKeyIsSubscription ? (
+                              <Alert>
+                                <InfoIcon className="h-4 w-4" />
+                                <AlertDescription>
+                                  Each person using this agent must connect
+                                  their own subscription account. No credential
+                                  is shared.
+                                </AlertDescription>
+                              </Alert>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                {selectedApiKey &&
+                                selectedApiKey.scope !== "org"
+                                  ? "Selected key will be available to everyone who has access to this agent."
+                                  : null}
+                              </p>
+                            )}
                             <div className="flex flex-wrap items-center gap-2">
                               <LlmProviderApiKeyDropdown
                                 availableKeys={availableApiKeys}

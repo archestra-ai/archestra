@@ -3,7 +3,7 @@ title: Chat
 category: Agents
 order: 2
 description: Built-in Chat interface for working with agents and MCP tools
-lastUpdated: 2026-07-18
+lastUpdated: 2026-07-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -68,4 +68,4 @@ When auto-compaction frees tokens, a note appears in the panel showing how many 
 
 Chat attachments are scoped to their conversation. To reuse files across related sessions, add them to a [Project](./platform-projects) instead, where files are shared across all of the project's chats.
 
-Which files you can attach depends on the agent. Without a code sandbox, uploads are limited to types the model can read directly: images, PDFs, and common text documents (`.txt`, `.md`, `.csv`, `.tsv`, `.json`, `.xml`, `.yaml`, `.toml`); large text files are rejected rather than truncated. When the code sandbox is available for the agent, any file type can be attached and is staged into the sandbox for the agent to process.
+You can attach any file type. Images, PDFs, and common text documents (`.txt`, `.md`, `.csv`, `.tsv`, `.json`, `.xml`, `.yaml`, `.toml`) go straight to the model. Other files — a zip archive, for example — are saved to the chat's Files panel. When the agent has a code sandbox, those files are also staged there for the agent to process; without one, the agent can't read them and tells you so.

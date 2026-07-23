@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.3.16](https://github.com/archestra-ai/archestra/compare/platform-v1.3.15...platform-v1.3.16) (2026-07-23)
+
+
+### Features
+
+* improve llm proxy instruction ([#6799](https://github.com/archestra-ai/archestra/issues/6799)) ([6c33ccf](https://github.com/archestra-ai/archestra/commit/6c33ccf18108e9701b15e423361d740b42f2199e))
+* **llm-providers:** add native Ollama provider with per-model params and context/output fixes ([#6739](https://github.com/archestra-ai/archestra/issues/6739)) ([6b47917](https://github.com/archestra-ai/archestra/commit/6b479177098e79e449cb11281fcdf82055217274))
+* org-level default role for new users ([#6791](https://github.com/archestra-ai/archestra/issues/6791)) ([2949ba3](https://github.com/archestra-ai/archestra/commit/2949ba3e4d46f019e54924efb4bc8e731d56c6f1))
+* **projects:** permission-gated org-wide sharing + set_project_share chat tool ([#6781](https://github.com/archestra-ai/archestra/issues/6781)) ([995be65](https://github.com/archestra-ai/archestra/commit/995be6543eac4d25a188f9c8b1872ae98756ece3))
+
+
+### Bug Fixes
+
+* address hackathon feedback ([#6798](https://github.com/archestra-ai/archestra/issues/6798)) ([52c9359](https://github.com/archestra-ai/archestra/commit/52c9359dccc1909e65957e9778aab0666a151460))
+* **chat:** map deliberate run cancellations to a structured Aborted error ([#6785](https://github.com/archestra-ai/archestra/issues/6785)) ([d54853b](https://github.com/archestra-ai/archestra/commit/d54853bd0976a8654ce41099d7c81d9f0d55edb0))
+* **chat:** store uploads the model can't read as conversation files instead of rejecting ([#6803](https://github.com/archestra-ai/archestra/issues/6803)) ([3027d00](https://github.com/archestra-ai/archestra/commit/3027d00a38e961865dd8c08426dc8dd7b02d569e))
+* **database:** classify multi-address connection failures as transient ([#6786](https://github.com/archestra-ai/archestra/issues/6786)) ([4c45be3](https://github.com/archestra-ai/archestra/commit/4c45be3adb168c4208a453d11c1280c113de9175))
+* **deps:** drop the duplicate vulnerable next copy from the backend image ([#6802](https://github.com/archestra-ai/archestra/issues/6802)) ([d6f5916](https://github.com/archestra-ai/archestra/commit/d6f59162a21e9aaf979c35da358a635ca9443f24))
+* **llm-models:** lock embedding config of the model backing the knowledge base ([#6805](https://github.com/archestra-ai/archestra/issues/6805)) ([14f17c9](https://github.com/archestra-ai/archestra/commit/14f17c94ecb4ab84f0ab8b80307b4ab9f0ac4d99))
+* **llm-proxy:** relay provider rate-limit errors uncorrupted ([#6808](https://github.com/archestra-ai/archestra/issues/6808)) ([511779b](https://github.com/archestra-ai/archestra/commit/511779be19decfd8cafc7b165262867e5cda1840))
+* **observability:** group DB statement timeouts under one stable error-tracking fingerprint ([#6804](https://github.com/archestra-ai/archestra/issues/6804)) ([77c455f](https://github.com/archestra-ai/archestra/commit/77c455f84468f94ae3b6f9cd7407667fb0b99cc4))
+* **team:** accept convertToolResultsToToon on create and honor team opt-ins regardless of org compression scope ([#4967](https://github.com/archestra-ai/archestra/issues/4967)) ([c635ad3](https://github.com/archestra-ai/archestra/commit/c635ad38cb8856547428c4af8dda5afc91660136))
+* **teams:** make external group sync usable by team admins and visible to identity-provider readers ([#6782](https://github.com/archestra-ai/archestra/issues/6782)) ([097d820](https://github.com/archestra-ai/archestra/commit/097d82066ee92026ab28d78d5a1d87b197293444))
+
+
+### Documentation
+
+* clarify ARCHESTRA_AUTH_COOKIE_DOMAIN cross-subdomain collision ([#6792](https://github.com/archestra-ai/archestra/issues/6792)) ([624675b](https://github.com/archestra-ai/archestra/commit/624675bae34dd15003856d4de5c36bbe80a2c74f))
+* remove references to the private archestra-ai/website repo ([#6796](https://github.com/archestra-ai/archestra/issues/6796)) ([821c352](https://github.com/archestra-ai/archestra/commit/821c3524da1419b823bea428eb1706a38dbf368f))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump hono from 4.12.25 to 4.12.31 in /platform/mcp_server_docker_image ([#6757](https://github.com/archestra-ai/archestra/issues/6757)) ([2352fc8](https://github.com/archestra-ai/archestra/commit/2352fc835e4a7048d90ee4d5c14ca29a007b8573))
+
 ## [1.3.15](https://github.com/archestra-ai/archestra/compare/platform-v1.3.14...platform-v1.3.15) (2026-07-22)
 
 

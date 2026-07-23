@@ -3,6 +3,7 @@
 import {
   type ContextWindowBreakdown,
   E2eTestId,
+  providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
@@ -90,10 +91,18 @@ export interface ChatPromptInputToolsProps {
   onResetModelOverride?: () => void;
   /**
    * The selected agent pins a per-user-credential model (e.g. GitHub Copilot)
-   * the viewer hasn't connected. Keep the agent's model selected (no auto-swap)
-   * so sending surfaces an inline connect prompt instead of silently switching.
+   * that the viewer hasn't connected. Keep the agent's model and subscription
+   * selected so the connect prompt appears instead of silently switching.
    */
   agentRequiresPerUserConnect?: boolean;
+  /** Keep credential controls visible while the selected subscription is unavailable. */
+  subscriptionConnectRequired?: boolean;
+  /** Provider whose personal subscription must be connected. */
+  subscriptionProvider?: SupportedProvider;
+  /** Open the selected subscription's connection flow. */
+  onSubscriptionConnect?: () => void;
+  /** Opens the pinned subscription connection dialog when incremented. */
+  subscriptionConnectRequest?: number;
   /**
    * Server-resolved model name to show in the read-only chip when the agent's
    * per-user model isn't in the viewer's available models (avoids a raw UUID).
@@ -137,6 +146,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   toolsUnavailable = false,
   onResetModelOverride,
   agentRequiresPerUserConnect = false,
+  subscriptionConnectRequired = false,
+  subscriptionProvider,
+  onSubscriptionConnect,
+  subscriptionConnectRequest = 0,
   agentModelDisplayName,
   textareaRef,
   isNarrow,
@@ -151,6 +164,13 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   const logoProvider = currentProvider
     ? providerToLogoProvider[currentProvider]
     : null;
+  const providerToConnect = subscriptionProvider ?? currentProvider;
+  const subscriptionProviderLabel =
+    providerToConnect === "openai"
+      ? "ChatGPT"
+      : providerToConnect
+        ? (providerDisplayNames[providerToConnect] ?? providerToConnect)
+        : "subscription";
 
   // Label for the model-source badge. A custom model is a "chat override" when
   // it is scoped to an existing conversation, and a "user override" otherwise
@@ -198,10 +218,32 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 
   return (
     <PromptInputTools ref={toolbarRef} className="gap-0.5">
+      {canSeeProviderSettings === false &&
+        subscriptionConnectRequired &&
+        (conversationId || onApiKeyChange) && (
+          <div className="hidden">
+            <LlmProviderApiKeySelector
+              conversationId={conversationId}
+              currentProvider={currentProvider}
+              currentConversationChatApiKeyId={
+                conversationId
+                  ? (currentConversationChatApiKeyId ?? null)
+                  : (initialApiKeyId ?? null)
+              }
+              onApiKeyChange={onApiKeyChange}
+              onProviderChange={onProviderChange}
+              isModelsLoading={isModelsLoading}
+              agentLlmApiKeyId={agentLlmApiKeyId}
+              suppressAutoSelect={agentRequiresPerUserConnect}
+              connectRequestToken={subscriptionConnectRequest}
+            />
+          </div>
+        )}
       {/* Narrow: vertical three-dots menu for collapsed toolbar items */}
       {isNarrow &&
         (showDefaultLogo &&
         logoProvider &&
+        !subscriptionConnectRequired &&
         (modelSource === "agent" || modelSource === "organization") ? (
           <Button
             type="button"
@@ -242,7 +284,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   )}
                 {canSeeProviderSettings && (
                   <>
-                    {modelSource && (
+                    {modelSource && !subscriptionConnectRequired && (
                       <div className="flex items-center gap-1.5">
                         <ComposerBadge>
                           {modelSourceLabel}
@@ -281,27 +323,56 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                           onProviderChange={onProviderChange}
                           isModelsLoading={isModelsLoading}
                           agentLlmApiKeyId={agentLlmApiKeyId}
+                          suppressAutoSelect={agentRequiresPerUserConnect}
+                          connectRequestToken={subscriptionConnectRequest}
+                        />
+                        {subscriptionConnectRequired &&
+                          onSubscriptionConnect && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 h-7 gap-1.5 px-2 text-xs"
+                              onClick={onSubscriptionConnect}
+                            >
+                              Sign in with {subscriptionProviderLabel}
+                            </Button>
+                          )}
+                      </div>
+                    )}
+                    {!subscriptionConnectRequired && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                          Model
+                        </p>
+                        <ModelSelector
+                          selectedModel={selectedModel}
+                          onModelChange={onModelChange}
+                          apiKeyId={
+                            conversationId
+                              ? currentConversationChatApiKeyId
+                              : initialApiKeyId
+                          }
+                          suppressAutoSelect={agentRequiresPerUserConnect}
+                          fallbackModelName={agentModelDisplayName}
                         />
                       </div>
                     )}
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Model
-                      </p>
-                      <ModelSelector
-                        selectedModel={selectedModel}
-                        onModelChange={onModelChange}
-                        apiKeyId={
-                          conversationId
-                            ? currentConversationChatApiKeyId
-                            : initialApiKeyId
-                        }
-                        suppressAutoSelect={agentRequiresPerUserConnect}
-                        fallbackModelName={agentModelDisplayName}
-                      />
-                    </div>
                   </>
                 )}
+                {canSeeProviderSettings === false &&
+                  subscriptionConnectRequired &&
+                  onSubscriptionConnect && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={onSubscriptionConnect}
+                    >
+                      Sign in with {subscriptionProviderLabel}
+                    </Button>
+                  )}
                 {tokensUsed > 0 && maxContextLength && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
@@ -399,8 +470,22 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 onAgentChange={onAgentChange}
               />
             )}
+          {canSeeProviderSettings === false &&
+            subscriptionConnectRequired &&
+            onSubscriptionConnect && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs text-primary hover:text-primary"
+                onClick={onSubscriptionConnect}
+              >
+                Sign in with {subscriptionProviderLabel}
+              </Button>
+            )}
           {!canSeeProviderSettings ? null : showDefaultLogo &&
             logoProvider &&
+            !subscriptionConnectRequired &&
             (modelSource === "agent" || modelSource === "organization") ? (
             <Button
               type="button"
@@ -426,6 +511,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   onProviderChange={onProviderChange}
                   isModelsLoading={isModelsLoading}
                   agentLlmApiKeyId={agentLlmApiKeyId}
+                  suppressAutoSelect={agentRequiresPerUserConnect}
+                  connectRequestToken={subscriptionConnectRequest}
                   onOpenChange={(open) => {
                     if (!open) {
                       setTimeout(() => {
@@ -435,19 +522,32 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   }}
                 />
               )}
-              <ModelSelector
-                selectedModel={selectedModel}
-                onModelChange={onModelChange}
-                onOpenChange={handleModelSelectorOpenChange}
-                apiKeyId={
-                  conversationId
-                    ? currentConversationChatApiKeyId
-                    : initialApiKeyId
-                }
-                suppressAutoSelect={agentRequiresPerUserConnect}
-                fallbackModelName={agentModelDisplayName}
-              />
-              {modelSource && (
+              {subscriptionConnectRequired && onSubscriptionConnect && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1 px-2 text-xs text-primary hover:text-primary"
+                  onClick={onSubscriptionConnect}
+                >
+                  Sign in with {subscriptionProviderLabel}
+                </Button>
+              )}
+              {!subscriptionConnectRequired && (
+                <ModelSelector
+                  selectedModel={selectedModel}
+                  onModelChange={onModelChange}
+                  onOpenChange={handleModelSelectorOpenChange}
+                  apiKeyId={
+                    conversationId
+                      ? currentConversationChatApiKeyId
+                      : initialApiKeyId
+                  }
+                  suppressAutoSelect={agentRequiresPerUserConnect}
+                  fallbackModelName={agentModelDisplayName}
+                />
+              )}
+              {modelSource && !subscriptionConnectRequired && (
                 <ComposerBadge className="ml-1 mr-2">
                   {modelSourceLabel}
                   {modelSource === "user" && onResetModelOverride && (

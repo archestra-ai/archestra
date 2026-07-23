@@ -191,6 +191,7 @@ const PromptInputContent = ({
   lastCompaction,
   agentLlmApiKeyId,
   submitDisabled = false,
+  subscriptionConnectRequired = false,
   isContextCompacting = false,
   onCompactConversation,
   isPlaywrightSetupVisible = false,
@@ -201,6 +202,7 @@ const PromptInputContent = ({
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
+  subscriptionProvider,
   sandboxAvailable,
   prefillText,
   onPrefillApplied,
@@ -211,6 +213,11 @@ const PromptInputContent = ({
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
+  const [subscriptionConnectRequest, setSubscriptionConnectRequest] =
+    useState(0);
+  const requestSubscriptionConnect = useCallback(() => {
+    setSubscriptionConnectRequest((request) => request + 1);
+  }, []);
 
   // Collapse the toolbar based on whether its inline controls actually fit —
   // measured on the footer, not the viewport — so it reacts when the right-side
@@ -495,6 +502,11 @@ const PromptInputContent = ({
 
   const handleWrappedSubmit = useCallback(
     (message: PromptInputMessage, e: FormEvent<HTMLFormElement>) => {
+      if (subscriptionConnectRequired) {
+        e.preventDefault();
+        return;
+      }
+
       const trimmed = message.text.trim();
 
       if (trimmed === "/compact" && onCompactConversation) {
@@ -561,6 +573,7 @@ const PromptInputContent = ({
       sandboxAvailable,
       sensitiveDataDetectionEnabled,
       skillCommands,
+      subscriptionConnectRequired,
     ],
   );
 
@@ -875,6 +888,10 @@ const PromptInputContent = ({
             toolsUnavailable={toolsUnavailable}
             onResetModelOverride={onResetModelOverride}
             agentRequiresPerUserConnect={agentRequiresPerUserConnect}
+            subscriptionConnectRequired={subscriptionConnectRequired}
+            subscriptionProvider={subscriptionProvider}
+            onSubscriptionConnect={requestSubscriptionConnect}
+            subscriptionConnectRequest={subscriptionConnectRequest}
             agentModelDisplayName={agentModelDisplayName}
             textareaRef={textareaRef}
             contextWindow={contextWindow}
@@ -894,7 +911,7 @@ const PromptInputContent = ({
                 <PromptInputSubmit
                   className="!h-8"
                   status={submitStatus}
-                  disabled={composerLocked}
+                  disabled={composerLocked || subscriptionConnectRequired}
                   onClick={(event) => {
                     // While a response is in-flight the button shows Stop; a
                     // click stops the stream instead of submitting the form
@@ -907,7 +924,9 @@ const PromptInputContent = ({
                 />
               </TooltipTrigger>
               <TooltipContent side="top">
-                {isResponseInFlight && onStop ? (
+                {subscriptionConnectRequired ? (
+                  "Connect the subscription or choose another credential"
+                ) : isResponseInFlight && onStop ? (
                   <span className="flex items-center gap-1.5">
                     Stop <Kbd>Esc</Kbd>
                   </span>
@@ -954,6 +973,7 @@ const ArchestraPromptInput = ({
   inputModalities,
   agentLlmApiKeyId,
   submitDisabled,
+  subscriptionConnectRequired,
   isContextCompacting,
   onCompactConversation,
   isPlaywrightSetupVisible,
@@ -964,6 +984,7 @@ const ArchestraPromptInput = ({
   onResetModelOverride,
   agentRequiresPerUserConnect,
   agentModelDisplayName,
+  subscriptionProvider,
   prefillText,
   onPrefillApplied,
 }: ArchestraPromptInputProps) => {
@@ -1053,6 +1074,8 @@ const ArchestraPromptInput = ({
           lastCompaction={lastCompaction}
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}
+          subscriptionConnectRequired={subscriptionConnectRequired}
+          subscriptionProvider={subscriptionProvider}
           isContextCompacting={isContextCompacting}
           onCompactConversation={onCompactConversation}
           isPlaywrightSetupVisible={isPlaywrightSetupVisible}

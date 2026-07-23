@@ -390,6 +390,8 @@ interface LlmProviderApiKeyFormProps {
   hideScopeAndPrimary?: boolean;
   /** When true, providers without embedding support are disabled in the picker. */
   forEmbedding?: boolean;
+  /** Whether personal subscription credential modes can be configured. */
+  allowPersonalSubscriptions?: boolean;
 }
 
 export function LlmProviderApiKeyForm({
@@ -405,6 +407,7 @@ export function LlmProviderApiKeyForm({
   allowedProviders,
   hideScopeAndPrimary = false,
   forEmbedding = false,
+  allowPersonalSubscriptions = true,
 }: LlmProviderApiKeyFormProps) {
   const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
@@ -458,12 +461,18 @@ export function LlmProviderApiKeyForm({
   const allowedProviderSet = useMemo(
     () =>
       new Set<CreateLlmProviderApiKeyBody["provider"]>(
-        allowedProviders ??
+        (
+          allowedProviders ??
           (Object.keys(
             PROVIDER_CONFIG,
-          ) as CreateLlmProviderApiKeyBody["provider"][]),
+          ) as CreateLlmProviderApiKeyBody["provider"][])
+        ).filter(
+          (candidate) =>
+            allowPersonalSubscriptions ||
+            !providerRequiresPerUserCredential(candidate),
+        ),
       ),
-    [allowedProviders],
+    [allowedProviders, allowPersonalSubscriptions],
   );
   // The endpoint to suggest when the app runs in Docker. Derived from the
   // provider's own default so it matches the transport in play — vLLM has no
@@ -974,7 +983,7 @@ export function LlmProviderApiKeyForm({
               </div>
             )}
 
-            {provider === "openai" && (
+            {provider === "openai" && allowPersonalSubscriptions && (
               <Tabs
                 value={openaiAuthMethod}
                 onValueChange={(value) => {

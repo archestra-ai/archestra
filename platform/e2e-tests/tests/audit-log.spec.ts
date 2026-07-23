@@ -49,7 +49,7 @@ test.describe("Audit log UI", {
     }
   });
 
-  test("audit table shows resource type only — never the resource id — in the Resource column", async ({
+  test("audit table shows resource type and name — never the resource id — in the Resource column", async ({
     adminPage,
     goToAdminPage,
   }) => {

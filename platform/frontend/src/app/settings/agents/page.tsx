@@ -1,5 +1,6 @@
 "use client";
 
+import { providerRequiresPerUserCredential } from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
@@ -12,6 +13,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -189,6 +191,10 @@ export default function AgentSettingsPage() {
     () => availableKeys.find((key) => key.id === selectedApiKeyId) ?? null,
     [availableKeys, selectedApiKeyId],
   );
+  const selectedApiKeyIsSubscription =
+    selectedApiKey !== null &&
+    (selectedApiKey.isChatgptSubscription === true ||
+      providerRequiresPerUserCredential(selectedApiKey.provider));
   const canFilterFreeModels = selectedApiKey?.provider === "openrouter";
 
   const handleAgentChange = useCallback((value: string) => {
@@ -278,6 +284,14 @@ export default function AgentSettingsPage() {
                       !selectedApiKeyId
                     }
                   />
+                  {selectedApiKeyIsSubscription && (
+                    <Alert>
+                      <AlertDescription>
+                        Each person using chat must connect their own
+                        subscription account. No credential is shared.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <Button
                     type="button"
                     variant="outline"

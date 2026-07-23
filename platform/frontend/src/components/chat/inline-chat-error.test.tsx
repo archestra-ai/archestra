@@ -25,6 +25,7 @@ vi.mock("@/components/github-copilot-sign-in", () => ({
 }));
 
 import { InlineChatError } from "./inline-chat-error";
+import { ProviderAuthRequiredCard } from "./provider-auth-required-card";
 
 describe("InlineChatError", () => {
   beforeEach(() => {
@@ -321,6 +322,34 @@ describe("InlineChatError", () => {
     );
 
     await waitFor(() => expect(onProviderConnected).toHaveBeenCalledTimes(1));
+  });
+
+  it("uses connect-before-send copy without claiming it will retry", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ProviderAuthRequiredCard
+        provider="github-copilot"
+        providerLabel="GitHub Copilot"
+        agentName="Research Agent"
+        variant="preflight"
+      />,
+    );
+
+    expect(
+      screen.getByText("Connect GitHub Copilot to use Research Agent"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/connect your own account before sending a message/i),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Sign in with GitHub" }),
+    );
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("GitHub Copilot connected"),
+    );
   });
 
   const retryableError = () =>

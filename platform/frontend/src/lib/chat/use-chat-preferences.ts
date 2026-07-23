@@ -246,22 +246,42 @@ export function resolveModelForAgent(params: {
 
 /**
  * True when a (shared) agent pins a model from a per-user-credential provider
- * (e.g. GitHub Copilot) that the viewer hasn't connected: the agent's model is
- * the current selection but isn't in the viewer's available models. In that
- * case the chat keeps the agent's model selected instead of auto-swapping to a
- * fallback, so sending it surfaces an inline "connect your account" prompt.
+ * (e.g. GitHub Copilot) that the viewer hasn't connected. These models remain
+ * in the catalog with `isConnected: false`, so catalog presence alone does not
+ * mean the viewer can use one. The gate only applies while the agent's model is
+ * selected; a deliberate model override remains usable.
  */
 export function agentRequiresPerUserConnect(params: {
   agent:
     | Pick<AgentLlmConfig, "modelId" | "llmProviderRequiresPerUserCredential">
     | undefined;
   selectedModelId: string | null | undefined;
-  isModelAvailable: boolean;
+  selectedModel:
+    | {
+        dbId: string;
+        requiresUserConnection?: boolean;
+        isConnected?: boolean;
+      }
+    | undefined;
+  requiresPerUserCredential?: boolean;
+  isCredentialConnected?: boolean;
 }): boolean {
-  const { agent, selectedModelId, isModelAvailable } = params;
-  if (!agent?.llmProviderRequiresPerUserCredential) return false;
+  const {
+    agent,
+    selectedModelId,
+    selectedModel,
+    requiresPerUserCredential,
+    isCredentialConnected,
+  } = params;
+  if (!agent) return false;
+  if (
+    !(requiresPerUserCredential ?? agent.llmProviderRequiresPerUserCredential)
+  ) {
+    return false;
+  }
   if (!selectedModelId || selectedModelId !== agent.modelId) return false;
-  return !isModelAvailable;
+  if (isCredentialConnected !== undefined) return !isCredentialConnected;
+  return selectedModel?.isConnected !== true;
 }
 
 /**

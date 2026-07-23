@@ -38,6 +38,7 @@ function buildSearchCondition(search: string) {
     ilike(schema.auditLogsTable.actorName, pattern),
     ilike(schema.auditLogsTable.httpPath, pattern),
     ilike(schema.auditLogsTable.resourceId, pattern),
+    ilike(schema.auditLogsTable.resourceName, pattern),
   );
 }
 
@@ -80,6 +81,7 @@ class AuditLogModel {
     outcome?: AuditOutcome;
     actorType?: AuditActorType;
     resourceType?: string;
+    resourceId?: string;
     search?: string;
   }): Promise<PaginatedResult<AuditLog>> {
     const {
@@ -94,6 +96,7 @@ class AuditLogModel {
       outcome,
       actorType,
       resourceType,
+      resourceId,
       search,
     } = opts;
 
@@ -121,6 +124,9 @@ class AuditLogModel {
     }
     if (resourceType) {
       conditions.push(eq(schema.auditLogsTable.resourceType, resourceType));
+    }
+    if (resourceId) {
+      conditions.push(eq(schema.auditLogsTable.resourceId, resourceId));
     }
     if (search) {
       const searchCondition = buildSearchCondition(search);

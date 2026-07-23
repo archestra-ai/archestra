@@ -116,6 +116,79 @@ describe("LlmProviderApiKeyDropdown", () => {
     expect(options[0]).toHaveTextContent("Staging key");
   });
 
+  it("separates personal subscriptions from API keys", async () => {
+    const user = userEvent.setup();
+
+    renderDropdown({
+      availableKeys: [
+        {
+          id: "chatgpt-subscription",
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          scope: "personal",
+          isChatgptSubscription: true,
+        },
+        {
+          id: "github-copilot",
+          name: "GitHub Copilot",
+          provider: "github-copilot",
+          scope: "personal",
+        },
+        {
+          id: "openai-key",
+          name: "OpenAI production",
+          provider: "openai",
+          scope: "org",
+          isChatgptSubscription: false,
+        },
+      ] as LlmProviderApiKey[],
+      selectedApiKeyId: "chatgpt-subscription",
+      onSelectKey: () => {},
+      triggerVariant: "button",
+    });
+
+    expect(screen.getByRole("button")).toHaveTextContent("Per-user");
+
+    await user.click(screen.getByRole("button"));
+
+    expect(screen.getByText("Personal subscriptions")).toBeInTheDocument();
+    expect(
+      screen.getByText("Each user connects their own account"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("API keys")).toBeInTheDocument();
+    expect(screen.getAllByText("Per-user")).toHaveLength(3);
+    expect(
+      screen.getByRole("option", { name: /openai production/i }),
+    ).not.toHaveTextContent("Per-user");
+  });
+
+  it("labels unconnected subscription options as connect actions", async () => {
+    const user = userEvent.setup();
+
+    renderDropdown({
+      availableKeys: [
+        {
+          id: "connect-subscription-github-copilot",
+          name: "GitHub Copilot",
+          provider: "github-copilot",
+          scope: "personal",
+          connectRequired: true,
+        },
+      ],
+      selectedApiKeyId: null,
+      onSelectKey: () => {},
+      triggerVariant: "button",
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: /select provider key/i }),
+    );
+
+    expect(
+      screen.getByRole("option", { name: /github copilot.*connect/i }),
+    ).toBeInTheDocument();
+  });
+
   it("supports selecting organization default", async () => {
     const user = userEvent.setup();
     const onSelectOrganizationDefault = vi.fn();

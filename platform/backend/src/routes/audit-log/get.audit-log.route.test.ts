@@ -3,8 +3,11 @@
  * - Requires a successful permission check for RouteId.GetAuditLogs (admin-only).
  * - Returns paginated audit rows strictly scoped to request.organizationId.
  * - Query filters map to AuditLogModel.findPaginated; invalid pagination/sortDirection → 400.
- * - actorId, action (dotted), outcome, actorType filters narrow results; unknown filter
- *   values that fail the closed enum are rejected with 400.
+ * - actorId, action (dotted), outcome, actorType, resourceType, resourceId filters
+ *   narrow results; unknown filter values that fail the closed enum are rejected
+ *   with 400.
+ * - search matches case-insensitively across actor email, actor name, HTTP path,
+ *   resource ID, and resource name.
  * - Legacy actorUserId param is not accepted by the route; it is silently ignored
  *   (Fastify strips unknown query params) — the regression guard verifies results are
  *   NOT narrowed when only actorUserId is passed.
@@ -318,6 +321,51 @@ describe("GET /api/audit-logs", () => {
       true,
     );
     expect(body.data.some((r: AuditLog) => r.id === agentRow.id)).toBe(true);
+  });
+
+  test("resourceId filter narrows results", async () => {
+    const targeted = await seedRow(organizationId, {
+      resourceType: "agent",
+      resourceId: "agent-under-audit",
+    });
+    await seedRow(organizationId, {
+      resourceType: "agent",
+      resourceId: "other-agent",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?resourceId=agent-under-audit",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].id).toBe(targeted.id);
+  });
+
+  test("search filter matches resource name case-insensitively", async () => {
+    const matchedRow = await seedRow(organizationId, {
+      resourceType: "agent",
+      resourceId: "renamed-agent-id",
+      resourceName: "PotatoAI",
+    });
+    await seedRow(organizationId, {
+      resourceType: "agent",
+      resourceId: "other-agent-id",
+      resourceName: "Unrelated Agent",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs?search=potatoai",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].id).toBe(matchedRow.id);
+    expect(body.data[0].resourceName).toBe("PotatoAI");
   });
 
   test("search filter matches actor email case-insensitively", async () => {

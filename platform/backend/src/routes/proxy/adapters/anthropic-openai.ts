@@ -159,7 +159,13 @@ class AnthropicOpenaiStreamAdapter
   }
 
   getRawToolCallEvents(): string[] {
-    return this.pendingToolCallEvents.splice(0);
+    // Snapshot, never drain: the proxy handler calls this repeatedly and
+    // dedupes replayed events by array index, so indices must stay stable
+    // across calls (the base anthropic adapter behaves the same way).
+    // Draining here re-based later tool calls to index 0, so with parallel
+    // tool calls the second call's start chunk (id + name) was skipped as
+    // already streamed and the client received a dangling tool call.
+    return [...this.pendingToolCallEvents];
   }
 
   formatCompleteTextSSE(text: string): string[] {

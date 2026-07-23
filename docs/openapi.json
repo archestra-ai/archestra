@@ -88883,6 +88883,7 @@
                                     "tool_call_output_truncated",
                                     "provider_auth_required",
                                     "tools_unsupported",
+                                    "aborted",
                                     "unknown"
                                   ]
                                 },
@@ -89653,6 +89654,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -90394,6 +90396,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -91176,6 +91179,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -93694,6 +93698,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -95078,6 +95083,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -96775,6 +96781,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -97540,6 +97547,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -98297,6 +98305,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -99064,6 +99073,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },
@@ -124539,6 +124549,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -125516,6 +125527,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -126204,6 +126216,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -126881,6 +126894,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -127558,6 +127572,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -128103,6 +128118,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -128659,6 +128675,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -131166,6 +131183,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -134384,6 +134402,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -134940,6 +134959,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -135496,6 +135516,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -136052,6 +136073,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -136608,6 +136630,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -137164,6 +137187,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -137720,6 +137744,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -138276,6 +138301,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -138821,6 +138847,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -139366,6 +139393,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -139922,6 +139950,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -140478,6 +140507,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -143205,6 +143235,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -145937,6 +145968,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -146493,6 +146525,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -147283,6 +147316,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -148260,6 +148294,7 @@
                                             "tool_call_output_truncated",
                                             "provider_auth_required",
                                             "tools_unsupported",
+                                            "aborted",
                                             "unknown"
                                           ]
                                         },
@@ -150338,6 +150373,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -151315,6 +151351,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -152003,6 +152040,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -152680,6 +152718,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -153357,6 +153396,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -153902,6 +153942,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -154458,6 +154499,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -156965,6 +157007,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -160183,6 +160226,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -160739,6 +160783,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -161295,6 +161340,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -161851,6 +161897,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -162407,6 +162454,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -162963,6 +163011,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -163519,6 +163568,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -164075,6 +164125,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -164620,6 +164671,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -165165,6 +165217,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -165721,6 +165774,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -166277,6 +166331,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -169004,6 +169059,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -171736,6 +171792,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -172292,6 +172349,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -173082,6 +173140,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -174059,6 +174118,7 @@
                                       "tool_call_output_truncated",
                                       "provider_auth_required",
                                       "tools_unsupported",
+                                      "aborted",
                                       "unknown"
                                     ]
                                   },
@@ -264706,6 +264766,7 @@
                                   "tool_call_output_truncated",
                                   "provider_auth_required",
                                   "tools_unsupported",
+                                  "aborted",
                                   "unknown"
                                 ]
                               },

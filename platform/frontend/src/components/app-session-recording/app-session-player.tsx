@@ -18,6 +18,7 @@ import {
   CornerDownLeftIcon,
   Download as DownloadIcon,
   HelpCircle,
+  Info,
   Pause,
   Pencil,
   Play,
@@ -38,6 +39,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import {
   Conversation,
   ConversationContent,
@@ -451,6 +453,22 @@ export function AppSessionPlayer({
   // Editing the description (in this header) must pause and lock playback
   // down in the surface, exactly like editing the chat or the timeline.
   const [descriptionEditing, setDescriptionEditing] = useState(false);
+  // One-click "fix it" wiring for the readiness notice: bumping a nonce opens
+  // the matching editor (description here in the header; build prompt down in
+  // the surface). The notice tells the builder — the moment the player opens —
+  // that the gallery card is missing a description and/or a build prompt, and
+  // gives a direct way to fill each in. Dismissible; nothing here ever blocks
+  // submission (the fallbacks do), it only nudges toward a better card.
+  const [descriptionOpenNonce, setDescriptionOpenNonce] = useState(0);
+  const [buildPromptOpenNonce, setBuildPromptOpenNonce] = useState(0);
+  const [readinessDismissed, setReadinessDismissed] = useState(false);
+  const needsDescription = !recording?.enhancement?.description?.trim();
+  const needsPrompt = !recording?.enhancement?.prompt?.trim();
+  const showReadinessNotice =
+    !!recording &&
+    !filming &&
+    !readinessDismissed &&
+    (needsDescription || needsPrompt);
   // Editing owns playback, and a filmed replay IS playback — so an export can
   // only start once every editor below is closed.
   const [surfaceEditing, setSurfaceEditing] = useState(false);
@@ -596,7 +614,11 @@ export function AppSessionPlayer({
                 appName={recording.appName}
                 enhancement={recording.enhancement ?? null}
                 saving={editor.isSaving}
-                showEditHint={tourOpen && tourStepKey === "description"}
+                showEditHint={
+                  (tourOpen && tourStepKey === "description") ||
+                  (showReadinessNotice && needsDescription)
+                }
+                openNonce={descriptionOpenNonce}
                 onEditingChange={setDescriptionEditing}
                 onSave={(description) =>
                   editor.applyEnhancement({
@@ -796,6 +818,15 @@ export function AppSessionPlayer({
             </div>
           </TooltipProvider>
         </DialogHeader>
+        {showReadinessNotice && (
+          <SubmissionReadinessNotice
+            needsDescription={needsDescription}
+            needsPrompt={needsPrompt}
+            onAddDescription={() => setDescriptionOpenNonce((n) => n + 1)}
+            onWriteBuildPrompt={() => setBuildPromptOpenNonce((n) => n + 1)}
+            onDismiss={() => setReadinessDismissed(true)}
+          />
+        )}
         {recording ? (
           <PlayerSurface
             key={conversationId}
@@ -806,6 +837,7 @@ export function AppSessionPlayer({
             tourStepKey={tourOpen ? tourStepKey : null}
             descriptionEditing={descriptionEditing}
             filming={filming}
+            openBuildPromptNonce={buildPromptOpenNonce}
             onEditingChange={setSurfaceEditing}
           />
         ) : validation && !validation.ok ? (
@@ -828,6 +860,90 @@ export function AppSessionPlayer({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * The on-open "finish your submission card" notice. Shown the moment the player
+ * opens whenever the recording is missing a real description and/or build prompt
+ * — the two fields a good gallery card needs and the ones an unavailable AI
+ * draft leaves blank. It never blocks: submission falls back to the app name
+ * and the opening chat message. It just says what's missing, why it matters, and
+ * gives a one-click way to fix each — so the builder learns it up front rather
+ * than at the submit button. Dismissible for anyone happy with the fallbacks.
+ */
+/** @public — exported for testability (the on-open readiness notice). */
+export function SubmissionReadinessNotice({
+  needsDescription,
+  needsPrompt,
+  onAddDescription,
+  onWriteBuildPrompt,
+  onDismiss,
+}: {
+  needsDescription: boolean;
+  needsPrompt: boolean;
+  onAddDescription: () => void;
+  onWriteBuildPrompt: () => void;
+  onDismiss: () => void;
+}) {
+  const missing =
+    needsDescription && needsPrompt
+      ? "a description and a build prompt"
+      : needsDescription
+        ? "a description"
+        : "a build prompt";
+  return (
+    // `w-0 min-w-full`: span the shrink-wrapped dialog without adding width.
+    <div className="flex w-0 min-w-full items-start gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm">
+      <Info className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div>
+          <p className="font-medium">Finish your gallery card</p>
+          <p className="text-muted-foreground">
+            This recording still needs {missing}. You can submit without
+            {needsDescription && needsPrompt ? " them" : " it"} — we fall back
+            to your app name and your first chat message — but a real one makes
+            a far better card.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {needsDescription && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 text-xs"
+              onClick={onAddDescription}
+            >
+              <Pencil className="size-3" />
+              Add description
+            </Button>
+          )}
+          {needsPrompt && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 text-xs"
+              onClick={onWriteBuildPrompt}
+            >
+              <Sparkles className="size-3" />
+              Write build prompt
+            </Button>
+          )}
+        </div>
+      </div>
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        className="size-6 shrink-0 text-muted-foreground"
+        aria-label="Dismiss"
+        onClick={onDismiss}
+      >
+        <X className="size-3.5" />
+      </Button>
+    </div>
   );
 }
 
@@ -872,10 +988,14 @@ function PlayerSurface({
   tourStepKey,
   descriptionEditing,
   filming,
+  openBuildPromptNonce,
   onEditingChange,
 }: {
   /** Rendering a video: hold every hover affordance down. */
   filming: boolean;
+  /** Bumped by the header's readiness notice to open the build-prompt editor
+   * directly (one-click "Write build prompt"). */
+  openBuildPromptNonce: number;
   /** Reports this surface's editors so the toolbar can gate the export. */
   onEditingChange: (editing: boolean) => void;
   conversationId: string;
@@ -1838,7 +1958,24 @@ function PlayerSurface({
       { conversationId, appName: recording.appName },
       {
         onSuccess: (result) => {
-          if (!result?.prompt) return;
+          if (!result?.prompt) {
+            // Never leave the click silent. A 200 with no prompt is the quiet
+            // failure (no usable LLM for this chat, an empty transcript, a
+            // generation sanitized to nothing) — drop the builder straight into
+            // the manual editor so they can write the prompt by hand. A null
+            // `result` already surfaced its API error via the mutation, so only
+            // the quiet 200-with-null case adds a message here.
+            if (promptDraftRef.current === null) {
+              setPlayState((state) => (state === "playing" ? "paused" : state));
+              setPromptDraft("");
+            }
+            if (result) {
+              toast.info(
+                "Couldn't draft a build prompt automatically — write one here. (Your first chat message is used for the submission if you skip it.)",
+              );
+            }
+            return;
+          }
           if (wasEditing) {
             if (promptDraftRef.current !== null) setPromptDraft(result.prompt);
             const backfilled = backfilledEnhancement(
@@ -1893,6 +2030,19 @@ function PlayerSurface({
     ],
   );
 
+  // The header's readiness notice can ask us to open the build-prompt editor
+  // directly (its one-click "Write build prompt"): switch into the chat editor
+  // and start a blank draft. Ref-indirected so the effect fires only when the
+  // nonce changes, not on every promptEditor identity change.
+  const startBuildPromptRef = useRef<() => void>(() => {});
+  startBuildPromptRef.current = () => {
+    setChatEditing(true);
+    promptEditor.start();
+  };
+  useEffect(() => {
+    if (openBuildPromptNonce > 0) startBuildPromptRef.current();
+  }, [openBuildPromptNonce]);
+
   // ── The closing AI response's inline editor. Same contract as the prompt's:
   // hand-edit or regenerate, saved into the bundle's `enhancement` layer.
   const responseDraftRef = useRef(responseDraft);
@@ -1916,7 +2066,23 @@ function PlayerSurface({
       { conversationId, appName: recording.appName },
       {
         onSuccess: (result) => {
-          if (!result?.response) return;
+          if (!result?.response) {
+            // Same no-silent rule as the prompt: open the response editor (with
+            // the stock closing line to edit) rather than letting the click do
+            // nothing. Only the quiet 200-with-null case adds a message.
+            if (responseDraftRef.current === null) {
+              setResponseDraft(
+                enhancementRef.current?.response?.trim() ||
+                  FALLBACK_ENHANCED_RESPONSE,
+              );
+            }
+            if (result) {
+              toast.info(
+                "Couldn't draft a closing message automatically — write one here.",
+              );
+            }
+            return;
+          }
           if (wasEditing) {
             if (responseDraftRef.current !== null) {
               setResponseDraft(result.response);
@@ -2603,6 +2769,7 @@ function ReplayDescriptionRow({
   enhancement,
   saving,
   showEditHint,
+  openNonce,
   onEditingChange,
   onSave,
   onRegenerated,
@@ -2614,6 +2781,9 @@ function ReplayDescriptionRow({
   /** Tour spotlight: hover can't reach under the tour overlay, so the stop
    * forces the edit chip visible while it points here. */
   showEditHint?: boolean;
+  /** Bumped by the header's readiness notice to open this editor directly
+   * (its one-click "Add description"). */
+  openNonce?: number;
   /** Editing anything pauses the replay and locks the play controls. */
   onEditingChange?: (editing: boolean) => void;
   onSave: (description: string) => void;
@@ -2654,6 +2824,19 @@ function ReplayDescriptionRow({
   useEffect(() => {
     onEditingChange?.(editing);
   }, [editing, onEditingChange]);
+
+  // The readiness notice's one-click "Add description" opens this editor. Open
+  // with the real description if there is one, else empty — never pre-fill the
+  // app-name fallback (that reads as "already filled"). Ref-indirected so the
+  // effect fires only when the nonce changes.
+  const openEditorRef = useRef<() => void>(() => {});
+  openEditorRef.current = () => {
+    closedRef.current = false;
+    setDraft(enhancement?.description?.trim() ?? "");
+  };
+  useEffect(() => {
+    if (openNonce && openNonce > 0) openEditorRef.current();
+  }, [openNonce]);
   useEffect(() => {
     if (!editing) return;
     const onPointerDown = (event: PointerEvent) => {
@@ -3978,7 +4161,8 @@ function ReplayChatPane({
  * Everything commits through the shared undo history; the capture itself
  * never changes.
  */
-function ReplayChatEditPane({
+/** @public — exported for testability (the manual "Write build prompt" path). */
+export function ReplayChatEditPane({
   transcript,
   enhancement,
   chat,
@@ -4056,21 +4240,45 @@ function ReplayChatEditPane({
               />
             </span>
           ) : (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1 text-xs"
-              disabled={promptEditor.generating || saving}
-              onClick={promptEditor.regenerate}
-            >
-              {promptEditor.generating ? (
-                <Loader size={12} />
-              ) : (
-                <Sparkles className="size-3" />
-              )}
-              {promptEditor.generating ? "Drafting…" : "Draft AI prompt"}
-            </Button>
+            // No prompt yet: offer BOTH the AI draft and a hand-written one.
+            // The manual path is the escape hatch that keeps sharing possible —
+            // the AI draft runs over the chat's model / agent / org-default LLM,
+            // which can be unfunded or unset even for a working app, and a
+            // recording can't be submitted to the gallery without a build
+            // prompt. Without a from-scratch editor a failed draft dead-ends the
+            // submission entirely.
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-xs"
+                disabled={promptEditor.generating || saving}
+                onClick={promptEditor.regenerate}
+              >
+                {promptEditor.generating ? (
+                  <Loader size={12} />
+                ) : (
+                  <Sparkles className="size-3" />
+                )}
+                {promptEditor.generating ? "Drafting…" : "Draft AI prompt"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-xs"
+                disabled={
+                  promptEditor.generating ||
+                  saving ||
+                  promptEditor.draft !== null
+                }
+                onClick={promptEditor.start}
+              >
+                <Pencil className="size-3" />
+                Write build prompt
+              </Button>
+            </div>
           )}
           <Button
             type="button"
@@ -4083,18 +4291,26 @@ function ReplayChatEditPane({
         </div>
         <Conversation className="flex-1">
           <ConversationContent>
+            {/* No captured user turn to anchor the prompt to (unusual), but a
+                started draft still needs a home — put it at the top so "Write
+                build prompt" works on any recording. */}
+            {promptEditor.draft !== null && !firstUserId && (
+              <ReplayPromptEditorCard editor={promptEditor} />
+            )}
             {transcript.map((message) => (
               <Fragment key={message.id}>
                 {message.id === firstUserId &&
-                  enhancementOn &&
                   (promptEditor.draft !== null ? (
+                    // An open prompt draft edits here whether it came from the
+                    // AI or was started by hand — so a from-scratch prompt has
+                    // somewhere to go even before any enhancement exists.
                     <ReplayPromptEditorCard editor={promptEditor} />
-                  ) : (
+                  ) : enhancementOn ? (
                     <ReplayAiPromptBubble
                       prompt={enhancement?.prompt ?? ""}
                       promptEditor={promptEditor}
                     />
-                  ))}
+                  ) : null)}
                 <ReplayEditableRow
                   message={message}
                   // With the AI version replaying, the captured messages are

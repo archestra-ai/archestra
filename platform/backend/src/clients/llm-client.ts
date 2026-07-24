@@ -24,7 +24,11 @@ import {
   USER_ID_HEADER,
 } from "@archestra/shared";
 import { context, propagation } from "@opentelemetry/api";
-import type { streamText } from "ai";
+import {
+  extractReasoningMiddleware,
+  type streamText,
+  wrapLanguageModel,
+} from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
@@ -490,7 +494,19 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
 
   perplexity: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+      // Perplexity reasoning models (sonar-reasoning-pro) stream their chain
+      // of thought as inline <think>…</think> text in `content` — there is no
+      // reasoning_content field — so no provider parser can surface it. The
+      // middleware extracts the tags into native reasoning parts; tagless
+      // responses (sonar, sonar-pro) pass through unchanged. Reasoning parts
+      // are dropped from outgoing messages by the strict openai converter,
+      // which is correct here: Perplexity does not accept reasoning back.
+      wrapLanguageModel({
+        model: createOpenAI({ apiKey, baseURL, headers, fetch }).chat(
+          modelName,
+        ),
+        middleware: extractReasoningMiddleware({ tagName: "think" }),
+      }),
     defaultBaseUrl: config.llm.perplexity.baseUrl,
     apiKeyRequiredMessage:
       "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",

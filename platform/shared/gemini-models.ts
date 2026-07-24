@@ -26,6 +26,13 @@ const GEMINI_FAMILY_LEGACY_MAX_VERSION: GeminiVersion = [3, 0];
 const GEMINI_EMBEDDING_PREFIX = "gemini-embedding-";
 
 /**
+ * Lowest generation whose chat models think by default. Deliberately its own
+ * constant: catalog policy ({@link GEMINI_FAMILY_MIN_VERSION}) can move
+ * independently of the thinking capability boundary.
+ */
+const GEMINI_THINKING_MIN_VERSION: GeminiVersion = [2, 5];
+
+/**
  * True when the model should appear in the selectable catalog: first-class
  * Gemini embeddings, or a text-output `gemini-`/`gemma-` chat model at or above
  * {@link GEMINI_FAMILY_MIN_VERSION}. Drops TTS/image/audio/live variants and
@@ -63,6 +70,31 @@ export function isLegacyGeminiModel(modelId: string): boolean {
   return (
     version !== null &&
     compareVersion(version, GEMINI_FAMILY_LEGACY_MAX_VERSION) <= 0
+  );
+}
+
+/**
+ * True when it is safe to request thought summaries
+ * (`thinkingConfig.includeThoughts`) from the model: Gemini chat models at or
+ * above {@link GEMINI_THINKING_MIN_VERSION}, where thinking is on by default.
+ * Excluded because the API rejects `includeThoughts` with a 400 when thinking
+ * is inactive: `flash-lite` variants (thinking off by default), `gemma-*`
+ * (no thinking support), and non-text-output variants.
+ */
+export function supportsGeminiThoughtSummaries(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+
+  if (!id.startsWith("gemini-") || id.includes("flash-lite")) {
+    return false;
+  }
+  if (NON_TEXT_GEMINI_PATTERNS.some((pattern) => id.includes(pattern))) {
+    return false;
+  }
+
+  const version = parseGeminiFamilyVersion(id);
+  return (
+    version !== null &&
+    compareVersion(version, GEMINI_THINKING_MIN_VERSION) >= 0
   );
 }
 

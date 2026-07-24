@@ -13,6 +13,7 @@ import {
   RouteId,
   requiresOpenAiResponsesApi,
   type SupportedProvider,
+  supportsGeminiThoughtSummaries,
   TimeInMs,
   type TokenUsage,
 } from "@archestra/shared";
@@ -1278,6 +1279,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     google: {
                       responseModalities: ["TEXT", "IMAGE"],
                     },
+                  };
+                }
+
+                // Gemini thinking models bill thought tokens either way, but
+                // the API only streams thought summaries (surfaced in the UI
+                // as reasoning parts) when explicitly asked. Only for models
+                // with thinking on by default: includeThoughts on an inactive-
+                // thinking model is a 400.
+                if (
+                  provider === "gemini" &&
+                  !isGeminiImageModel &&
+                  supportsGeminiThoughtSummaries(selectedModel)
+                ) {
+                  streamTextConfig.providerOptions = {
+                    ...streamTextConfig.providerOptions,
+                    google: { thinkingConfig: { includeThoughts: true } },
                   };
                 }
 

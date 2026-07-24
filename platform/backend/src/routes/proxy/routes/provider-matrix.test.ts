@@ -148,6 +148,7 @@ type HarnessOptions = {
   usage?: UsageSpec;
   nonStreamingToolCall?: ToolCallSpec | null;
   streamingToolCall?: ToolCallSpec | null;
+  reasoningContent?: string;
 };
 
 const READ_FILE_TOOL: ToolDefinition = {
@@ -494,6 +495,9 @@ function createOpenAiLikeHarness(options: HarnessOptions = {}) {
                         role: "assistant",
                         content: null,
                         refusal: null,
+                        ...(options.reasoningContent
+                          ? { reasoning_content: options.reasoningContent }
+                          : {}),
                         tool_calls: [
                           {
                             id: "call_nonstream_tool",
@@ -509,6 +513,9 @@ function createOpenAiLikeHarness(options: HarnessOptions = {}) {
                         role: "assistant",
                         content: text,
                         refusal: null,
+                        ...(options.reasoningContent
+                          ? { reasoning_content: options.reasoningContent }
+                          : {}),
                       },
                   finish_reason: options.nonStreamingToolCall
                     ? "tool_calls"
@@ -2129,6 +2136,74 @@ describe("LLM proxy provider matrix", () => {
           const storedTool = await ToolModel.findByName(READ_FILE_TOOL.name);
           expect(storedTool).not.toBeNull();
           expect(await ToolModel.countByName(READ_FILE_TOOL.name)).toBe(1);
+        },
+      );
+
+      // DeepSeek-style thinking mode rejects tool-call turns with a 400 unless
+      // the assistant's `reasoning_content` is passed back verbatim, so the
+      // proxy must round-trip the field in both directions: request body
+      // validation must not strip it before it reaches the upstream, and
+      // response serialization must not strip it before it reaches the client.
+      test.skipIf(config.family !== "openai")(
+        "round-trips reasoning_content for thinking-mode tool calls",
+        async ({ makeAgent }) => {
+          const agent = await makeAgent({
+            agentType: "llm_proxy",
+            name: `${config.providerName} reasoning proxy`,
+          });
+          const responseReasoning =
+            "Considering the tool result before answering.";
+          const harness = await setupRoute(agent, {
+            reasoningContent: responseReasoning,
+          });
+
+          const requestReasoning =
+            "The user wants the file contents, so I should call read_file.";
+          const response = await app.inject({
+            method: "POST",
+            url: config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: {
+              model: config.model,
+              messages: [
+                { role: "user", content: "Read /tmp/test.txt" },
+                {
+                  role: "assistant",
+                  content: "",
+                  reasoning_content: requestReasoning,
+                  tool_calls: [
+                    {
+                      id: "call_reasoning_1",
+                      type: "function",
+                      function: {
+                        name: READ_FILE_TOOL.name,
+                        arguments: '{"file_path":"/tmp/test.txt"}',
+                      },
+                    },
+                  ],
+                },
+                {
+                  role: "tool",
+                  tool_call_id: "call_reasoning_1",
+                  content: "file contents",
+                },
+              ],
+            },
+          });
+
+          expect(response.statusCode).toBe(200);
+
+          const upstream = harness.requests[0] as unknown as {
+            messages: Array<Record<string, unknown>>;
+          };
+          const assistantMessage = upstream.messages.find(
+            (message) => message.role === "assistant",
+          );
+          expect(assistantMessage?.reasoning_content).toBe(requestReasoning);
+
+          expect(response.json().choices[0].message.reasoning_content).toBe(
+            responseReasoning,
+          );
         },
       );
 

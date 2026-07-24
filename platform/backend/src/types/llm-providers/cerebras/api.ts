@@ -49,6 +49,10 @@ const CerebrasChoiceSchema = z
           })
           .nullable()
           .optional(),
+        // DeepSeek-style reasoning models return thinking in `reasoning_content`
+        // and require it passed back on tool-call turns; response serialization
+        // must preserve it.
+        reasoning_content: z.string().nullable().optional(),
         tool_calls: z.array(ToolCallSchema).optional(),
       })
       .describe(

@@ -92,6 +92,7 @@ overrides:
 packageExtensionsChecksum: sha256-OtX37i1Ryo9P6g4B33ec8l4gf38qd6EPAZjHSLupRlQ=
 
 patchedDependencies:
+  ollama-ai-provider-v2@3.6.0: 98b56e2b73bf66546c2a30b64828a038f17206a826311e6249b506fe4488a5ca
   opus-decoder@0.7.11: 56051d0697914c234dba3419dbbdf41d5f0c8461c8ed89501a06a8c83af4e59d
 
 importers:
@@ -469,7 +470,7 @@ importers:
         version: 0.11.0
       ollama-ai-provider-v2:
         specifier: 3.6.0
-        version: 3.6.0(ai@6.0.193(zod@4.3.6))(zod@4.3.6)
+        version: 3.6.0(patch_hash=98b56e2b73bf66546c2a30b64828a038f17206a826311e6249b506fe4488a5ca)(ai@6.0.193(zod@4.3.6))(zod@4.3.6)
       openai:
         specifier: ^6.26.0
         version: 6.29.0(ws@8.21.0)(zod@4.3.6)
@@ -19996,7 +19997,7 @@ snapshots:
 
   ohash@2.0.11: {}
 
-  ollama-ai-provider-v2@3.6.0(ai@6.0.193(zod@4.3.6))(zod@4.3.6):
+  ollama-ai-provider-v2@3.6.0(patch_hash=98b56e2b73bf66546c2a30b64828a038f17206a826311e6249b506fe4488a5ca)(ai@6.0.193(zod@4.3.6))(zod@4.3.6):
     dependencies:
       '@ai-sdk/provider': 3.0.10
       '@ai-sdk/provider-utils': 4.0.27(zod@4.3.6)

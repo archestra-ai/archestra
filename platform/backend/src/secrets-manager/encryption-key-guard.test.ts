@@ -5,16 +5,23 @@ import { describe, expect, test } from "@/test";
 import { _resetCachedKey } from "@/utils/crypto";
 import { verifySecretsEncryptionKey } from "./encryption-key-guard";
 
+// The encryption key derives from config.secretsManager.encryptionSecret; in
+// tests it falls back to ARCHESTRA_AUTH_SECRET (see test/setup.ts).
+const TEST_SECRET = "auth-secret-unit-tests-32-chars!";
+
 /**
- * Simulates an ARCHESTRA_AUTH_SECRET rotation: everything encrypted before
- * the call used the old key. Returns a restore function for `finally`.
+ * Point the encryption key at `next`, with `previous` as the prior secret the
+ * startup re-encryption path may use. Returns a restore fn for `finally`.
  */
-function rotateAuthSecret(): () => void {
-  const original = config.auth.secret;
+function withEncryptionKeys(next: string, previous: string): () => void {
+  const originalNext = config.secretsManager.encryptionSecret;
+  const originalPrev = config.secretsManager.encryptionSecretPrevious;
   _resetCachedKey();
-  config.auth.secret = "rotated-auth-secret-that-cannot-decrypt-old-rows";
+  config.secretsManager.encryptionSecret = next;
+  config.secretsManager.encryptionSecretPrevious = previous;
   return () => {
-    config.auth.secret = original;
+    config.secretsManager.encryptionSecret = originalNext;
+    config.secretsManager.encryptionSecretPrevious = originalPrev;
     _resetCachedKey();
   };
 }
@@ -30,11 +37,50 @@ describe("verifySecretsEncryptionKey", () => {
     await verifySecretsEncryptionKey();
   });
 
-  test("aborts startup when the auth secret changes after the canary was written", async () => {
+  test("re-encrypts stored secrets when the encryption secret is rotated with a valid previous key", async () => {
+    const s1 = await SecretModel.create({
+      name: "s1",
+      secret: { apiKey: "sk-1" },
+    });
+    await verifySecretsEncryptionKey(); // canary written under TEST_SECRET
+
+    // Rotate to a NEW encryption secret; the previous is the old (valid) one.
+    const restore = withEncryptionKeys(
+      "brand-new-encryption-secret-value",
+      TEST_SECRET,
+    );
+    try {
+      // Migrates instead of throwing; the secret decrypts under the new key.
+      await verifySecretsEncryptionKey();
+      expect((await SecretModel.findById(s1.id))?.secret).toEqual({
+        apiKey: "sk-1",
+      });
+    } finally {
+      restore();
+    }
+
+    // The canary was refreshed under the new key: a later boot with only that
+    // key (no previous) passes without re-encrypting again.
+    const restore2 = withEncryptionKeys(
+      "brand-new-encryption-secret-value",
+      "brand-new-encryption-secret-value",
+    );
+    try {
+      await verifySecretsEncryptionKey();
+    } finally {
+      restore2();
+    }
+  });
+
+  test("aborts when the encryption secret changes and no previous key can decrypt", async () => {
     await SecretModel.create({ name: "s1", secret: { apiKey: "sk-1" } });
     await verifySecretsEncryptionKey();
 
-    const restore = rotateAuthSecret();
+    // Neither the current nor the previous key can decrypt the existing rows.
+    const restore = withEncryptionKeys(
+      "new-unrecoverable-secret",
+      "also-wrong-previous-secret",
+    );
     try {
       await expect(verifySecretsEncryptionKey()).rejects.toThrow(
         "does not match the key previously used to encrypt stored secrets",
@@ -44,15 +90,17 @@ describe("verifySecretsEncryptionKey", () => {
     }
   });
 
-  test("aborts the first canary boot when existing secrets are already undecryptable (upgrade path)", async () => {
+  test("aborts the first canary boot when existing secrets are already undecryptable", async () => {
     await SecretModel.create({ name: "s1", secret: { apiKey: "sk-1" } });
 
-    // The deployment rotated its auth secret BEFORE upgrading to a version
-    // with the canary check — the current key must not be blessed.
-    const restore = rotateAuthSecret();
+    // No canary yet, and the current key can't decrypt the existing rows.
+    const restore = withEncryptionKeys(
+      "new-unrecoverable-secret",
+      "also-wrong-previous-secret",
+    );
     try {
       await expect(verifySecretsEncryptionKey()).rejects.toThrow(
-        "ARCHESTRA_AUTH_SECRET",
+        "ARCHESTRA_SECRETS_ENCRYPTION_SECRET",
       );
       expect(await EncryptionKeyCanaryModel.get()).toBeNull();
     } finally {
@@ -64,7 +112,10 @@ describe("verifySecretsEncryptionKey", () => {
     await SecretModel.create({ name: "s1", secret: { apiKey: "sk-1" } });
     await verifySecretsEncryptionKey();
 
-    const restore = rotateAuthSecret();
+    const restore = withEncryptionKeys(
+      "new-unrecoverable-secret",
+      "also-wrong-previous-secret",
+    );
     try {
       config.secretsManager.acceptNewEncryptionKey = true;
       await verifySecretsEncryptionKey();

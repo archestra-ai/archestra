@@ -107,18 +107,18 @@ describe("isEncryptedSecret", () => {
 });
 
 describe("key management", () => {
-  test("throws when auth secret is not set", () => {
+  test("throws when the encryption secret is not set", () => {
     _resetCachedKey();
 
-    const original = config.auth.secret;
-    config.auth.secret = undefined;
+    const original = config.secretsManager.encryptionSecret;
+    config.secretsManager.encryptionSecret = undefined;
 
     try {
       expect(() => encryptSecretValue({ key: "value" })).toThrow(
-        "ARCHESTRA_AUTH_SECRET is required",
+        "ARCHESTRA_SECRETS_ENCRYPTION_SECRET",
       );
     } finally {
-      config.auth.secret = original;
+      config.secretsManager.encryptionSecret = original;
       _resetCachedKey();
     }
   });
@@ -128,17 +128,18 @@ describe("key management", () => {
 
     // Change the secret to simulate key rotation without re-encryption
     _resetCachedKey();
-    const original = config.auth.secret;
-    config.auth.secret = "a-completely-different-secret-key-value-here";
+    const original = config.secretsManager.encryptionSecret;
+    config.secretsManager.encryptionSecret =
+      "a-completely-different-secret-key-value-here";
 
     try {
       // The raw Node crypto error is opaque; the wrapper must point at the
-      // auth-secret mismatch so operators can diagnose it.
+      // encryption-secret mismatch so operators can diagnose it.
       expect(() => decryptSecretValue(encrypted)).toThrow(
-        "different key than the one derived from the current ARCHESTRA_AUTH_SECRET",
+        "different key than the one derived from the current ARCHESTRA_SECRETS_ENCRYPTION_SECRET",
       );
     } finally {
-      config.auth.secret = original;
+      config.secretsManager.encryptionSecret = original;
       _resetCachedKey();
     }
   });

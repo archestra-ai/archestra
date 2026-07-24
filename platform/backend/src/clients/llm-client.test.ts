@@ -17,13 +17,27 @@ import { describe, expect, it, test } from "@/test";
 // Mock the gemini-client module before importing llm-client
 const mockIsVertexAiEnabled = vi.hoisted(() => vi.fn(() => false));
 const mockIsAzureOpenAiEntraIdEnabled = vi.hoisted(() => vi.fn(() => false));
+// Capture the fetch option passed to createAnthropic, so the thinking-display
+// injection can be asserted against the body that actually goes out.
+const capturedCreateAnthropicOptions = vi.hoisted(() => ({
+  fetch: undefined as typeof globalThis.fetch | undefined,
+}));
 const mockCreateAnthropic = vi.hoisted(() =>
-  vi.fn(({ headers }: { headers?: Record<string, string> }) =>
-    vi.fn((modelName: string) => ({
-      provider: "anthropic",
-      modelName,
+  vi.fn(
+    ({
       headers,
-    })),
+      fetch,
+    }: {
+      headers?: Record<string, string>;
+      fetch?: typeof globalThis.fetch;
+    }) => {
+      capturedCreateAnthropicOptions.fetch = fetch;
+      return vi.fn((modelName: string) => ({
+        provider: "anthropic",
+        modelName,
+        headers,
+      }));
+    },
   ),
 );
 vi.mock("@/clients/gemini-client", () => ({
@@ -162,6 +176,19 @@ describe("createDirectLLMModel", () => {
       baseUrl: null,
     });
     expect(model).toBeDefined();
+  });
+
+  it("creates DeepSeek models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "deepseek",
+      apiKey: "test-key",
+      modelName: "deepseek-reasoner",
+      baseUrl: null,
+    });
+    // DeepSeek thinking mode requires `reasoning_content` passed back on
+    // tool-call turns; the strict openai provider ("openai.chat") drops it in
+    // both directions, while the openai-compatible provider round-trips it.
+    expect((model as { provider: string }).provider).toBe("deepseek.chat");
   });
 
   it("creates a model for zhipuai provider", () => {
@@ -386,6 +413,85 @@ describe("createDirectLLMModel", () => {
       });
 
       expect(mockFetch.mock.calls[0][1].body).toBe("not json");
+    });
+  });
+
+  // Sonnet 5 / Fable 5-class models think — and bill those tokens — on every
+  // request, but `display` defaults to "omitted", so without an injected
+  // `thinking` config the response carries only empty signature blocks and
+  // the chat UI has nothing to render. The installed @ai-sdk/anthropic has no
+  // `display` provider option (its closed Zod schema strips unknown thinking
+  // keys), so the injection happens in a fetch wrapper against the raw
+  // request body — these tests pin that wire-level rewrite.
+  describe("anthropic thinking display injection", () => {
+    const sendBody = async (body: string): Promise<RequestInit> => {
+      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
+      // Must be stubbed BEFORE the model is built: the wrapper captures
+      // globalThis.fetch at construction time.
+      vi.stubGlobal("fetch", mockFetch);
+
+      createDirectLLMModel({
+        provider: "anthropic",
+        apiKey: "test-key",
+        modelName: "claude-sonnet-5",
+        baseUrl: null,
+      });
+      const wrapped = capturedCreateAnthropicOptions.fetch;
+      if (!wrapped) {
+        throw new Error("Expected anthropic fetch wrapper to be configured");
+      }
+
+      await wrapped("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        body,
+      });
+
+      return mockFetch.mock.calls[0][1];
+    };
+
+    const wireBodyFor = async (
+      requestBody: Record<string, unknown>,
+    ): Promise<Record<string, unknown>> => {
+      const init = await sendBody(JSON.stringify(requestBody));
+      return JSON.parse(init.body as string);
+    };
+
+    it("requests summarized thinking for models that think by default", async () => {
+      for (const model of [
+        "claude-sonnet-5",
+        "claude-sonnet-5-20250929",
+        "claude-fable-5",
+      ]) {
+        const body = await wireBodyFor({ model, messages: [] });
+        expect(body.thinking).toEqual({
+          type: "adaptive",
+          display: "summarized",
+        });
+      }
+    });
+
+    it("leaves models whose thinking is off by default untouched", async () => {
+      // Injecting thinking here would ENABLE it — new tokens, new cost —
+      // rather than surface what already runs.
+      const body = await wireBodyFor({
+        model: "claude-opus-4-8",
+        messages: [],
+      });
+      expect(body).not.toHaveProperty("thinking");
+    });
+
+    it("respects an explicit thinking configuration", async () => {
+      const body = await wireBodyFor({
+        model: "claude-sonnet-5",
+        messages: [],
+        thinking: { type: "disabled" },
+      });
+      expect(body.thinking).toEqual({ type: "disabled" });
+    });
+
+    it("passes a non-JSON body through untouched", async () => {
+      const init = await sendBody("not json");
+      expect(init.body).toBe("not json");
     });
   });
 

@@ -1246,6 +1246,12 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 
   // Capture sign-out audit event (session is often cleared before/without
   // reliable context in the after hook — see stashSignOutSessionForAudit).
+  //
+  // This block MUST return nothing (never `return ctx`). better-auth serializes
+  // an after-hook's return value as the HTTP response body, so returning `ctx`
+  // ships the entire AuthContext — including `secret` (ARCHESTRA_AUTH_SECRET) —
+  // to the (unauthenticated) sign-out caller. Return undefined to keep the
+  // endpoint's own `{ success: true }` body.
   if (isAuthSignOutPath(path)) {
     const fromBefore = consumeStashedSignOutSession(request);
     if (fromBefore) {
@@ -1261,7 +1267,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           "[auth:audit] failed to write sign-out audit row (pre-hook capture)",
         ),
       );
-      return ctx;
+      return;
     }
 
     const sessionCtx = context?.session as
@@ -1321,7 +1327,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         );
       }
     }
-    return ctx;
+    return;
   }
 
   if (path.startsWith("/sign-up")) {

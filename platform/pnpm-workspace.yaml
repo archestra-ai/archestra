@@ -121,11 +121,19 @@ packageExtensions:
     dependencies:
       zod: ^4.3.4
 
-# The package root eagerly re-exports its optional worker implementation. That
-# pulls @eshaz/web-worker's Node shim into Next's Client Component SSR graph and
-# Turbopack cannot resolve the shim's intentionally dynamic import. We use only
-# the main-thread decoder, so keep that worker branch out of the package entry.
 patchedDependencies:
+  # Native Ollama /api/chat sends `"content": ""` on every thinking-phase chunk,
+  # and the package opened the text part on `content != null` and processed text
+  # before thinking — so the UI text part was created before the reasoning part
+  # and chat rendered the answer above the thinking block. The patch processes
+  # thinking first, opens text only on non-empty content, and orders reasoning
+  # before text in non-streaming results too. Upstream master (v4, needs ai@^7)
+  # has the same bug; drop the patch when moving to ai v7 after verifying a fix.
+  ollama-ai-provider-v2@3.6.0: patches/ollama-ai-provider-v2@3.6.0.patch
+  # The package root eagerly re-exports its optional worker implementation. That
+  # pulls @eshaz/web-worker's Node shim into Next's Client Component SSR graph and
+  # Turbopack cannot resolve the shim's intentionally dynamic import. We use only
+  # the main-thread decoder, so keep that worker branch out of the package entry.
   opus-decoder@0.7.11: patches/opus-decoder@0.7.11.patch
 
 # Enforce Node.js version requirements from package.json engines field.

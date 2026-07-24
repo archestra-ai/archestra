@@ -580,6 +580,12 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         ? { ...headers, "api-key": normalizedApiKey }
         : headers;
 
+      // Azure has no usable default endpoint; without this guard createOpenAI
+      // would fall back to api.openai.com and send the Azure api-key there.
+      if (!baseURL) {
+        throw new ApiError(400, "Azure AI Foundry base URL is required.");
+      }
+
       // OpenAI first-party deployments stay on strict @ai-sdk/openai: its name
       // heuristic converts max_tokens → max_completion_tokens for reasoning
       // models (which reject max_tokens), and those models never stream
@@ -595,10 +601,6 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
           headers: requestHeaders,
           fetch: fetchWithVersion,
         }).chat(modelName);
-      }
-
-      if (!baseURL) {
-        throw new ApiError(400, "Azure AI Foundry base URL is required.");
       }
 
       return createOpenAICompatible({

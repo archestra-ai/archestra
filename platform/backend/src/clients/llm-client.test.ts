@@ -315,6 +315,19 @@ describe("createDirectLLMModel", () => {
     expect(capturedCreateOpenAICompatibleOptions.includeUsage).toBe(true);
   });
 
+  it("throws when azure has no base URL instead of falling back to api.openai.com", () => {
+    // Covers the strict-SDK branch too: createOpenAI would otherwise default
+    // to api.openai.com and send the Azure api-key there.
+    expect(() =>
+      createDirectLLMModel({
+        provider: "azure",
+        apiKey: "test-key",
+        modelName: "gpt-5.5",
+        baseUrl: null,
+      }),
+    ).toThrow("Azure AI Foundry base URL is required.");
+  });
+
   it("routes azure gpt-oss deployments through the openai-compatible chat model", () => {
     const model = createDirectLLMModel({
       provider: "azure",

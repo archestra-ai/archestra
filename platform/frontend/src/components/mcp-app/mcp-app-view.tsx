@@ -933,6 +933,7 @@ export function SandboxIframe({
   onIframeElement,
   onRecordingEvents,
   onConnected,
+  onInitialized,
   ownedApp,
 }: {
   html: string;
@@ -965,10 +966,14 @@ export function SandboxIframe({
   onIframeElement?: (el: HTMLIFrameElement | null) => void;
   /** Raw recorder batch (`mcp-apps:recording-event`) forwarded by the proxy. */
   onRecordingEvents?: (data: unknown, frame?: HTMLIFrameElement) => void;
-  /** Fired when the guest bridge connects — the injected app SDK (and its
-   * replay listener) is live. The session player gates replay on this so early
-   * events aren't posted to a frame whose SDK hasn't attached yet. */
+  /** Fired when the guest bridge connects. A PROXY-level signal: it can
+   * resolve while the inner app document is still being written, so it says
+   * nothing about the app being on screen — gate on `onInitialized` (or the
+   * replay announcement) for that. */
   onConnected?: () => void;
+  /** Fired when the app inside the inner document reports `initialized` —
+   * the injected SDK has actually run in the document that is on screen. */
+  onInitialized?: () => void;
   /** Archestra-owned app: its envelope carries the platform CSP, so the proxy
    * must not inject a second one. A trusted host signal, not derived from HTML. */
   ownedApp?: boolean;
@@ -992,6 +997,7 @@ export function SandboxIframe({
   const onIframeElementRef = useRef(onIframeElement);
   const onRecordingEventsRef = useRef(onRecordingEvents);
   const onConnectedRef = useRef(onConnected);
+  const onInitializedRef = useRef(onInitialized);
   // Read at iframe-creation time only; a ref keeps it out of the effect deps so
   // the iframe never remounts when the height changes.
   const initialHeightRef = useRef(initialHeight);
@@ -1017,6 +1023,7 @@ export function SandboxIframe({
     onIframeElementRef.current = onIframeElement;
     onRecordingEventsRef.current = onRecordingEvents;
     onConnectedRef.current = onConnected;
+    onInitializedRef.current = onInitialized;
     initialHeightRef.current = initialHeight;
     maxHeightRef.current = maxHeight;
   });
@@ -1201,6 +1208,7 @@ export function SandboxIframe({
 
     appBridge.oninitialized = () => {
       setInitialized(true);
+      onInitializedRef.current?.();
     };
   }, [ready, appBridge]);
 

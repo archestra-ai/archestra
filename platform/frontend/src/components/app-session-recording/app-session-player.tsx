@@ -329,6 +329,25 @@ const APP_FRAME_READY_TRIES = 200;
  * one animated timeline.
  */
 const PREROLL_MS = 1_200;
+/**
+ * Ready-fallback fuses for a frame whose SDK never posts the replay-ready
+ * announcement (a stale HTTP-cached SDK that predates it). Real readiness is
+ * always the announcement; these only stop a silent frame from freezing the
+ * replay forever.
+ *
+ * The `initialized` fuse is short: that signal comes from the app SDK RUNNING
+ * inside the inner document, so the document is on screen and only the
+ * announcement is missing. The `connect` fuse is long: connect is a
+ * proxy-level signal that resolves while the inner document may not even be
+ * written yet — on a cold sandbox subdomain the document's own chain (proxy
+ * handshake, HTML delivery, the parser-blocking SDK fetch) runs many seconds
+ * behind it. Arming the clock off connect after 1.5s is exactly what played
+ * the replay's whole head against a blank white stage: the chat animated,
+ * the app frame was still loading, and when it finally announced, the
+ * catch-up made it pop in fully formed mid-timeline.
+ */
+const INITIALIZED_READY_FALLBACK_MS = 1_500;
+const CONNECT_READY_FALLBACK_MS = 8_000;
 
 type ReplayActivity = { kind: "tool"; name: string } | null;
 
@@ -1226,18 +1245,6 @@ function PlayerSurface({
   mutedRef.current = muted;
   const playStateRef = useRef(playState);
   playStateRef.current = playState;
-
-  // A remount (version switch, restart, or seek) makes the frame not-ready
-  // until its SDK reconnects. The deps ARE the remount triggers even though the
-  // body only resets the flag.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: segmentIndex/runNonce are the intended re-run triggers
-  useEffect(() => {
-    setFrameReady(false);
-    if (legacyReadyTimerRef.current) {
-      clearTimeout(legacyReadyTimerRef.current);
-      legacyReadyTimerRef.current = null;
-    }
-  }, [segmentIndex, runNonce]);
 
   // Which recorded version segment is visible at a given clock time, by the
   // segment's own `atMs` — independent of the `segment` marker events (which a
@@ -2435,6 +2442,23 @@ function PlayerSurface({
     return replayBridge;
   }, [conversationId, segmentIndex, runNonce, sandboxUrl.href]);
 
+  // A remount makes the frame not-ready until its SDK announces again. Keyed
+  // on the bridge, which is rebuilt exactly once per app-frame instance
+  // (segment switch, restart, seek — and the sandboxUrl swap when the
+  // sandbox-domain config lands after mount): every way the frame element is
+  // replaced resets readiness, so the clock can never keep running against a
+  // frame that is still loading. Keying on segmentIndex/runNonce alone left
+  // the sandboxUrl remount armed — the clock free-ran over the new frame's
+  // cold handshake and the replay's head played against a blank stage.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the bridge IS the frame-instance identity; the body only resets state
+  useEffect(() => {
+    setFrameReady(false);
+    if (legacyReadyTimerRef.current) {
+      clearTimeout(legacyReadyTimerRef.current);
+      legacyReadyTimerRef.current = null;
+    }
+  }, [bridge]);
+
   // A tool call's `t` is its completion time, so its in-flight window is
   // [t - durationMs, t] — the app top bar shows a "running" chip during it.
   const mcpWindows = useMemo(
@@ -2649,7 +2673,14 @@ function PlayerSurface({
             </span>
           </button>
           <ReplayAppStage viewport={viewport}>
-            {segment ? (
+            {/* Held until the sandbox origin is KNOWN (undefined = the config
+                queries are still resolving; they always settle to a domain or
+                null). Mounting before that points the frame at the same-origin
+                proxy URL, which a sandbox-domain deployment refuses with a 403
+                — a doomed first mount that is then torn down and repeated on
+                the real origin when the config lands. Every cold tab (each
+                Slack Replay link opens one) paid that double handshake. */}
+            {segment && mcpSandboxDomain !== undefined ? (
               <SandboxIframe
                 key={`${conversationId}:${segmentIndex}:${runNonce}`}
                 html={replayHtml}
@@ -2677,13 +2708,32 @@ function PlayerSurface({
                     armReplayFrame();
                   }
                 }}
-                // Fallback for a stale cached SDK that predates the
-                // announcement: after a beat, treat connect as ready.
+                // Stale-SDK fallback, tier 1: the app SDK inside the inner
+                // document finished its handshake, so the document is really
+                // on screen — only the announcement is missing. Re-armed per
+                // announcing document (a settling sandbox can navigate more
+                // than once); the announcement itself clears it.
+                onInitialized={() => {
+                  if (legacyReadyTimerRef.current) {
+                    clearTimeout(legacyReadyTimerRef.current);
+                  }
+                  legacyReadyTimerRef.current = setTimeout(() => {
+                    if (!frameReadyRef.current) armReplayFrame();
+                  }, INITIALIZED_READY_FALLBACK_MS);
+                }}
+                // Stale-SDK fallback, tier 2 (last resort): connect is a
+                // proxy-level signal that resolves while the inner document
+                // may not even be written yet, so its fuse is LONG — arming
+                // the clock 1.5s after connect is what used to play the
+                // replay's head against a blank white stage on every cold
+                // sandbox origin (see the fallback constants). This tier only
+                // exists so a frame whose SDK never runs at all cannot freeze
+                // the replay forever.
                 onConnected={() => {
                   if (legacyReadyTimerRef.current) return;
                   legacyReadyTimerRef.current = setTimeout(() => {
                     if (!frameReadyRef.current) armReplayFrame();
-                  }, 1500);
+                  }, CONNECT_READY_FALLBACK_MS);
                 }}
               />
             ) : null}

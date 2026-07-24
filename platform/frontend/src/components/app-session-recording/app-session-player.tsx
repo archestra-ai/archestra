@@ -648,7 +648,14 @@ export function AppSessionPlayer({
             </div>
           </div>
           {recording ? (
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
+            // Top-aligned, not centered: the surface's height is derived from
+            // the SCREEN (replayRegionLayout), so in this docked host it is
+            // usually shorter than the panel — centering floated it into the
+            // middle and opened a dead band between the heading above and the
+            // replay's cards, which read as broken layout. Pinned to the top,
+            // the cards sit right under the heading and the slack falls below
+            // the transport where trailing space is normal.
+            <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto p-4">
               <PlayerSurface
                 key={review.submission.sub}
                 conversationId={review.submission.sub}
@@ -2382,7 +2389,7 @@ function PlayerSurface({
     () =>
       getMcpSandboxBaseUrl(
         mcpSandboxDomain,
-        `archestra-app-replay-${conversationId}`,
+        replaySandboxPrefix(conversationId),
       ),
     [mcpSandboxDomain, conversationId],
   );
@@ -2532,12 +2539,18 @@ function PlayerSurface({
   }, [nextMessage, transcript, displayClock, duration]);
 
   const segment = segments[segmentIndex] ?? segments[0];
-  // Recomputed only when the shown version changes — rebuilding this string on
-  // every render would hand SandboxIframe new HTML each time and remount the
-  // app, throwing away the very run we are trying to reproduce.
+  // Recomputed only when the shown version (or the sandbox origin) changes —
+  // rebuilding this string on every render would hand SandboxIframe new HTML
+  // each time and remount the app, throwing away the very run we are trying
+  // to reproduce. Assets are pointed at the replaying sandbox origin FIRST so
+  // the frame loads them same-origin (see relocalizeSandboxAssets), then the
+  // app's own scripts are neutralized.
   const replayHtml = useMemo(
-    () => neutralizeAppScripts(segment?.html ?? ""),
-    [segment?.html],
+    () =>
+      neutralizeAppScripts(
+        relocalizeSandboxAssets(segment?.html ?? "", sandboxResult.baseUrl),
+      ),
+    [segment?.html, sandboxResult.baseUrl],
   );
 
   return (
@@ -2640,6 +2653,21 @@ function PlayerSurface({
           {activity && (
             <div className="pointer-events-none absolute right-3 top-3 z-20">
               <ReplayActivityChip activity={activity} />
+            </div>
+          )}
+          {/* The frame's loading state, made visible: while the clock is held
+              for the app frame (cold sandbox origin, remount after a seek or
+              version switch), the stage would otherwise sit silently blank and
+              read as a hung player. Never while filming — the renderer waits
+              out readiness between frames, and this pill must not be filmed
+              into an export. z-10 with the stage content: above the frame,
+              below the play/pause hover affordance. */}
+          {!frameReady && !filming && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+              <div className="flex items-center gap-2 rounded-md bg-foreground/60 px-3 py-2 text-xs font-medium text-background shadow-sm backdrop-blur-sm">
+                <Loader size={14} />
+                <span>Loading replay…</span>
+              </div>
             </div>
           )}
           {/* The whole stage is a play/pause surface: hovering names the
@@ -6108,6 +6136,51 @@ function formatMs(ms: number): string {
 
 /** The export ceiling in whole seconds, for the copy that quotes it. */
 const MAX_EXPORT_SECONDS = Math.round(APP_RECORDING_MAX_EXPORT_MS / 1000);
+
+/**
+ * Point the recorded document's platform assets at the origin that will
+ * actually replay it.
+ *
+ * A segment's HTML is captured from the served resource, so its SDK scripts,
+ * baseline stylesheet, CSP meta sources and bootstrap `sdkUrl` all carry
+ * ABSOLUTE `/_sandbox/…` URLs of the deployment the RECORDING was made on.
+ * Replayed as-is, the sandboxed frame must open fresh cross-origin
+ * connections back to that frontend for every one of those fetches — a
+ * parser-blocking chain of cold DNS+TLS handshakes that is what a viewer on a
+ * cold tab actually waits on before the replay can start (and a recording
+ * from another deployment would phone that other deployment entirely).
+ *
+ * Rewriting every `/_sandbox/` asset URL to the replaying sandbox origin
+ * makes each of them same-origin with the proxy document: one already-warm
+ * connection, the proxy's preload links apply, and gallery bundles replay
+ * self-contained on whatever deployment shows them. The backend serves the
+ * identical files on both origins, and one regex covers attributes, the CSP
+ * meta and the bootstrap JSON alike because the segment is a single
+ * serialized string in which those URLs only ever appear verbatim.
+ *
+ * @public — exported for testability
+ */
+export function relocalizeSandboxAssets(
+  html: string,
+  sandboxBaseUrl: string,
+): string {
+  const base = sandboxBaseUrl.replace(/\/+$/, "");
+  if (!base) return html;
+  return html.replace(
+    /https?:\/\/[^"'`\s\\]*\/_sandbox\//g,
+    `${base}/_sandbox/`,
+  );
+}
+
+/**
+ * The sandbox server-prefix a conversation's replay frame runs under — the
+ * value that picks its dedicated sandbox subdomain. Shared with the review
+ * host so it can PRECONNECT to that exact origin while the recording bundle
+ * is still downloading, taking the cold DNS+TLS handshake off the critical
+ * path the frame pays on mount.
+ */
+export const replaySandboxPrefix = (conversationId: string | undefined) =>
+  `archestra-app-replay-${conversationId}`;
 
 /**
  * Stop the app's own code from running in a replay.

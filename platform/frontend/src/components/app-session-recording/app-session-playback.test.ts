@@ -14,6 +14,7 @@ import {
   neutralizeAppScripts,
   planPaintFlush,
   presentedTranscript,
+  relocalizeSandboxAssets,
   replayRegionLayout,
   replayStageFit,
   revealSchedule,
@@ -986,6 +987,44 @@ describe("neutralizeAppScripts", () => {
     expect(html).toContain("scrollbar-width: none");
     expect(html).toContain("::-webkit-scrollbar");
     expect(html).toContain("<body>app</body>");
+  });
+});
+
+describe("relocalizeSandboxAssets", () => {
+  const base = "https://abc123.sandbox.example.com";
+
+  it("points every recorded /_sandbox/ URL — script, CSP meta, bootstrap sdkUrl, stylesheet — at the replaying sandbox origin", () => {
+    // A segment captured on another deployment carries that deployment's
+    // absolute asset URLs in four shapes at once; all must move together or
+    // the frame mixes origins (and the CSP meta blocks the moved ones).
+    const recorded =
+      `<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://frontend.other.dev/_sandbox/ext-apps-app.js https://frontend.other.dev/_sandbox/archestra-app-sdk.js; style-src https://frontend.other.dev/_sandbox/archestra-app-base.css">` +
+      `<link rel="stylesheet" href="https://frontend.other.dev/_sandbox/archestra-app-base.css">` +
+      `<script data-archestra-app-bootstrap>window.__ARCHESTRA_APP_CONTEXT__={"sdkUrl":"https://frontend.other.dev/_sandbox/ext-apps-app.js"};</script>` +
+      `<script data-archestra-app-sdk src="https://frontend.other.dev/_sandbox/archestra-app-sdk.js"></script>`;
+    const html = relocalizeSandboxAssets(recorded, base);
+    expect(html).not.toContain("frontend.other.dev");
+    expect(html).toContain(`src="${base}/_sandbox/archestra-app-sdk.js"`);
+    expect(html).toContain(`href="${base}/_sandbox/archestra-app-base.css"`);
+    expect(html).toContain(`"sdkUrl":"${base}/_sandbox/ext-apps-app.js"`);
+    expect(html).toContain(
+      `script-src 'unsafe-inline' ${base}/_sandbox/ext-apps-app.js ${base}/_sandbox/archestra-app-sdk.js;`,
+    );
+  });
+
+  it("leaves URLs outside /_sandbox/ alone and tolerates a trailing slash on the base", () => {
+    const recorded =
+      `<img src="https://cdn.jsdelivr.net/pic.png">` +
+      `<script src="https://frontend.other.dev/_sandbox/archestra-app-sdk.js"></script>`;
+    const html = relocalizeSandboxAssets(recorded, `${base}/`);
+    expect(html).toContain(`https://cdn.jsdelivr.net/pic.png`);
+    expect(html).toContain(`src="${base}/_sandbox/archestra-app-sdk.js"`);
+    expect(html).not.toContain(`${base}//_sandbox`);
+  });
+
+  it("returns the html unchanged when there is no base to point at", () => {
+    const recorded = `<script src="https://a.dev/_sandbox/x.js"></script>`;
+    expect(relocalizeSandboxAssets(recorded, "")).toBe(recorded);
   });
 });
 

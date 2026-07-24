@@ -55,6 +55,33 @@ const ARCHESTRA_APP_SDK_URL = location.origin + "/_sandbox/archestra-app-sdk.js"
 // resolves against this proxy origin, so style-src must allowlist this URL.
 const ARCHESTRA_APP_BASE_CSS_URL = location.origin + "/_sandbox/archestra-app-base.css";
 
+// Warm the guest-SDK assets NOW, while the host handshake (proxy-ready →
+// bridge connect → resource-ready) is still in flight: the inner document is
+// about to load these same-origin files, its parser blocks on the SDK script,
+// and on a cold sandbox origin those fetches are exactly what a viewer waits
+// on before an app (or a replay) can appear. All three are served cacheable,
+// so the preloads land in the HTTP cache the inner document reads from. The
+// ext-apps preload carries `crossorigin` to match the SDK's module import
+// (cors request mode); the classic script and stylesheet must not, or the
+// preload wouldn't match their no-cors fetches. Best-effort — a failed
+// preload costs nothing, the inner document just fetches as before.
+try {
+  [
+    [ARCHESTRA_APP_SDK_URL, "script", false],
+    [APP_SDK_URL, "script", true],
+    [ARCHESTRA_APP_BASE_CSS_URL, "style", false],
+  ].forEach(function (spec) {
+    var warm = document.createElement("link");
+    warm.rel = "preload";
+    warm.href = spec[0];
+    warm.as = spec[1];
+    if (spec[2]) warm.crossOrigin = "anonymous";
+    document.head.appendChild(warm);
+  });
+} catch (e) {
+  // never let warming break the proxy
+}
+
 function buildAllowAttribute(permissions) {
   if (!permissions) return "";
 

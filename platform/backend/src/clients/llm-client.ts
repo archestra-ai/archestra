@@ -10,6 +10,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
 import type { InteractionSource } from "@archestra/shared";
 import {
+  anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   isProviderApiKeyOptional,
@@ -408,7 +409,14 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
 
   anthropic: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createAnthropic({ apiKey, baseURL, headers, fetch })(modelName),
+      createAnthropic({
+        apiKey,
+        baseURL,
+        headers,
+        // Models that think by default return their thinking text only on
+        // request — see createAnthropicThinkingDisplayFetch.
+        fetch: createAnthropicThinkingDisplayFetch(fetch),
+      })(modelName),
     defaultBaseUrl: config.llm.anthropic.baseUrl,
     apiKeyRequiredMessage:
       "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
@@ -796,6 +804,62 @@ function createOllamaNativeFetch(
     }
 
     return baseFetch(input, { ...forwarded, body: JSON.stringify(body) });
+  };
+}
+
+/**
+ * Wraps fetch to surface thinking text on Anthropic models that think by
+ * default (see anthropicThinksByDefault).
+ *
+ * On those models thinking already runs — and is billed — on every request,
+ * but `display` defaults to `"omitted"`, so responses carry only empty
+ * thinking blocks with a signature and the UI has nothing to render.
+ * Requesting `thinking: {type: "adaptive", display: "summarized"}` returns the
+ * summary text. Per Anthropic's docs this changes neither billing nor prompt
+ * caching: `adaptive` is those models' default, and explicitly sending a
+ * default is equivalent to omitting it.
+ *
+ * The field is injected at the HTTP boundary because the installed
+ * @ai-sdk/anthropic (3.x) has no `display` provider option — its closed Zod
+ * schema strips unknown thinking keys, so no providerOptions value can carry
+ * it (same constraint as OLLAMA_THINK_EXPLICIT_HEADER above).
+ *
+ * A request that already carries a `thinking` configuration is forwarded
+ * untouched, as is any model where thinking is off by default (Opus 4.8 and
+ * earlier) — enabling thinking there would add cost.
+ */
+function createAnthropicThinkingDisplayFetch(
+  providedFetch?: typeof globalThis.fetch,
+): typeof globalThis.fetch {
+  const baseFetch = providedFetch ?? globalThis.fetch;
+
+  return (input, init) => {
+    if (typeof init?.body !== "string") {
+      return baseFetch(input, init);
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(init.body);
+      if (typeof parsed !== "object" || parsed === null) {
+        return baseFetch(input, init);
+      }
+      body = parsed as Record<string, unknown>;
+    } catch {
+      // Not JSON we understand — forward verbatim rather than guessing.
+      return baseFetch(input, init);
+    }
+
+    if (
+      typeof body.model !== "string" ||
+      !anthropicThinksByDefault(body.model) ||
+      "thinking" in body
+    ) {
+      return baseFetch(input, init);
+    }
+
+    body.thinking = { type: "adaptive", display: "summarized" };
+    return baseFetch(input, { ...init, body: JSON.stringify(body) });
   };
 }
 

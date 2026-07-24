@@ -3892,6 +3892,14 @@
                   },
                   "budget_tokens": {
                     "type": "number"
+                  },
+                  "display": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "summarized",
+                      "omitted"
+                    ]
                   }
                 },
                 "required": [
@@ -3920,6 +3928,14 @@
                     "type": "string",
                     "enum": [
                       "adaptive"
+                    ]
+                  },
+                  "display": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "summarized",
+                      "omitted"
                     ]
                   }
                 },
@@ -22783,6 +22799,14 @@
                   },
                   "budget_tokens": {
                     "type": "number"
+                  },
+                  "display": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "summarized",
+                      "omitted"
+                    ]
                   }
                 },
                 "required": [
@@ -22813,6 +22837,14 @@
                     "type": "string",
                     "enum": [
                       "adaptive"
+                    ]
+                  },
+                  "display": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "summarized",
+                      "omitted"
                     ]
                   }
                 },
@@ -85720,6 +85752,14 @@
                           },
                           "budget_tokens": {
                             "type": "number"
+                          },
+                          "display": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "summarized",
+                              "omitted"
+                            ]
                           }
                         },
                         "required": [
@@ -85748,6 +85788,14 @@
                             "type": "string",
                             "enum": [
                               "adaptive"
+                            ]
+                          },
+                          "display": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "summarized",
+                              "omitted"
                             ]
                           }
                         },
@@ -87285,6 +87333,14 @@
                           },
                           "budget_tokens": {
                             "type": "number"
+                          },
+                          "display": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "summarized",
+                              "omitted"
+                            ]
                           }
                         },
                         "required": [
@@ -87313,6 +87369,14 @@
                             "type": "string",
                             "enum": [
                               "adaptive"
+                            ]
+                          },
+                          "display": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "summarized",
+                              "omitted"
                             ]
                           }
                         },
@@ -88860,6 +88924,14 @@
                           },
                           "budget_tokens": {
                             "type": "number"
+                          },
+                          "display": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "summarized",
+                              "omitted"
+                            ]
                           }
                         },
                         "required": [
@@ -88888,6 +88960,14 @@
                             "type": "string",
                             "enum": [
                               "adaptive"
+                            ]
+                          },
+                          "display": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "summarized",
+                              "omitted"
                             ]
                           }
                         },
@@ -90190,6 +90270,14 @@
                           },
                           "budget_tokens": {
                             "type": "number"
+                          },
+                          "display": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "summarized",
+                              "omitted"
+                            ]
                           }
                         },
                         "required": [
@@ -90218,6 +90306,14 @@
                             "type": "string",
                             "enum": [
                               "adaptive"
+                            ]
+                          },
+                          "display": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "summarized",
+                              "omitted"
                             ]
                           }
                         },
@@ -136289,6 +136385,14 @@
                                               },
                                               "budget_tokens": {
                                                 "type": "number"
+                                              },
+                                              "display": {
+                                                "nullable": true,
+                                                "type": "string",
+                                                "enum": [
+                                                  "summarized",
+                                                  "omitted"
+                                                ]
                                               }
                                             },
                                             "required": [
@@ -136319,6 +136423,14 @@
                                                 "type": "string",
                                                 "enum": [
                                                   "adaptive"
+                                                ]
+                                              },
+                                              "display": {
+                                                "nullable": true,
+                                                "type": "string",
+                                                "enum": [
+                                                  "summarized",
+                                                  "omitted"
                                                 ]
                                               }
                                             },
@@ -137632,6 +137744,14 @@
                                               },
                                               "budget_tokens": {
                                                 "type": "number"
+                                              },
+                                              "display": {
+                                                "nullable": true,
+                                                "type": "string",
+                                                "enum": [
+                                                  "summarized",
+                                                  "omitted"
+                                                ]
                                               }
                                             },
                                             "required": [
@@ -137662,6 +137782,14 @@
                                                 "type": "string",
                                                 "enum": [
                                                   "adaptive"
+                                                ]
+                                              },
+                                              "display": {
+                                                "nullable": true,
+                                                "type": "string",
+                                                "enum": [
+                                                  "summarized",
+                                                  "omitted"
                                                 ]
                                               }
                                             },
@@ -165554,6 +165682,14 @@
                                         },
                                         "budget_tokens": {
                                           "type": "number"
+                                        },
+                                        "display": {
+                                          "nullable": true,
+                                          "type": "string",
+                                          "enum": [
+                                            "summarized",
+                                            "omitted"
+                                          ]
                                         }
                                       },
                                       "required": [
@@ -165584,6 +165720,14 @@
                                           "type": "string",
                                           "enum": [
                                             "adaptive"
+                                          ]
+                                        },
+                                        "display": {
+                                          "nullable": true,
+                                          "type": "string",
+                                          "enum": [
+                                            "summarized",
+                                            "omitted"
                                           ]
                                         }
                                       },
@@ -166897,6 +167041,14 @@
                                         },
                                         "budget_tokens": {
                                           "type": "number"
+                                        },
+                                        "display": {
+                                          "nullable": true,
+                                          "type": "string",
+                                          "enum": [
+                                            "summarized",
+                                            "omitted"
+                                          ]
                                         }
                                       },
                                       "required": [
@@ -166927,6 +167079,14 @@
                                           "type": "string",
                                           "enum": [
                                             "adaptive"
+                                          ]
+                                        },
+                                        "display": {
+                                          "nullable": true,
+                                          "type": "string",
+                                          "enum": [
+                                            "summarized",
+                                            "omitted"
                                           ]
                                         }
                                       },

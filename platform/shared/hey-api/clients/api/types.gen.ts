@@ -1425,10 +1425,12 @@ export type AnthropicMessagesRequestInput = {
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
+        display?: 'summarized' | 'omitted';
     } | {
         type: 'disabled';
     } | {
         type: 'adaptive';
+        display?: 'summarized' | 'omitted';
     };
     tool_choice?: {
         type: 'auto';
@@ -7194,10 +7196,12 @@ export type AnthropicMessagesRequest = {
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
+        display?: 'summarized' | 'omitted';
     } | {
         type: 'disabled';
     } | {
         type: 'adaptive';
+        display?: 'summarized' | 'omitted';
     };
     tool_choice?: {
         type: 'auto';
@@ -24431,10 +24435,12 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
+            display?: 'summarized' | 'omitted';
         } | {
             type: 'disabled';
         } | {
             type: 'adaptive';
+            display?: 'summarized' | 'omitted';
         };
         tool_choice?: {
             type: 'auto';
@@ -24759,10 +24765,12 @@ export type BedrockInvokeWithAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
+            display?: 'summarized' | 'omitted';
         } | {
             type: 'disabled';
         } | {
             type: 'adaptive';
+            display?: 'summarized' | 'omitted';
         };
         tool_choice?: {
             type: 'auto';
@@ -25088,10 +25096,12 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
+            display?: 'summarized' | 'omitted';
         } | {
             type: 'disabled';
         } | {
             type: 'adaptive';
+            display?: 'summarized' | 'omitted';
         };
         tool_choice?: {
             type: 'auto';
@@ -25349,10 +25359,12 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
+            display?: 'summarized' | 'omitted';
         } | {
             type: 'disabled';
         } | {
             type: 'adaptive';
+            display?: 'summarized' | 'omitted';
         };
         tool_choice?: {
             type: 'auto';
@@ -37459,10 +37471,12 @@ export type GetInteractionsResponses = {
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
+                    display?: 'summarized' | 'omitted';
                 } | {
                     type: 'disabled';
                 } | {
                     type: 'adaptive';
+                    display?: 'summarized' | 'omitted';
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -37697,10 +37711,12 @@ export type GetInteractionsResponses = {
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
+                    display?: 'summarized' | 'omitted';
                 } | {
                     type: 'disabled';
                 } | {
                     type: 'adaptive';
+                    display?: 'summarized' | 'omitted';
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -43409,10 +43425,12 @@ export type GetInteractionResponses = {
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
+                display?: 'summarized' | 'omitted';
             } | {
                 type: 'disabled';
             } | {
                 type: 'adaptive';
+                display?: 'summarized' | 'omitted';
             };
             tool_choice?: {
                 type: 'auto';
@@ -43647,10 +43665,12 @@ export type GetInteractionResponses = {
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
+                display?: 'summarized' | 'omitted';
             } | {
                 type: 'disabled';
             } | {
                 type: 'adaptive';
+                display?: 'summarized' | 'omitted';
             };
             tool_choice?: {
                 type: 'auto';

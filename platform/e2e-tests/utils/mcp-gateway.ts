@@ -401,6 +401,29 @@ export async function waitForMcpGatewayJwtReady(params: {
       lastError = error;
       const msg = error instanceof Error ? error.message : String(error);
       seenErrors.set(msg, (seenErrors.get(msg) ?? 0) + 1);
+
+      // A deleted provider row is unrecoverable within this poll: the FK
+      // ON DELETE SET NULL nulls the agent binding and every further attempt
+      // 401s identically. Fail fast with the actual cause instead of burning
+      // the full ~162s backoff — in CI run 30107797407 this state came from
+      // another worker deleting providers it did not own, which the give-up
+      // probe only surfaced after the whole window elapsed.
+      if (params.identityProviderId) {
+        const idpResp = await makeApiRequest({
+          request: params.request,
+          method: "get",
+          urlSuffix: `/api/identity-providers/${params.identityProviderId}`,
+          ignoreStatusCheck: true,
+        }).catch(() => null);
+        if (idpResp?.status() === 404) {
+          throw new Error(
+            `Identity provider ${params.identityProviderId} was deleted while waiting for MCP Gateway JWT auth ` +
+              `(agent binding is FK-nulled, so JWT auth can never succeed). ` +
+              `Another test deleting identity providers it does not own is the usual cause. ` +
+              `Last auth error: ${msg}`,
+          );
+        }
+      }
     }
   }
 

@@ -133,7 +133,7 @@ The Helm chart provides extensive configuration options through values. For the 
 - `archestra.extraVolumes` - Additional volumes for mounting extra files into the platform and worker pods
 - `archestra.extraVolumeMounts` - Additional volume mounts for the platform and worker containers (for example, a Vertex AI service account key file)
 
-**Auth secret configuration**: `ARCHESTRA_AUTH_SECRET` is optional. If you do not configure it, the Helm chart creates a `<release>-auth` Secret and auto-generates a 64-character `auth-secret` value on first install.
+**Auth secret configuration**: the auth secrets are optional. If you do not configure them, the Helm chart creates a `<release>-auth` Secret and auto-generates 64-character `session-secret` and `secrets-encryption-secret` values on first install.
 
 If you manage secrets outside Helm, point the chart at an existing Kubernetes Secret:
 
@@ -166,7 +166,8 @@ archestra:
 openssl rand -base64 32
 
 # Then add to your helm command:
---set archestra.env.ARCHESTRA_AUTH_SECRET=<your-generated-secret>
+--set archestra.env.ARCHESTRA_AUTH_SESSION_SECRET=<generated-secret> \
+--set archestra.env.ARCHESTRA_SECRETS_ENCRYPTION_SECRET=<generated-secret>
 ```
 
 #### Init Container Configuration
@@ -850,11 +851,18 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
 
 ### Authentication & Security
 
-- **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens, encrypting secrets stored in the database, and encrypting JWKS private keys.
-  - Auto-generated once on first run. Set manually if you need to control the secret value. Must be at least 32 characters long.
-  - Example: `something-really-really-secret-12345`
-  - **Warning:** Do not change this value after deployment. Rotating this secret will invalidate all user sessions (forcing re-login), make existing encrypted secrets unreadable, break JWT signing (JWKS private keys are encrypted with this secret), and break two-factor authentication for enrolled users.
-  - Startup verifies this key against previously encrypted secrets and aborts on a mismatch. See `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY` to accept a deliberate rotation.
+- **`ARCHESTRA_AUTH_SESSION_SECRET`** - Session-signing secret (better-auth). Signs session cookies and the `session_data` cookie cache, and encrypts better-auth-internal material: JWKS private keys and two-factor secrets.
+  - Auto-generated once by Helm in the auth Secret under the `session-secret` key. Set manually to control it; must be at least 32 characters.
+  - **Rotating it** invalidates all sessions (forces re-login), regenerates JWKS (in-flight JWTs stop verifying), and breaks two-factor enrollment (enrolled users must re-enroll). No database migration is needed.
+
+- **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`** - Derives the AES key that encrypts secrets stored in the database (`secret` table). Independent of sessions/JWKS/2FA.
+  - Auto-generated once by Helm in the auth Secret under the `secrets-encryption-secret` key. Set manually to control it; must be at least 32 characters.
+  - Startup verifies this key against previously encrypted secrets and aborts on a mismatch (see `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`).
+  - **Rotating it** requires re-encrypting existing rows: set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and run the re-encryption migration (the Helm pre-upgrade migration Job runs it automatically; manually: `pnpm --filter backend db:reencrypt-secrets`). It decrypts each secret with the previous key and re-encrypts with the new one; it is a no-op when the key is unchanged. Vault-managed secrets are unaffected.
+
+- **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the re-encryption migration to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on upgrade. Unset it after the migration completes.
+
+  > When using an external `authSecret.existingSecretName`, that Secret must include `session-secret` and `secrets-encryption-secret` keys (add them before upgrading). Rotate by updating a key in your own secret manager.
 
 - **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
   - Default: `admin@example.com`
@@ -915,10 +923,10 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Options: `DB`, `VAULT`, or `READONLY_VAULT`
   - Note: When set to `VAULT` or `READONLY_VAULT`, requires `ARCHESTRA_HASHICORP_VAULT_ADDR` and the credentials for the selected auth method. See [Secrets Management](/docs/platform-secrets-management) for the full configuration reference (KV version, secret path prefix, auth methods).
 
-- **`ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`** - One-boot escape hatch after a deliberate `ARCHESTRA_AUTH_SECRET` change.
+- **`ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`** - One-boot escape hatch after a deliberate encryption-secret change made without the re-encryption migration.
   - Default: `false`
-  - Startup aborts when the current auth secret cannot decrypt previously stored secrets. Set to `true` for one boot to accept the new key, then unset it.
-  - Secrets encrypted with the previous key stay unreadable — re-enter them after the change.
+  - Startup aborts when the current encryption secret cannot decrypt previously stored secrets. Set to `true` for one boot to accept the new key, then unset it.
+  - Secrets encrypted with the previous key stay unreadable — re-enter them after the change. To keep them, use `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` and the re-encryption migration instead.
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
   - Required when: `ARCHESTRA_SECRETS_MANAGER=VAULT` or `READONLY_VAULT`

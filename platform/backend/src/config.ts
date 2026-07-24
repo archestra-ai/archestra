@@ -1480,7 +1480,12 @@ const config = {
     },
   },
   auth: {
-    secret: process.env.ARCHESTRA_AUTH_SECRET,
+    // Session-signing secret (better-auth session/cookie HMAC). Prefer the
+    // dedicated ARCHESTRA_AUTH_SESSION_SECRET; fall back to the legacy combined
+    // ARCHESTRA_AUTH_SECRET so existing single-secret deployments keep working.
+    secret:
+      process.env.ARCHESTRA_AUTH_SESSION_SECRET?.trim() ||
+      process.env.ARCHESTRA_AUTH_SECRET,
     trustedOrigins: getTrustedOrigins(),
     adminDefaultEmail:
       process.env[DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME] || DEFAULT_ADMIN_EMAIL,
@@ -2238,7 +2243,24 @@ const config = {
     type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",
     vaultKvVersion: process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION || "2",
     /**
-     * One-boot escape hatch for a deliberate ARCHESTRA_AUTH_SECRET rotation:
+     * Secret from which the AES key that encrypts DB-stored secrets is derived.
+     * Split out from the session-signing secret so the two rotate
+     * independently; falls back to the legacy combined ARCHESTRA_AUTH_SECRET so
+     * existing deployments are unchanged until they opt into the split.
+     */
+    encryptionSecret:
+      process.env.ARCHESTRA_SECRETS_ENCRYPTION_SECRET?.trim() ||
+      process.env.ARCHESTRA_AUTH_SECRET,
+    /**
+     * Previous encryption secret — used ONLY by the re-encryption migration to
+     * decrypt rows written under the prior key. Falls back to
+     * ARCHESTRA_AUTH_SECRET (the combined secret in use before the split).
+     */
+    encryptionSecretPrevious:
+      process.env.ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS?.trim() ||
+      process.env.ARCHESTRA_AUTH_SECRET,
+    /**
+     * One-boot escape hatch for a deliberate encryption-secret rotation:
      * lets startup accept an encryption key that cannot decrypt previously
      * stored secrets instead of aborting.
      */

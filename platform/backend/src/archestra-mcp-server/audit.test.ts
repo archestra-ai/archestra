@@ -78,6 +78,7 @@ describe("archestra tool audit records", () => {
     expect(row?.actorId).toBe(adminUserId);
     expect(row?.httpPath).toBe("mcp-tool:archestra__create_team");
     expect(row?.resourceId).toBeTruthy();
+    expect(row?.resourceName).toBe("Audit Eng");
     expect(row?.before).toBeNull();
     expect(row?.after).toMatchObject({ name: "Audit Eng" });
   });
@@ -99,6 +100,8 @@ describe("archestra tool audit records", () => {
     const rows = await findRows("team");
     const row = rows.find((r) => r.action === "team.updated");
     expect(row?.resourceId).toBe(team.id);
+    // Post-state name wins — the row records the name resulting from the edit.
+    expect(row?.resourceName).toBe("New Name");
     expect(row?.before).toMatchObject({ name: "Old Name" });
     expect(row?.after).toMatchObject({ name: "New Name" });
   });
@@ -120,6 +123,8 @@ describe("archestra tool audit records", () => {
     const rows = await findRows("team");
     const row = rows.find((r) => r.action === "team.deleted");
     expect(row?.resourceId).toBe(team.id);
+    // Deletes have no after-state; the name survives via the before snapshot.
+    expect(row?.resourceName).toBe("Doomed");
     expect(row?.before).toMatchObject({ name: "Doomed" });
     expect(row?.after).toBeNull();
   });

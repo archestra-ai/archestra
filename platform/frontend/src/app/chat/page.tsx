@@ -166,7 +166,9 @@ import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
+  type LlmProviderApiKey,
   type SupportedProvider,
+  useAvailableLlmProviderApiKeys,
   useLlmProviderApiKeys,
 } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -252,6 +254,8 @@ export function ChatPageContent({
     return () => document.body.classList.remove("hide-version");
   }, []);
   const [isArtifactOpen, setIsArtifactOpen] = useState(false);
+  const [isApplyingAgentSelection, setIsApplyingAgentSelection] =
+    useState(false);
   const pendingPromptRef = useRef<string | undefined>(undefined);
   const pendingFilesRef = useRef<
     Array<{ url: string; mediaType: string; filename?: string }>
@@ -453,6 +457,10 @@ export function ChatPageContent({
   const persistMemberDefaultModel = useCallback(
     (modelId: string | null, apiKeyId: string | null) => {
       if (!modelId || !apiKeyId) return;
+      subscriptionDebug("persist member default", {
+        modelId,
+        chatApiKeyId: apiKeyId,
+      });
       updateMemberDefaultModelMutateRef.current({
         modelId,
         chatApiKeyId: apiKeyId,
@@ -734,67 +742,158 @@ export function ChatPageContent({
     }
   }, [conversationId, conversation?.artifact, isLoadingConversation]);
 
-  // Derive current provider from the selected model
+  const conversationAgent = internalAgents.find(
+    (agent) => agent.id === conversation?.agentId,
+  );
+  const initialAgent = internalAgents.find(
+    (agent) => agent.id === initialAgentId,
+  );
+  const activeSelectionAgent = conversationId
+    ? conversationAgent
+    : initialAgent;
+  const {
+    data: activeAgentCredentials = [],
+    isPending: isActiveAgentCredentialPending,
+  } = useAvailableLlmProviderApiKeys({
+    includeKeyId: activeSelectionAgent?.llmApiKeyId ?? undefined,
+    enabled:
+      canUseProviderSettings && Boolean(activeSelectionAgent?.llmApiKeyId),
+    toastOnError: false,
+  });
+  const activeAgentSubscription = useMemo(
+    () =>
+      getAgentSubscriptionConnection({
+        agent: activeSelectionAgent,
+        credentials: activeAgentCredentials,
+        userId: session?.user.id,
+      }),
+    [activeSelectionAgent, activeAgentCredentials, session?.user.id],
+  );
+  const isAgentSubscriptionMetadataPending = Boolean(
+    activeSelectionAgent?.llmApiKeyId && isActiveAgentCredentialPending,
+  );
+  // An unconnected per-user subscription is stored as a null conversation
+  // model/key pair. In that state the agent's pinned model remains the effective
+  // UI selection until the viewer connects or deliberately chooses an override.
+  const conversationModelId =
+    conversation?.modelId ?? conversationAgent?.modelId ?? null;
+
+  // Derive current provider from the effective selected model.
   const currentProvider = useMemo((): SupportedProvider | undefined => {
-    if (!conversation?.modelId) return undefined;
-    const model = chatModels.find((m) => m.dbId === conversation.modelId);
+    if (!conversationModelId) return undefined;
+    const model = chatModels.find((m) => m.dbId === conversationModelId);
     return model?.provider;
-  }, [conversation?.modelId, chatModels]);
+  }, [conversationModelId, chatModels]);
 
   // Model source — derived purely by comparing the selected model against the
   // agent's and org's configured defaults. No stored state, nothing to keep in sync.
   const conversationModelSource = useMemo(() => {
-    const agent = internalAgents.find((a) => a.id === conversation?.agentId) as
-      | (Record<string, unknown> & { modelId?: string | null })
-      | undefined;
     return deriveModelSource({
-      selectedModelId: conversation?.modelId,
-      agentModelId: agent?.modelId,
+      selectedModelId: conversationModelId,
+      agentModelId: conversationAgent?.modelId,
       orgModelId: organization?.defaultModelId,
     });
   }, [
-    conversation?.modelId,
-    conversation?.agentId,
-    internalAgents,
+    conversationModelId,
+    conversationAgent?.modelId,
     organization?.defaultModelId,
   ]);
 
   // A shared agent can pin a per-user-credential model (e.g. GitHub Copilot).
   // When the viewer hasn't connected their own account that model is not in
   // their available list; keep it selected (no silent swap) so sending it
-  // surfaces an inline connect prompt instead of substituting another provider.
+  // can be blocked with an inline connect prompt instead of substituting
+  // another provider.
   // Returns whether the per-user connect prompt applies and, if so, the agent's
   // resolved model name — so the read-only chip can show "gpt-4" instead of the
   // model's UUID (which the viewer can't resolve without access to the key).
   const initialPerUserConnect = useMemo(() => {
-    const agent = internalAgents.find((a) => a.id === initialAgentId);
     return {
       needsConnect: agentRequiresPerUserConnect({
-        agent,
+        agent: initialAgent,
         selectedModelId: initialModel,
-        isModelAvailable: chatModels.some((m) => m.dbId === initialModel),
+        selectedModel: chatModels.find((m) => m.dbId === initialModel),
+        requiresPerUserCredential: activeAgentSubscription.requiresConnection,
+        isCredentialConnected: activeAgentSubscription.isConnected,
       }),
-      modelName: agent?.resolvedLlmModelName ?? undefined,
+      modelName: initialAgent?.resolvedLlmModelName ?? undefined,
+      provider: initialAgent?.resolvedLlmProvider,
+      agentName: initialAgent?.name,
     };
-  }, [internalAgents, initialAgentId, initialModel, chatModels]);
+  }, [initialAgent, initialModel, chatModels, activeAgentSubscription]);
 
   const conversationPerUserConnect = useMemo(() => {
-    const agent = internalAgents.find((a) => a.id === conversation?.agentId);
     return {
       needsConnect: agentRequiresPerUserConnect({
-        agent,
-        selectedModelId: conversation?.modelId,
-        isModelAvailable: chatModels.some(
-          (m) => m.dbId === conversation?.modelId,
-        ),
+        agent: conversationAgent,
+        selectedModelId: conversationModelId,
+        selectedModel: chatModels.find((m) => m.dbId === conversationModelId),
+        requiresPerUserCredential: activeAgentSubscription.requiresConnection,
+        isCredentialConnected: activeAgentSubscription.isConnected,
       }),
-      modelName: agent?.resolvedLlmModelName ?? undefined,
+      modelName: conversationAgent?.resolvedLlmModelName ?? undefined,
+      provider: conversationAgent?.resolvedLlmProvider,
+      agentName: conversationAgent?.name,
     };
   }, [
-    internalAgents,
-    conversation?.agentId,
-    conversation?.modelId,
+    conversationAgent,
+    conversationModelId,
     chatModels,
+    activeAgentSubscription,
+  ]);
+
+  useEffect(() => {
+    const catalogModel = chatModels.find(
+      (model) => model.dbId === conversationModelId,
+    );
+    subscriptionDebug("effective conversation state", {
+      routeConversationId: conversationId ?? null,
+      conversationId: conversation?.id ?? null,
+      conversationAgentId: conversation?.agentId ?? null,
+      storedModelId: conversation?.modelId ?? null,
+      storedChatApiKeyId: conversation?.chatApiKeyId ?? null,
+      agentModelId: conversationAgent?.modelId ?? null,
+      agentApiKeyId: conversationAgent?.llmApiKeyId ?? null,
+      effectiveModelId: conversationModelId,
+      modelSource: conversationModelSource,
+      requiresUserConnection: catalogModel?.requiresUserConnection ?? null,
+      isConnected: catalogModel?.isConnected ?? null,
+      needsConnect: conversationPerUserConnect.needsConnect,
+      subscriptionMetadataPending: isAgentSubscriptionMetadataPending,
+      credentialRequiresConnection: activeAgentSubscription.requiresConnection,
+      credentialConnected: activeAgentSubscription.isConnected,
+      isApplyingAgentSelection,
+      memberDefaultModelId: memberDefault?.modelId ?? null,
+      memberDefaultChatApiKeyId: memberDefault?.chatApiKeyId ?? null,
+      initialAgentId,
+      initialModelId: initialModel,
+      initialChatApiKeyId: initialApiKeyId,
+      activeSelectionAgentId: activeSelectionAgent?.id ?? null,
+      initialNeedsConnect: initialPerUserConnect.needsConnect,
+    });
+  }, [
+    chatModels,
+    conversationId,
+    conversation?.agentId,
+    conversation?.chatApiKeyId,
+    conversation?.id,
+    conversation?.modelId,
+    conversationAgent?.llmApiKeyId,
+    conversationAgent?.modelId,
+    conversationModelId,
+    conversationModelSource,
+    conversationPerUserConnect.needsConnect,
+    isApplyingAgentSelection,
+    isAgentSubscriptionMetadataPending,
+    memberDefault?.chatApiKeyId,
+    memberDefault?.modelId,
+    activeAgentSubscription.isConnected,
+    activeAgentSubscription.requiresConnection,
+    activeSelectionAgent?.id,
+    initialAgentId,
+    initialApiKeyId,
+    initialModel,
+    initialPerUserConnect.needsConnect,
   ]);
 
   // A no-tools model (e.g. Microsoft 365 Copilot) paired with a tooled agent
@@ -813,28 +912,28 @@ export function ChatPageContent({
   const conversationToolsUnavailable = useMemo(
     () =>
       agentToolsUnavailableForModel({
-        agent: internalAgents.find((a) => a.id === conversation?.agentId),
-        selectedModelId: conversation?.modelId,
+        agent: conversationAgent,
+        selectedModelId: conversationModelId,
         models: chatModels,
       }),
-    [internalAgents, conversation?.agentId, conversation?.modelId, chatModels],
+    [conversationAgent, conversationModelId, chatModels],
   );
 
   // Get selected model's context length for the context indicator
   const selectedModelContextLength = useMemo((): number | null => {
-    const modelId = conversation?.modelId ?? initialModel;
+    const modelId = conversationId ? conversationModelId : initialModel;
     if (!modelId) return null;
     const model = chatModels.find((m) => m.dbId === modelId);
     return model?.capabilities?.contextLength ?? null;
-  }, [conversation?.modelId, initialModel, chatModels]);
+  }, [conversationId, conversationModelId, initialModel, chatModels]);
 
   // Get selected model's input modalities for file upload filtering
   const selectedModelInputModalities = useMemo(() => {
-    const modelId = conversation?.modelId ?? initialModel;
+    const modelId = conversationId ? conversationModelId : initialModel;
     if (!modelId) return null;
     const model = chatModels.find((m) => m.dbId === modelId);
     return model?.capabilities?.inputModalities ?? null;
-  }, [conversation?.modelId, initialModel, chatModels]);
+  }, [conversationId, conversationModelId, initialModel, chatModels]);
 
   // Mutation for updating conversation model
   // Use a ref so callbacks don't recreate when mutation state changes (isPending etc.),
@@ -869,6 +968,14 @@ export function ChatPageContent({
           ? currentKey.id
           : (chatApiKeysRef.current.find((k) => k.provider === model?.provider)
               ?.id ?? null);
+      subscriptionDebug("model change", {
+        source: "conversation-model-selector",
+        conversationId: conv.id,
+        previousModelId: conv.modelId,
+        previousChatApiKeyId: conv.chatApiKeyId,
+        nextModelId: modelId,
+        nextChatApiKeyId: chatApiKeyId,
+      });
       updateConversationMutateRef.current({
         id: conv.id,
         modelId,
@@ -889,6 +996,12 @@ export function ChatPageContent({
       const preferredModel = resolvePreferredModelForProvider({
         provider: newProvider,
         modelsByProvider,
+      });
+      subscriptionDebug("provider credential change", {
+        conversationId: conversation.id,
+        provider: newProvider,
+        chatApiKeyId: apiKeyId,
+        preferredModelId: preferredModel?.modelId ?? null,
       });
       if (preferredModel) {
         updateConversationMutateRef.current({
@@ -912,10 +1025,31 @@ export function ChatPageContent({
   const handleConversationAgentChange = useCallback(
     (agentId: string) => {
       if (!conversation) return;
-      updateConversationMutateRef.current({
-        id: conversation.id,
-        agentId,
+      subscriptionDebug("agent change start", {
+        conversationId: conversation.id,
+        previousAgentId: conversation.agentId,
+        nextAgentId: agentId,
+        previousModelId: conversation.modelId,
+        previousChatApiKeyId: conversation.chatApiKeyId,
       });
+      setIsApplyingAgentSelection(true);
+      updateConversationMutateRef.current(
+        {
+          id: conversation.id,
+          agentId,
+        },
+        {
+          onSettled: (data, error) => {
+            subscriptionDebug("agent change settled", {
+              responseAgentId: data?.agentId ?? null,
+              responseModelId: data?.modelId ?? null,
+              responseChatApiKeyId: data?.chatApiKeyId ?? null,
+              error: error ? String(error) : null,
+            });
+            setIsApplyingAgentSelection(false);
+          },
+        },
+      );
     },
     [conversation],
   );
@@ -947,13 +1081,65 @@ export function ChatPageContent({
       // Reset deliberately drops the user's personal override.
       memberDefault: null,
     });
+    const agentModel = chatModels.find(
+      (model) => model.dbId === agent?.modelId,
+    );
+    const resetsToUnconnectedSubscription = Boolean(
+      agentModel?.requiresUserConnection && !agentModel.isConnected,
+    );
+    subscriptionDebug("reset override start", {
+      conversationId: conversation.id,
+      agentId: conversation.agentId,
+      storedModelId: conversation.modelId,
+      storedChatApiKeyId: conversation.chatApiKeyId,
+      agentModelId: agent?.modelId ?? null,
+      resolvedModelId: resolved?.modelId ?? null,
+      resolvedChatApiKeyId: resolved?.apiKeyId ?? null,
+      requiresUserConnection: agentModel?.requiresUserConnection ?? null,
+      isConnected: agentModel?.isConnected ?? null,
+      resetsToUnconnectedSubscription,
+    });
 
-    if (resolved) {
-      updateConversationMutateRef.current({
-        id: conversation.id,
-        modelId: resolved.modelId,
-        chatApiKeyId: resolved.apiKeyId,
-      });
+    if (resetsToUnconnectedSubscription) {
+      // The backend stores an unresolved per-user subscription as a null pair;
+      // the agent's pinned model remains the effective UI selection.
+      setIsApplyingAgentSelection(true);
+      updateConversationMutateRef.current(
+        {
+          id: conversation.id,
+          modelId: null,
+          chatApiKeyId: null,
+        },
+        {
+          onSettled: (data, error) => {
+            subscriptionDebug("reset override settled", {
+              responseModelId: data?.modelId ?? null,
+              responseChatApiKeyId: data?.chatApiKeyId ?? null,
+              error: error ? String(error) : null,
+            });
+            setIsApplyingAgentSelection(false);
+          },
+        },
+      );
+    } else if (resolved) {
+      setIsApplyingAgentSelection(true);
+      updateConversationMutateRef.current(
+        {
+          id: conversation.id,
+          modelId: resolved.modelId,
+          chatApiKeyId: resolved.apiKeyId,
+        },
+        {
+          onSettled: (data, error) => {
+            subscriptionDebug("reset override settled", {
+              responseModelId: data?.modelId ?? null,
+              responseChatApiKeyId: data?.chatApiKeyId ?? null,
+              error: error ? String(error) : null,
+            });
+            setIsApplyingAgentSelection(false);
+          },
+        },
+      );
     }
 
     // Clear the saved member default too — resetting the chat override also
@@ -967,6 +1153,7 @@ export function ChatPageContent({
     internalAgents,
     modelsByProvider,
     chatApiKeys,
+    chatModels,
     organization,
   ]);
 
@@ -2694,7 +2881,7 @@ export function ChatPageContent({
                                 )
                             )?.name
                           }
-                          selectedModel={conversation?.modelId ?? initialModel}
+                          selectedModel={conversationModelId ?? initialModel}
                           modelSource={
                             conversationModelSource ?? initialModelSource
                           }
@@ -2803,7 +2990,7 @@ export function ChatPageContent({
                               toolsUnavailable={conversationToolsUnavailable}
                               onStop={handleStopStreaming}
                               status={status}
-                              selectedModel={conversation?.modelId ?? ""}
+                              selectedModel={conversationModelId ?? ""}
                               onModelChange={handleModelChange}
                               agentId={promptAgentId ?? activeAgentId}
                               conversationId={conversationId}
@@ -2826,7 +3013,17 @@ export function ChatPageContent({
                               agentLlmApiKeyId={
                                 conversation?.agent?.llmApiKeyId ?? null
                               }
-                              submitDisabled={isPlaywrightSetupVisible}
+                              submitDisabled={
+                                isPlaywrightSetupVisible ||
+                                isApplyingAgentSelection ||
+                                isAgentSubscriptionMetadataPending
+                              }
+                              subscriptionConnectRequired={
+                                conversationPerUserConnect.needsConnect
+                              }
+                              subscriptionProvider={
+                                conversationPerUserConnect.provider
+                              }
                               isContextCompacting={isContextCompacting}
                               onCompactConversation={handleCompactConversation}
                               isPlaywrightSetupVisible={
@@ -2839,6 +3036,9 @@ export function ChatPageContent({
                                 handleConversationResetModelOverride
                               }
                               agentRequiresPerUserConnect={
+                                isApplyingAgentSelection ||
+                                isAgentSubscriptionMetadataPending ||
+                                conversationModelSource === "agent" ||
                                 conversationPerUserConnect.needsConnect
                               }
                               agentModelDisplayName={
@@ -2932,6 +3132,11 @@ export function ChatPageContent({
                                 <Suggestion
                                   key={`${sp.summaryTitle}-${sp.prompt}`}
                                   suggestion={sp.summaryTitle}
+                                  disabled={
+                                    isAgentSubscriptionMetadataPending ||
+                                    (initialPerUserConnect.needsConnect &&
+                                      Boolean(initialPerUserConnect.provider))
+                                  }
                                   onClick={() => {
                                     trackEvent("prompt_selected", {
                                       agentId: initialAgentId ?? undefined,
@@ -2947,63 +3152,76 @@ export function ChatPageContent({
                             </div>
                           );
                         })()}
-                        {/* Shared-element pair with the conversation composer —
-                          see the bottom-anchored ViewTransition above. */}
-                        <ViewTransition
-                          name="chat-composer"
-                          share="chat-composer-morph"
-                          default="none"
-                        >
-                          <div className="w-full max-w-4xl">
-                            <ArchestraPromptInput
-                              onSubmit={handleInitialSubmit}
-                              toolsUnavailable={initialToolsUnavailable}
-                              status={
-                                createConversationMutation.isPending
-                                  ? "submitted"
-                                  : "ready"
-                              }
-                              selectedModel={initialModel}
-                              onModelChange={handleInitialModelChange}
-                              agentId={newChatAgentId}
-                              currentProvider={initialProvider}
-                              textareaRef={textareaRef}
-                              initialApiKeyId={initialApiKeyId}
-                              onApiKeyChange={setInitialApiKeyId}
-                              onProviderChange={handleInitialProviderChange}
-                              allowFileUploads={
-                                organization?.allowChatFileUploads ?? false
-                              }
-                              isModelsLoading={isModelsLoading}
-                              inputModalities={selectedModelInputModalities}
-                              agentLlmApiKeyId={
-                                (
-                                  internalAgents.find(
-                                    (a) => a.id === initialAgentId,
-                                  ) as Record<string, unknown> | undefined
-                                )?.llmApiKeyId as string | null
-                              }
-                              submitDisabled={isPlaywrightSetupVisible}
-                              isPlaywrightSetupVisible={
-                                isPlaywrightSetupVisible
-                              }
-                              selectorAgentId={initialAgentId}
-                              onAgentChange={handleInitialAgentChange}
-                              modelSource={initialModelSource}
-                              onResetModelOverride={handleResetModelOverride}
-                              agentRequiresPerUserConnect={
-                                initialPerUserConnect.needsConnect
-                              }
-                              agentModelDisplayName={
-                                initialPerUserConnect.needsConnect
-                                  ? initialPerUserConnect.modelName
-                                  : undefined
-                              }
-                              prefillText={composerPrefill}
-                              onPrefillApplied={handleComposerPrefillApplied}
-                            />
-                          </div>
-                        </ViewTransition>
+                        <div className="w-full max-w-4xl space-y-3">
+                          {/* Shared-element pair with the conversation composer —
+                            see the bottom-anchored ViewTransition above. */}
+                          <ViewTransition
+                            name="chat-composer"
+                            share="chat-composer-morph"
+                            default="none"
+                          >
+                            <div className="w-full">
+                              <ArchestraPromptInput
+                                onSubmit={handleInitialSubmit}
+                                toolsUnavailable={initialToolsUnavailable}
+                                status={
+                                  createConversationMutation.isPending
+                                    ? "submitted"
+                                    : "ready"
+                                }
+                                selectedModel={initialModel}
+                                onModelChange={handleInitialModelChange}
+                                agentId={newChatAgentId}
+                                currentProvider={initialProvider}
+                                textareaRef={textareaRef}
+                                initialApiKeyId={initialApiKeyId}
+                                onApiKeyChange={setInitialApiKeyId}
+                                onProviderChange={handleInitialProviderChange}
+                                allowFileUploads={
+                                  organization?.allowChatFileUploads ?? false
+                                }
+                                isModelsLoading={isModelsLoading}
+                                inputModalities={selectedModelInputModalities}
+                                agentLlmApiKeyId={
+                                  (
+                                    internalAgents.find(
+                                      (a) => a.id === initialAgentId,
+                                    ) as Record<string, unknown> | undefined
+                                  )?.llmApiKeyId as string | null
+                                }
+                                submitDisabled={
+                                  isPlaywrightSetupVisible ||
+                                  isAgentSubscriptionMetadataPending
+                                }
+                                subscriptionConnectRequired={
+                                  initialPerUserConnect.needsConnect
+                                }
+                                subscriptionProvider={
+                                  initialPerUserConnect.provider
+                                }
+                                isPlaywrightSetupVisible={
+                                  isPlaywrightSetupVisible
+                                }
+                                selectorAgentId={initialAgentId}
+                                onAgentChange={handleInitialAgentChange}
+                                modelSource={initialModelSource}
+                                onResetModelOverride={handleResetModelOverride}
+                                agentRequiresPerUserConnect={
+                                  isAgentSubscriptionMetadataPending ||
+                                  initialModelSource === "agent" ||
+                                  initialPerUserConnect.needsConnect
+                                }
+                                agentModelDisplayName={
+                                  initialPerUserConnect.needsConnect
+                                    ? initialPerUserConnect.modelName
+                                    : undefined
+                                }
+                                prefillText={composerPrefill}
+                                onPrefillApplied={handleComposerPrefillApplied}
+                              />
+                            </div>
+                          </ViewTransition>
+                        </div>
                       </div>
                       <div className="p-4 text-center">
                         <Version inline />
@@ -3183,4 +3401,54 @@ function noopRecorderSubscribe() {
 }
 function idleRecorderStatus() {
   return "idle" as const;
+}
+
+function getAgentSubscriptionConnection(params: {
+  agent:
+    | {
+        llmApiKeyId?: string | null;
+        resolvedLlmProvider?: SupportedProvider;
+        llmProviderRequiresPerUserCredential?: boolean;
+      }
+    | undefined;
+  credentials: LlmProviderApiKey[];
+  userId?: string;
+}) {
+  const { agent, credentials, userId } = params;
+  const pinnedCredential = credentials.find(
+    (credential) => credential.id === agent?.llmApiKeyId,
+  );
+  const requiresConnection = Boolean(
+    agent?.llmProviderRequiresPerUserCredential ||
+      (pinnedCredential?.provider === "openai" &&
+        (pinnedCredential.isChatgptSubscription === true ||
+          pinnedCredential.name.trim().toLowerCase() ===
+            "chatgpt subscription")),
+  );
+  if (!requiresConnection) {
+    return { requiresConnection: false, isConnected: undefined };
+  }
+
+  const provider = pinnedCredential?.provider ?? agent?.resolvedLlmProvider;
+  const isChatgptSubscription =
+    pinnedCredential?.provider === "openai" &&
+    (pinnedCredential.isChatgptSubscription === true ||
+      pinnedCredential.name.trim().toLowerCase() === "chatgpt subscription");
+  const isConnected = Boolean(
+    userId &&
+      credentials.some(
+        (credential) =>
+          credential.userId === userId &&
+          (isChatgptSubscription
+            ? credential.provider === "openai" &&
+              (credential.isChatgptSubscription === true ||
+                credential.name.trim().toLowerCase() === "chatgpt subscription")
+            : credential.provider === provider),
+      ),
+  );
+  return { requiresConnection, isConnected };
+}
+
+function subscriptionDebug(event: string, data: Record<string, unknown>) {
+  console.info(`[subscription-debug] ${event}`, data);
 }

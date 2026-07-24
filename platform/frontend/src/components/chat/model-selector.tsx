@@ -646,6 +646,12 @@ export const ModelSelector = memo(function ModelSelector({
       isLoading,
     });
     if (modelToSelect) {
+      subscriptionDebug("model auto-select", {
+        selectedModelId: selectedModel,
+        nextModelId: modelToSelect,
+        suppressAutoSelect,
+        isPlaceholderData,
+      });
       onModelChange(modelToSelect);
     }
   }, [
@@ -976,4 +982,8 @@ function ModelSelectorDialogBody({
       </ModelSelectorList>
     </>
   );
+}
+
+function subscriptionDebug(event: string, data: Record<string, unknown>) {
+  console.info(`[subscription-debug] ${event}`, data);
 }

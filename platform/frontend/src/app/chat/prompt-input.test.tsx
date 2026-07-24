@@ -323,6 +323,32 @@ describe("ArchestraPromptInput", () => {
     localStorage.clear();
   });
 
+  it("shows subscription sign-in without provider settings permission", () => {
+    const onSubmit = vi.fn();
+    mockControllerState.value = "keep this draft";
+
+    render(
+      <ArchestraPromptInput
+        {...defaultProps}
+        onSubmit={onSubmit}
+        subscriptionConnectRequired
+        subscriptionProvider="openai"
+        modelSource="agent"
+      />,
+    );
+
+    expect(screen.getByTestId("prompt-submit")).toBeDisabled();
+    expect(screen.queryByTestId("model-selector")).not.toBeInTheDocument();
+    expect(screen.queryByText("agent")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign in with ChatGPT" }),
+    );
+    fireEvent.submit(screen.getByTestId("prompt-input"));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(mockTextInputClear).not.toHaveBeenCalled();
+  });
+
   describe("File Upload Button", () => {
     // The composer renders more than one tooltip now (the submit button carries
     // a keyboard-shortcut tooltip too), so scope file-upload assertions to the

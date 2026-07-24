@@ -1467,17 +1467,19 @@ async function handleStreaming<
         actualModel,
         source,
       });
-    } else if (
-      toolCalls.length > 0 &&
-      streamedEventIndices.size < streamAdapter.getRawToolCallEvents().length
-    ) {
+    } else if (toolCalls.length > 0) {
       // Some tool call chunks were buffered during streaming (per-tool
-      // blocking policies). Policy allowed them, so flush un-streamed events now.
+      // blocking policies). Policy allowed them, so flush un-streamed events
+      // now. Read the events once: getRawToolCallEvents must not be called in
+      // a condition and again for the flush, or a snapshot-per-call adapter
+      // would still work but a draining one would silently discard events.
       const allEvents = streamAdapter.getRawToolCallEvents();
-      ensureStreamHeaders();
-      for (let i = 0; i < allEvents.length; i++) {
-        if (!streamedEventIndices.has(i)) {
-          reply.raw.write(allEvents[i]);
+      if (streamedEventIndices.size < allEvents.length) {
+        ensureStreamHeaders();
+        for (let i = 0; i < allEvents.length; i++) {
+          if (!streamedEventIndices.has(i)) {
+            reply.raw.write(allEvents[i]);
+          }
         }
       }
     }

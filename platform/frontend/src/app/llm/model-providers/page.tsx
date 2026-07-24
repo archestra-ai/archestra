@@ -77,6 +77,25 @@ import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import { isEditApiKeyFormValid } from "./edit-key-form.utils";
 
+type SubscriptionProvider =
+  | "openai"
+  | "github-copilot"
+  | "microsoft-365-copilot";
+
+type ModelProviderRow =
+  | (LlmProviderApiKeyResponse & { kind: "credential" })
+  | {
+      kind: "subscription";
+      id: string;
+      name: string;
+      provider: SubscriptionProvider;
+      scope: "personal";
+      isSystem: false;
+      isPrimary: false;
+      credential: LlmProviderApiKeyResponse | null;
+      defaultValues: Partial<LlmProviderApiKeyFormValues>;
+    };
+
 const SCOPE_ICONS: Record<ResourceVisibilityScope, React.ReactNode> = {
   personal: <User className="h-3 w-3" />,
   team: <Users className="h-3 w-3" />,
@@ -101,6 +120,40 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
   awsSessionToken: null,
   openaiAuthMethod: "api-key",
 };
+
+const SUBSCRIPTION_PROVIDERS = [
+  {
+    id: "subscription-chatgpt",
+    name: "ChatGPT",
+    provider: "openai" as const,
+    defaultValues: {
+      name: "ChatGPT",
+      provider: "openai" as const,
+      scope: "personal" as const,
+      openaiAuthMethod: "chatgpt-subscription" as const,
+    },
+  },
+  {
+    id: "subscription-github-copilot",
+    name: "GitHub Copilot",
+    provider: "github-copilot" as const,
+    defaultValues: {
+      name: "GitHub Copilot",
+      provider: "github-copilot" as const,
+      scope: "personal" as const,
+    },
+  },
+  {
+    id: "subscription-microsoft-365-copilot",
+    name: "Microsoft 365 Copilot",
+    provider: "microsoft-365-copilot" as const,
+    defaultValues: {
+      name: "Microsoft 365 Copilot",
+      provider: "microsoft-365-copilot" as const,
+      scope: "personal" as const,
+    },
+  },
+];
 
 export default function ApiKeysPage() {
   const docsUrl = getFrontendDocsUrl("platform-supported-llm-providers");
@@ -131,6 +184,10 @@ export default function ApiKeysPage() {
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [subscriptionToConnect, setSubscriptionToConnect] = useState<Extract<
+    ModelProviderRow,
+    { kind: "subscription" }
+  > | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedApiKey, setSelectedApiKey] =
     useState<LlmProviderApiKeyResponse | null>(null);
@@ -314,9 +371,48 @@ export default function ApiKeysPage() {
 
   const apiKeys = queriedApiKeys;
 
+  const rows = useMemo<ModelProviderRow[]>(() => {
+    const subscriptions = SUBSCRIPTION_PROVIDERS.map((subscription) => ({
+      kind: "subscription" as const,
+      ...subscription,
+      scope: "personal" as const,
+      isSystem: false as const,
+      isPrimary: false as const,
+      credential:
+        allApiKeys.find(
+          (credential) =>
+            credential.scope === "personal" &&
+            (subscription.provider === "openai"
+              ? credential.provider === "openai" &&
+                credential.isChatgptSubscription === true
+              : credential.provider === subscription.provider),
+        ) ?? null,
+    }));
+    const connectedIds = new Set(
+      subscriptions.flatMap(({ credential }) =>
+        credential ? [credential.id] : [],
+      ),
+    );
+    const normalizedSearch = search.toLowerCase();
+
+    return [
+      ...subscriptions.filter(
+        ({ name, provider, credential }) =>
+          (providerFilter === "all" || providerFilter === provider) &&
+          (!normalizedSearch ||
+            `${name} ${PROVIDER_CONFIG[provider].name} ${credential?.name ?? ""}`
+              .toLowerCase()
+              .includes(normalizedSearch)),
+      ),
+      ...queriedApiKeys
+        .filter(({ id }) => !connectedIds.has(id))
+        .map((credential) => ({ kind: "credential" as const, ...credential })),
+    ];
+  }, [allApiKeys, queriedApiKeys, providerFilter, search]);
+
   const providerOptions = useMemo(() => {
     const seen = new Set<string>();
-    return allApiKeys
+    return [...SUBSCRIPTION_PROVIDERS, ...allApiKeys]
       .filter((apiKey) => {
         if (seen.has(apiKey.provider)) return false;
         seen.add(apiKey.provider);
@@ -333,19 +429,26 @@ export default function ApiKeysPage() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [allApiKeys]);
 
-  const columns: ColumnDef<LlmProviderApiKeyResponse>[] = useMemo(
+  const columns: ColumnDef<ModelProviderRow>[] = useMemo(
     () => [
       {
         accessorKey: "name",
         header: "Name",
+        size: 230,
+        minSize: 180,
         cell: ({ row }) => (
           <div
-            className="flex items-center gap-2"
+            className="flex min-w-0 flex-wrap items-center gap-2"
             data-testid={`${E2eTestId.ChatApiKeyRow}-${row.original.name}`}
           >
-            <span className="font-medium break-all">{row.original.name}</span>
+            <span className="min-w-0 truncate font-medium">
+              {row.original.name}
+            </span>
+            {row.original.kind === "subscription" && (
+              <InlineTag className="shrink-0">Subscription</InlineTag>
+            )}
             {row.original.isPrimary && (
-              <InlineTag className="text-amber-500 bg-amber-500/15 border border-amber-500/20">
+              <InlineTag className="shrink-0 text-amber-500 bg-amber-500/15 border border-amber-500/20">
                 Primary
               </InlineTag>
             )}
@@ -355,10 +458,12 @@ export default function ApiKeysPage() {
       {
         accessorKey: "provider",
         header: "Provider",
+        size: 220,
+        minSize: 180,
         cell: ({ row }) => {
           const config = PROVIDER_CONFIG[row.original.provider];
           return (
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <Image
                 src={config.icon}
                 alt={config.name}
@@ -366,41 +471,53 @@ export default function ApiKeysPage() {
                 height={20}
                 className="rounded dark:invert"
               />
-              <span>{config.name}</span>
+              <span className="truncate">{config.name}</span>
             </div>
           );
         },
       },
       {
         accessorKey: "scope",
-        header: "Scope",
-        cell: ({ row }) => (
-          <Badge
-            variant={row.original.isSystem ? "secondary" : "outline"}
-            className="gap-1"
-          >
-            {row.original.isSystem ? (
-              <Server className="h-3 w-3" />
-            ) : (
-              SCOPE_ICONS[row.original.scope as ResourceVisibilityScope]
-            )}
-            <span>
-              {row.original.isSystem
-                ? "System"
-                : row.original.scope === "team"
-                  ? row.original.teamName
-                  : row.original.scope === "personal"
-                    ? "Personal"
-                    : "Whole Organization"}
-            </span>
-          </Badge>
-        ),
+        header: "Access",
+        size: 210,
+        minSize: 170,
+        cell: ({ row }) =>
+          row.original.kind === "subscription" ? (
+            <Badge variant="outline" className="max-w-full gap-1">
+              <User className="h-3 w-3" />
+              <span className="truncate">Personal account</span>
+            </Badge>
+          ) : (
+            <Badge
+              variant={row.original.isSystem ? "secondary" : "outline"}
+              className="max-w-full gap-1"
+            >
+              {row.original.isSystem ? (
+                <Server className="h-3 w-3" />
+              ) : (
+                SCOPE_ICONS[row.original.scope as ResourceVisibilityScope]
+              )}
+              <span className="truncate">
+                {row.original.isSystem
+                  ? "System"
+                  : row.original.scope === "team"
+                    ? row.original.teamName
+                    : row.original.scope === "personal"
+                      ? "Personal"
+                      : "Organization"}
+              </span>
+            </Badge>
+          ),
       },
       {
         accessorKey: "secretStorageType",
         header: "Storage",
+        size: 120,
+        minSize: 100,
         cell: ({ row }) =>
-          row.original.isSystem ? (
+          row.original.kind === "subscription" ? (
+            <span className="text-sm text-muted-foreground">—</span>
+          ) : row.original.isSystem ? (
             <span className="text-sm text-muted-foreground">
               Env Vars{" "}
               {docsUrl && (
@@ -421,15 +538,30 @@ export default function ApiKeysPage() {
       {
         accessorKey: "secretId",
         header: "Status",
+        size: 150,
+        minSize: 130,
         cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            {row.original.isSystem ||
-            row.original.secretId ||
-            isProviderApiKeyOptional({
-              provider: row.original.provider,
-              azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
-              anthropicWifEnabled: anthropicWifEnabled === true,
-            }) ? (
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            {row.original.kind === "subscription" ? (
+              row.original.credential ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  <span className="text-sm text-muted-foreground">
+                    Connected
+                  </span>
+                </>
+              ) : (
+                <span className="text-sm text-muted-foreground">
+                  Not connected
+                </span>
+              )
+            ) : row.original.isSystem ||
+              row.original.secretId ||
+              isProviderApiKeyOptional({
+                provider: row.original.provider,
+                azureEntraIdEnabled: azureOpenAiEntraIdEnabled === true,
+                anthropicWifEnabled: anthropicWifEnabled === true,
+              }) ? (
               <>
                 <CheckCircle2 className="h-4 w-4 text-green-500" />
                 <span className="text-sm text-muted-foreground">
@@ -447,13 +579,36 @@ export default function ApiKeysPage() {
       {
         id: "actions",
         header: "Actions",
+        size: 110,
+        minSize: 110,
         cell: ({ row }) => {
-          const isSystem = row.original.isSystem;
-          const keyUsage = getKeyUsage(row.original.id);
+          if (
+            row.original.kind === "subscription" &&
+            !row.original.credential
+          ) {
+            const subscription = row.original;
+            return (
+              <PermissionButton
+                permissions={{ llmProviderApiKey: ["create"] }}
+                variant="outline"
+                size="sm"
+                onClick={() => setSubscriptionToConnect(subscription)}
+              >
+                Connect
+              </PermissionButton>
+            );
+          }
+          const credential =
+            row.original.kind === "subscription"
+              ? row.original.credential
+              : row.original;
+          if (!credential) return null;
+          const isSystem = credential.isSystem;
+          const keyUsage = getKeyUsage(credential.id);
           const isInUse = !!keyUsage;
           return (
             <TableRowActions
-              itemName={row.original.name}
+              itemName={credential.name}
               actions={[
                 {
                   icon: <Pencil className="h-4 w-4" />,
@@ -463,8 +618,8 @@ export default function ApiKeysPage() {
                   },
                   disabled: isSystem,
                   disabledTooltip: "System keys cannot be edited",
-                  onClick: () => openEditDialog(row.original),
-                  testId: `${E2eTestId.EditChatApiKeyButton}-${row.original.name}`,
+                  onClick: () => openEditDialog(credential),
+                  testId: `${E2eTestId.EditChatApiKeyButton}-${credential.name}`,
                 },
                 {
                   icon: <Trash2 className="h-4 w-4" />,
@@ -477,8 +632,8 @@ export default function ApiKeysPage() {
                   disabledTooltip: isInUse
                     ? `${keyUsage}. Remove it from Settings > Knowledge before deleting.`
                     : "System keys cannot be deleted",
-                  onClick: () => openDeleteDialog(row.original),
-                  testId: `${E2eTestId.DeleteChatApiKeyButton}-${row.original.name}`,
+                  onClick: () => openDeleteDialog(credential),
+                  testId: `${E2eTestId.DeleteChatApiKeyButton}-${credential.name}`,
                 },
               ]}
             />
@@ -499,14 +654,14 @@ export default function ApiKeysPage() {
   return (
     <PageLayout
       title="Model Providers"
-      description="Connect the LLM providers used in Chat and the LLM Proxy by adding their API keys."
+      description="Connect credentials for the LLM providers used in Chat and the LLM Proxy."
       tabs={MODEL_NAV_TABS}
       actionButton={addApiKeyButton}
     >
       <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <SearchInput
-            objectNamePlural="API keys"
+            objectNamePlural="credentials"
             searchFields={["name"]}
             paramName="search"
           />
@@ -547,13 +702,13 @@ export default function ApiKeysPage() {
         <div data-testid={E2eTestId.ChatApiKeysTable}>
           <DataTable
             columns={columns}
-            data={apiKeys}
+            data={rows}
             getRowId={(row) => row.id}
             hideSelectedCount
             isLoading={permissionsPending || isPending}
-            emptyMessage="No API keys configured"
+            emptyMessage="No credentials configured"
             hasActiveFilters={Boolean(search || providerFilter !== "all")}
-            filteredEmptyMessage="No LLM provider API keys match your filters. Try adjusting your search."
+            filteredEmptyMessage="No LLM provider credentials match your filters. Try adjusting your search."
             onClearFilters={() =>
               updateQueryParams({
                 search: null,
@@ -570,6 +725,18 @@ export default function ApiKeysPage() {
           title="Add API Key"
           description="Add a new LLM provider API key for use in Chat and LLM Proxy"
         />
+        {subscriptionToConnect && (
+          <CreateLlmProviderApiKeyDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) setSubscriptionToConnect(null);
+            }}
+            title={`Connect ${subscriptionToConnect.name}`}
+            description={`Connect your ${subscriptionToConnect.name} subscription`}
+            defaultValues={subscriptionToConnect.defaultValues}
+            allowedProviders={[subscriptionToConnect.provider]}
+          />
+        )}
 
         {/* Edit Dialog */}
         <FormDialog

@@ -1,23 +1,29 @@
 import {
-  CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
-  CLAUDE_CODE_GUARD_MARKER_END,
-  CLAUDE_CODE_GUARD_MARKER_START,
-  CLAUDE_CODE_GUARD_SCRIPT_RELPATH,
-  CLAUDE_CODE_GUARD_SKIP_RELPATH,
-  CLAUDE_CODE_PROXY_ENV_KEYS,
-  EXTERNAL_AGENT_ID_HEADER,
   isDefaultBrandedAppName,
-  VIRTUAL_KEY_HEADER,
+  type StartupGuardClientId,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { CONNECTION_HEALTH_PATH } from "@/routes/route-paths";
+import {
+  ARCHESTRA_MARK,
+  ARCHESTRA_MARK_GAP,
+  ARCHESTRA_MARK_NAME_ROW,
+  ARCHESTRA_MARK_TAGLINE,
+  ARCHESTRA_MARK_TAGLINE_ROW,
+} from "./archestra-mark";
 import type { SetupScriptContext } from "./connection-setup-script";
 
 /**
- * Renderer for the Claude Code startup guard ("pre-loader"): a standalone bash
- * script the connect setup script installs at ~/{@link CLAUDE_CODE_GUARD_SCRIPT_RELPATH}
- * plus a `claude()` wrapper function in the user's shell profile. Before every
- * launch the guard checks the Archestra remotes wired into Claude Code — LLM
- * proxy, MCP gateway, skills marketplace, in that order — and:
+ * Client-agnostic renderer for the CLI startup guard ("pre-loader"): a
+ * standalone bash script the connect setup script installs at
+ * ~/`<client.scriptRelpath>` plus a `<binary>()` wrapper function in the user's
+ * shell profile. Everything here is the shared engine; per-client specifics
+ * (the wrapped binary, install paths, and the reverse-of-connect disconnect
+ * commands) arrive through a {@link StartupGuardClient} descriptor — see
+ * `startup-guard.clients.ts` for the Claude Code / Codex / Copilot CLI
+ * descriptors. Before every launch the guard checks the Archestra remotes
+ * wired into that client — LLM proxy, MCP gateway, skills marketplace, in that
+ * order — and:
  *
  * - makes ONE health request for the whole launch:
  *   GET /v1/health?mcp=<id-or-slug>&llm=<id-or-slug>, which reports ok/down
@@ -52,8 +58,8 @@ import type { SetupScriptContext } from "./connection-setup-script";
  * integer `read -t` fallback, no associative arrays.
  */
 
-interface ClaudeCodeGuardMcpSection {
-  /** Logical server name registered in Claude Code (slug). */
+interface StartupGuardMcpSection {
+  /** Logical server name registered in the client (slug). */
   serverName: string;
   /** Gateway URL, e.g. https://host/v1/mcp/<gateway-slug>. */
   url: string;
@@ -61,23 +67,28 @@ interface ClaudeCodeGuardMcpSection {
   ref: string | null;
 }
 
-interface ClaudeCodeGuardProxySection {
-  /** Claude Code proxy providers only. */
-  provider: "anthropic" | "bedrock";
+interface StartupGuardProxySection {
+  /** The proxied provider — drives the health URL's `/v1/<provider>/` path. */
+  provider: SupportedProvider;
   providerLabel: string;
   /** Proxy URL, e.g. https://host/v1/anthropic/<profile-id>. */
   url: string;
   /** Id-or-slug as embedded in the URL; null when it could not be derived. */
   ref: string | null;
+  /**
+   * Slug of the LLM proxy (provider id in client configs). Codex's disconnect
+   * strips the `[model_providers.<proxyName>]` block it wrote to config.toml.
+   */
+  proxyName: string;
 }
 
-interface ClaudeCodeGuardSkillsSection {
+interface StartupGuardSkillsSection {
   marketplaceName: string;
   cloneUrl: string;
 }
 
 /** @public — named by the unit tests that build guard fixtures. */
-export interface ClaudeCodeStartupGuardContext {
+export interface StartupGuardContext {
   /** White-label product name (pre-sanitized by the setup-script renderer). */
   appName: string;
   /**
@@ -86,24 +97,101 @@ export interface ClaudeCodeStartupGuardContext {
    * reachability probes.
    */
   healthUrl: string | null;
-  mcp: ClaudeCodeGuardMcpSection | null;
-  proxy: ClaudeCodeGuardProxySection | null;
-  skills: ClaudeCodeGuardSkillsSection | null;
+  mcp: StartupGuardMcpSection | null;
+  proxy: StartupGuardProxySection | null;
+  skills: StartupGuardSkillsSection | null;
 }
 
 /**
- * The Archestra mark rendered in the pre-loader header (Claude Code renders
- * its own logo the same way). Only shown for the default brand — printing the
- * Archestra icon under a white-labeled name would be wrong — and shared with
- * the PowerShell guard renderer so both platforms draw the same mark.
+ * Everything the shared guard engine needs that differs per CLI client: the
+ * wrapped binary, the conversational product name shown in prompts, the
+ * install locations, and the reverse-of-connect disconnect commands. One
+ * descriptor per scriptable client lives in `startup-guard.clients.ts`.
+ *
+ * @public — descriptors are defined in a sibling module and consumed by the
+ * setup-script renderers, both of which knip --production can see; the tests
+ * (which it ignores) also build against this.
  */
-export const ARCHESTRA_GUARD_MARK_LINES = [
-  "   ▟██▙",
-  "   ████",
-  "  ████",
-  "  ████ ▟▙",
-  " ▜██▛  ▜▛",
-];
+export interface StartupGuardClient {
+  clientId: StartupGuardClientId;
+  /** The binary the guard wraps and re-execs, e.g. "claude" / "codex". */
+  binary: string;
+  /** Full display label, e.g. "Claude Code" / "Copilot CLI". */
+  label: string;
+  /**
+   * Conversational product name used in the on-screen prompts ("Disconnect X
+   * from <promptName> now?"), e.g. "Claude" / "Codex" / "Copilot".
+   */
+  promptName: string;
+  /** Env var that fully disables the guard, e.g. "ARCHESTRA_CLAUDE_GUARD". */
+  disableEnvVar: string;
+  /** ~/-relative guard script path (`STARTUP_GUARD_INSTALL[id].scriptRelpath`). */
+  scriptRelpath: string;
+  /** ~/-relative PowerShell guard script path (Windows engine). */
+  psScriptRelpath: string;
+  /** ~/-relative skip file (remembers already-disconnected remotes). */
+  skipRelpath: string;
+  /** Shell-profile wrapper marker block bounds. */
+  markerStart: string;
+  markerEnd: string;
+  /**
+   * bash `case "$arg"` patterns (matched per launch arg) that mean a
+   * non-interactive / one-shot run, so the guard warns on stderr and gets out
+   * of the way instead of drawing the pre-loader (Claude: `-p|--print`).
+   */
+  nonInteractiveArgPatterns: string[];
+  /**
+   * Reverse-of-connect commands for the `mcp)` disconnect case — may reference
+   * `$MCP_SERVER_NAME` and must run silenced (`command <binary> ...`). Only
+   * emitted when the guard covers an MCP gateway.
+   */
+  mcpDisconnectCommands: string;
+  /**
+   * Reverse-of-connect commands for the `skills)` disconnect case — may
+   * reference `$SKILLS_MARKETPLACE_NAME`. Only emitted when skills are covered.
+   */
+  skillsDisconnectCommands: string;
+  /**
+   * The `disconnect_proxy()` and `proxy_disconnect_notes()` shell function
+   * definitions, fully client-specific (settings.json strip / TOML block strip
+   * / shell-profile export strip). Only emitted when a proxy is covered.
+   */
+  renderProxyDisconnect(ctx: StartupGuardContext): string;
+  /**
+   * The PowerShell equivalents of the disconnect actions, for the Windows guard
+   * engine (`startup-guard.windows.ts`). PowerShell is a separate language, so
+   * the bash fields above cannot be reused — but everything else on this
+   * descriptor (binary, label, promptName, install paths,
+   * nonInteractiveArgPatterns) is platform-agnostic and shared by both engines.
+   */
+  windows: StartupGuardWindowsClient;
+}
+
+/** The Windows/PowerShell half of a client's disconnect actions. */
+export interface StartupGuardWindowsClient {
+  /**
+   * PowerShell statements for the `'mcp'` case of `Invoke-ArchDisconnectActions`.
+   * May reference `$archRealExe` (the resolved real binary) and `$McpServerName`.
+   */
+  mcpDisconnect: string;
+  /**
+   * PowerShell statements for the `'skills'` case. May reference `$archRealExe`
+   * and `$SkillsMarketplaceName`.
+   */
+  skillsDisconnect: string;
+  /**
+   * Defines `function Disconnect-ArchProxy { … }` — the client-specific proxy
+   * reversal (settings.json strip / config.toml block strip / env removal).
+   */
+  renderProxyDisconnect(ctx: StartupGuardContext): string;
+  /**
+   * A single DarkGray note line printed after a proxy remote is disconnected
+   * (bedrock token reminder / codex-logout hint / copilot env note). Returns the
+   * empty string for no note. The engine emits it as a quoted PowerShell string
+   * literal, so it may contain arbitrary text (quotes included).
+   */
+  proxyDisconnectNote(ctx: StartupGuardContext): string;
+}
 
 /**
  * Derive the guard's context from the setup-script context: pass the remotes
@@ -111,9 +199,9 @@ export const ARCHESTRA_GUARD_MARK_LINES = [
  * and build the single health URL. Shared by the bash and PowerShell setup
  * renderers so the two guards can never disagree on what they probe.
  */
-export function buildClaudeCodeStartupGuardContext(
+export function buildStartupGuardContext(
   ctx: SetupScriptContext,
-): ClaudeCodeStartupGuardContext {
+): StartupGuardContext {
   const mcpParsed = ctx.mcp ? splitResourceUrl(ctx.mcp.url, "/v1/mcp/") : null;
   const proxyParsed = ctx.proxy
     ? splitResourceUrl(ctx.proxy.url, `/v1/${ctx.proxy.provider}/`)
@@ -140,10 +228,11 @@ export function buildClaudeCodeStartupGuardContext(
       : null,
     proxy: ctx.proxy
       ? {
-          provider: ctx.proxy.provider === "bedrock" ? "bedrock" : "anthropic",
+          provider: ctx.proxy.provider,
           providerLabel: ctx.proxy.providerLabel,
           url: ctx.proxy.url,
           ref: proxyParsed?.ref ?? null,
+          proxyName: ctx.proxy.proxyName,
         }
       : null,
     skills: ctx.skills,
@@ -156,28 +245,29 @@ export function buildClaudeCodeStartupGuardContext(
  * @public — consumed by the install section below and exercised directly by
  * the unit tests (bash -n + behavioral runs), which knip --production ignores.
  */
-export function renderClaudeCodeStartupGuardScript(
-  ctx: ClaudeCodeStartupGuardContext,
+export function renderStartupGuardScript(
+  ctx: StartupGuardContext,
+  client: StartupGuardClient,
 ): string {
   const resources = guardResources(ctx);
 
   return `#!/usr/bin/env bash
-# ${ctx.appName} pre-loader for Claude Code — generated by the ${ctx.appName} /connection page.
-# Checks the ${ctx.appName} remotes wired into Claude Code before it starts —
+# ${ctx.appName} pre-loader for ${client.label} — generated by the ${ctx.appName} /connection page.
+# Checks the ${ctx.appName} remotes wired into ${client.label} before it starts —
 # one platform health request for all of them — and offers to disconnect
 # everything that is down in one keypress (the reverse of connect). It never
-# blocks the launch: the shell wrapper runs \`command claude\` no matter how
-# this script exits. Disable with ARCHESTRA_CLAUDE_GUARD=0.
+# blocks the launch: the shell wrapper runs \`command ${client.binary}\` no matter how
+# this script exits. Disable with ${client.disableEnvVar}=0.
 set -u
 
-[ "\${ARCHESTRA_CLAUDE_GUARD:-1}" = "0" ] && exit 0
+[ "\${${client.disableEnvVar}:-1}" = "0" ] && exit 0
 command -v curl >/dev/null 2>&1 || exit 0
 
 APP_NAME=${sh(ctx.appName)}
-GUARD_PATH="$HOME/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}"
-# Remotes this guard's own disconnect action already removed from Claude
-# Code, one kind per line. They are skipped below; connect clears the file.
-SKIP_FILE="$HOME/${CLAUDE_CODE_GUARD_SKIP_RELPATH}"
+GUARD_PATH="$HOME/${client.scriptRelpath}"
+# Remotes this guard's own disconnect action already removed from ${client.label},
+# one kind per line. They are skipped below; connect clears the file.
+SKIP_FILE="$HOME/${client.skipRelpath}"
 # One request answers for every checkable remote ('' = no health endpoint
 # derivable; the guard then falls back to per-resource reachability probes).
 # The platform reports ok/down per remote; a response without a down marker
@@ -214,7 +304,7 @@ INTERACTIVE=1
 [ -t 0 ] && [ -t 1 ] && { : </dev/tty; } 2>/dev/null || INTERACTIVE=0
 for arg in "$@"; do
   case "$arg" in
-    -p|--print) INTERACTIVE=0 ;;
+    ${client.nonInteractiveArgPatterns.join("|")}) INTERACTIVE=0 ;;
   esac
 done
 
@@ -230,7 +320,7 @@ uninstall_guard() {
   rm -f "$GUARD_PATH" "$SKIP_FILE" 2>/dev/null || true
   for profile in "$HOME/.zshrc" "$HOME/.bashrc"; do
     [ -f "$profile" ] || continue
-    awk -v start=${sh(CLAUDE_CODE_GUARD_MARKER_START)} -v end=${sh(CLAUDE_CODE_GUARD_MARKER_END)} '
+    awk -v start=${sh(client.markerStart)} -v end=${sh(client.markerEnd)} '
       $0 == start {skip=1; next}
       $0 == end {skip=0; next}
       !skip {print}
@@ -299,7 +389,7 @@ if [ "$INTERACTIVE" = "0" ]; then
   i=0
   while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
     if [ "\${GUARD_ACTIVE[$i]}" = "1" ] && resource_down "$i"; then
-      printf '%s\\n' "archestra: failed to connect to \${GUARD_FAIL_NAMES[$i]} — claude is configured to use it and may fail. Disconnect it from the $APP_NAME /connection page, or run claude interactively to be offered a disconnect." >&2
+      printf '%s\\n' "archestra: failed to connect to \${GUARD_FAIL_NAMES[$i]} — ${client.binary} is configured to use it and may fail. Disconnect it from the $APP_NAME /connection page, or run ${client.binary} interactively to be offered a disconnect." >&2
     fi
     i=$((i+1))
   done
@@ -362,15 +452,14 @@ disconnect_actions() { # $1 kind — the reverse-of-connect commands, silenced
     ctx.mcp
       ? `
     mcp)
-      command claude mcp remove --scope user "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true
-      command claude mcp remove --scope local "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true
+${client.mcpDisconnectCommands}
       ;;`
       : ""
   }${
     ctx.skills
       ? `
     skills)
-      command claude plugin marketplace remove "$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true
+${client.skillsDisconnectCommands}
       ;;`
       : ""
   }${
@@ -420,7 +509,7 @@ SKILLS_MARKETPLACE_NAME=${sh(ctx.skills.marketplaceName)}`
     ctx.proxy
       ? `
 
-${disconnectProxyFunction(ctx)}`
+${client.renderProxyDisconnect(ctx)}`
       : ""
   }
 
@@ -475,7 +564,7 @@ reconfigure_menu() {
     menu_pos=$((menu_pos + 1))
     menu_paint_row "$menu_pos" "$menu_idx"
   done
-  printf '\\033[s\\n\\r\\033[2K%s  Press 1-%s to disconnect a resource from Claude · [Esc] Done%s\\033[u' "$C_DIM" "$ACTIVE_TOTAL" "$C_RESET"
+  printf '\\033[s\\n\\r\\033[2K%s  Press 1-%s to disconnect a resource from ${client.promptName} · [Esc] Done%s\\033[u' "$C_DIM" "$ACTIVE_TOTAL" "$C_RESET"
   while :; do
     key=''
     read -rs -n 1 key </dev/tty 2>/dev/null || break
@@ -550,9 +639,9 @@ offer_reconfigure_tail() {
 prompt_down_all() {
   if [ "$DOWN_COUNT" -eq 1 ]; then
     set -- $DOWN_IDXS
-    down_prompt="Disconnect \${GUARD_FAIL_NAMES[$1]} from Claude now? (Y/n)"
+    down_prompt="Disconnect \${GUARD_FAIL_NAMES[$1]} from ${client.promptName} now? (Y/n)"
   else
-    down_prompt="Disconnect all $DOWN_COUNT unreachable resources from Claude now? (Y/n)"
+    down_prompt="Disconnect all $DOWN_COUNT unreachable resources from ${client.promptName} now? (Y/n)"
   fi
   printf '\\033[s\\n\\r\\033[2K%s\\n\\r\\033[2K%s  or press [C] to reconfigure your %s connection%s\\033[u' "$down_prompt" "$C_DIM" "$APP_NAME" "$C_RESET"
   key=''
@@ -570,9 +659,9 @@ prompt_down_all() {
     *)
       line_reset
       if [ "$DOWN_COUNT" -eq 1 ]; then
-        printf '%s○%s %sSkipped — still configured; Claude may fail to reach it this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
+        printf '%s○%s %sSkipped — still configured; ${client.promptName} may fail to reach it this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
       else
-        printf '%s○%s %sSkipped — still configured; Claude may fail to reach them this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
+        printf '%s○%s %sSkipped — still configured; ${client.promptName} may fail to reach them this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
       fi
       ;;
   esac
@@ -589,9 +678,9 @@ show_wait_prompt() {
   [ "$WAIT_PROMPT_SHOWN" = "1" ] && return 0
   WAIT_PROMPT_SHOWN=1
   if [ "$ACTIVE_TOTAL" -eq 1 ]; then
-    wait_prompt="Disconnect \${GUARD_FAIL_NAMES[$FIRST_ACTIVE]} from Claude now? (Y/n)"
+    wait_prompt="Disconnect \${GUARD_FAIL_NAMES[$FIRST_ACTIVE]} from ${client.promptName} now? (Y/n)"
   else
-    wait_prompt="Disconnect all $ACTIVE_TOTAL unreachable resources from Claude now? (Y/n)"
+    wait_prompt="Disconnect all $ACTIVE_TOTAL unreachable resources from ${client.promptName} now? (Y/n)"
   fi
   # two lines below the block: the persistent [C] hint sits at +1, this
   # (Y/n) offer at +2, so both stay visible during the outage wait
@@ -714,7 +803,7 @@ if [ "$DISC_ALL" = "1" ]; then
 fi
 if [ "$SKIP_ALL" = "1" ]; then
   line_reset
-  printf '%s○%s %sSkipped — remotes stay configured; Claude may fail to reach them this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
+  printf '%s○%s %sSkipped — remotes stay configured; ${client.promptName} may fail to reach them this session%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$C_RESET"
   printf '\\033[J'
   finish_guard
 fi
@@ -754,57 +843,97 @@ finish_guard
 
 /**
  * The setup-script section that installs the guard: writes the script file,
- * marks it executable, and hooks the claude() wrapper into the user's shell
+ * marks it executable, and hooks the `<binary>()` wrapper into the user's shell
  * profiles inside an idempotent marker block. Relies on the setup script's
  * shared helpers (say/ok) being defined.
  */
-export function buildClaudeCodeStartupGuardInstallSection(
-  ctx: ClaudeCodeStartupGuardContext,
+export function buildStartupGuardInstallSection(
+  ctx: StartupGuardContext,
+  client: StartupGuardClient,
 ): string {
-  const guardPath = `$HOME/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}`;
+  const guardPath = `$HOME/${client.scriptRelpath}`;
 
-  return `say ${sh(`Installing the ${ctx.appName} startup guard for Claude Code`)}
+  return `say ${sh(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
 mkdir -p "$(dirname "${guardPath}")"
 cat > "${guardPath}" <<'${GUARD_FILE_EOF}'
-${renderClaudeCodeStartupGuardScript(ctx)}${GUARD_FILE_EOF}
+${renderStartupGuardScript(ctx, client)}${GUARD_FILE_EOF}
 chmod +x "${guardPath}"
 # A fresh connect re-arms every check: forget remotes a previous guard
 # disconnected.
-rm -f "$HOME/${CLAUDE_CODE_GUARD_SKIP_RELPATH}"
+rm -f "$HOME/${client.skipRelpath}"
 
-# Wrap \`claude\` in each shell profile so the guard runs before every launch.
+# Wrap \`${client.binary}\` in each shell profile so the guard runs before every launch.
 # The block is stripped and re-added, so re-running connect never duplicates it.
 archestra_install_guard_block() {
   touch "$1"
-  awk -v start=${sh(CLAUDE_CODE_GUARD_MARKER_START)} -v end=${sh(CLAUDE_CODE_GUARD_MARKER_END)} '
+  awk -v start=${sh(client.markerStart)} -v end=${sh(client.markerEnd)} '
     $0 == start {skip=1; next}
     $0 == end {skip=0; next}
     !skip {print}
   ' "$1" > "$1.archestra-tmp" && mv "$1.archestra-tmp" "$1"
   cat >> "$1" <<'${GUARD_PROFILE_EOF}'
-${CLAUDE_CODE_GUARD_MARKER_START}
-# Pre-flight connectivity check for ${ctx.appName}-connected Claude Code.
-# Remove this block and ~/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH} to uninstall.
-claude() {
-  if [ -x "$HOME/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}" ]; then
-    "$HOME/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}" "$@" || true
+${client.markerStart}
+# Pre-flight connectivity check for ${ctx.appName}-connected ${client.label}.
+# Remove this block and ~/${client.scriptRelpath} to uninstall.
+${client.binary}() {
+  if [ -x "$HOME/${client.scriptRelpath}" ]; then
+    "$HOME/${client.scriptRelpath}" "$@" || true
   fi
-  command claude "$@"
+  command ${client.binary} "$@"
 }
-${CLAUDE_CODE_GUARD_MARKER_END}
+${client.markerEnd}
 ${GUARD_PROFILE_EOF}
   echo "Updated $1"
 }
-archestra_guard_hooked=0
-if [ -f "$HOME/.zshrc" ]; then archestra_install_guard_block "$HOME/.zshrc"; archestra_guard_hooked=1; fi
-if [ -f "$HOME/.bashrc" ]; then archestra_install_guard_block "$HOME/.bashrc"; archestra_guard_hooked=1; fi
-if [ "$archestra_guard_hooked" = "0" ]; then
-  case "\${SHELL:-}" in
-    *zsh*) archestra_install_guard_block "$HOME/.zshrc" ;;
-    *) archestra_install_guard_block "$HOME/.bashrc" ;;
-  esac
-fi
-ok "Startup guard installed — new terminals check your ${ctx.appName} remotes before claude starts."`;
+# Hook the CURRENT shell's rc first — creating it if needed — so the activation
+# hint below always resolves to a profile that carries the wrapper, then hook the
+# other rc too when it exists (covers users who switch shells). This script runs
+# in a child \`curl | bash\`, which cannot define the wrapper in the interactive
+# shell you launched it from, so the hint is how you arm it without a new terminal.
+case "\${SHELL:-}" in
+  *zsh*) archestra_guard_profile="$HOME/.zshrc" ;;
+  *)     archestra_guard_profile="$HOME/.bashrc" ;;
+esac
+archestra_install_guard_block "$archestra_guard_profile"
+if [ -f "$HOME/.zshrc" ] && [ "$archestra_guard_profile" != "$HOME/.zshrc" ]; then archestra_install_guard_block "$HOME/.zshrc"; fi
+if [ -f "$HOME/.bashrc" ] && [ "$archestra_guard_profile" != "$HOME/.bashrc" ]; then archestra_install_guard_block "$HOME/.bashrc"; fi
+ok "Startup guard installed for ${client.binary}."
+printf '   It runs automatically in new terminals. To arm it in THIS terminal now,\n'
+printf '   reload your shell:  %ssource %s%s   (or just open a new terminal).\n' "$ARCH_C_OK" "$archestra_guard_profile" "$ARCH_C_RESET"`;
+}
+
+/**
+ * The setup-script step that unshadows the client binary for THIS shell — emitted
+ * BEFORE the connect steps run the client CLI. A previous connect may have
+ * installed the guard's `<binary>()` wrapper into a profile that this shell has
+ * already sourced; left in place, it would splash/animate every time the connect
+ * steps below invoke `<binary>`. Dropping the wrapper function makes those calls
+ * reach the real `<binary>`.
+ *
+ * It is deliberately NON-destructive: it never deletes the installed guard files
+ * and never edits a shell profile. That is the whole point — the connect steps
+ * between here and the install section run under `set -euo pipefail`, so if any
+ * of them fails the script aborts before the install section is reached. Were
+ * this step to delete the persisted guard (as an earlier version did), that
+ * abort would strand the user with no startup screen at all. Leaving the on-disk
+ * guard untouched means a failed connect keeps the existing guard intact, while
+ * a successful connect refreshes it: {@link buildStartupGuardInstallSection}
+ * overwrites the guard file and rewrites the profile block idempotently, so it
+ * both de-duplicates and delivers updates on its own. Silent no-op when nothing
+ * is installed yet (first-ever connect).
+ */
+export function buildStartupGuardUnshadowSection(
+  client: StartupGuardClient,
+): string {
+  return `# A previous connect may have installed the ${client.binary} startup guard, whose
+# \`${client.binary}()\` wrapper this shell may already have sourced — it would splash
+# over the steps below. Drop it from this shell so those steps reach the real
+# \`${client.binary}\`. Deliberately non-destructive: it never deletes the installed
+# guard or edits a profile, so a failing step below (this script runs under
+# \`set -e\`) can never strand you without a startup screen. The install section at
+# the end overwrites the guard with the current version. No-op when nothing is
+# installed yet.
+unset -f ${client.binary} 2>/dev/null || true`;
 }
 
 // ===================================================================
@@ -839,16 +968,27 @@ function splitResourceUrl(
  * its own variants (e.g. "Archestra Staging"). White-label deployments get
  * the plain title line.
  */
-function guardHeader(ctx: ClaudeCodeStartupGuardContext): string {
+function guardHeader(ctx: StartupGuardContext): string {
   if (!isDefaultBrandedAppName(ctx.appName)) {
     return `printf '%s%s%s\\n\\n' "$C_TITLE" "$APP_NAME" "$C_RESET"`;
   }
-  const [m0, m1, m2, m3, m4] = ARCHESTRA_GUARD_MARK_LINES;
-  return `printf '%s${m0}%s\\n' "$C_LOGO" "$C_RESET"
-printf '%s${m1}%s      %s%s%s\\n' "$C_LOGO" "$C_RESET" "$C_TITLE" "$APP_NAME" "$C_RESET"
-printf '%s${m2}%s       %sSecure access to your AI tools%s\\n' "$C_LOGO" "$C_RESET" "$C_DIM" "$C_RESET"
-printf '%s${m3}%s\\n' "$C_LOGO" "$C_RESET"
-printf '%s${m4}%s\\n\\n' "$C_LOGO" "$C_RESET"`;
+  // The exact canonical mark, colored per line: the box art in C_LOGO with the
+  // product name (C_TITLE) and tagline (C_DIM) overlaid on their rows. The box
+  // lines carry no `%`, so they are safe inside the printf format string; the
+  // app name is always passed as an argument, never interpolated into it.
+  const lines = ARCHESTRA_MARK.unicode;
+  return lines
+    .map((line, i) => {
+      const tail = i === lines.length - 1 ? "\\n\\n" : "\\n";
+      if (i === ARCHESTRA_MARK_NAME_ROW) {
+        return `printf '%s${line}%s${ARCHESTRA_MARK_GAP}%s%s%s${tail}' "$C_LOGO" "$C_RESET" "$C_TITLE" "$APP_NAME" "$C_RESET"`;
+      }
+      if (i === ARCHESTRA_MARK_TAGLINE_ROW) {
+        return `printf '%s${line}%s${ARCHESTRA_MARK_GAP}%s${ARCHESTRA_MARK_TAGLINE}%s${tail}' "$C_LOGO" "$C_RESET" "$C_DIM" "$C_RESET"`;
+      }
+      return `printf '%s${line}%s${tail}' "$C_LOGO" "$C_RESET"`;
+    })
+    .join("\n");
 }
 
 /**
@@ -858,7 +998,7 @@ printf '%s${m4}%s\\n\\n' "$C_LOGO" "$C_RESET"`;
  * per-resource status — it rides on endpoint reachability (same origin), and
  * a revoked share link never blocks a claude launch.
  */
-function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
+function guardResources(ctx: StartupGuardContext): Array<{
   label: string;
   url: string;
   kind: "proxy" | "mcp" | "skills";
@@ -900,73 +1040,4 @@ function guardResources(ctx: ClaudeCodeStartupGuardContext): Array<{
     });
   }
   return resources;
-}
-
-/**
- * The proxy disconnect action: strip exactly the env keys connect set (per
- * provider, from the shared {@link CLAUDE_CODE_PROXY_ENV_KEYS} list) from
- * ~/.claude/settings.json, keeping the user's own custom-header lines. Falls
- * back to printed manual steps when python3 is missing, mirroring the connect
- * script's merge fallback.
- */
-function disconnectProxyFunction(ctx: ClaudeCodeStartupGuardContext): string {
-  const provider = ctx.proxy?.provider ?? "anthropic";
-  const envKeys = CLAUDE_CODE_PROXY_ENV_KEYS[provider];
-  const ourHeaderNames = [EXTERNAL_AGENT_ID_HEADER, VIRTUAL_KEY_HEADER]
-    .map((name) => `"${name.toLowerCase()}"`)
-    .join(", ");
-  const bedrockNote =
-    provider === "bedrock"
-      ? `
-  line_reset
-  printf '%s  If you exported AWS_BEARER_TOKEN_BEDROCK in your shell profile, remove it there too.%s\\n' "$C_DIM" "$C_RESET"`
-      : "";
-
-  const strippedKeysList = envKeys.map((key) => `"${key}"`).join(", ");
-
-  return `disconnect_proxy() {
-  command -v python3 >/dev/null 2>&1 || return 0
-  python3 - <<'ARCHESTRA_GUARD_PY'
-import json, os, pathlib
-path = pathlib.Path(os.path.expanduser("~/.claude/settings.json"))
-if not path.exists():
-    raise SystemExit(0)
-raw = path.read_text().strip()
-if not raw:
-    raise SystemExit(0)
-settings = json.loads(raw)
-env = settings.get("env")
-if not isinstance(env, dict):
-    raise SystemExit(0)
-backup = path.with_name(path.name + ".archestra-guard-backup")
-if not backup.exists():
-    backup.write_text(json.dumps(settings, indent=2) + "\\n")
-for key in [${strippedKeysList}]:
-    env.pop(key, None)
-# Drop only our header lines; the user's other custom headers survive.
-ours = {${ourHeaderNames}}
-existing = env.get("${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}", "") or ""
-lines = [
-    ln for ln in existing.splitlines()
-    if ln.strip() and ln.split(":", 1)[0].strip().lower() not in ours
-]
-if lines:
-    env["${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}"] = "\\n".join(lines)
-else:
-    env.pop("${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}", None)
-if not env:
-    settings.pop("env", None)
-path.write_text(json.dumps(settings, indent=2) + "\\n")
-ARCHESTRA_GUARD_PY
-}
-
-# Printed after the Disconnected line — the strip itself runs silenced in
-# the background while the spinner plays.
-proxy_disconnect_notes() {
-  if ! command -v python3 >/dev/null 2>&1; then
-    line_reset
-    printf '%s  python3 not found — remove these keys from the env block of ~/.claude/settings.json manually: ${envKeys.join(", ")} (and our lines in ${CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY}).%s\\n' "$C_WARN" "$C_RESET"
-  fi${bedrockNote}
-  return 0
-}`;
 }

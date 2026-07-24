@@ -1109,6 +1109,119 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(mockStreamText.mock.calls[0]?.[0].tools).toBeUndefined();
   });
 
+  // Seeds a synced Gemini model row so resolveConversationModel dereferences
+  // the conversation to that model id + the gemini provider.
+  const makeGeminiModelRow = (geminiModelId: string) =>
+    ModelModel.create({
+      externalId: `gemini/${geminiModelId}`,
+      provider: "gemini",
+      modelId: geminiModelId,
+      description: geminiModelId,
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+  test("requests Gemini thought summaries for a default-thinking model", async ({
+    makeConversation,
+  }) => {
+    const model = await makeGeminiModelRow("gemini-2.5-pro");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      thinkingConfig: { includeThoughts: true },
+    });
+  });
+
+  test("omits thinkingConfig for a Gemini model with thinking off by default", async ({
+    makeConversation,
+  }) => {
+    // flash-lite does not think unless asked; a bare includeThoughts on it is
+    // rejected by the API with a 400, so the turn must not carry it.
+    const model = await makeGeminiModelRow("gemini-2.5-flash-lite");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(
+      mockStreamText.mock.calls[0]?.[0].providerOptions?.google,
+    ).toBeUndefined();
+  });
+
+  test("keeps Gemini image-model providerOptions free of thinkingConfig", async ({
+    makeConversation,
+  }) => {
+    const model = await makeGeminiModelRow("gemini-2.5-flash-image");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      responseModalities: ["TEXT", "IMAGE"],
+    });
+  });
+
   test("adds load-tools guidance when the agent has no authored prompt", async () => {
     const { AgentModel } = await import("@/models");
     await AgentModel.update(agentId, {

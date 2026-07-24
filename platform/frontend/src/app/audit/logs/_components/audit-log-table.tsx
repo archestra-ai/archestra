@@ -19,6 +19,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
+import { useProfilesPaginated } from "@/lib/agent.query";
+import { useApps } from "@/lib/app.query";
 import {
   type AuditActorType,
   type AuditEventName,
@@ -27,9 +29,14 @@ import {
   useAuditLog,
   useAuditLogs,
 } from "@/lib/audit-log/audit-log.query";
+import { useEnvironments } from "@/lib/environment.query";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMembersPaginated } from "@/lib/member.query";
+import { useRolesPaginated } from "@/lib/role.query";
+import { useSkillsPaginated } from "@/lib/skills/skill.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { formatDate } from "@/lib/utils";
 import {
   ACTION_BADGE_VARIANT,
@@ -42,11 +49,27 @@ import {
   KNOWN_RESOURCE_TYPES,
   OUTCOME_BADGE_VARIANT,
   OUTCOME_LABEL,
+  resourceDisplayName,
 } from "./audit-log-action-labels";
 import { AuditLogDetailDialog } from "./audit-log-detail-dialog";
 
 const ACTOR_FILTER_LIMIT = 100;
+const ENTITY_FILTER_LIMIT = 100;
+const RESOURCE_NAME_TRUNCATE_LENGTH = 64;
 const ALL_VALUE = "all";
+
+// The high-signal types whose names render in the Resource column and whose
+// entities populate the "Filter by resource" picker. Every other type keeps a
+// bare type chip in the list; its full identity lives in the detail dialog.
+const LIST_NAME_RESOURCE_TYPES: ReadonlySet<string> = new Set([
+  "agent",
+  "app",
+  "environment",
+  "mcpServer",
+  "role",
+  "skill",
+  "team",
+]);
 
 // TS7 (tsgo) trips instantiating ColumnDef over AuditLog because `action` is a
 // large string-literal union, failing with a spurious "two unrelated ColumnDef
@@ -80,6 +103,7 @@ export function AuditLogTable() {
     | typeof ALL_VALUE
     | AuditEventName;
   const resourceTypeFromUrl = searchParams.get("resourceType") ?? ALL_VALUE;
+  const resourceIdFromUrl = searchParams.get("resourceId") ?? ALL_VALUE;
   const actorFromUrl = searchParams.get("actorId") ?? ALL_VALUE;
   const outcomeFromUrl = (searchParams.get("outcome") ?? ALL_VALUE) as
     | typeof ALL_VALUE
@@ -167,6 +191,14 @@ export function AuditLogTable() {
     [updateUrlParams],
   );
 
+  const handleEntityChange = useCallback(
+    (value: string) => {
+      setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+      updateUrlParams({ resourceId: value === ALL_VALUE ? null : value });
+    },
+    [updateUrlParams],
+  );
+
   const handleOutcomeChange = useCallback(
     (value: string) => {
       setPagination((prev) => ({ ...prev, pageIndex: 0 }));
@@ -190,6 +222,8 @@ export function AuditLogTable() {
     : undefined;
   const resourceType =
     resourceTypeFromUrl === ALL_VALUE ? undefined : resourceTypeFromUrl;
+  const resourceId =
+    resourceIdFromUrl === ALL_VALUE ? undefined : resourceIdFromUrl;
   const actorId = actorFromUrl === ALL_VALUE ? undefined : actorFromUrl;
   const outcome = (ALL_OUTCOMES as readonly string[]).includes(outcomeFromUrl)
     ? (outcomeFromUrl as AuditOutcome)
@@ -216,11 +250,47 @@ export function AuditLogTable() {
     outcome,
     actorType,
     resourceType,
+    resourceId,
     search: searchFromUrl ?? undefined,
   });
 
   const { data: membersResponse } = useMembersPaginated({
     limit: ACTOR_FILTER_LIMIT,
+    offset: 0,
+  });
+
+  // Two lifecycle buckets: agents are soft-deleted, so a deleted agent's
+  // history stays reachable through the picker (the audit page is admin-only,
+  // which is also what the deleted bucket requires).
+  const { data: activeAgentsResponse } = useProfilesPaginated({
+    limit: ENTITY_FILTER_LIMIT,
+    offset: 0,
+    sortBy: "name",
+    sortDirection: "asc",
+    status: "active",
+  });
+  const { data: deletedAgentsResponse } = useProfilesPaginated({
+    limit: ENTITY_FILTER_LIMIT,
+    offset: 0,
+    sortBy: "name",
+    sortDirection: "asc",
+    status: "deleted",
+  });
+
+  // The remaining LIST_NAME_RESOURCE_TYPES entities for the entity picker.
+  const { data: mcpServers } = useMcpServers();
+  const { data: teams } = useTeams();
+  const { data: rolesResponse } = useRolesPaginated({
+    limit: ENTITY_FILTER_LIMIT,
+    offset: 0,
+  });
+  const { data: environmentList } = useEnvironments();
+  const { data: appsResponse } = useApps({
+    limit: ENTITY_FILTER_LIMIT,
+    offset: 0,
+  });
+  const { data: skillsResponse } = useSkillsPaginated({
+    limit: ENTITY_FILTER_LIMIT,
     offset: 0,
   });
 
@@ -237,6 +307,59 @@ export function AuditLogTable() {
     return [{ value: ALL_VALUE, label: "All actors" }, ...items];
   }, [membersResponse]);
 
+  const entityOptions = useMemo(() => {
+    // The type goes into `description`: SearchableSelect renders it as a
+    // subtitle and matches it in search, so typing "team" finds all teams.
+    const toOptions = (
+      items: Array<{ id: string; name: string }> | undefined,
+      resourceType: string,
+    ) =>
+      (items ?? [])
+        .map((item) => ({
+          value: item.id,
+          label: item.name,
+          // Single line per option: long machine names truncate with an
+          // ellipsis (full name in the hover title, and search still matches
+          // the full label) so the popover stays scannable.
+          content: (
+            <span className="block truncate" title={item.name}>
+              {item.name}
+            </span>
+          ),
+          description: formatResourceType(resourceType),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+
+    const deletedAgents = toOptions(deletedAgentsResponse?.data, "agent").map(
+      (option) => ({ ...option, description: "Agent (deleted)" }),
+    );
+    // External catalog apps carry no id (and are not audited) — only owned
+    // apps can be picked.
+    const ownedApps = appsResponse?.data?.filter(
+      (app) => app.source === "owned",
+    );
+    return [
+      { value: ALL_VALUE, label: "All resources" },
+      ...toOptions(activeAgentsResponse?.data, "agent"),
+      ...deletedAgents,
+      ...toOptions(mcpServers, "mcpServer"),
+      ...toOptions(teams, "team"),
+      ...toOptions(rolesResponse?.data, "role"),
+      ...toOptions(environmentList?.environments, "environment"),
+      ...toOptions(ownedApps, "app"),
+      ...toOptions(skillsResponse?.data, "skill"),
+    ];
+  }, [
+    activeAgentsResponse,
+    deletedAgentsResponse,
+    mcpServers,
+    teams,
+    rolesResponse,
+    environmentList,
+    appsResponse,
+    skillsResponse,
+  ]);
+
   const actionOptions = useMemo(
     () => [
       { value: ALL_VALUE, label: "All actions" },
@@ -247,7 +370,7 @@ export function AuditLogTable() {
 
   const resourceOptions = useMemo(
     () => [
-      { value: ALL_VALUE, label: "All resources" },
+      { value: ALL_VALUE, label: "All resource types" },
       ...KNOWN_RESOURCE_TYPES.map((r) => ({
         value: r,
         label: formatResourceType(r),
@@ -340,12 +463,36 @@ export function AuditLogTable() {
         header: "Resource",
         cell: ({ row }) => {
           const { resourceType: rt } = row.original;
-          if (!rt) {
+          const name =
+            rt && LIST_NAME_RESOURCE_TYPES.has(rt)
+              ? resourceDisplayName(row.original)
+              : null;
+          if (!rt && !name) {
             return <span className="text-xs text-muted-foreground">—</span>;
           }
+          const displayName =
+            name && name.length > RESOURCE_NAME_TRUNCATE_LENGTH
+              ? `${name.slice(0, RESOURCE_NAME_TRUNCATE_LENGTH)}…`
+              : name;
+          // One chip holding "Type: name" as a single text flow (not flex
+          // columns). break-all splits machine names mid-word (the Model
+          // providers convention) so every line fills the cell width instead
+          // of breaking ragged at each hyphen; rounded-md instead of the
+          // badge's pill rounding keeps multiline corners off the text.
           return (
-            <Badge variant="secondary" className="text-xs">
-              {formatResourceType(rt)}
+            <Badge
+              variant="secondary"
+              className="max-w-full rounded-md whitespace-normal text-xs"
+            >
+              <span className="break-all font-normal">
+                {rt && (
+                  <span className="font-semibold">
+                    {formatResourceType(rt)}
+                  </span>
+                )}
+                {rt && name ? ": " : ""}
+                {name && <span title={name}>{displayName}</span>}
+              </span>
             </Badge>
           );
         },
@@ -388,6 +535,7 @@ export function AuditLogTable() {
     outcome !== undefined ||
     actorType !== undefined ||
     resourceType !== undefined ||
+    resourceId !== undefined ||
     actorId !== undefined ||
     dateTimePicker.startDate !== undefined;
 
@@ -400,6 +548,7 @@ export function AuditLogTable() {
       outcome: null,
       actorType: null,
       resourceType: null,
+      resourceId: null,
       actorId: null,
       startDate: null,
       endDate: null,
@@ -450,9 +599,16 @@ export function AuditLogTable() {
         <SearchableSelect
           value={resourceType ?? ALL_VALUE}
           onValueChange={handleResourceChange}
-          placeholder="Filter by resource"
+          placeholder="Filter by resource type"
           items={resourceOptions}
           className="w-[200px]"
+        />
+        <SearchableSelect
+          value={resourceId ?? ALL_VALUE}
+          onValueChange={handleEntityChange}
+          placeholder="Filter by resource"
+          items={entityOptions}
+          className="w-[220px]"
         />
         <SearchableSelect
           value={actorId ?? ALL_VALUE}

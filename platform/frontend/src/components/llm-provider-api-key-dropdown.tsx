@@ -5,6 +5,7 @@ import {
   getChatApiKeySelectorOptionTestId,
   getChatApiKeySelectorProviderGroupTestId,
   providerDisplayNames,
+  providerRequiresPerUserCredential,
   type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -42,7 +43,11 @@ type DropdownLlmProviderApiKey = Pick<
   LlmProviderApiKey,
   "id" | "name" | "provider"
 > &
-  Partial<Pick<LlmProviderApiKey, "scope" | "teamName">>;
+  Partial<
+    Pick<LlmProviderApiKey, "scope" | "teamName" | "isChatgptSubscription">
+  > & {
+    connectRequired?: boolean;
+  };
 
 interface LlmProviderApiKeyDropdownProps {
   availableKeys: DropdownLlmProviderApiKey[];
@@ -97,10 +102,15 @@ export function LlmProviderApiKeyDropdown({
   organizationDefaultSelected = false,
   onSelectOrganizationDefault,
 }: LlmProviderApiKeyDropdownProps) {
-  const keysByProvider = useMemo(
-    () => groupKeysByProvider(availableKeys),
+  const subscriptionKeys = useMemo(
+    () => availableKeys.filter(isPersonalSubscription),
     [availableKeys],
   );
+  const apiKeys = useMemo(
+    () => availableKeys.filter((key) => !isPersonalSubscription(key)),
+    [availableKeys],
+  );
+  const keysByProvider = useMemo(() => groupKeysByProvider(apiKeys), [apiKeys]);
   const availableProviders = useMemo(
     () =>
       sortProviders({
@@ -110,6 +120,8 @@ export function LlmProviderApiKeyDropdown({
     [keysByProvider, currentProvider],
   );
   const selectedKey = availableKeys.find((key) => key.id === selectedApiKeyId);
+  const selectedKeyIsSubscription =
+    selectedKey !== undefined && isPersonalSubscription(selectedKey);
   const fallbackTriggerLabel =
     emptyTriggerLabel ??
     (allOptionSelected && allOptionLabel ? allOptionLabel : undefined) ??
@@ -139,6 +151,14 @@ export function LlmProviderApiKeyDropdown({
                   <span className="truncate font-medium">
                     {selectedKey.name}
                   </span>
+                  {selectedKeyIsSubscription && (
+                    <Badge
+                      variant="secondary"
+                      className="shrink-0 px-1.5 py-0 text-[10px]"
+                    >
+                      Per-user
+                    </Badge>
+                  )}
                 </>
               ) : (
                 <>
@@ -185,7 +205,7 @@ export function LlmProviderApiKeyDropdown({
             }
           />
           <CommandList onWheelCapture={(event) => event.stopPropagation()}>
-            <CommandEmpty>No API keys found.</CommandEmpty>
+            <CommandEmpty>No credentials found.</CommandEmpty>
             {allOptionLabel && onSelectAllOption && (
               <CommandGroup>
                 <CommandItem onSelect={onSelectAllOption}>
@@ -215,6 +235,62 @@ export function LlmProviderApiKeyDropdown({
                   )}
                 </CommandItem>
               </CommandGroup>
+            )}
+            {subscriptionKeys.length > 0 && (
+              <CommandGroup
+                heading={
+                  <div className="space-y-0.5">
+                    <div className="text-foreground">
+                      Personal subscriptions
+                    </div>
+                    <div className="font-normal">
+                      Each user connects their own account
+                    </div>
+                  </div>
+                }
+              >
+                {subscriptionKeys.map((key) => (
+                  <CommandItem
+                    key={key.id}
+                    data-testid={
+                      showChatTestIds
+                        ? getChatApiKeySelectorOptionTestId(key.id)
+                        : undefined
+                    }
+                    value={key.id}
+                    keywords={[
+                      key.provider,
+                      key.name,
+                      "personal subscription",
+                      "per-user",
+                    ]}
+                    onSelect={() => onSelectKey(key.id)}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <ProviderIcon provider={key.provider} />
+                      <span className="truncate">{key.name}</span>
+                      <Badge
+                        variant={key.connectRequired ? "outline" : "secondary"}
+                        className="shrink-0 px-1 py-0 text-[10px]"
+                      >
+                        {key.connectRequired ? "Connect" : "Per-user"}
+                      </Badge>
+                    </div>
+                    {selectedApiKeyId === key.id && (
+                      <CheckIcon className="h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {availableProviders.length > 0 && (
+              <div className="border-t px-3 pb-1 pt-2 text-xs">
+                <div className="font-medium text-foreground">API keys</div>
+                <div className="text-muted-foreground">
+                  Stored credentials shared according to scope
+                </div>
+              </div>
             )}
             {availableProviders.map((provider) => (
               <CommandGroup
@@ -276,6 +352,15 @@ function groupKeysByProvider(availableKeys: DropdownLlmProviderApiKey[]) {
   }
 
   return grouped;
+}
+
+function isPersonalSubscription(key: DropdownLlmProviderApiKey) {
+  return (
+    (key.provider === "openai" &&
+      (key.isChatgptSubscription === true ||
+        key.name.trim().toLowerCase() === "chatgpt subscription")) ||
+    providerRequiresPerUserCredential(key.provider)
+  );
 }
 
 function ProviderGroupHeading({ provider }: { provider: SupportedProvider }) {

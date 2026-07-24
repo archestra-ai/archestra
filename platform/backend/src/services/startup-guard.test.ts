@@ -12,24 +12,31 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
-  CLAUDE_CODE_GUARD_MARKER_END,
-  CLAUDE_CODE_GUARD_MARKER_START,
-  CLAUDE_CODE_GUARD_SCRIPT_RELPATH,
-  CLAUDE_CODE_GUARD_SKIP_RELPATH,
   CLAUDE_CODE_PROXY_ENV_KEYS,
+  STARTUP_GUARD_INSTALL,
 } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
-import {
-  buildClaudeCodeStartupGuardContext,
-  buildClaudeCodeStartupGuardInstallSection,
-  type ClaudeCodeStartupGuardContext,
-  renderClaudeCodeStartupGuardScript,
-} from "@/services/claude-code-startup-guard";
 import type { SetupScriptContext } from "@/services/connection-setup-script";
+import {
+  buildStartupGuardContext,
+  buildStartupGuardInstallSection,
+  renderStartupGuardScript,
+  type StartupGuardContext,
+} from "@/services/startup-guard";
+import { CLAUDE_CODE_GUARD_CLIENT } from "@/services/startup-guard.clients";
 
 const execFileAsync = promisify(execFile);
 
-const CTX: ClaudeCodeStartupGuardContext = {
+// This suite pins the Claude Code descriptor's rendered guard behavior — the
+// reference client for the shared engine.
+const {
+  scriptRelpath: CLAUDE_CODE_GUARD_SCRIPT_RELPATH,
+  skipRelpath: CLAUDE_CODE_GUARD_SKIP_RELPATH,
+  markerStart: CLAUDE_CODE_GUARD_MARKER_START,
+  markerEnd: CLAUDE_CODE_GUARD_MARKER_END,
+} = STARTUP_GUARD_INSTALL["claude-code"];
+
+const CTX: StartupGuardContext = {
   appName: "Archestra",
   healthUrl:
     "https://archestra.example.com/v1/health?mcp=prod-gateway&llm=profile-123",
@@ -38,6 +45,7 @@ const CTX: ClaudeCodeStartupGuardContext = {
     providerLabel: "Anthropic",
     url: "https://archestra.example.com/v1/anthropic/profile-123",
     ref: "profile-123",
+    proxyName: "default_proxy",
   },
   mcp: {
     serverName: "prod_gateway",
@@ -246,7 +254,7 @@ async function readClaudeLog(guardHome: GuardHome): Promise<string> {
     : "";
 }
 
-describe("buildClaudeCodeStartupGuardContext", () => {
+describe("buildStartupGuardContext", () => {
   test("derives refs and the single health URL from the connect-wired URLs", () => {
     const setupCtx: SetupScriptContext = {
       clientId: "claude-code",
@@ -268,7 +276,7 @@ describe("buildClaudeCodeStartupGuardContext", () => {
       },
       skills: null,
     };
-    const guardCtx = buildClaudeCodeStartupGuardContext(setupCtx);
+    const guardCtx = buildStartupGuardContext(setupCtx);
     expect(guardCtx.healthUrl).toBe(
       "https://archestra.example.com/v1/health?mcp=prod-gateway&llm=profile-123",
     );
@@ -276,7 +284,7 @@ describe("buildClaudeCodeStartupGuardContext", () => {
     expect(guardCtx.proxy?.ref).toBe("profile-123");
 
     // gateway-only connects still get a health URL with just the mcp param
-    const mcpOnly = buildClaudeCodeStartupGuardContext({
+    const mcpOnly = buildStartupGuardContext({
       ...setupCtx,
       proxy: null,
     });
@@ -286,16 +294,16 @@ describe("buildClaudeCodeStartupGuardContext", () => {
   });
 });
 
-describe("renderClaudeCodeStartupGuardScript", () => {
+describe("renderStartupGuardScript", () => {
   test("renders parseable bash with no unrendered placeholders", async () => {
-    const script = renderClaudeCodeStartupGuardScript(CTX);
+    const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
     await expectValidBash(script);
     expect(script).not.toMatch(/<[a-z-]+>/);
     expect(script.startsWith("#!/usr/bin/env bash")).toBe(true);
   });
 
   test("shows the remotes in pre-loader order: proxy, gateway, skills", () => {
-    const script = renderClaudeCodeStartupGuardScript(CTX);
+    const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
     const proxyAt = script.indexOf("LLM proxy (Anthropic)");
     const mcpAt = script.indexOf("MCP gateway (prod_gateway)");
     const skillsAt = script.indexOf("Skills marketplace (acme-skills)");
@@ -305,7 +313,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
   });
 
   test("makes ONE health request for the launch; skills has no per-resource marker", () => {
-    const script = renderClaudeCodeStartupGuardScript(CTX);
+    const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
     expect(script).toContain(`HEALTH_URL='${CTX.healthUrl}'`);
     expect(script).toContain(`'"mcp":"down"'`);
     expect(script).toContain(`'"llm":"down"'`);
@@ -316,7 +324,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
   });
 
   test("every down remote gets the failure copy; ONE prompt then covers them all", () => {
-    const script = renderClaudeCodeStartupGuardScript(CTX);
+    const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
     expect(script).toContain("✗ Failed to connect to");
     expect(script).toContain("'LLM proxy (profile-123)'");
     expect(script).toContain("'MCP gateway (prod-gateway)'");
@@ -332,7 +340,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
   });
 
   test("always offers a reconfigure entry under the rows; the down prompt routes [C] into the same menu", () => {
-    const script = renderClaudeCodeStartupGuardScript(CTX);
+    const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
     // the persistent [C] entry, present on every launch
     expect(script).toContain("To reconfigure your");
     expect(script).toContain("press [C]");
@@ -355,7 +363,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
   });
 
   test("encodes the retry contract on the single request: 15s budget, notice at 3s, hang-tight at 10s, own-line (Y/n) offer", () => {
-    const script = renderClaudeCodeStartupGuardScript(CTX);
+    const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
     expect(script).toContain("RETRY_TOTAL_SECONDS=15");
     expect(script).toContain("NOTICE_AFTER_SECONDS=3");
     expect(script).toContain("HANG_TIGHT_AFTER_SECONDS=10");
@@ -377,7 +385,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
   });
 
   test("paces every check with ~0.75s of appended dots, on the alternate screen", () => {
-    const script = renderClaudeCodeStartupGuardScript(CTX);
+    const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
     // ~0.75s per row, one appended dot per ~250ms tick — append-only output
     // cannot flicker (glyph spinners strobed on Windows Terminal)
     expect(script).toContain("MIN_CHECK_FRAMES=3");
@@ -407,29 +415,29 @@ describe("renderClaudeCodeStartupGuardScript", () => {
   });
 
   test("renders the Archestra mark for the default brand and its own variants, plain title when genuinely white-labeled", () => {
-    const branded = renderClaudeCodeStartupGuardScript(CTX);
+    const branded = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
     expect(branded).toContain("▟██▙");
     expect(branded).toContain("Secure access to your AI tools");
 
     // an org named "Archestra Staging" is still Archestra's own brand — the
     // mark must not disappear just because the name isn't an exact match
-    const variant = renderClaudeCodeStartupGuardScript({
-      ...CTX,
-      appName: "Archestra Staging",
-    });
+    const variant = renderStartupGuardScript(
+      { ...CTX, appName: "Archestra Staging" },
+      CLAUDE_CODE_GUARD_CLIENT,
+    );
     expect(variant).toContain("▟██▙");
     expect(variant).toContain("'Archestra Staging'");
 
-    const whiteLabel = renderClaudeCodeStartupGuardScript({
-      ...CTX,
-      appName: "Acme AI",
-    });
+    const whiteLabel = renderStartupGuardScript(
+      { ...CTX, appName: "Acme AI" },
+      CLAUDE_CODE_GUARD_CLIENT,
+    );
     expect(whiteLabel).not.toContain("▟██▙");
     expect(whiteLabel).toContain("'Acme AI'");
   });
 
   test("disconnect actions mirror the connect steps for each remote", () => {
-    const script = renderClaudeCodeStartupGuardScript(CTX);
+    const script = renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT);
     // the variables the disconnect actions dereference MUST be assigned —
     // under set -u a missing assignment kills the guard exactly when the
     // user presses d (caught live; pinned here)
@@ -454,15 +462,19 @@ describe("renderClaudeCodeStartupGuardScript", () => {
   });
 
   test("bedrock variant strips the bedrock env keys and flags the shell-profile token", () => {
-    const script = renderClaudeCodeStartupGuardScript({
-      ...CTX,
-      proxy: {
-        provider: "bedrock",
-        providerLabel: "AWS Bedrock",
-        url: "https://archestra.example.com/v1/bedrock/profile-123",
-        ref: "profile-123",
+    const script = renderStartupGuardScript(
+      {
+        ...CTX,
+        proxy: {
+          provider: "bedrock",
+          providerLabel: "AWS Bedrock",
+          url: "https://archestra.example.com/v1/bedrock/profile-123",
+          ref: "profile-123",
+          proxyName: "default_proxy",
+        },
       },
-    });
+      CLAUDE_CODE_GUARD_CLIENT,
+    );
     for (const key of CLAUDE_CODE_PROXY_ENV_KEYS.bedrock) {
       expect(script).toContain(`"${key}"`);
     }
@@ -470,12 +482,15 @@ describe("renderClaudeCodeStartupGuardScript", () => {
   });
 
   test("omitted sections render no row for them", () => {
-    const script = renderClaudeCodeStartupGuardScript({
-      ...CTX,
-      healthUrl: "https://archestra.example.com/v1/health?mcp=prod-gateway",
-      skills: null,
-      proxy: null,
-    });
+    const script = renderStartupGuardScript(
+      {
+        ...CTX,
+        healthUrl: "https://archestra.example.com/v1/health?mcp=prod-gateway",
+        skills: null,
+        proxy: null,
+      },
+      CLAUDE_CODE_GUARD_CLIENT,
+    );
     expect(script).not.toContain("Skills marketplace");
     expect(script).not.toContain("LLM proxy");
     expect(script).toContain("MCP gateway (prod_gateway)");
@@ -483,7 +498,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("non-interactive run with healthy remotes is silent and exits 0", async () => {
     const { stdout, stderr } = await runGuardNonInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: '{"mcp":"ok","llm":"ok"}',
     });
@@ -493,7 +508,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("non-interactive run with the platform unreachable downs every remote on stderr, exit 0", async () => {
     const { stdout, stderr } = await runGuardNonInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 7,
     });
     expect(stdout).toBe("");
@@ -508,7 +523,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     // The platform answers (reachability fine) but reports both resources
     // down. The old reachability-only guard showed green here.
     const { stdout, stderr } = await runGuardNonInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: '{"mcp":"down","llm":"down"}',
     });
@@ -521,7 +536,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("one down resource warns only for itself", async () => {
     const { stderr } = await runGuardNonInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: '{"mcp":"down","llm":"ok"}',
     });
@@ -531,7 +546,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("down markers match pretty-printed JSON too (whitespace-normalized body)", async () => {
     const { stderr } = await runGuardNonInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: '{"mcp": "down", "llm": "ok"}',
     });
@@ -541,7 +556,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("an older backend without the health route degrades to reachable-silent, never false-down", async () => {
     const { stderr } = await runGuardNonInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: '{"error":{"message":"Route GET:/v1/health not found"}}',
     });
@@ -550,7 +565,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("ARCHESTRA_CLAUDE_GUARD=0 disables the guard entirely", async () => {
     const { stdout, stderr } = await runGuardNonInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 7,
       env: { ARCHESTRA_CLAUDE_GUARD: "0" },
     });
@@ -563,7 +578,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     // but a previous launch already disconnected it from Claude Code — the
     // skip file must silence it for good instead of re-prompting forever.
     const { stdout, stderr } = await runGuardNonInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: '{"mcp":"down","llm":"ok"}',
       skipFileContent: "mcp\n",
@@ -574,7 +589,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("with every remote already disconnected the guard uninstalls itself and gets out of the way", async () => {
     const { stdout, stderr, guardHome } = await runGuardNonInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 7,
       skipFileContent: "proxy\nmcp\nskills\n",
     });
@@ -594,7 +609,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("interactive, platform unreachable, y during the wait: disconnects EVERYTHING and removes the guard itself", async () => {
     const { output, guardHome } = await runGuardInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 7,
       keys: "y",
     });
@@ -627,7 +642,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("interactive, one remote down, d at the prompt: disconnects only it and keeps the guard for the rest", async () => {
     const { output, guardHome } = await runGuardInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: '{"mcp":"down","llm":"ok"}',
       keys: "y",
@@ -653,7 +668,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("interactive, several remotes down: ONE prompt disconnects them all at once", async () => {
     const { output, guardHome } = await runGuardInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: '{"mcp":"down","llm":"down"}',
       // Enter alone accepts the (Y/n) default: remove
@@ -679,7 +694,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("interactive, down remotes skipped: nothing is disconnected and nothing is remembered", async () => {
     const { output, guardHome } = await runGuardInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: '{"mcp":"down","llm":"ok"}',
       keys: "n",
@@ -697,7 +712,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
     // holds regardless of pass count (skills always stays connected, so the
     // guard survives either way) — the same immunity the tests above rely on.
     const { output, guardHome } = await runGuardInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: '{"mcp":"ok","llm":"ok"}',
       keys: "c1\r",
@@ -722,7 +737,7 @@ describe("renderClaudeCodeStartupGuardScript", () => {
 
   test("interactive, [C] menu, removing every remote uninstalls the guard entirely", async () => {
     const { guardHome } = await runGuardInteractive({
-      script: renderClaudeCodeStartupGuardScript(CTX),
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: '{"mcp":"ok","llm":"ok"}',
       // open the menu, then disconnect rows 1, 2 and 3
@@ -745,9 +760,12 @@ describe("renderClaudeCodeStartupGuardScript", () => {
   });
 });
 
-describe("buildClaudeCodeStartupGuardInstallSection", () => {
+describe("buildStartupGuardInstallSection", () => {
   test("writes the guard file and hooks an idempotent marker block into shell profiles", () => {
-    const section = buildClaudeCodeStartupGuardInstallSection(CTX);
+    const section = buildStartupGuardInstallSection(
+      CTX,
+      CLAUDE_CODE_GUARD_CLIENT,
+    );
     expect(section).toContain(`$HOME/${CLAUDE_CODE_GUARD_SCRIPT_RELPATH}`);
     expect(section).toContain(CLAUDE_CODE_GUARD_MARKER_START);
     expect(section).toContain(CLAUDE_CODE_GUARD_MARKER_END);

@@ -1,6 +1,9 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import logger from "@/logging";
-import { sanitizeAuditSnapshot } from "@/middleware/audit-log-hook";
+import {
+  extractAuditResourceName,
+  sanitizeAuditSnapshot,
+} from "@/middleware/audit-log-hook";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import AppModel from "@/models/app";
@@ -182,6 +185,7 @@ export async function recordToolAudit(params: {
       outcome,
       resourceType: spec.resourceType,
       resourceId,
+      resourceName: extractAuditResourceName(after, capture.before),
       before: capture.before,
       after,
       httpMethod: null,

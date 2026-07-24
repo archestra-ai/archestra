@@ -117,6 +117,19 @@ export function resolveChatModelState(params: {
   organization: OrganizationInfo;
   memberDefault: MemberDefaultInfo;
 }): ResolvedChatModelState | null {
+  const agentModel = params.agent?.modelId
+    ? Object.values(params.modelsByProvider)
+        .flat()
+        .find((model) => model.dbId === params.agent?.modelId)
+    : undefined;
+  // Selecting an agent whose pinned subscription is not connected must first
+  // surface that requirement. Otherwise the saved member default immediately
+  // becomes a "chat override", and resetting it just restores the same value.
+  const memberDefault =
+    agentModel?.requiresUserConnection && agentModel.isConnected === false
+      ? null
+      : params.memberDefault;
+
   // The resolver identifies models by their models.id UUID.
   const modelsByProvider = Object.fromEntries(
     Object.entries(params.modelsByProvider).map(([provider, models]) => [
@@ -132,14 +145,14 @@ export function resolveChatModelState(params: {
           modelsByProvider,
           chatApiKeys: params.chatApiKeys,
           organization: params.organization,
-          memberDefault: params.memberDefault,
+          memberDefault,
         },
       })
     : resolveInitialModel({
         modelsByProvider,
         chatApiKeys: params.chatApiKeys,
         organization: params.organization,
-        memberDefault: params.memberDefault,
+        memberDefault,
         agent: null,
       });
 

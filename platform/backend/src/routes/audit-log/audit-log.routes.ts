@@ -51,11 +51,15 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe("Filter by resource type (e.g. agent, role)"),
+            resourceId: z
+              .string()
+              .optional()
+              .describe("Filter by resource ID (e.g. a specific agent's ID)"),
             search: z
               .string()
               .optional()
               .describe(
-                "Case-insensitive search across actor email, actor name, HTTP path, and resource ID",
+                "Case-insensitive search across actor email, actor name, HTTP path, resource ID, and resource name",
               ),
           })
           .extend({
@@ -77,6 +81,7 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           outcome,
           actorType,
           resourceType,
+          resourceId,
           search,
           limit,
           offset,
@@ -98,6 +103,7 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         outcome,
         actorType,
         resourceType,
+        resourceId,
         search,
       });
 

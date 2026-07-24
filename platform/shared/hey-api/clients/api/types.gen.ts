@@ -82,6 +82,7 @@ export type OpenAiChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -318,6 +319,7 @@ export type OpenAiChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -1425,10 +1427,12 @@ export type AnthropicMessagesRequestInput = {
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
+        display?: 'summarized' | 'omitted';
     } | {
         type: 'disabled';
     } | {
         type: 'adaptive';
+        display?: 'summarized' | 'omitted';
     };
     tool_choice?: {
         type: 'auto';
@@ -1584,6 +1588,7 @@ export type CerebrasChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -1817,6 +1822,7 @@ export type CerebrasChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
              */
@@ -2049,6 +2055,7 @@ export type MistralChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -2285,6 +2292,7 @@ export type MistralChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -2406,6 +2414,7 @@ export type PerplexityChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -2642,6 +2651,7 @@ export type PerplexityChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -2763,6 +2773,7 @@ export type GroqChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -2999,6 +3010,7 @@ export type GroqChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -3120,6 +3132,7 @@ export type OpenrouterChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -3360,6 +3373,7 @@ export type OpenrouterChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -3504,6 +3518,7 @@ export type VllmChatCompletionRequestInput = {
             };
         }>;
         reasoning?: string | null;
+        reasoning_content?: string | null;
     } | {
         role: 'tool';
         content: string | Array<{
@@ -3720,6 +3735,7 @@ export type VllmChatCompletionResponseInput = {
                 };
             }>;
             reasoning?: string | null;
+            reasoning_content?: string | null;
         };
     }>;
     created: number;
@@ -3809,6 +3825,7 @@ export type OllamaChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * A tool call in the assistant message
@@ -4020,6 +4037,7 @@ export type OllamaChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             /**
              * A tool call in the assistant message
              */
@@ -4401,6 +4419,7 @@ export type DeepSeekChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -4638,6 +4657,7 @@ export type DeepSeekChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -4759,6 +4779,7 @@ export type ArchestraChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -4996,6 +5017,7 @@ export type ArchestraChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -5117,6 +5139,7 @@ export type MinimaxChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -5473,6 +5496,7 @@ export type XaiChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -5709,6 +5733,7 @@ export type XaiChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -5851,6 +5876,7 @@ export type OpenAiChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -6087,6 +6113,7 @@ export type OpenAiChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -7194,10 +7221,12 @@ export type AnthropicMessagesRequest = {
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
+        display?: 'summarized' | 'omitted';
     } | {
         type: 'disabled';
     } | {
         type: 'adaptive';
+        display?: 'summarized' | 'omitted';
     };
     tool_choice?: {
         type: 'auto';
@@ -7353,6 +7382,7 @@ export type CerebrasChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -7586,6 +7616,7 @@ export type CerebrasChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
              */
@@ -7818,6 +7849,7 @@ export type MistralChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -8054,6 +8086,7 @@ export type MistralChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -8175,6 +8208,7 @@ export type PerplexityChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -8411,6 +8445,7 @@ export type PerplexityChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -8532,6 +8567,7 @@ export type GroqChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -8768,6 +8804,7 @@ export type GroqChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -8889,6 +8926,7 @@ export type OpenrouterChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -9129,6 +9167,7 @@ export type OpenrouterChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -9273,6 +9312,7 @@ export type VllmChatCompletionRequest = {
             };
         }>;
         reasoning?: string | null;
+        reasoning_content?: string | null;
     } | {
         role: 'tool';
         content: string | Array<{
@@ -9489,6 +9529,7 @@ export type VllmChatCompletionResponse = {
                 };
             }>;
             reasoning?: string | null;
+            reasoning_content?: string | null;
         };
     }>;
     created: number;
@@ -9578,6 +9619,7 @@ export type OllamaChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * A tool call in the assistant message
@@ -9789,6 +9831,7 @@ export type OllamaChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             /**
              * A tool call in the assistant message
              */
@@ -10170,6 +10213,7 @@ export type DeepSeekChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -10407,6 +10451,7 @@ export type DeepSeekChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -10528,6 +10573,7 @@ export type ArchestraChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -10765,6 +10811,7 @@ export type ArchestraChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -10886,6 +10933,7 @@ export type MinimaxChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -11242,6 +11290,7 @@ export type XaiChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -11478,6 +11527,7 @@ export type XaiChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -19782,7 +19832,11 @@ export type GetAuditLogsData = {
          */
         resourceType?: string;
         /**
-         * Case-insensitive search across actor email, actor name, HTTP path, and resource ID
+         * Filter by resource ID (e.g. a specific agent's ID)
+         */
+        resourceId?: string;
+        /**
+         * Case-insensitive search across actor email, actor name, HTTP path, resource ID, and resource name
          */
         search?: string;
         sortDirection?: 'asc' | 'desc';
@@ -19876,6 +19930,7 @@ export type GetAuditLogsResponses = {
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
+            resourceName: string | null;
             before: {
                 [key: string]: unknown;
             } | null;
@@ -19995,6 +20050,7 @@ export type GetAuditLogResponses = {
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
+        resourceName: string | null;
         before: {
             [key: string]: unknown;
         } | null;
@@ -21809,6 +21865,7 @@ export type AzureChatCompletionsWithDefaultAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -22309,6 +22366,7 @@ export type AzureChatCompletionsWithAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -24425,10 +24483,12 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
+            display?: 'summarized' | 'omitted';
         } | {
             type: 'disabled';
         } | {
             type: 'adaptive';
+            display?: 'summarized' | 'omitted';
         };
         tool_choice?: {
             type: 'auto';
@@ -24753,10 +24813,12 @@ export type BedrockInvokeWithAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
+            display?: 'summarized' | 'omitted';
         } | {
             type: 'disabled';
         } | {
             type: 'adaptive';
+            display?: 'summarized' | 'omitted';
         };
         tool_choice?: {
             type: 'auto';
@@ -25082,10 +25144,12 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
+            display?: 'summarized' | 'omitted';
         } | {
             type: 'disabled';
         } | {
             type: 'adaptive';
+            display?: 'summarized' | 'omitted';
         };
         tool_choice?: {
             type: 'auto';
@@ -25343,10 +25407,12 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
+            display?: 'summarized' | 'omitted';
         } | {
             type: 'disabled';
         } | {
             type: 'adaptive';
+            display?: 'summarized' | 'omitted';
         };
         tool_choice?: {
             type: 'auto';
@@ -33394,6 +33460,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 name: string;
             } | null;
             name?: string;
+            reasoning_content?: string | null;
             refusal?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -33714,6 +33781,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -33839,6 +33907,7 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                 name: string;
             } | null;
             name?: string;
+            reasoning_content?: string | null;
             refusal?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -34161,6 +34230,7 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -37453,10 +37523,12 @@ export type GetInteractionsResponses = {
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
+                    display?: 'summarized' | 'omitted';
                 } | {
                     type: 'disabled';
                 } | {
                     type: 'adaptive';
+                    display?: 'summarized' | 'omitted';
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -37691,10 +37763,12 @@ export type GetInteractionsResponses = {
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
+                    display?: 'summarized' | 'omitted';
                 } | {
                     type: 'disabled';
                 } | {
                     type: 'adaptive';
+                    display?: 'summarized' | 'omitted';
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -38957,6 +39031,7 @@ export type GetInteractionsResponses = {
                         name: string;
                     } | null;
                     name?: string;
+                    reasoning_content?: string | null;
                     refusal?: string | null;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -39247,6 +39322,7 @@ export type GetInteractionsResponses = {
                         name: string;
                     } | null;
                     name?: string;
+                    reasoning_content?: string | null;
                     refusal?: string | null;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -39485,6 +39561,7 @@ export type GetInteractionsResponses = {
                             arguments: string;
                             name: string;
                         } | null;
+                        reasoning_content?: string | null;
                         tool_calls?: Array<{
                             id: string;
                             type: 'function';
@@ -39686,6 +39763,7 @@ export type GetInteractionsResponses = {
                         name: string;
                     } | null;
                     name?: string;
+                    reasoning_content?: string | null;
                     refusal?: string | null;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -39976,6 +40054,7 @@ export type GetInteractionsResponses = {
                         name: string;
                     } | null;
                     name?: string;
+                    reasoning_content?: string | null;
                     refusal?: string | null;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -40214,6 +40293,7 @@ export type GetInteractionsResponses = {
                             arguments: string;
                             name: string;
                         } | null;
+                        reasoning_content?: string | null;
                         tool_calls?: Array<{
                             id: string;
                             type: 'function';
@@ -40415,6 +40495,7 @@ export type GetInteractionsResponses = {
                         name: string;
                     } | null;
                     name?: string;
+                    reasoning_content?: string | null;
                     refusal?: string | null;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -40705,6 +40786,7 @@ export type GetInteractionsResponses = {
                         name: string;
                     } | null;
                     name?: string;
+                    reasoning_content?: string | null;
                     refusal?: string | null;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -40943,6 +41025,7 @@ export type GetInteractionsResponses = {
                             arguments: string;
                             name: string;
                         } | null;
+                        reasoning_content?: string | null;
                         tool_calls?: Array<{
                             id: string;
                             type: 'function';
@@ -41186,6 +41269,7 @@ export type GetInteractionsResponses = {
                             arguments: string;
                             name: string;
                         } | null;
+                        reasoning_content?: string | null;
                         tool_calls?: Array<{
                             id: string;
                             type: 'function';
@@ -43403,10 +43487,12 @@ export type GetInteractionResponses = {
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
+                display?: 'summarized' | 'omitted';
             } | {
                 type: 'disabled';
             } | {
                 type: 'adaptive';
+                display?: 'summarized' | 'omitted';
             };
             tool_choice?: {
                 type: 'auto';
@@ -43641,10 +43727,12 @@ export type GetInteractionResponses = {
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
+                display?: 'summarized' | 'omitted';
             } | {
                 type: 'disabled';
             } | {
                 type: 'adaptive';
+                display?: 'summarized' | 'omitted';
             };
             tool_choice?: {
                 type: 'auto';
@@ -44907,6 +44995,7 @@ export type GetInteractionResponses = {
                     name: string;
                 } | null;
                 name?: string;
+                reasoning_content?: string | null;
                 refusal?: string | null;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -45197,6 +45286,7 @@ export type GetInteractionResponses = {
                     name: string;
                 } | null;
                 name?: string;
+                reasoning_content?: string | null;
                 refusal?: string | null;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -45435,6 +45525,7 @@ export type GetInteractionResponses = {
                         arguments: string;
                         name: string;
                     } | null;
+                    reasoning_content?: string | null;
                     tool_calls?: Array<{
                         id: string;
                         type: 'function';
@@ -45636,6 +45727,7 @@ export type GetInteractionResponses = {
                     name: string;
                 } | null;
                 name?: string;
+                reasoning_content?: string | null;
                 refusal?: string | null;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -45926,6 +46018,7 @@ export type GetInteractionResponses = {
                     name: string;
                 } | null;
                 name?: string;
+                reasoning_content?: string | null;
                 refusal?: string | null;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -46164,6 +46257,7 @@ export type GetInteractionResponses = {
                         arguments: string;
                         name: string;
                     } | null;
+                    reasoning_content?: string | null;
                     tool_calls?: Array<{
                         id: string;
                         type: 'function';
@@ -46365,6 +46459,7 @@ export type GetInteractionResponses = {
                     name: string;
                 } | null;
                 name?: string;
+                reasoning_content?: string | null;
                 refusal?: string | null;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -46655,6 +46750,7 @@ export type GetInteractionResponses = {
                     name: string;
                 } | null;
                 name?: string;
+                reasoning_content?: string | null;
                 refusal?: string | null;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -46893,6 +46989,7 @@ export type GetInteractionResponses = {
                         arguments: string;
                         name: string;
                     } | null;
+                    reasoning_content?: string | null;
                     tool_calls?: Array<{
                         id: string;
                         type: 'function';
@@ -47136,6 +47233,7 @@ export type GetInteractionResponses = {
                         arguments: string;
                         name: string;
                     } | null;
+                    reasoning_content?: string | null;
                     tool_calls?: Array<{
                         id: string;
                         type: 'function';
@@ -50197,6 +50295,7 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 name: string;
             } | null;
             name?: string;
+            reasoning_content?: string | null;
             refusal?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -50517,6 +50616,7 @@ export type KimiChatCompletionsWithDefaultAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -50642,6 +50742,7 @@ export type KimiChatCompletionsWithAgentData = {
                 name: string;
             } | null;
             name?: string;
+            reasoning_content?: string | null;
             refusal?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -50964,6 +51065,7 @@ export type KimiChatCompletionsWithAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -60531,6 +60633,7 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 name: string;
             } | null;
             name?: string;
+            reasoning_content?: string | null;
             refusal?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -60851,6 +60954,7 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -60976,6 +61080,7 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                 name: string;
             } | null;
             name?: string;
+            reasoning_content?: string | null;
             refusal?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -61298,6 +61403,7 @@ export type Microsoft365CopilotChatCompletionsWithAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';

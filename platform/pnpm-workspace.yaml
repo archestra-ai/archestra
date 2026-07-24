@@ -54,6 +54,11 @@ overrides:
   # exact so a `>=` floor can't pull an unvetted release.
   form-data@>=4: 4.0.6
   form-data@<4: 3.0.5
+  # CVE-2026-47219 (HIGH, prototype pollution via route params) fixed in 9.7.0,
+  # published 2026-07-21 — inside the 7-day window, so excluded from
+  # minimumReleaseAge below and pinned exact so a `>=` floor can't pull an
+  # unvetted release. Transitive via fastify (^9.0.0 range).
+  find-my-way: 9.7.0
   '@hono/node-server': 1.19.14
   body-parser: 2.2.1
   dompurify: 3.4.10
@@ -98,7 +103,8 @@ overrides:
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'
   fastify: '>=5.8.5'
-  postcss: '>=8.5.10'
+  # CVE-2026-45623 (HIGH, exposure of sensitive information) fixed in 8.5.12.
+  postcss: '>=8.5.12'
   uuid@^11: '>=11.1.1'
   ip-address: '>=10.1.1'
   # CVE-2026-13149 (HIGH, uncontrolled resource consumption) fixed in 5.0.7.
@@ -163,6 +169,10 @@ minimumReleaseAgeExclude:
   # published 2026-07-19 and clears the 7-day window on 2026-07-26. Remove
   # on/after that date — the lockfile stays pinned at 3.1.4 regardless.
   - fast-uri
+  # TEMPORARY: find-my-way 9.7.0 (fix CVE-2026-47219, HIGH) was published
+  # 2026-07-21 and clears the 7-day window on 2026-07-28. Remove on/after that
+  # date — the lockfile stays pinned at 9.7.0 regardless.
+  - find-my-way
 
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare

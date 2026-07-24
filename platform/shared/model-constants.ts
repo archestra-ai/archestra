@@ -246,7 +246,6 @@ export const PERPLEXITY_MODELS = [
   { id: "sonar-pro", displayName: "Sonar Pro" },
   { id: "sonar", displayName: "Sonar" },
   { id: "sonar-reasoning-pro", displayName: "Sonar Reasoning Pro" },
-  { id: "sonar-reasoning", displayName: "Sonar Reasoning" },
   { id: "sonar-deep-research", displayName: "Sonar Deep Research" },
 ] as const;
 

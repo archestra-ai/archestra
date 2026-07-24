@@ -307,6 +307,70 @@ describe("createDirectLLMModel", () => {
     expect((model as { provider: string }).provider).toBe("zhipuai.chat");
   });
 
+  // generateObject callers (KB reranker, dual-LLM subagents, tool-call arg
+  // repair) hand their schema to the provider via responseFormat. Z.ai's API
+  // accepts only `text`/`json_object` response formats (mirrored by the proxy
+  // request schema in types/llm-providers/zhipuai/api.ts), so the strict
+  // openai provider's `json_schema` request would be rejected; the
+  // openai-compatible provider must fall back to bare `json_object` and leave
+  // schema enforcement to the SDK's validation of the returned text.
+  describe("zhipuai structured output fallback", () => {
+    it("sends response_format json_object for generateObject and parses the result", async () => {
+      let sent: Record<string, unknown> | undefined;
+      const mockFetch = vi.fn(
+        async (_input: unknown, init: RequestInit | undefined) => {
+          sent = JSON.parse(init?.body as string);
+          return new Response(
+            JSON.stringify({
+              id: "chatcmpl-glm",
+              object: "chat.completion",
+              created: 0,
+              model: "glm-4.7",
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: "assistant",
+                    content: '{"scores":[{"index":0,"score":9}]}',
+                  },
+                  finish_reason: "stop",
+                },
+              ],
+              usage: {
+                prompt_tokens: 1,
+                completion_tokens: 1,
+                total_tokens: 2,
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        },
+      );
+      vi.stubGlobal("fetch", mockFetch);
+
+      const model = createDirectLLMModel({
+        provider: "zhipuai",
+        apiKey: "test-key",
+        modelName: "glm-4.7",
+        baseUrl: null,
+      });
+
+      const { object } = await generateObject({
+        model,
+        schema: z.object({
+          scores: z.array(z.object({ index: z.number(), score: z.number() })),
+        }),
+        prompt: "Score the passage.",
+        maxRetries: 0,
+      });
+
+      // Exact match: a `json_schema` response_format here would 400 against
+      // the real API and the proxy's request validation alike.
+      expect(sent?.response_format).toEqual({ type: "json_object" });
+      expect(object).toEqual({ scores: [{ index: 0, score: 9 }] });
+    });
+  });
+
   it("throws ApiError for unsupported provider", () => {
     expect(() =>
       createDirectLLMModel({

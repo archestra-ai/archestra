@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { MessageParamSchema, ToolCallSchema } from "./messages";
+import {
+  MessageParamSchema,
+  ReasoningDetailSchema,
+  ToolCallSchema,
+} from "./messages";
 import { ToolChoiceOptionSchema, ToolSchema } from "./tools";
 
 export const ChatCompletionUsageSchema = z
@@ -25,14 +29,6 @@ export const FinishReasonSchema = z.enum([
   "content_filter",
 ]);
 
-/**
- * Reasoning detail object in MiniMax responses
- * Contains the model's thinking process when reasoning_split=True
- */
-const ReasoningDetailSchema = z.object({
-  text: z.string(),
-});
-
 const ChoiceSchema = z
   .object({
     finish_reason: FinishReasonSchema,
@@ -47,6 +43,10 @@ const ChoiceSchema = z
          * Only present when reasoning_split=True is used in request
          */
         reasoning_details: z.array(ReasoningDetailSchema).optional(),
+        // DeepSeek-style alias for the same thinking text. The proxy emits it
+        // alongside reasoning_details so OpenAI-compatible clients (which only
+        // parse reasoning_content) can render thinking.
+        reasoning_content: z.string().nullable().optional(),
         tool_calls: z.array(ToolCallSchema).optional(),
       })
       .describe(

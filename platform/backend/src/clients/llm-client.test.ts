@@ -191,6 +191,19 @@ describe("createDirectLLMModel", () => {
     expect((model as { provider: string }).provider).toBe("deepseek.chat");
   });
 
+  it("creates OpenRouter models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "openrouter",
+      apiKey: "test-key",
+      modelName: "deepseek/deepseek-r1",
+      baseUrl: null,
+    });
+    // OpenRouter streams thinking as a `reasoning` delta field; the strict
+    // openai provider ("openai.chat") drops it, while the openai-compatible
+    // provider surfaces it as reasoning parts.
+    expect((model as { provider: string }).provider).toBe("openrouter.chat");
+  });
+
   it("creates a model for zhipuai provider", () => {
     const model = createDirectLLMModel({
       provider: "zhipuai",

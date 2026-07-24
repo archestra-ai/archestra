@@ -480,8 +480,26 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   openrouter: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      if (!baseURL) {
+        throw new ApiError(400, "OpenRouter base URL is required.");
+      }
+      // OpenRouter streams thinking as a `reasoning` delta field that the
+      // strict @ai-sdk/openai chat parser drops — so reasoning models' thinking
+      // never reaches the UI. @ai-sdk/openai-compatible parses
+      // `reasoning_content` / `reasoning` into native reasoning parts.
+      return createOpenAICompatible({
+        name: "openrouter",
+        apiKey,
+        baseURL,
+        headers,
+        fetch,
+        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+        // provider only sends it when asked. Keep it on so the final usage chunk
+        // still arrives and cost/usage metrics are unaffected.
+        includeUsage: true,
+      }).chatModel(modelName);
+    },
     defaultBaseUrl: config.llm.openrouter.baseUrl,
     apiKeyRequiredMessage:
       "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",

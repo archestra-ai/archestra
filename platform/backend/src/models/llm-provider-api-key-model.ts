@@ -1,6 +1,7 @@
 import {
   type CompleteModelSelection,
   MODEL_MARKER_PATTERNS,
+  pickBestGeminiModelId,
   type SupportedProvider,
 } from "@archestra/shared";
 import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
@@ -118,15 +119,8 @@ class LlmProviderApiKeyModelLinkModel {
 
       // Insert new links
       if (uniqueModels.length > 0) {
-        // Detect the best model using pattern matching
-        // Patterns are checked in order (first pattern = highest priority)
-        const patterns = MODEL_MARKER_PATTERNS[provider];
-        const sorted = [...uniqueModels].sort((a, b) =>
-          a.modelId.localeCompare(b.modelId),
-        );
-
-        // Find first matching model respecting pattern priority order
-        const bestModel = findFirstMatchByPatternPriority(sorted, patterns);
+        // Detect the best (highest-quality) model for this provider.
+        const bestModel = findBestModel(provider, uniqueModels);
 
         // Build values with markers
         const values = uniqueModels.map((model) => ({
@@ -655,16 +649,26 @@ function toDateOrNull(value: Date | string | null): Date | null {
 }
 
 /**
- * Find the first model matching patterns, respecting pattern priority order.
- * Patterns are checked in order (first pattern = highest priority).
- * For each pattern, returns the first alphabetically sorted match.
+ * Pick the best (highest-quality) model for a provider. Gemini is ranked by a
+ * computed tier + version comparator (Google's catalog changes too often for a
+ * static id list); every other provider uses the ordered pattern list.
  */
-function findFirstMatchByPatternPriority(
-  sortedModels: Array<{ id: string; modelId: string }>,
-  patterns: string[],
+function findBestModel(
+  provider: SupportedProvider,
+  models: Array<{ id: string; modelId: string }>,
 ): { id: string; modelId: string } | undefined {
-  for (const pattern of patterns) {
-    const match = sortedModels.find((m) =>
+  if (provider === "gemini") {
+    const bestModelId = pickBestGeminiModelId(models.map((m) => m.modelId));
+    return bestModelId === null
+      ? undefined
+      : models.find((m) => m.modelId === bestModelId);
+  }
+
+  // Patterns are checked in order (first pattern = highest priority); for each
+  // pattern the first alphabetically sorted match wins.
+  const sorted = [...models].sort((a, b) => a.modelId.localeCompare(b.modelId));
+  for (const pattern of MODEL_MARKER_PATTERNS[provider]) {
+    const match = sorted.find((m) =>
       m.modelId.toLowerCase().includes(pattern.toLowerCase()),
     );
     if (match) {

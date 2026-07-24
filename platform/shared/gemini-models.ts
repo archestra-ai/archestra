@@ -48,6 +48,23 @@ export function isUsableGeminiCatalogModel(modelId: string): boolean {
 }
 
 /**
+ * Highest-quality Gemini chat model, computed from the id so new releases rank
+ * correctly with no hardcoded list to maintain. Best = highest tier (Pro >
+ * Flash > Flash-lite), then newest generation, then GA over -preview, then the
+ * shortest/lowest id. Null when the account has no rankable Gemini chat model.
+ */
+export function pickBestGeminiModelId(modelIds: string[]): string | null {
+  return (
+    modelIds
+      .filter((id) => geminiChatScore(id) !== null)
+      .sort(
+        (a, b) =>
+          geminiChatScore(b)! - geminiChatScore(a)! || a.localeCompare(b),
+      )[0] ?? null
+  );
+}
+
+/**
  * True when a Gemini-family chat model is an older generation
  * (≤ {@link GEMINI_FAMILY_LEGACY_MAX_VERSION}) and should carry an "old" badge.
  * Embeddings are never badged.
@@ -93,4 +110,34 @@ function compareVersion(a: GeminiVersion, b: GeminiVersion): number {
     return a[0] - b[0];
   }
   return a[1] - b[1];
+}
+
+/** Tier -> quality rank, listed match-first so "flash-lite" wins over "flash". */
+const GEMINI_TIER_RANKS: ReadonlyArray<readonly [string, number]> = [
+  ["flash-lite", 1],
+  ["flash", 2],
+  ["pro", 3],
+];
+
+/**
+ * Sortable quality score for a Gemini chat model, or null when it is not
+ * rankable (embeddings, computer-use/robotics, unversioned `-latest` aliases,
+ * or legacy/non-text families filtered by {@link isUsableGeminiCatalogModel}).
+ * Digits, most significant first: tier, generation, GA-over-preview.
+ */
+function geminiChatScore(modelId: string): number | null {
+  const id = modelId.toLowerCase();
+  const tierRank = GEMINI_TIER_RANKS.find(([tier]) => id.includes(tier))?.[1];
+  const version = parseGeminiFamilyVersion(id);
+  if (
+    tierRank === undefined ||
+    version === null ||
+    !isUsableGeminiCatalogModel(id) ||
+    id.startsWith(GEMINI_EMBEDDING_PREFIX)
+  ) {
+    return null;
+  }
+  const [major, minor] = version;
+  const isGA = id.includes("preview") ? 0 : 1;
+  return ((tierRank * 100 + major) * 100 + minor) * 10 + isGA;
 }

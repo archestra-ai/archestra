@@ -600,11 +600,23 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         expected: "gemini-2.5-flash",
       },
       {
-        // Current generation must outrank a legacy model so "best" is never a
-        // model the selector also badges "old".
+        // Pro always outranks Flash, even a newer-generation Flash: "best"
+        // means highest quality, so an older Pro wins over a newer Flash.
         provider: "gemini",
         catalog: ["gemini-2.5-pro", "gemini-3.5-flash"],
-        expected: "gemini-3.5-flash",
+        expected: "gemini-2.5-pro",
+      },
+      {
+        // The real-world case: no 3.5 Pro exists yet, so the newest available
+        // Pro (a preview) must beat the 3.5/3.6 Flash models in the account.
+        provider: "gemini",
+        catalog: [
+          "gemini-3.6-flash",
+          "gemini-3.5-flash",
+          "gemini-3.1-pro-preview",
+          "gemini-2.5-pro",
+        ],
+        expected: "gemini-3.1-pro-preview",
       },
       {
         provider: "bedrock",

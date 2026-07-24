@@ -347,14 +347,11 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "gpt-4.1",
     "gpt-4o",
   ],
-  gemini: [
-    "gemini-3.5-pro",
-    "gemini-3.5-flash",
-    "gemini-3.1-pro-preview",
-    "gemini-3-pro",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
-  ],
+  // Gemini's "best" is computed from tier + version by pickBestGeminiModelId
+  // (shared/gemini-models.ts), not matched against a hardcoded id list — Google
+  // ships Pro/Flash/Flash-lite on different cadences with unpredictable preview
+  // names, so any static list goes stale and re-marks a Flash as best.
+  gemini: [],
   cerebras: ["zai-glm-4.7"],
   cohere: ["command-a-plus", "command-a", "command-r-plus", "command-r"],
   mistral: [

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   isLegacyGeminiModel,
   isUsableGeminiCatalogModel,
+  pickBestGeminiModelId,
 } from "./gemini-models";
 
 describe("isUsableGeminiCatalogModel", () => {
@@ -69,5 +70,90 @@ describe("isLegacyGeminiModel", () => {
     ["aqa", false],
   ])("%s -> legacy=%s", (modelId, expected) => {
     expect(isLegacyGeminiModel(modelId)).toBe(expected);
+  });
+});
+
+describe("pickBestGeminiModelId", () => {
+  test("Pro always beats a newer-generation Flash", () => {
+    expect(pickBestGeminiModelId(["gemini-2.5-pro", "gemini-3.5-flash"])).toBe(
+      "gemini-2.5-pro",
+    );
+  });
+
+  test("picks the newest Pro (the reported bug's real catalog)", () => {
+    // Direct Gemini API fetch on the dev key: a Flash used to be marked best
+    // because no `gemini-3.5-pro` exists. The newest Pro must win instead.
+    expect(
+      pickBestGeminiModelId([
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-3-pro-preview",
+        "gemini-3-flash-preview",
+        "gemini-3.1-pro-preview",
+        "gemini-3.1-pro-preview-customtools",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.6-flash",
+      ]),
+    ).toBe("gemini-3.1-pro-preview");
+  });
+
+  test("prefers GA over -preview at the same tier and version", () => {
+    expect(
+      pickBestGeminiModelId(["gemini-2.5-pro-preview-06-05", "gemini-2.5-pro"]),
+    ).toBe("gemini-2.5-pro");
+  });
+
+  test("plain id wins over a longer variant at the same tier/version/preview", () => {
+    expect(
+      pickBestGeminiModelId([
+        "gemini-3.1-pro-preview-customtools",
+        "gemini-3.1-pro-preview",
+      ]),
+    ).toBe("gemini-3.1-pro-preview");
+  });
+
+  test("falls to Flash, then Flash-lite, when no Pro is present", () => {
+    expect(
+      pickBestGeminiModelId(["gemini-3.5-flash-lite", "gemini-3.5-flash"]),
+    ).toBe("gemini-3.5-flash");
+    expect(pickBestGeminiModelId(["gemini-2.5-flash-lite"])).toBe(
+      "gemini-2.5-flash-lite",
+    );
+  });
+
+  test("higher generation Flash beats a lower generation Flash", () => {
+    expect(
+      pickBestGeminiModelId(["gemini-2.5-flash", "gemini-3.6-flash"]),
+    ).toBe("gemini-3.6-flash");
+  });
+
+  test("ignores non-chat models (embeddings, computer-use, robotics)", () => {
+    expect(
+      pickBestGeminiModelId([
+        "gemini-embedding-001",
+        "gemini-2.5-computer-use-preview-10-2025",
+        "gemini-robotics-er-1.5-preview",
+        "gemini-2.5-pro",
+      ]),
+    ).toBe("gemini-2.5-pro");
+  });
+
+  test("ignores unversioned -latest aliases and legacy generations", () => {
+    expect(
+      pickBestGeminiModelId([
+        "gemini-pro-latest",
+        "gemini-flash-latest",
+        "gemini-1.5-pro",
+        "gemini-2.5-flash",
+      ]),
+    ).toBe("gemini-2.5-flash");
+  });
+
+  test("returns null when there is no rankable Gemini chat model", () => {
+    expect(pickBestGeminiModelId([])).toBeNull();
+    expect(
+      pickBestGeminiModelId(["gemini-embedding-001", "gemini-pro-latest"]),
+    ).toBeNull();
   });
 });

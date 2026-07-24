@@ -29,7 +29,7 @@ When secrets are stored in the database, they are automatically encrypted at res
 - Encryption and decryption are fully transparent — no configuration is needed beyond setting `ARCHESTRA_SECRETS_ENCRYPTION_SECRET`.
 - Existing plaintext secrets are automatically migrated to encrypted format on startup.
 
-> **Warning:** Rotating `ARCHESTRA_SECRETS_ENCRYPTION_SECRET` makes existing encrypted secrets unreadable unless they are re-encrypted under the new key. Set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and run the re-encryption migration — the Helm pre-upgrade migration Job does this automatically.
+> **Warning:** Rotating `ARCHESTRA_SECRETS_ENCRYPTION_SECRET` makes existing encrypted secrets unreadable unless they are re-encrypted under the new key. Set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and restart — the app re-encrypts stored secrets under the new key on startup (idempotent).
 
 On every startup, Archestra verifies that the current `ARCHESTRA_SECRETS_ENCRYPTION_SECRET` still matches the key used to encrypt stored secrets. On a mismatch, startup aborts with an error that names the cause. This catches an accidental rotation — or a database restored from another environment — before it surfaces as scattered decryption failures.
 

@@ -858,9 +858,9 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`** - Derives the AES key that encrypts secrets stored in the database (`secret` table). Independent of sessions/JWKS/2FA.
   - Auto-generated once by Helm in the auth Secret under the `secrets-encryption-secret` key. Set manually to control it; must be at least 32 characters.
   - Startup verifies this key against previously encrypted secrets and aborts on a mismatch (see `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`).
-  - **Rotating it** requires re-encrypting existing rows: set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and run the re-encryption migration (the Helm pre-upgrade migration Job runs it automatically; manually: `pnpm --filter backend db:reencrypt-secrets`). It decrypts each secret with the previous key and re-encrypts with the new one; it is a no-op when the key is unchanged. Vault-managed secrets are unaffected.
+  - **Rotating it** requires re-encrypting existing rows: set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and restart — the app re-encrypts stored secrets on startup, decrypting each with the previous key and re-encrypting with the new one (idempotent, and a no-op when the key is unchanged). You can also run it explicitly with `pnpm --filter backend db:reencrypt-secrets`. Vault-managed secrets are unaffected.
 
-- **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the re-encryption migration to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on upgrade. Unset it after the migration completes.
+- **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.
 
   > When using an external `authSecret.existingSecretName`, that Secret must include `session-secret` and `secrets-encryption-secret` keys (add them before upgrading). Rotate by updating a key in your own secret manager.
 

@@ -1483,6 +1483,10 @@ const config = {
     // Session-signing secret (better-auth session/cookie HMAC). Prefer the
     // dedicated ARCHESTRA_AUTH_SESSION_SECRET; fall back to the legacy combined
     // ARCHESTRA_AUTH_SECRET so existing single-secret deployments keep working.
+    // The new var is trimmed; the legacy fallback is deliberately left as-is —
+    // trimming it would change the key existing deployments already derive from
+    // it and break decryption of already-stored data. (Same for the
+    // encryption secrets below.)
     secret:
       process.env.ARCHESTRA_AUTH_SESSION_SECRET?.trim() ||
       process.env.ARCHESTRA_AUTH_SECRET,

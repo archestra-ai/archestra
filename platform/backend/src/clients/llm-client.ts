@@ -588,8 +588,15 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   zhipuai: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    // GLM thinking mode (on by default; glm-4.7 thinks unconditionally) streams
+    // its chain of thought in `reasoning_content`. Z.ai accepts only
+    // `text`/`json_object` response formats, so this deliberately stays off
+    // supportsStructuredOutputs: generateObject falls back to bare
+    // `json_object` and the SDK validates the returned JSON against the schema.
+    createModel: reasoningCompatibleCreateModel({
+      name: "zhipuai",
+      missingBaseUrlMessage: "Zhipu AI base URL is required.",
+    }),
     defaultBaseUrl: config.llm.zhipuai.baseUrl,
     apiKeyRequiredMessage:
       "Zhipu AI API key is required. Please configure ZHIPUAI_API_KEY.",

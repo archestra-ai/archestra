@@ -294,14 +294,17 @@ describe("createDirectLLMModel", () => {
     expect(responseFormat?.json_schema?.schema).toBeDefined();
   });
 
-  it("creates a model for zhipuai provider", () => {
+  it("creates Zhipu AI models on the openai-compatible provider", () => {
     const model = createDirectLLMModel({
       provider: "zhipuai",
       apiKey: "test-key",
-      modelName: "glm-4-flash",
+      modelName: "glm-4.7",
       baseUrl: null,
     });
-    expect(model).toBeDefined();
+    // GLM thinking mode streams the chain of thought in `reasoning_content`,
+    // which the strict openai provider ("openai.chat") drops; the
+    // openai-compatible provider parses it into native reasoning parts.
+    expect((model as { provider: string }).provider).toBe("zhipuai.chat");
   });
 
   it("throws ApiError for unsupported provider", () => {

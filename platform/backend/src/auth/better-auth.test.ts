@@ -2099,6 +2099,39 @@ describe("handleAfterHook", () => {
   });
 });
 
+describe("sign-out response body", () => {
+  // Regression guard. better-auth serializes whatever an after-hook returns as
+  // the HTTP response body. handleAfterHook used to `return ctx` on the
+  // sign-out path, which turned the unauthenticated POST /sign-out 200 into a
+  // ~168 KB dump of the entire internal AuthContext — including `secret`
+  // (ARCHESTRA_AUTH_SECRET, which signs session cookies and encrypts stored
+  // secrets). The sign-out body must stay the minimal `{ success: true }`.
+  test("unauthenticated sign-out returns only { success: true } and never the auth secret", async () => {
+    const req = new Request("http://localhost:3000/api/auth/sign-out", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost:3000",
+      },
+      body: JSON.stringify({}),
+    });
+
+    const res = await auth.handler(req);
+    const text = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(JSON.parse(text)).toEqual({ success: true });
+
+    const secret = process.env.ARCHESTRA_AUTH_SECRET as string;
+    expect(secret.length).toBeGreaterThan(0);
+    expect(text).not.toContain(secret);
+    // Structural guard: catch any future full-context dump even if the secret
+    // string itself changes. `internalAdapter` is an AuthContext-only key.
+    expect(text).not.toContain("internalAdapter");
+    expect(text.length).toBeLessThan(200);
+  });
+});
+
 describe("auth event audit logging", () => {
   // Let each fire-and-forget audit write settle before querying the DB.
   async function waitForAuditWrite() {

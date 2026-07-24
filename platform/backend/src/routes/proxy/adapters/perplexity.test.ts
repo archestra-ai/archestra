@@ -39,6 +39,19 @@ describe("perplexity request adapter: stream mode", () => {
     expect(result.stream_mode).toBeUndefined();
   });
 
+  test("leaves sonar-deep-research on the default wire format", () => {
+    // Deep research exposes no reasoning on this API in any mode; under
+    // concise it streams an empty reasoning stage, so the opt-in would change
+    // its wire format for nothing.
+    const request = makeRequest({ model: "sonar-deep-research", stream: true });
+
+    const result = perplexityAdapterFactory
+      .createRequestAdapter(request)
+      .toProviderRequest();
+
+    expect(result.stream_mode).toBeUndefined();
+  });
+
   test("does not request concise mode for non-streaming calls", () => {
     const request = makeRequest({
       model: "sonar-reasoning-pro",

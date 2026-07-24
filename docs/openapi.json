@@ -8122,6 +8122,13 @@
           "stream": {
             "nullable": true,
             "type": "boolean"
+          },
+          "stream_mode": {
+            "type": "string",
+            "enum": [
+              "full",
+              "concise"
+            ]
           }
         },
         "required": [
@@ -27316,6 +27323,13 @@
           "stream": {
             "nullable": true,
             "type": "boolean"
+          },
+          "stream_mode": {
+            "type": "string",
+            "enum": [
+              "full",
+              "concise"
+            ]
           }
         },
         "required": [
@@ -139972,7 +139986,7 @@
                               "request": {
                                 "anyOf": [
                                   {
-                                    "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                                    "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                                   },
                                   {
                                     "type": "object",
@@ -139984,7 +139998,7 @@
                                 "nullable": true,
                                 "anyOf": [
                                   {
-                                    "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                                    "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                                   },
                                   {
                                     "type": "object",
@@ -169309,7 +169323,7 @@
                         "request": {
                           "anyOf": [
                             {
-                              "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                              "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                             },
                             {
                               "type": "object",
@@ -169321,7 +169335,7 @@
                           "nullable": true,
                           "anyOf": [
                             {
-                              "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                              "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                             },
                             {
                               "type": "object",
@@ -270575,7 +270589,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
               }
             }
           }
@@ -270854,7 +270868,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
               }
             }
           }

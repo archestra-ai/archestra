@@ -250,17 +250,20 @@ export const PERPLEXITY_MODELS = [
 ] as const;
 
 /**
- * Perplexity models that produce a chain of thought.
+ * Perplexity models whose chain of thought is retrievable over the
+ * chat-completions API.
  *
  * Perplexity only emits reasoning when the request opts into the `concise`
  * stream mode; the default `full` mode suppresses it entirely. The proxy sends
  * that opt-in for these models only, so the plain Sonar models keep the
  * default wire format.
+ *
+ * sonar-deep-research is deliberately absent: under `concise` it streams an
+ * empty reasoning stage (a bare `chat.reasoning.done`, no steps) — its
+ * research trace is not exposed on this API in any mode — so opting it in
+ * yields no reasoning while changing its wire format for nothing.
  */
-export const PERPLEXITY_REASONING_MODELS = [
-  "sonar-reasoning-pro",
-  "sonar-deep-research",
-] as const;
+export const PERPLEXITY_REASONING_MODELS = ["sonar-reasoning-pro"] as const;
 
 export function isPerplexityReasoningModel(model: string): boolean {
   return (PERPLEXITY_REASONING_MODELS as readonly string[]).includes(model);

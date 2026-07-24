@@ -11,7 +11,7 @@ packages:
 
 catalog:
   ai: ^6.0.193
-  better-auth: 1.6.13
+  better-auth: 1.6.22
   "@better-auth/core": 1.6.13
   "@better-auth/oauth-provider": 1.6.13
   "@better-auth/sso": 1.6.13

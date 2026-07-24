@@ -1,10 +1,32 @@
 import { describe, expect, test } from "vitest";
 import {
+  anthropicThinksByDefault,
   getProvidersWithOptionalApiKey,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   requiresOpenAiResponsesApi,
 } from "./model-constants";
+
+describe("anthropicThinksByDefault", () => {
+  test("matches models whose thinking is always on, including dated snapshots", () => {
+    expect(anthropicThinksByDefault("claude-sonnet-5")).toBe(true);
+    expect(anthropicThinksByDefault("claude-sonnet-5-20250929")).toBe(true);
+    expect(anthropicThinksByDefault("claude-fable-5")).toBe(true);
+    expect(anthropicThinksByDefault("claude-mythos-5")).toBe(true);
+    expect(anthropicThinksByDefault("claude-mythos-preview")).toBe(true);
+  });
+
+  test("excludes models where thinking is off until requested", () => {
+    // Opus 4.8/4.7 hide thinking text too (`display` defaults to "omitted"),
+    // but thinking itself is off by default there — requesting it would add
+    // cost, so they are deliberately not matched.
+    expect(anthropicThinksByDefault("claude-opus-4-8")).toBe(false);
+    expect(anthropicThinksByDefault("claude-opus-4-7")).toBe(false);
+    expect(anthropicThinksByDefault("claude-sonnet-4-6")).toBe(false);
+    expect(anthropicThinksByDefault("claude-sonnet-4-5")).toBe(false);
+    expect(anthropicThinksByDefault("claude-3-5-haiku-20241022")).toBe(false);
+  });
+});
 
 describe("requiresOpenAiResponsesApi", () => {
   test("matches pro reasoning models, including dated snapshots", () => {

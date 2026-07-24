@@ -6,9 +6,9 @@ import { useMswServer } from "@/test/msw";
 /**
  * Pins the Perplexity reasoning extraction in the model factory.
  *
- * Perplexity reasoning models (sonar-reasoning-pro) stream their chain of
- * thought as inline <think>…</think> text in `content` — there is no
- * reasoning_content field — so the factory wraps the model with
+ * Perplexity reasoning models (sonar-reasoning-pro, sonar-deep-research)
+ * stream their chain of thought as inline <think>…</think> text in `content`
+ * — there is no reasoning_content field — so the factory wraps the model with
  * extractReasoningMiddleware. These tests drive the real factory against a
  * mocked wire and fail if the wrap is dropped or the middleware stops
  * extracting: raw <think> text would then leak into chat answers again.
@@ -49,8 +49,6 @@ describe("perplexity reasoning extraction", () => {
 
     expect(joinedDeltas(parts, "reasoning-delta")).toBe("Let me count.");
     expect(joinedDeltas(parts, "text-delta")).toBe("There are three.");
-    // The tags themselves must not leak into either channel.
-    expect(joinedDeltas(parts, "text-delta")).not.toContain("think");
 
     // Usage still arrives on the finish part — cost accounting is unaffected.
     const finish = parts.find((part) => part.type === "finish");
@@ -75,6 +73,17 @@ describe("perplexity reasoning extraction", () => {
 
     expect(joinedDeltas(parts, "text-delta")).toBe("Hello there.");
     expect(parts.map((part) => part.type)).not.toContain("reasoning-start");
+  });
+
+  test("orders reasoning before text in non-streaming generate results", async () => {
+    serveJson("<think>Let me count.</think>There are three.");
+
+    const { content } = await makeModel().doGenerate({ prompt: PROMPT });
+
+    expect(content).toEqual([
+      expect.objectContaining({ type: "reasoning", text: "Let me count." }),
+      expect.objectContaining({ type: "text", text: "There are three." }),
+    ]);
   });
 });
 
@@ -127,16 +136,42 @@ function chunk({
   };
 }
 
-/** Streams one completion through the real factory-built model. */
-async function streamParts(): Promise<StreamPart[]> {
-  // Exclude the plain-string model ids from the union so doStream is typed.
-  const model = createDirectLLMModel({
+/** Serves one non-streaming chat completion whose content is `content`. */
+function serveJson(content: string) {
+  server.use(
+    http.post("https://api.perplexity.ai/chat/completions", () =>
+      HttpResponse.json({
+        id: "chatcmpl-test",
+        object: "chat.completion",
+        created: 1720000000,
+        model: "sonar-reasoning-pro",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 10, total_tokens: 15 },
+      }),
+    ),
+  );
+}
+
+/** Builds the factory-produced model, typed so doStream/doGenerate resolve. */
+function makeModel() {
+  // Exclude the plain-string model ids from the union.
+  return createDirectLLMModel({
     provider: "perplexity",
     apiKey: "test-key",
     modelName: "sonar-reasoning-pro",
     baseUrl: null,
   }) as Exclude<LLMModel, string>;
-  const { stream } = await model.doStream({ prompt: PROMPT });
+}
+
+/** Streams one completion through the real factory-built model. */
+async function streamParts(): Promise<StreamPart[]> {
+  const { stream } = await makeModel().doStream({ prompt: PROMPT });
   const parts: StreamPart[] = [];
   const reader = (stream as unknown as ReadableStream<StreamPart>).getReader();
   for (;;) {

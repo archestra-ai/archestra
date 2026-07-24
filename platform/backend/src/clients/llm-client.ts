@@ -494,13 +494,15 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
 
   perplexity: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      // Perplexity reasoning models (sonar-reasoning-pro) stream their chain
-      // of thought as inline <think>…</think> text in `content` — there is no
-      // reasoning_content field — so no provider parser can surface it. The
-      // middleware extracts the tags into native reasoning parts; tagless
-      // responses (sonar, sonar-pro) pass through unchanged. Reasoning parts
-      // are dropped from outgoing messages by the strict openai converter,
-      // which is correct here: Perplexity does not accept reasoning back.
+      // Perplexity reasoning models (sonar-reasoning-pro, sonar-deep-research)
+      // stream their chain of thought as inline <think>…</think> text in
+      // `content` — there is no reasoning_content field — so no provider
+      // parser can surface it. The middleware extracts the tags into native
+      // reasoning parts; tagless responses (sonar, sonar-pro) pass through
+      // unchanged, at the accepted cost that literal <think> text in a real
+      // answer is also treated as reasoning. Reasoning parts are dropped from
+      // outgoing messages by the strict openai converter, which is correct
+      // here: Perplexity does not accept reasoning back.
       wrapLanguageModel({
         model: createOpenAI({ apiKey, baseURL, headers, fetch }).chat(
           modelName,

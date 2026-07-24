@@ -48,7 +48,10 @@ export const Reasoning = memo(
     className,
     isStreaming = false,
     open,
-    defaultOpen = true,
+    // A block that mounts mid-stream starts open; a persisted block (a
+    // reopened conversation) mounts collapsed, so loading a chat doesn't flash
+    // every thinking accordion open and then auto-close it one second later.
+    defaultOpen = isStreaming,
     onOpenChange,
     duration: durationProp,
     children,
@@ -70,11 +73,13 @@ export const Reasoning = memo(
     });
 
     const [hasAutoClosed, setHasAutoClosed] = useState(false);
+    const [hasStreamed, setHasStreamed] = useState(isStreaming);
     const [startTime, setStartTime] = useState<number | null>(null);
 
     // Track duration when streaming starts and ends
     useEffect(() => {
       if (isStreaming) {
+        setHasStreamed(true);
         if (startTime === null) {
           setStartTime(Date.now());
         }
@@ -84,9 +89,13 @@ export const Reasoning = memo(
       }
     }, [isStreaming, startTime, setDuration]);
 
-    // Auto-open when streaming starts, auto-close when streaming ends (once only)
+    // Auto-close once, shortly after a live block finishes streaming. Gated on
+    // hasStreamed rather than defaultOpen — defaultOpen tracks isStreaming and
+    // is already false again on the render where streaming ends — and so that
+    // persisted blocks, which never streamed in this mount, stay put instead of
+    // flicker-closing on conversation load.
     useEffect(() => {
-      if (defaultOpen && !isStreaming && isOpen && !hasAutoClosed) {
+      if (hasStreamed && !isStreaming && isOpen && !hasAutoClosed) {
         // Add a small delay before closing to allow user to see the content
         const timer = setTimeout(() => {
           setIsOpen(false);
@@ -95,7 +104,7 @@ export const Reasoning = memo(
 
         return () => clearTimeout(timer);
       }
-    }, [isStreaming, isOpen, defaultOpen, setIsOpen, hasAutoClosed]);
+    }, [isStreaming, isOpen, hasStreamed, setIsOpen, hasAutoClosed]);
 
     const handleOpenChange = (newOpen: boolean) => {
       setIsOpen(newOpen);

@@ -498,6 +498,13 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         // provider only sends it when asked. Keep it on so the final usage chunk
         // still arrives and cost/usage metrics are unaffected.
         includeUsage: true,
+        // @ai-sdk/openai always sends `response_format: json_schema` for
+        // structured outputs; the compatible provider defaults to a schema-less
+        // `json_object` (and nothing else carries the schema to the model), which
+        // breaks generateObject flows (KB reranker, dual-LLM subagents) pointed
+        // at OpenRouter. OpenRouter supports json_schema; providers that can't
+        // honor it ignore it, exactly as with the strict client.
+        supportsStructuredOutputs: true,
       }).chatModel(modelName);
     },
     defaultBaseUrl: config.llm.openrouter.baseUrl,

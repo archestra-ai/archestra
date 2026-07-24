@@ -258,6 +258,14 @@ export async function createLLMModelForAgent(params: {
    * proxy's `anthropic-beta` header gating so the two can't drift.
    */
   anthropicNativeEndpoint: boolean;
+  /**
+   * The resolved credential row id, when a stored key was used (undefined for
+   * environment-variable keys and keyless auth). This is the credential the
+   * turn actually runs on — resolution can land on a personal/team/org key or
+   * substitute a per-user ChatGPT-subscription credential, not just the
+   * agent's own configured key.
+   */
+  chatApiKeyId?: string;
 }> {
   const {
     organizationId,
@@ -361,7 +369,13 @@ export async function createLLMModelForAgent(params: {
     baseUrl,
   });
 
-  return { model, provider, apiKeySource, anthropicNativeEndpoint };
+  return {
+    model,
+    provider,
+    apiKeySource,
+    anthropicNativeEndpoint,
+    chatApiKeyId,
+  };
 }
 
 // =============================================================================

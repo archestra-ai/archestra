@@ -343,18 +343,19 @@ export async function executeA2AMessage(
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
     // Pass agent's llmApiKeyId so it can be used without user access check
-    const { model, anthropicNativeEndpoint } = await createLLMModelForAgent({
-      organizationId,
-      userId,
-      agentId: agent.id,
-      model: selectedModel,
-      provider,
-      sessionId,
-      source,
-      externalAgentId: delegationChain,
-      agentLlmApiKeyId: agent.llmApiKeyId,
-      contextIsTrusted: parentContextIsTrusted,
-    });
+    const { model, anthropicNativeEndpoint, chatApiKeyId } =
+      await createLLMModelForAgent({
+        organizationId,
+        userId,
+        agentId: agent.id,
+        model: selectedModel,
+        provider,
+        sessionId,
+        source,
+        externalAgentId: delegationChain,
+        agentLlmApiKeyId: agent.llmApiKeyId,
+        contextIsTrusted: parentContextIsTrusted,
+      });
 
     // Which attachment mime types this model can read. A missing model row
     // (lookup failure or unknown model) falls back to the safe default set
@@ -460,7 +461,7 @@ export async function executeA2AMessage(
       provider === "openai" && requiresOpenAiResponsesApi(selectedModel)
         ? openAiReasoningSummaryCacheKey({
             organizationId,
-            llmApiKeyId: agent.llmApiKeyId,
+            llmApiKeyId: chatApiKeyId ?? null,
           })
         : null;
     const requestOpenAiReasoningSummary =

@@ -473,6 +473,30 @@ describe("runAgentStream", () => {
     expect(await result.text).toBe("hi");
   });
 
+  test("continues the strip-retry when the unsupported callback itself fails", async () => {
+    const model = modelFor(
+      errorChunks(reasoningSummaryVerificationError()),
+      renderableChunks(),
+    );
+    const onReasoningSummaryUnsupported = vi.fn(async () => {
+      throw new Error("cache unavailable");
+    });
+
+    const { result } = await runAgentStream({
+      config: {
+        model,
+        prompt: "hello",
+        providerOptions: { openai: { store: false, reasoningSummary: "auto" } },
+      },
+      recovery: { onReasoningSummaryUnsupported },
+    });
+    await drain(result);
+
+    // the callback is bookkeeping; its failure must not cost the recovery
+    expect(model.doStreamCalls).toHaveLength(2);
+    expect(await result.text).toBe("hi");
+  });
+
   test("does not strip-retry a verification error when no reasoningSummary was requested", async () => {
     // Nothing to strip means retrying reproduces the same rejection — the
     // error must surface through the merge instead of a futile silent retry.

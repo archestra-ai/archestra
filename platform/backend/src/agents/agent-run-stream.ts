@@ -205,7 +205,16 @@ export async function runAgentStream(params: {
           logContext,
           "[ReasoningSummary] OpenAI org not verified for reasoning summaries, retrying without",
         );
-        await recovery?.onReasoningSummaryUnsupported?.();
+        try {
+          await recovery?.onReasoningSummaryUnsupported?.();
+        } catch (callbackError) {
+          // The callback is bookkeeping (negative-caching the verdict); its
+          // failure must not abort a recovery that can still save the turn.
+          logger.warn(
+            { ...logContext, error: callbackError },
+            "[ReasoningSummary] onReasoningSummaryUnsupported callback failed, continuing retry",
+          );
+        }
         currentConfig = withoutOpenAiReasoningSummary(currentConfig);
         result = runAttempt();
         continue;

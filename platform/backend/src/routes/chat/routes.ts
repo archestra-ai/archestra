@@ -897,7 +897,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // (the inline connect card) rather than a generic server error.
                 // Pass agent's llmApiKeyId so it's used without a user access
                 // check; pass conversationId as sessionId to group the session.
-                const { model, anthropicNativeEndpoint } =
+                const { model, anthropicNativeEndpoint, chatApiKeyId } =
                   await createLLMModelForAgent({
                     organizationId,
                     userId: user.id,
@@ -1323,7 +1323,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   requiresOpenAiResponsesApi(selectedModel)
                     ? openAiReasoningSummaryCacheKey({
                         organizationId,
-                        llmApiKeyId: agent.llmApiKeyId,
+                        llmApiKeyId: chatApiKeyId ?? null,
                       })
                     : null;
                 if (openAiReasoningSummaryKey !== null) {

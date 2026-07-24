@@ -50,6 +50,8 @@ const mockCompactMessagesForChat = vi.hoisted(() => vi.fn());
 // the negative-cache test flips it. Mocked because the real check reads the
 // distributed cacheManager, which is not started in unit tests.
 const mockIsOpenAiReasoningSummaryMarkedUnsupported = vi.hoisted(() => vi.fn());
+// Observed by the verification-400 wiring test; mocked for the same reason.
+const mockMarkOpenAiReasoningSummaryUnsupported = vi.hoisted(() => vi.fn());
 
 vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ai")>();
@@ -77,6 +79,8 @@ vi.mock("@/agents/openai-reasoning-summary", async (importOriginal) => {
     ...actual,
     isOpenAiReasoningSummaryMarkedUnsupported:
       mockIsOpenAiReasoningSummaryMarkedUnsupported,
+    markOpenAiReasoningSummaryUnsupported:
+      mockMarkOpenAiReasoningSummaryUnsupported,
   };
 });
 
@@ -1350,6 +1354,76 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
       store: false,
     });
+  });
+
+  test("retries without summaries and negative-caches the resolved credential on the verification 400", async ({
+    makeConversation,
+  }) => {
+    const model = await makeOpenAiModelRow("gpt-5.6");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    // the turn runs on a resolved stored credential, not the agent's own key
+    mockCreateLLMModelForAgent.mockResolvedValueOnce({
+      model: "mock-model",
+      chatApiKeyId: "credential-1",
+    });
+    mockStreamText.mockClear();
+    mockMarkOpenAiReasoningSummaryUnsupported.mockClear();
+    // First attempt: the stream carries only the unverified-org rejection.
+    // The beforeEach default implementation then serves the retry.
+    mockStreamText.mockImplementationOnce(() => ({
+      fullStream: {
+        [Symbol.asyncIterator]: () => {
+          const events = [
+            {
+              type: "error",
+              error: new Error(
+                "Your organization must be verified to generate reasoning summaries.",
+              ),
+            },
+          ];
+          let index = 0;
+          return {
+            next: async () =>
+              index < events.length
+                ? { done: false, value: events[index++] }
+                : { done: true, value: undefined },
+          };
+        },
+      },
+    }));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
+      store: false,
+      reasoningSummary: "auto",
+    });
+    // the retry dropped only the summary option; store:false must survive
+    expect(mockStreamText.mock.calls[1]?.[0].providerOptions?.openai).toEqual({
+      store: false,
+    });
+    // the verdict is keyed by the credential the turn ran on
+    expect(mockMarkOpenAiReasoningSummaryUnsupported).toHaveBeenCalledTimes(1);
+    expect(mockMarkOpenAiReasoningSummaryUnsupported).toHaveBeenCalledWith(
+      `openai-reasoning-summary-unsupported-${organizationId}:credential-1`,
+    );
   });
 
   test("adds load-tools guidance when the agent has no authored prompt", async () => {

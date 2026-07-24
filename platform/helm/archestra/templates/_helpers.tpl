@@ -102,6 +102,9 @@ Additionally, any env var matching ARCHESTRA_CHAT_*_API_KEY is treated as sensit
 */}}
 {{- $sensitiveEnvVars := list
   "ARCHESTRA_AUTH_SECRET"
+  "ARCHESTRA_AUTH_SESSION_SECRET"
+  "ARCHESTRA_SECRETS_ENCRYPTION_SECRET"
+  "ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS"
   "ARCHESTRA_AUTH_ADMIN_PASSWORD"
   "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_PASSWORD"
   "ARCHESTRA_OTEL_EXPORTER_OTLP_AUTH_BEARER"
@@ -123,6 +126,32 @@ If ARCHESTRA_AUTH_SECRET env variable is explicitly set, it will override the au
     secretKeyRef:
       name: {{ include "archestra-platform.authSecretName" . }}
       key: {{ include "archestra-platform.authSecretKey" . }}
+{{- end }}
+{{/*
+Inject the session-signing and secret-encryption secrets from the auth Secret
+(Helm-managed or authSecret.existingSecretName) under the fixed session-secret
+and secrets-encryption-secret keys — an external Secret must provide both keys.
+An explicit archestra.env value overrides the injection.
+*/}}
+{{- $authSecretName := include "archestra-platform.authSecretName" . }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_AUTH_SESSION_SECRET") }}
+- name: ARCHESTRA_AUTH_SESSION_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ $authSecretName }}
+      key: session-secret
+      # optional so pods still start when the key is absent (the pre-upgrade
+      # migration Job runs before the Secret is updated; config.ts then falls
+      # back to ARCHESTRA_AUTH_SECRET).
+      optional: true
+{{- end }}
+{{- if not (hasKey .Values.archestra.env "ARCHESTRA_SECRETS_ENCRYPTION_SECRET") }}
+- name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: {{ $authSecretName }}
+      key: secrets-encryption-secret
+      optional: true
 {{- end }}
 {{- if not (hasKey .Values.archestra.env "ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE") }}
 - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE

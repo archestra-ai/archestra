@@ -513,8 +513,27 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   deepseek: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      if (!baseURL) {
+        throw new ApiError(400, "DeepSeek base URL is required.");
+      }
+      // DeepSeek thinking mode requires the assistant's `reasoning_content` to
+      // be passed back on tool-call turns (the API 400s without it). The strict
+      // @ai-sdk/openai chat converter drops reasoning parts from outgoing
+      // messages and its parser drops `reasoning_content` from responses;
+      // @ai-sdk/openai-compatible round-trips both.
+      return createOpenAICompatible({
+        name: "deepseek",
+        apiKey,
+        baseURL,
+        headers,
+        fetch,
+        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+        // provider only sends it when asked. Keep it on so the final usage chunk
+        // still arrives and cost/usage metrics are unaffected.
+        includeUsage: true,
+      }).chatModel(modelName);
+    },
     defaultBaseUrl: config.llm.deepseek.baseUrl,
     apiKeyRequiredMessage:
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",

@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.17](https://github.com/archestra-ai/archestra/compare/platform-v1.3.16...platform-v1.3.17) (2026-07-24)
+
+
+### Features
+
+* **audit:** show resource names in audit logs and filter by resource ([#6809](https://github.com/archestra-ai/archestra/issues/6809)) ([8f0138e](https://github.com/archestra-ai/archestra/commit/8f0138e65f5a506b09747638fcb1c4511dc5529a))
+* **connection:** extend the CLI startup guard to Codex and Copilot CLI (macOS/Linux + Windows) ([#6821](https://github.com/archestra-ai/archestra/issues/6821)) ([598a534](https://github.com/archestra-ai/archestra/commit/598a53465fe44a436d6ec093a5b5f68cbf28353e))
+* **frontend:** improve subscription provider UX ([#6814](https://github.com/archestra-ai/archestra/issues/6814)) ([f26240b](https://github.com/archestra-ai/archestra/commit/f26240b0ef63c3d3d0cb25e31d4273a907f9c81c))
+
+
+### Bug Fixes
+
+* **connection:** clarify provider-key gating across the setup wizard ([#6815](https://github.com/archestra-ai/archestra/issues/6815)) ([750f30e](https://github.com/archestra-ai/archestra/commit/750f30ebf1231ba2036a1517c150dd09ee6b7c52))
+* **llm-logs:** show one session per Archestra Chat and badge sub-agent calls ([#6812](https://github.com/archestra-ai/archestra/issues/6812)) ([5bf8671](https://github.com/archestra-ai/archestra/commit/5bf8671985b10a5c753b2fef3600814c0a6348de))
+* **llm-proxy:** stable tool-call event snapshots for openai-compat replay ([#6818](https://github.com/archestra-ai/archestra/issues/6818)) ([12f8697](https://github.com/archestra-ai/archestra/commit/12f869718b898dc3852e82c26f201c069b367f2c))
+* stop send ctx in sign-out ([#6822](https://github.com/archestra-ai/archestra/issues/6822)) ([103bbf2](https://github.com/archestra-ai/archestra/commit/103bbf21204b69e48d3a3f00509b96dc6a5feace))
+
 ## [1.3.16](https://github.com/archestra-ai/archestra/compare/platform-v1.3.15...platform-v1.3.16) (2026-07-23)
 
 

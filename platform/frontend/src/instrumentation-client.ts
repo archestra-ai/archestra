@@ -9,8 +9,10 @@ const {
   sentry: { dsn, environment },
 } = config;
 
-// Only initialize Sentry if DSN is configured
-if (dsn) {
+// Only initialize Sentry if DSN is configured. The production check comes
+// first and is inlined so the bundler folds it to `false` in dev and drops the
+// branch with its module edge, keeping the reporting SDK out of dev compiles.
+if (process.env.NODE_ENV === "production" && dsn) {
   void import("@sentry/nextjs").then((Sentry) => {
     const browserOptions = getFrontendBrowserSentryOptions({
       dsn,
@@ -32,7 +34,9 @@ export const onRouterTransitionStart: typeof import("@sentry/nextjs").captureRou
   (...args) => {
     if (!dsn) return;
 
-    void import("@sentry/nextjs").then(({ captureRouterTransitionStart }) => {
-      captureRouterTransitionStart(...args);
-    });
+    if (process.env.NODE_ENV === "production") {
+      void import("@sentry/nextjs").then(({ captureRouterTransitionStart }) => {
+        captureRouterTransitionStart(...args);
+      });
+    }
   };

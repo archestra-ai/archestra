@@ -25,9 +25,18 @@ function isIgnorableRequestError(error: unknown): boolean {
   );
 }
 
+/**
+ * The `process.env.NODE_ENV === "production"` guards below are written inline
+ * (not hoisted into a const) and placed first in each condition so the bundler
+ * folds them to a literal `false` in dev and drops the branch — along with its
+ * module edge — instead of following it. Without that, every dev route compile
+ * walks into the error-reporting server package and drags the OpenTelemetry /
+ * Fastify instrumentation graph in with it. Reporting is production-only
+ * anyway, and next.config.ts already skips the build-time plugin in dev.
+ */
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    if (ERROR_REPORTING_DSN) {
+    if (process.env.NODE_ENV === "production" && ERROR_REPORTING_DSN) {
       await import("../sentry.server.config");
     }
 
@@ -37,16 +46,24 @@ export async function register() {
     }
   }
 
-  if (process.env.NEXT_RUNTIME === "edge" && ERROR_REPORTING_DSN) {
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.NEXT_RUNTIME === "edge" &&
+    ERROR_REPORTING_DSN
+  ) {
     await import("../sentry.edge.config");
   }
 }
 
+// The annotation is a `typeof import(...)` type expression — erased at compile
+// time, so it carries no module edge of its own.
 export const onRequestError: typeof import("@sentry/nextjs").captureRequestError =
   async (...args) => {
     if (!ERROR_REPORTING_DSN) return;
     if (isIgnorableRequestError(args[0])) return;
 
-    const { captureRequestError } = await import("@sentry/nextjs");
-    return captureRequestError(...args);
+    if (process.env.NODE_ENV === "production") {
+      const { captureRequestError } = await import("@sentry/nextjs");
+      return captureRequestError(...args);
+    }
   };

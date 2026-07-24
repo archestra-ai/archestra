@@ -173,6 +173,38 @@ export function normalizeAzureApiKey(
   return apiKey.replace(/^Bearer\s+/i, "");
 }
 
+/**
+ * Whether an Azure deployment name denotes an OpenAI first-party model
+ * (gpt-4o, gpt-5.x, o-series, ...) as opposed to a Foundry-hosted open model
+ * (DeepSeek-R1, gpt-oss, grok, phi, ...). Deployment names are free-form, so
+ * this is the same name heuristic @ai-sdk/openai itself applies. It decides
+ * which AI SDK provider the chat feature builds for a deployment: first-party
+ * reasoning models need @ai-sdk/openai's max_tokens → max_completion_tokens
+ * conversion (they reject max_tokens), while open models need
+ * @ai-sdk/openai-compatible so their `reasoning_content` deltas surface as
+ * reasoning parts instead of being dropped by the strict parser.
+ *
+ * gpt-oss is the deliberate exception inside the gpt-* family: it is an
+ * open-weight model that streams `reasoning_content`.
+ */
+export function isAzureOpenAiFirstPartyModelName(
+  deploymentName: string,
+): boolean {
+  const name = deploymentName.toLowerCase();
+  if (name.startsWith("gpt-oss")) {
+    return false;
+  }
+
+  return (
+    name.startsWith("gpt-") ||
+    name.startsWith("o1") ||
+    name.startsWith("o3") ||
+    name.startsWith("o4") ||
+    name.startsWith("chatgpt") ||
+    name.startsWith("codex")
+  );
+}
+
 function getRequestUrl(input: URL | RequestInfo): string {
   if (typeof input === "string") {
     return input;

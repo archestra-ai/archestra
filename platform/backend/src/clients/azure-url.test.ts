@@ -8,6 +8,7 @@ import {
   createAzureFetchWithApiVersion,
   extractAzureDeploymentName,
   isAzureAiFoundryBaseUrl,
+  isAzureOpenAiFirstPartyModelName,
   isAzureOpenAiV1BaseUrl,
   normalizeAzureApiKey,
 } from "./azure-url";
@@ -363,5 +364,40 @@ describe("extractAzureDeploymentName", () => {
     expect(
       extractAzureDeploymentName("https://my-resource.openai.azure.com/openai"),
     ).toBeNull();
+  });
+});
+
+describe("isAzureOpenAiFirstPartyModelName", () => {
+  it.each([
+    "gpt-5.5",
+    "gpt-5.5-pro",
+    "gpt-5-chat",
+    "gpt-4o",
+    "gpt-4.1-mini",
+    "gpt-35-turbo",
+    "o1-preview",
+    "o3-mini",
+    "o4-mini",
+    "chatgpt-4o-latest",
+    "codex-mini",
+    "GPT-4o",
+  ])("returns true for OpenAI first-party deployment name %s", (name) => {
+    expect(isAzureOpenAiFirstPartyModelName(name)).toBe(true);
+  });
+
+  it.each([
+    "DeepSeek-R1",
+    "DeepSeek-R1-0528",
+    "grok-4",
+    "Phi-4-reasoning",
+    "Llama-3.3-70B-Instruct",
+    "mistral-large",
+  ])("returns false for Foundry open-model deployment name %s", (name) => {
+    expect(isAzureOpenAiFirstPartyModelName(name)).toBe(false);
+  });
+
+  it("returns false for gpt-oss despite the gpt- prefix", () => {
+    expect(isAzureOpenAiFirstPartyModelName("gpt-oss-120b")).toBe(false);
+    expect(isAzureOpenAiFirstPartyModelName("GPT-OSS-20b")).toBe(false);
   });
 });

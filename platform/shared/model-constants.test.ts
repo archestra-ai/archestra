@@ -9,6 +9,8 @@ import {
 
 describe("anthropicThinksByDefault", () => {
   test("matches models whose thinking is always on, including dated snapshots", () => {
+    expect(anthropicThinksByDefault("claude-opus-5")).toBe(true);
+    expect(anthropicThinksByDefault("claude-opus-5-20260724")).toBe(true);
     expect(anthropicThinksByDefault("claude-sonnet-5")).toBe(true);
     expect(anthropicThinksByDefault("claude-sonnet-5-20250929")).toBe(true);
     expect(anthropicThinksByDefault("claude-fable-5")).toBe(true);
@@ -22,6 +24,8 @@ describe("anthropicThinksByDefault", () => {
     // cost, so they are deliberately not matched.
     expect(anthropicThinksByDefault("claude-opus-4-8")).toBe(false);
     expect(anthropicThinksByDefault("claude-opus-4-7")).toBe(false);
+    // Nearest substring neighbor of the "opus-5" marker — must not match.
+    expect(anthropicThinksByDefault("claude-opus-4-5-20251101")).toBe(false);
     expect(anthropicThinksByDefault("claude-sonnet-4-6")).toBe(false);
     expect(anthropicThinksByDefault("claude-sonnet-4-5")).toBe(false);
     expect(anthropicThinksByDefault("claude-3-5-haiku-20241022")).toBe(false);

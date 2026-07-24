@@ -502,11 +502,11 @@ export function requiresOpenAiResponsesApi(modelId: string): boolean {
 }
 
 /**
- * True for Anthropic models where thinking is on by default (Claude Sonnet 5,
- * Fable 5, Mythos 5, Mythos Preview): the model reasons — and bills those
- * tokens — on every request, but the API returns the thinking text only when
- * the request opts in with `thinking: {display: "summarized"}`. Matched as
- * substrings so dated snapshots (`claude-sonnet-5-20250929`) are covered.
+ * True for Anthropic models where thinking is on by default (Claude Opus 5,
+ * Sonnet 5, Fable 5, Mythos 5, Mythos Preview): the model reasons — and bills
+ * those tokens — on every request, but the API returns the thinking text only
+ * when the request opts in with `thinking: {display: "summarized"}`. Matched
+ * as substrings so dated snapshots (`claude-sonnet-5-20250929`) are covered.
  *
  * Models where thinking is off until requested (Opus 4.8/4.7, Sonnet 4.6 and
  * earlier) are deliberately excluded: turning thinking on there would add
@@ -520,6 +520,7 @@ export function anthropicThinksByDefault(modelId: string): boolean {
 }
 
 const ANTHROPIC_DEFAULT_THINKING_MODEL_MARKERS = [
+  "opus-5",
   "sonnet-5",
   "fable-5",
   "mythos-5",

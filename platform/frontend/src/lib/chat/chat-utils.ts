@@ -38,6 +38,7 @@ export function conversationStorageKeys(conversationId: string) {
     rightPanelTab: `archestra-chat-right-panel-tab-${conversationId}`,
     draft: `archestra_chat_draft_${conversationId}`,
     messageQueue: `archestra_chat_queue_${conversationId}`,
+    reviewContext: `archestra-chat-review-context-${conversationId}`,
   };
 }
 

@@ -18,6 +18,7 @@ import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { useSession } from "@/lib/auth/auth.query";
 import { callApi } from "@/lib/chat/api-call";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
+import { clearReviewContext } from "@/lib/chat/chat-review-context";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import {
   type ConversationFileItem,
@@ -642,6 +643,9 @@ export function useDeleteConversation() {
         localStorage.removeItem(keys.rightPanelOpen);
         localStorage.removeItem(keys.rightPanelTab);
         localStorage.removeItem(keys.draft);
+        // Also drop any docked-review context (localStorage + in-memory map) so
+        // a deleted review chat leaves nothing behind.
+        clearReviewContext(deletedId);
       }
       // Drops both the in-memory queue and its persisted copy.
       chatMessageQueue.clear(deletedId);

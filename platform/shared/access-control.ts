@@ -1704,6 +1704,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAppRecordingRenderStatus]: { chat: ["update"] },
   [RouteId.DownloadAppRecordingVideo]: { chat: ["update"] },
   [RouteId.CancelAppRecordingRender]: { chat: ["update"] },
+  // Reviewing a hackathon submission: any authenticated org member may open the
+  // read-only review player. The bundle it serves is public GitHub data fetched
+  // server-side, so no per-resource permission is required beyond being signed in.
+  [RouteId.ReviewAppRecording]: {},
   // Same chat-scoped permission as the recording routes above: sharing starts
   // from the player inside a chat session; the handler re-checks the feature
   // gates.

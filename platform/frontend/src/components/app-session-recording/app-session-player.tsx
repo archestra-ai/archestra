@@ -354,6 +354,43 @@ type PromptBubbleEditor = {
   regenerate: () => void;
 };
 
+/** Shared no-op for review-mode callbacks that have nothing to report. */
+const noop = () => {};
+
+/**
+ * The review scrubber's cut list: always empty. Review runs on the already-cut
+ * playback timeline, so there are no shaded regions to draw — a stable module
+ * reference keeps the timeline's cut-change reset effect from firing each render.
+ */
+const EMPTY_CUTS: {
+  fromMs: number;
+  toMs: number;
+  kind: "start" | "end" | "mid";
+}[] = [];
+
+/**
+ * A hackathon submission under review: the recording bundle to replay plus the
+ * PR / gallery context the review host shows around the player. Mirrors the
+ * `sub, src, pr, repo, app, by, name, cat` review-link contract the hackathon
+ * MCP builds; `prUrl` is derived from `repo`+`pr` by the host.
+ */
+export interface AppReviewSubmission {
+  sub: string;
+  pr?: string;
+  repo?: string;
+  app?: string;
+  by?: string;
+  name?: string;
+  cat?: string;
+  prUrl?: string;
+}
+
+/** The review-mode input to {@link AppSessionPlayer}. */
+export interface AppReviewContext {
+  bundle: AppRecordingBundle;
+  submission: AppReviewSubmission;
+}
+
 /**
  * Built-in player for recorded app demo sessions, styled to read like the real
  * Archestra chat: the recorded conversation replays on the left using the same
@@ -368,8 +405,10 @@ export function AppSessionPlayer({
   open,
   onOpenChange,
   filming = false,
+  review,
 }: {
-  conversationId: string;
+  /** Omitted in review mode — the recording comes from `review.bundle`. */
+  conversationId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /**
@@ -378,8 +417,21 @@ export function AppSessionPlayer({
    * into an exported frame.
    */
   filming?: boolean;
+  /**
+   * Immutable-review mode: replay a hackathon submission's bundle sourced from
+   * GitHub (not the local IndexedDB store) with every authoring affordance —
+   * the chat/prompt editor, timeline cut/trim, share/export/download — gone.
+   * The transport and transcript stay; the replay is byte-for-byte the normal
+   * native video+audio+DOM playback.
+   */
+  review?: AppReviewContext;
 }) {
-  const { data: bundle } = useAppRecording(open ? conversationId : null);
+  // The store hook is parked in review (and while closed): a null id disables
+  // the query, so no conversation is needed and IndexedDB is never read.
+  const { data: storedBundle } = useAppRecording(
+    review || !open ? null : (conversationId ?? null),
+  );
+  const bundle = review ? review.bundle : storedBundle;
   // The player replays only bundles that honor the shared recording contract —
   // schema-valid static data with an app version and a chat. An invalid bundle
   // gets an explanation instead of a broken replay.
@@ -427,8 +479,11 @@ export function AppSessionPlayer({
 
   // The editor (undo/redo history + cuts + AI enhancement) is owned here so its
   // controls can live in the player's top toolbar; the timeline cutter in the
-  // surface below shares the same instance.
-  const editor = useAppRecordingEditor(open ? conversationId : null);
+  // surface below shares the same instance. In review mode it is inert (null
+  // id) — there is nothing to edit, and every authoring affordance is gone.
+  const editor = useAppRecordingEditor(
+    review || !open ? null : (conversationId ?? null),
+  );
 
   // First-open onboarding: the guided tour runs once per browser, then only
   // on demand via the header's help button. Decided synchronously so the
@@ -523,7 +578,8 @@ export function AppSessionPlayer({
   // Ctrl/Cmd+Shift+Z redoes. Text fields keep their own native undo.
   const { undo, redo, canUndo, canRedo, isSaving } = editor;
   useEffect(() => {
-    if (!open) return;
+    // Review is read-only: no history, so no undo/redo keys to bind.
+    if (!open || review) return;
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z")
         return;
@@ -546,7 +602,63 @@ export function AppSessionPlayer({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, undo, redo, canUndo, canRedo, isSaving]);
+  }, [open, review, undo, redo, canUndo, canRedo, isSaving]);
+
+  if (review) {
+    // The review host is the page itself, not a modal: render inline so the
+    // host layout's banner, submission metadata and PR links stay visible and
+    // interactive around the player. A Dialog would portal out of the page,
+    // trap focus, and mark those very links inert — exactly what a reviewer
+    // must not lose. The heavy replay engine (PlayerSurface) is shared with the
+    // authoring path unchanged; only the shell and the affordance gating differ.
+    return (
+      <TooltipProvider delayDuration={200}>
+        <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-background">
+          <div className="flex w-full items-start gap-3 border-b px-4 py-4">
+            <AppWindow className="mt-px size-4 shrink-0 text-muted-foreground" />
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <h2 className="truncate text-lg font-semibold leading-none">
+                {title}
+              </h2>
+              {recording && (
+                <p className="max-w-2xl text-sm text-muted-foreground">
+                  {recording.enhancement?.description ??
+                    fallbackRecordingDescription(recording.appName)}
+                </p>
+              )}
+            </div>
+          </div>
+          {recording ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
+              <PlayerSurface
+                key={review.submission.sub}
+                conversationId={review.submission.sub}
+                recording={recording}
+                editor={editor}
+                tourActive={false}
+                tourStepKey={null}
+                descriptionEditing={false}
+                filming={false}
+                review
+                onEditingChange={noop}
+              />
+            </div>
+          ) : (
+            <div className="flex min-h-[40vh] flex-1 items-center justify-center px-8 text-center text-sm text-muted-foreground">
+              {validation && !validation.ok
+                ? `This recording can't be replayed. ${validation.reason}`
+                : "Loading recording…"}
+            </div>
+          )}
+        </div>
+      </TooltipProvider>
+    );
+  }
+
+  // Past the review branch this is the authoring path, where every caller
+  // supplies a conversation id — bind it as a definite string for the header
+  // controls (description, export, share) and the surface below.
+  const authoringConversationId = conversationId ?? "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -610,7 +722,7 @@ export function AppSessionPlayer({
             <DialogTitle className="truncate">{title}</DialogTitle>
             {recording && (
               <ReplayDescriptionRow
-                conversationId={conversationId}
+                conversationId={authoringConversationId}
                 appName={recording.appName}
                 enhancement={recording.enhancement ?? null}
                 saving={editor.isSaving}
@@ -719,7 +831,10 @@ export function AppSessionPlayer({
                               return;
                             }
                             if (!recording) return;
-                            renderVideo.mutate({ conversationId, title });
+                            renderVideo.mutate({
+                              conversationId: authoringConversationId,
+                              title,
+                            });
                           }}
                         >
                           {rendering ? (
@@ -759,7 +874,7 @@ export function AppSessionPlayer({
                       export length cap: the gallery renders the submitted cut
                       to video downstream, so the same 30-second bound applies. */}
                   <AppGalleryShareButton
-                    conversationId={conversationId}
+                    conversationId={authoringConversationId}
                     disabled={exportBlocked}
                     disabledReason={
                       tooLongToExport ? (
@@ -829,8 +944,8 @@ export function AppSessionPlayer({
         )}
         {recording ? (
           <PlayerSurface
-            key={conversationId}
-            conversationId={conversationId}
+            key={authoringConversationId}
+            conversationId={authoringConversationId}
             recording={recording}
             editor={editor}
             tourActive={tourOpen}
@@ -988,14 +1103,23 @@ function PlayerSurface({
   tourStepKey,
   descriptionEditing,
   filming,
-  openBuildPromptNonce,
+  openBuildPromptNonce = 0,
+  review = false,
   onEditingChange,
 }: {
   /** Rendering a video: hold every hover affordance down. */
   filming: boolean;
   /** Bumped by the header's readiness notice to open the build-prompt editor
-   * directly (one-click "Write build prompt"). */
-  openBuildPromptNonce: number;
+   * directly (one-click "Write build prompt"). Optional so read-only review mode
+   * (which never opens the editor) can omit it. */
+  openBuildPromptNonce?: number;
+  /**
+   * Immutable-review mode: read-only. The chat "click to edit" affordance and
+   * every timeline cut/trim gesture are suppressed; transport (play/pause/seek/
+   * mute) and the transcript stay. Distinct from `filming`, which also silences
+   * audio and hides the transport — review keeps both.
+   */
+  review?: boolean;
   /** Reports this surface's editors so the toolbar can gate the export. */
   onEditingChange: (editing: boolean) => void;
   conversationId: string;
@@ -1921,6 +2045,47 @@ function PlayerSurface({
     [playback, basePlayback, segmentIndexForClock, seekTo],
   );
 
+  // ── Review-mode transport. The authoring strip runs on the FULL (uncut)
+  // timeline so removed regions stay visible and draggable; review has no
+  // editing, so its scrubber runs on the CUT playback timeline directly — the
+  // stored cuts are already collapsed into it, so the strip carries only kept
+  // content with no empty trimmed tail. The strip therefore hands back playback
+  // ms, seeked without the base<->cut round-trip the authoring handlers do.
+  const seekPlayback = useCallback(
+    (clock: number) => {
+      cancelPendingScrub();
+      seekTo(clock);
+    },
+    [seekTo, cancelPendingScrub],
+  );
+  const scrubPlayback = useCallback(
+    (clock: number) => {
+      const scrub = scrubRewindRef.current;
+      const rewind =
+        clock < clockRef.current - 1 ||
+        segmentIndexForClock(clock) !== segmentIndexRef.current;
+      if (!rewind && scrub.timer === null) {
+        seekTo(clock);
+        return;
+      }
+      scrub.pendingClock = clock;
+      setDisplayClock(clock);
+      if (scrub.timer !== null) return;
+      const wait = Math.max(
+        0,
+        SCRUB_REWIND_THROTTLE_MS - (performance.now() - scrub.lastAt),
+      );
+      scrub.timer = setTimeout(() => {
+        scrub.timer = null;
+        scrub.lastAt = performance.now();
+        const pending = scrub.pendingClock;
+        scrub.pendingClock = null;
+        if (pending !== null) seekTo(pending);
+      }, wait);
+    },
+    [segmentIndexForClock, seekTo],
+  );
+
   // ── The one-shot prompt bubble's editor. The bubble in the chat pane is the
   // replay's opening ask; its controls edit or regenerate the enhancement
   // in place (no dialog). Entering edit mode pauses the replay; display-mode
@@ -2407,6 +2572,7 @@ function PlayerSurface({
               durationMs={duration}
               paused={playState !== "playing"}
               filming={filming}
+              review={review}
               pending={pending}
               promptEditor={promptEditor}
               showEditHint={tourStepKey === "chat"}
@@ -2643,11 +2809,19 @@ function PlayerSurface({
             {formatMs(displayClock)} / {formatMs(duration)}
           </span>
           <ReplayTimeline
-            durationMs={baseDuration}
-            cuts={baseCuts}
-            playheadMs={playheadBaseMs}
-            contentStartMs={basePlayback.toPlaybackMs(rawStart + PREROLL_MS)}
+            // Review runs on the CUT playback timeline (cuts already collapsed,
+            // no shaded regions, no empty tail); authoring runs on the FULL
+            // uncut timeline with removed regions shaded and draggable.
+            durationMs={review ? duration : baseDuration}
+            cuts={review ? EMPTY_CUTS : baseCuts}
+            playheadMs={review ? displayClock : playheadBaseMs}
+            contentStartMs={
+              review
+                ? playback.toPlaybackMs(rawStart + PREROLL_MS)
+                : basePlayback.toPlaybackMs(rawStart + PREROLL_MS)
+            }
             saving={editor.isSaving}
+            readOnly={review}
             onEditingChange={setTimelineEditing}
             demo={
               tourStepKey === "timeline-cut"
@@ -2658,9 +2832,9 @@ function PlayerSurface({
                     ? "resize"
                     : null
             }
-            exportLimit={exportLimitBaseMs}
-            onSeek={seekBase}
-            onScrub={scrubBase}
+            exportLimit={review ? null : exportLimitBaseMs}
+            onSeek={review ? seekPlayback : seekBase}
+            onScrub={review ? scrubPlayback : scrubBase}
             onCut={cutBaseRange}
             onResize={resizeCutBase}
             onRestore={restoreCut}
@@ -3156,6 +3330,7 @@ function ReplayTimeline({
   playheadMs,
   contentStartMs,
   saving,
+  readOnly = false,
   exportLimit,
   onSeek,
   onScrub,
@@ -3171,6 +3346,13 @@ function ReplayTimeline({
   /** Existing cuts in full-timeline ms, in stored order, pre-classified. */
   cuts: { fromMs: number; toMs: number; kind: "start" | "end" | "mid" }[];
   playheadMs: number;
+  /**
+   * Immutable review: the strip is a pure scrubber — click/drag to seek, no
+   * selection, no cut/trim/resize grips, no restore or export-limit controls.
+   * Existing cuts still render as shaded gaps (the session the author trimmed),
+   * they are simply not editable.
+   */
+  readOnly?: boolean;
   /** Where real session content begins on this timeline — before it lies the
    * synthetic (still cuttable) lead-in beat; an end trim must always keep
    * some content past this point. */
@@ -3227,8 +3409,9 @@ function ReplayTimeline({
     drag !== null &&
     Math.abs(drag.currentClientX - drag.anchorClientX) >= CLICK_DRAG_PX;
   useEffect(() => {
-    onEditingChange?.(selection !== null || dragEditing);
-  }, [selection, dragEditing, onEditingChange]);
+    // Review never edits: a scrub-drag must not lock the transport.
+    onEditingChange?.(readOnly ? false : selection !== null || dragEditing);
+  }, [readOnly, selection, dragEditing, onEditingChange]);
 
   const msAtClientX = (clientX: number): number => {
     const rect = trackRef.current?.getBoundingClientRect();
@@ -3382,6 +3565,13 @@ function ReplayTimeline({
         travelPx: Math.abs(event.clientX - drag.anchorClientX),
         heldMs: performance.now() - drag.anchorTime,
       });
+      // Review is scrub-only: a press seeks to the pressed point, a drag scrubs
+      // and settles on the released point — never a selection to cut.
+      if (readOnly) {
+        setSelection(null);
+        onSeek(gesture === "select" ? drag.currentMs : drag.anchorMs);
+        return;
+      }
       // A zero-span drag (pure vertical wobble) has nothing to select.
       if (gesture === "seek" || toMs - fromMs < 1) {
         // The everyday interaction: a click fast-forwards (or rewinds)
@@ -3504,7 +3694,11 @@ function ReplayTimeline({
         </div>
         <div
           ref={trackRef}
-          className="relative h-8 cursor-crosshair touch-none select-none overflow-hidden rounded-md border bg-muted/60"
+          className={cn(
+            "relative h-8 touch-none select-none overflow-hidden rounded-md border bg-muted/60",
+            // Review scrubs; authoring selects — so the cursor names the gesture.
+            readOnly ? "cursor-pointer" : "cursor-crosshair",
+          )}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -3544,37 +3738,42 @@ function ReplayTimeline({
             />
           )}
           {/* One shared pill grip per remove-boundary: the whole timeline's
-              trim ends and every cut edge drag with the same handle. */}
-          {midCutIndexes.map((index) => (
-            <TimelineGrip
-              key={`cut-from-${index}`}
-              atMs={liveCuts[index].fromMs}
-              keptSide="left"
-              leftPct={leftPct}
-              onPointerDown={beginResize(index, "from")}
-            />
-          ))}
-          {midCutIndexes.map((index) => (
-            <TimelineGrip
-              key={`cut-to-${index}`}
-              atMs={liveCuts[index].toMs}
-              keptSide="right"
-              leftPct={leftPct}
-              onPointerDown={beginResize(index, "to")}
-            />
-          ))}
-          <TimelineGrip
-            atMs={startBoundary}
-            keptSide="right"
-            leftPct={leftPct}
-            onPointerDown={beginTrim("start")}
-          />
-          <TimelineGrip
-            atMs={endBoundary}
-            keptSide="left"
-            leftPct={leftPct}
-            onPointerDown={beginTrim("end")}
-          />
+              trim ends and every cut edge drag with the same handle. Gone in
+              read-only review — the strip is a scrubber only. */}
+          {!readOnly && (
+            <>
+              {midCutIndexes.map((index) => (
+                <TimelineGrip
+                  key={`cut-from-${index}`}
+                  atMs={liveCuts[index].fromMs}
+                  keptSide="left"
+                  leftPct={leftPct}
+                  onPointerDown={beginResize(index, "from")}
+                />
+              ))}
+              {midCutIndexes.map((index) => (
+                <TimelineGrip
+                  key={`cut-to-${index}`}
+                  atMs={liveCuts[index].toMs}
+                  keptSide="right"
+                  leftPct={leftPct}
+                  onPointerDown={beginResize(index, "to")}
+                />
+              ))}
+              <TimelineGrip
+                atMs={startBoundary}
+                keptSide="right"
+                leftPct={leftPct}
+                onPointerDown={beginTrim("start")}
+              />
+              <TimelineGrip
+                atMs={endBoundary}
+                keptSide="left"
+                leftPct={leftPct}
+                onPointerDown={beginTrim("end")}
+              />
+            </>
+          )}
         </div>
         {/* Each cut's restore control is its WHOLE column — the gap on the
             strip plus the ruler band above it: hovering anywhere in it shows
@@ -3584,51 +3783,52 @@ function ReplayTimeline({
             centers it in the whole area above the strip — the transport
             row's top padding included — without crowding the drag grips at
             the gap's edges. */}
-        {liveCuts.map((cut, index) => {
-          // EVERY cut gets the treatment, trims included — a trimmed head or
-          // tail is just an edge-touching cutout. Except the one being
-          // trim-dragged: its gap tracks the live boundary and the stale
-          // column would lag it, so it sits the drag out.
-          if (
-            drag?.kind === "trim" &&
-            cuts[index].kind === (drag.edge === "start" ? "start" : "end")
-          ) {
-            return null;
-          }
-          return (
-            <Tooltip
-              key={`cut-restore-${cuts[index].fromMs}-${cuts[index].toMs}`}
-            >
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Restore this cut"
-                  className="group absolute inset-y-0 z-10 cursor-pointer"
-                  style={{
-                    left: leftPct(cut.fromMs),
-                    width: widthPct(cut.fromMs, cut.toMs),
-                  }}
-                  onClick={() => onRestore(index)}
-                >
-                  <span className="absolute inset-x-0 bottom-0 h-8 rounded-md border border-destructive/50 bg-destructive/10 opacity-0 transition-opacity group-hover:opacity-100" />
-                  <span className="absolute inset-x-0 top-0 flex h-2.5 items-center justify-center">
-                    <span className="flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-sm transition-colors group-hover:text-foreground">
-                      <Undo2 className="size-3" />
+        {!readOnly &&
+          liveCuts.map((cut, index) => {
+            // EVERY cut gets the treatment, trims included — a trimmed head or
+            // tail is just an edge-touching cutout. Except the one being
+            // trim-dragged: its gap tracks the live boundary and the stale
+            // column would lag it, so it sits the drag out.
+            if (
+              drag?.kind === "trim" &&
+              cuts[index].kind === (drag.edge === "start" ? "start" : "end")
+            ) {
+              return null;
+            }
+            return (
+              <Tooltip
+                key={`cut-restore-${cuts[index].fromMs}-${cuts[index].toMs}`}
+              >
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Restore this cut"
+                    className="group absolute inset-y-0 z-10 cursor-pointer"
+                    style={{
+                      left: leftPct(cut.fromMs),
+                      width: widthPct(cut.fromMs, cut.toMs),
+                    }}
+                    onClick={() => onRestore(index)}
+                  >
+                    <span className="absolute inset-x-0 bottom-0 h-8 rounded-md border border-destructive/50 bg-destructive/10 opacity-0 transition-opacity group-hover:opacity-100" />
+                    <span className="absolute inset-x-0 top-0 flex h-2.5 items-center justify-center">
+                      <span className="flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground shadow-sm transition-colors group-hover:text-foreground">
+                        <Undo2 className="size-3" />
+                      </span>
                     </span>
-                  </span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent className="text-xs">
-                Restore this cut
-              </TooltipContent>
-            </Tooltip>
-          );
-        })}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs">
+                  Restore this cut
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
         {/* A released selection asks its question right where it was made:
             cut the stretch, or dismiss it. (There is no standing Cut button —
             the tour teaches the gesture.) Same band and midline as the
-            restore badges. */}
-        {selection && !drag && (
+            restore badges. Never in review — no selection is ever made. */}
+        {!readOnly && selection && !drag && (
           <div
             className="absolute top-0 z-30 flex h-2.5 -translate-x-1/2 items-center gap-1"
             style={{ left: leftPct((selection.fromMs + selection.toMs) / 2) }}
@@ -3705,7 +3905,7 @@ function ReplayTimeline({
             hovered, no line through the strip (that would read as a second
             playhead), and no hit area over the strip itself, where an end
             bracket dragged to ~30s must stay grabbable. */}
-        {exportLimit !== null && (
+        {!readOnly && exportLimit !== null && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -3975,6 +4175,7 @@ function ReplayChatPane({
   durationMs,
   paused,
   filming,
+  review,
   pending,
   promptEditor,
   showEditHint,
@@ -3989,6 +4190,8 @@ function ReplayChatPane({
   paused: boolean;
   /** A video export is running — hover affordances must stay out of the film. */
   filming?: boolean;
+  /** Immutable review: the whole-pane "click to edit" affordance is gone. */
+  review?: boolean;
   pending: ChatPending;
   promptEditor: PromptBubbleEditor;
   /** Tour spotlight: hover can't reach under the tour overlay, so the stop
@@ -4078,8 +4281,9 @@ function ReplayChatPane({
     >
       {/* The hover tint, painted behind the conversation exactly like the
           description's — a negative layer inside this pane's own stacking
-          context, so it washes the surface without covering the messages. */}
-      {promptEditor.draft === null && !filming && (
+          context, so it washes the surface without covering the messages.
+          Gone in review: there is nothing to edit. */}
+      {promptEditor.draft === null && !filming && !review && (
         <span
           className={cn(
             "pointer-events-none absolute inset-0 -z-10 bg-muted opacity-0 transition-opacity group-hover/pane:opacity-100",
@@ -4089,8 +4293,8 @@ function ReplayChatPane({
       )}
       {/* The whole replayed chat is one edit affordance: hovering names the
           action, clicking opens the chat editor. (Hidden while the prompt
-          editor is open — that IS editing.) */}
-      {promptEditor.draft === null && !filming && (
+          editor is open — that IS editing — and in read-only review.) */}
+      {promptEditor.draft === null && !filming && !review && (
         <button
           type="button"
           aria-label="Edit the replayed chat"
@@ -5558,6 +5762,63 @@ function useReplayRegionLayout(viewport: { width: number; height: number }) {
         : null,
     [screen, recordedWidth, recordedHeight],
   );
+}
+
+/**
+ * Horizontal chrome around the review player's render region inside the side
+ * panel: the review shell's `p-4` gutters (16px each side) plus a little air so
+ * a rounding difference never trips the `overflow-auto` scrollbar.
+ */
+const REVIEW_PANEL_GUTTER_PX = 48;
+/**
+ * A recording captured through the platform recorder is locked to
+ * {@link APP_RECORDING_VIEWPORT_ASPECT}; use that as the pre-load viewport so
+ * the panel opens at the real two-card width and settles, not widens, once the
+ * bundle arrives (4:5 → the canonical 0.8 app aspect).
+ */
+const CANONICAL_REVIEW_VIEWPORT = { width: 4, height: 5 };
+
+/**
+ * The width the docked review side panel must take so a submission's replay
+ * shows in FULL — the chat card and app card side by side plus the shell's
+ * gutter — with no horizontal scroll. Tracks the window exactly like the
+ * player's own {@link useReplayRegionLayout}, so the panel and the player agree
+ * on the shape and re-fit together on resize. Before the bundle loads it uses
+ * the canonical recording aspect, so the panel opens wide immediately and then
+ * settles to the recording's own (clamped) shape. Null only during SSR.
+ *
+ * @public — the review right-side panel sizes itself from this.
+ */
+export function useReviewPanelWidth(
+  bundle: AppRecordingBundle | null | undefined,
+): number | null {
+  const [screen, setScreen] = useState(() =>
+    typeof window === "undefined"
+      ? null
+      : { width: window.innerWidth, height: window.innerHeight },
+  );
+  useEffect(() => {
+    const onResize = () =>
+      setScreen({ width: window.innerWidth, height: window.innerHeight });
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return useMemo(() => {
+    if (!screen) return null;
+    // Viewport events are byte-identical raw vs. revived (revival only touches
+    // frame payloads), so the un-revived bundle events feed dominantViewport
+    // fine — no need to decode the whole recording just to measure it.
+    const viewport = bundle
+      ? dominantViewport(bundle.recording.events as unknown as TimelineEvent[])
+      : CANONICAL_REVIEW_VIEWPORT;
+    const { chatWidth, appWidth } = replayRegionLayout({
+      screenWidth: screen.width,
+      screenHeight: screen.height,
+      viewport,
+    });
+    return chatWidth + appWidth + REVIEW_PANEL_GUTTER_PX;
+  }, [bundle, screen]);
 }
 
 /**

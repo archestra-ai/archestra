@@ -315,6 +315,14 @@ function errorChunks(error: Error): ModelStreamPart[] {
   ];
 }
 
+// The rejection OpenAI returns for `reasoning.summary` from an unverified
+// organization; the strip-retry detection matches the message fragment.
+function reasoningSummaryVerificationError(): Error {
+  return new Error(
+    "Your organization must be verified to generate reasoning summaries. Please go to: https://platform.openai.com/settings/organization/general and click on Verify Organization.",
+  );
+}
+
 // drains the returned stream's fullStream so simulated streams don't leak.
 async function drain(result: { fullStream: AsyncIterable<unknown> }) {
   for await (const _ of result.fullStream) {
@@ -437,6 +445,74 @@ describe("runAgentStream", () => {
       model.doStreamCalls[0].prompt.length,
     );
     expect(await result.text).toBe("hi");
+  });
+
+  test("strips reasoningSummary and retries when the OpenAI org is not verified for summaries", async () => {
+    const model = modelFor(
+      errorChunks(reasoningSummaryVerificationError()),
+      renderableChunks(),
+    );
+    const onReasoningSummaryUnsupported = vi.fn(async () => {});
+
+    const { result } = await runAgentStream({
+      config: {
+        model,
+        prompt: "hello",
+        providerOptions: { openai: { store: false, reasoningSummary: "auto" } },
+      },
+      recovery: { onReasoningSummaryUnsupported },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(2);
+    // the retry drops only the summary option; store:false must survive
+    expect(model.doStreamCalls[1]?.providerOptions?.openai).toEqual({
+      store: false,
+    });
+    expect(onReasoningSummaryUnsupported).toHaveBeenCalledTimes(1);
+    expect(await result.text).toBe("hi");
+  });
+
+  test("does not strip-retry a verification error when no reasoningSummary was requested", async () => {
+    // Nothing to strip means retrying reproduces the same rejection — the
+    // error must surface through the merge instead of a futile silent retry.
+    const model = modelFor(
+      errorChunks(reasoningSummaryVerificationError()),
+      renderableChunks(),
+    );
+    const onReasoningSummaryUnsupported = vi.fn(async () => {});
+
+    const { result } = await runAgentStream({
+      config: {
+        model,
+        prompt: "hello",
+        providerOptions: { openai: { store: false } },
+      },
+      recovery: { onReasoningSummaryUnsupported },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(onReasoningSummaryUnsupported).not.toHaveBeenCalled();
+  });
+
+  test("does not strip-retry an unrelated provider error even with reasoningSummary set", async () => {
+    const unrelatedError = new Error(
+      "You exceeded your current quota, please check your plan and billing details.",
+    );
+    const model = modelFor(errorChunks(unrelatedError), renderableChunks());
+
+    const { result, getCapturedStreamError } = await runAgentStream({
+      config: {
+        model,
+        prompt: "hello",
+        providerOptions: { openai: { store: false, reasoningSummary: "auto" } },
+      },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(getCapturedStreamError()).toBe(unrelatedError);
   });
 
   test("does not trim a prompt-only run; returns the errored result for the merge", async () => {

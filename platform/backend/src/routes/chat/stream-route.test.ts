@@ -46,6 +46,10 @@ const mockFetchToolUiResource = vi.hoisted(() => vi.fn());
 const mockExtractAndIngestDocuments = vi.hoisted(() => vi.fn());
 const mockStartActiveChatSpan = vi.hoisted(() => vi.fn());
 const mockCompactMessagesForChat = vi.hoisted(() => vi.fn());
+// Unset (→ awaited falsy) by default so turns request reasoning summaries;
+// the negative-cache test flips it. Mocked because the real check reads the
+// distributed cacheManager, which is not started in unit tests.
+const mockIsOpenAiReasoningSummaryMarkedUnsupported = vi.hoisted(() => vi.fn());
 
 vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ai")>();
@@ -63,6 +67,16 @@ vi.mock("@/clients/llm-client", async (importOriginal) => {
   return {
     ...actual,
     createLLMModelForAgent: mockCreateLLMModelForAgent,
+  };
+});
+
+vi.mock("@/agents/openai-reasoning-summary", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/agents/openai-reasoning-summary")>();
+  return {
+    ...actual,
+    isOpenAiReasoningSummaryMarkedUnsupported:
+      mockIsOpenAiReasoningSummaryMarkedUnsupported,
   };
 });
 
@@ -1219,6 +1233,122 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(mockStreamText).toHaveBeenCalledTimes(1);
     expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
       responseModalities: ["TEXT", "IMAGE"],
+    });
+  });
+
+  // Seeds a synced OpenAI model row so resolveConversationModel dereferences
+  // the conversation to that model id + the openai provider.
+  const makeOpenAiModelRow = (openAiModelId: string) =>
+    ModelModel.create({
+      externalId: `openai/${openAiModelId}`,
+      provider: "openai",
+      modelId: openAiModelId,
+      description: openAiModelId,
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+  test("requests OpenAI reasoning summaries for a Responses-routed model", async ({
+    makeConversation,
+  }) => {
+    const model = await makeOpenAiModelRow("gpt-5.6");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
+      store: false,
+      reasoningSummary: "auto",
+    });
+  });
+
+  test("omits reasoningSummary for a chat-completions-routed OpenAI model", async ({
+    makeConversation,
+  }) => {
+    // Chat completions never returns reasoning content, and the summary
+    // option only exists on the Responses transport — the turn must carry
+    // neither it nor store:false, only the max_completion_tokens budget.
+    const model = await makeOpenAiModelRow("gpt-5-mini");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
+      maxCompletionTokens: expect.any(Number),
+    });
+  });
+
+  test("omits reasoningSummary while the credential is negative-cached as unsupported", async ({
+    makeConversation,
+  }) => {
+    const model = await makeOpenAiModelRow("gpt-5.6");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockIsOpenAiReasoningSummaryMarkedUnsupported.mockResolvedValueOnce(true);
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
+      store: false,
     });
   });
 

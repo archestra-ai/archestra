@@ -191,6 +191,33 @@ describe("createDirectLLMModel", () => {
     expect((model as { provider: string }).provider).toBe("deepseek.chat");
   });
 
+  it("creates Archestra models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "archestra",
+      apiKey: "arch_test-key",
+      modelName: "deepseek:deepseek-reasoner",
+      baseUrl: "https://other-archestra.test/v1/model-router/agent-1",
+    });
+    // The upstream Archestra relays thinking as DeepSeek-style
+    // `reasoning_content`; the strict openai provider ("openai.chat") drops
+    // that field in both directions, while the openai-compatible provider
+    // round-trips it.
+    expect((model as { provider: string }).provider).toBe("archestra.chat");
+  });
+
+  it("throws for archestra provider without a base URL", () => {
+    // The upstream endpoint has no default; the old strict client silently
+    // fell back to api.openai.com instead.
+    expect(() =>
+      createDirectLLMModel({
+        provider: "archestra",
+        apiKey: "arch_test-key",
+        modelName: "deepseek:deepseek-reasoner",
+        baseUrl: null,
+      }),
+    ).toThrow("Archestra base URL is required.");
+  });
+
   it("creates a model for zhipuai provider", () => {
     const model = createDirectLLMModel({
       provider: "zhipuai",

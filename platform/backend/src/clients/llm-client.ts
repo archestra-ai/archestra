@@ -542,8 +542,31 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // Another Archestra instance's OpenAI-compatible LLM proxy. Base URL is always
   // supplied per key (no global default), so direct calls rely on that override.
   archestra: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      if (!baseURL) {
+        // Without a base URL the OpenAI-compatible client would have no
+        // upstream at all; failing closed beats the old silent fallback to
+        // api.openai.com with an Archestra virtual key.
+        throw new ApiError(400, "Archestra base URL is required.");
+      }
+      // The upstream Archestra streams thinking as DeepSeek-style
+      // `reasoning_content` deltas and, when it fronts DeepSeek, requires them
+      // passed back on tool-call turns. The strict @ai-sdk/openai chat
+      // converter drops reasoning parts from outgoing messages and its parser
+      // drops `reasoning_content` from responses; @ai-sdk/openai-compatible
+      // round-trips both.
+      return createOpenAICompatible({
+        name: "archestra",
+        apiKey,
+        baseURL,
+        headers,
+        fetch,
+        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+        // provider only sends it when asked. Keep it on so the final usage chunk
+        // still arrives and cost/usage metrics are unaffected.
+        includeUsage: true,
+      }).chatModel(modelName);
+    },
     defaultBaseUrl: config.llm.archestra.baseUrl,
     apiKeyRequiredMessage:
       "Archestra API key is required. Please configure an Archestra API key.",

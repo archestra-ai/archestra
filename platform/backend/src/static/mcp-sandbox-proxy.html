@@ -304,6 +304,22 @@ const RESOURCE_READY_NOTIFICATION =
 const PROXY_READY_NOTIFICATION =
   "ui/notifications/sandbox-proxy-ready";
 
+// The one signal that says the guest document is REALLY on screen: the inner
+// frame's own load event, after its content was written. Everything else the
+// host can observe (proxy-ready, bridge connect, resource-ready) happens while
+// the inner document is still empty — a host that treats those as "the app is
+// showing" paints nothing and looks broken. Guarded by `contentWritten`
+// because appending an iframe fires a load for its initial about:blank, which
+// would announce an empty frame as ready.
+let contentWritten = false;
+inner.addEventListener("load", function () {
+  if (!contentWritten) return;
+  window.parent.postMessage(
+    { type: "mcp-apps:sandbox-content-loaded" },
+    EXPECTED_HOST_ORIGIN || "*",
+  );
+});
+
 // Message relay: This Sandbox (outer iframe) acts as a bidirectional bridge,
 // forwarding messages between:
 //
@@ -352,6 +368,11 @@ window.addEventListener("message", async (event) => {
         // Inject CSP as meta tag + violation listener into the HTML (Inspector pattern).
         // One code path for all modes — CSP is always in the HTML, not HTTP headers.
         const processedHtml = injectCSP(html, buildCSP(csp), ownedApp === true);
+
+        // From here on, an inner load event means the GUEST document finished
+        // loading (document.close() and srcdoc both fire one), which is what
+        // the host waits for before it may treat the app as on screen.
+        contentWritten = true;
 
         if (IS_OPAQUE_ORIGIN) {
           // Opaque origin (production fallback): use srcdoc

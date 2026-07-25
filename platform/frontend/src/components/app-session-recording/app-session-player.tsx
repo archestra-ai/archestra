@@ -335,19 +335,25 @@ const PREROLL_MS = 1_200;
  * always the announcement; these only stop a silent frame from freezing the
  * replay forever.
  *
- * The `initialized` fuse is short: that signal comes from the app SDK RUNNING
- * inside the inner document, so the document is on screen and only the
- * announcement is missing. The `connect` fuse is long: connect is a
- * proxy-level signal that resolves while the inner document may not even be
- * written yet — on a cold sandbox subdomain the document's own chain (proxy
- * handshake, HTML delivery, the parser-blocking SDK fetch) runs many seconds
- * behind it. Arming the clock off connect after 1.5s is exactly what played
- * the replay's whole head against a blank white stage: the chat animated,
- * the app frame was still loading, and when it finally announced, the
- * catch-up made it pop in fully formed mid-timeline.
+ * BOTH fuses hang off a signal that means the guest document is actually on
+ * screen — the app SDK reporting `initialized` (it ran INSIDE that document),
+ * or the sandbox proxy reporting the guest document's load event. Nothing
+ * arms off the bridge connect any more: connect is a PROXY-level signal that
+ * resolves while the inner frame is still empty, so a fuse hung off it starts
+ * playback against a blank stage — the replay's whole head played white, and
+ * the app popped in fully formed mid-timeline when it finally loaded. A
+ * signal that can lie about pixels must never gate the clock, however long
+ * its fuse.
  */
 const INITIALIZED_READY_FALLBACK_MS = 1_500;
-const CONNECT_READY_FALLBACK_MS = 8_000;
+const CONTENT_LOADED_READY_FALLBACK_MS = 1_500;
+/**
+ * How long the frame may take before the loading state says so out loud. Under
+ * this, a fast load just flashes — worse than showing nothing.
+ */
+const LOADING_NOTICE_DELAY_MS = 250;
+/** When to admit the load is slow rather than merely in progress. */
+const LOADING_SLOW_AFTER_MS = 4_000;
 
 type ReplayActivity = { kind: "tool"; name: string } | null;
 
@@ -1211,6 +1217,33 @@ function PlayerSurface({
   // a mid-timeline version switch that remounts the frame).
   const [frameReady, setFrameReady] = useState(false);
   /**
+   * How the held clock is presented: nothing at first (a fast load must not
+   * flash a spinner), then "loading", then an explicit slow state. A silent
+   * frozen player is indistinguishable from a broken one — the whole reason
+   * the hold got reported as a hang.
+   */
+  const [loadingNotice, setLoadingNotice] = useState<
+    "none" | "loading" | "slow"
+  >("none");
+  useEffect(() => {
+    if (frameReady || filming) {
+      setLoadingNotice("none");
+      return;
+    }
+    const show = setTimeout(
+      () => setLoadingNotice("loading"),
+      LOADING_NOTICE_DELAY_MS,
+    );
+    const slow = setTimeout(
+      () => setLoadingNotice("slow"),
+      LOADING_SLOW_AFTER_MS,
+    );
+    return () => {
+      clearTimeout(show);
+      clearTimeout(slow);
+    };
+  }, [frameReady, filming]);
+  /**
    * Bumped per replay-frame announcement. The sandbox can navigate its inner
    * document more than once while settling, and each document announces for
    * itself — every announcement gets its own full catch-up delivery, so the
@@ -1696,6 +1729,28 @@ function PlayerSurface({
     setFrameReady(true);
     setFrameReadyNonce((nonce) => nonce + 1);
   }, [segments, events]);
+
+  /**
+   * Arm a stale-SDK ready fallback, replacing any pending one.
+   *
+   * Only signals that mean the guest document is really on screen may call
+   * this (see the fallback constants). Re-arming rather than first-wins keeps
+   * the fuse tied to the LATEST such signal: a settling sandbox can navigate
+   * its inner document more than once, and the fuse must measure from the
+   * document that ended up there.
+   */
+  const armReadyFallback = useCallback(
+    (delayMs: number) => {
+      if (frameReadyRef.current) return;
+      if (legacyReadyTimerRef.current) {
+        clearTimeout(legacyReadyTimerRef.current);
+      }
+      legacyReadyTimerRef.current = setTimeout(() => {
+        if (!frameReadyRef.current) armReplayFrame();
+      }, delayMs);
+    },
+    [armReplayFrame],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: frameReadyNonce re-delivers to each announcing document
   useEffect(() => {
@@ -2658,15 +2713,20 @@ function PlayerSurface({
           {/* The frame's loading state, made visible: while the clock is held
               for the app frame (cold sandbox origin, remount after a seek or
               version switch), the stage would otherwise sit silently blank and
-              read as a hung player. Never while filming — the renderer waits
-              out readiness between frames, and this pill must not be filmed
-              into an export. z-10 with the stage content: above the frame,
-              below the play/pause hover affordance. */}
-          {!frameReady && !filming && (
+              read as a hung player — which is exactly how the hold was
+              reported. Never while filming: the renderer waits out readiness
+              between frames, and this must not be filmed into an export.
+              z-10 with the stage content: above the frame, below the
+              play/pause hover affordance. */}
+          {loadingNotice !== "none" && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-              <div className="flex items-center gap-2 rounded-md bg-foreground/60 px-3 py-2 text-xs font-medium text-background shadow-sm backdrop-blur-sm">
+              <div className="flex max-w-[80%] items-center gap-2 rounded-md bg-foreground/60 px-3 py-2 text-center text-xs font-medium text-background shadow-sm backdrop-blur-sm">
                 <Loader size={14} />
-                <span>Loading replay…</span>
+                <span>
+                  {loadingNotice === "slow"
+                    ? "Still loading the recorded app…"
+                    : "Loading the recorded app…"}
+                </span>
               </div>
             </div>
           )}
@@ -2741,28 +2801,23 @@ function PlayerSurface({
                 // on screen — only the announcement is missing. Re-armed per
                 // announcing document (a settling sandbox can navigate more
                 // than once); the announcement itself clears it.
-                onInitialized={() => {
-                  if (legacyReadyTimerRef.current) {
-                    clearTimeout(legacyReadyTimerRef.current);
-                  }
-                  legacyReadyTimerRef.current = setTimeout(() => {
-                    if (!frameReadyRef.current) armReplayFrame();
-                  }, INITIALIZED_READY_FALLBACK_MS);
-                }}
-                // Stale-SDK fallback, tier 2 (last resort): connect is a
-                // proxy-level signal that resolves while the inner document
-                // may not even be written yet, so its fuse is LONG — arming
-                // the clock 1.5s after connect is what used to play the
-                // replay's head against a blank white stage on every cold
-                // sandbox origin (see the fallback constants). This tier only
-                // exists so a frame whose SDK never runs at all cannot freeze
-                // the replay forever.
-                onConnected={() => {
-                  if (legacyReadyTimerRef.current) return;
-                  legacyReadyTimerRef.current = setTimeout(() => {
-                    if (!frameReadyRef.current) armReplayFrame();
-                  }, CONNECT_READY_FALLBACK_MS);
-                }}
+                onInitialized={() =>
+                  armReadyFallback(INITIALIZED_READY_FALLBACK_MS)
+                }
+                // Stale-SDK fallback, tier 2: the proxy says the guest
+                // document finished loading. Also about pixels — it fires on
+                // the inner frame's own load event — so arming after it is
+                // honest even when the SDK is too old to announce or never
+                // runs at all (a document whose script 404s still renders its
+                // markup, and that markup IS the replay's first frame).
+                //
+                // There is deliberately NO fallback on the bridge connect: it
+                // resolves before the guest document exists, and gating the
+                // clock on it is what played the replay's head against a
+                // blank stage.
+                onContentLoaded={() =>
+                  armReadyFallback(CONTENT_LOADED_READY_FALLBACK_MS)
+                }
               />
             ) : null}
           </ReplayAppStage>

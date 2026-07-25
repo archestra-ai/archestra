@@ -248,3 +248,44 @@ describe("MinimaxRequestAdapter reasoning passback", () => {
     expect(assistant.reasoning_details).toBeUndefined();
   });
 });
+
+describe("MinimaxRequestAdapter reasoning_split", () => {
+  const baseRequest = {
+    model: "MiniMax-M2.5",
+    messages: [{ role: "user" as const, content: "Think about this" }],
+  };
+
+  // MiniMax's docs show `extra_body.reasoning_split` because their examples use
+  // the OpenAI Python SDK, which merges extra_body into the top level of the
+  // body. Sent as a literal nested object it is just an unknown key: the server
+  // ignores it and the M-series falls back to inlining `<think>` tags in the
+  // content, so no reasoning_details ever arrives.
+  test("sends reasoning_split at the top level, not nested in extra_body", () => {
+    const request = minimaxAdapterFactory
+      .createRequestAdapter(baseRequest)
+      .toProviderRequest() as Record<string, unknown>;
+
+    expect(request.reasoning_split).toBe(true);
+    expect(request.extra_body).toBeUndefined();
+  });
+
+  test("honors reasoning_split: false sent the Python-SDK way", () => {
+    const request = minimaxAdapterFactory
+      .createRequestAdapter({
+        ...baseRequest,
+        extra_body: { reasoning_split: false },
+      })
+      .toProviderRequest() as Record<string, unknown>;
+
+    expect(request.reasoning_split).toBe(false);
+    expect(request.extra_body).toBeUndefined();
+  });
+
+  test("honors an explicit top-level reasoning_split", () => {
+    const request = minimaxAdapterFactory
+      .createRequestAdapter({ ...baseRequest, reasoning_split: false })
+      .toProviderRequest() as Record<string, unknown>;
+
+    expect(request.reasoning_split).toBe(false);
+  });
+});

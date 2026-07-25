@@ -213,12 +213,6 @@ class MinimaxRequestAdapter
 
   constructor(request: MinimaxRequest) {
     this.request = request;
-    // Enable reasoning_split by default for interleaved thinking support
-    if (!this.request.extra_body) {
-      this.request.extra_body = { reasoning_split: true };
-    } else if (this.request.extra_body.reasoning_split === undefined) {
-      this.request.extra_body.reasoning_split = true;
-    }
   }
 
   /**
@@ -357,8 +351,19 @@ class MinimaxRequestAdapter
       this.request.messages,
     );
 
+    // `extra_body` only exists in MiniMax's Python examples, where the OpenAI
+    // SDK merges its keys into the top level of the request body. Forwarding it
+    // verbatim over HTTP means MiniMax sees one unknown key and ignores the flag
+    // inside it, so unwrap it here. reasoning_split defaults on: without it the
+    // M-series inlines thinking in `content` as `<think>` tags instead of
+    // returning it in `reasoning_details`.
+    const { extra_body, ...request } = this.request;
+
     return {
-      ...this.request,
+      ...request,
+      ...extra_body,
+      reasoning_split:
+        this.request.reasoning_split ?? extra_body?.reasoning_split ?? true,
       model: this.getModel(),
       messages: convertReasoningContentToDetails(processedMessages),
     };

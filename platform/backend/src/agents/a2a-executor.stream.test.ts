@@ -24,10 +24,14 @@ const {
   mockGetChatMcpTools,
   mockCreateLLMModelForAgent,
   mockResolveConversationLlmSelectionForAgent,
+  mockIsOpenAiReasoningSummaryMarkedUnsupported,
+  mockMarkOpenAiReasoningSummaryUnsupported,
 } = vi.hoisted(() => ({
   mockGetChatMcpTools: vi.fn(),
   mockCreateLLMModelForAgent: vi.fn(),
   mockResolveConversationLlmSelectionForAgent: vi.fn(),
+  mockIsOpenAiReasoningSummaryMarkedUnsupported: vi.fn(),
+  mockMarkOpenAiReasoningSummaryUnsupported: vi.fn(),
 }));
 
 vi.mock("@/clients/chat-mcp-client", () => ({
@@ -48,6 +52,23 @@ vi.mock("@/utils/llm-resolution", async () => {
     ...actual,
     resolveConversationLlmSelectionForAgent: (...args: unknown[]) =>
       mockResolveConversationLlmSelectionForAgent(...args),
+  };
+});
+
+// Cache verdict boundary only — the detector and the strip-retry stay real so
+// these tests exercise the actual recovery. Unset (→ awaited falsy) the check
+// means summaries are requested; the negative-cache test flips it. The mark is
+// mocked so the wiring test can observe the verdict write.
+vi.mock("@/agents/openai-reasoning-summary", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/agents/openai-reasoning-summary")
+  >("@/agents/openai-reasoning-summary");
+  return {
+    ...actual,
+    isOpenAiReasoningSummaryMarkedUnsupported: (...args: unknown[]) =>
+      mockIsOpenAiReasoningSummaryMarkedUnsupported(...args),
+    markOpenAiReasoningSummaryUnsupported: (...args: unknown[]) =>
+      mockMarkOpenAiReasoningSummaryUnsupported(...args),
   };
 });
 
@@ -156,6 +177,38 @@ function primeAgent(model: MockLanguageModelV3) {
     provider: "gemini",
     apiKeySource: "org",
   });
+}
+
+// OpenAI variant of primeAgent: a Responses-routed model (gpt-5.6) resolved to
+// a stored credential, so the reasoning-summary gate is in play.
+function primeOpenAiAgent(model: MockLanguageModelV3) {
+  mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+    chatApiKeyId: "org-key",
+    selectedModel: "gpt-5.6",
+    selectedProvider: "openai",
+  });
+  mockGetChatMcpTools.mockResolvedValue({});
+  mockCreateLLMModelForAgent.mockResolvedValue({
+    model,
+    provider: "openai",
+    apiKeySource: "org",
+    chatApiKeyId: "credential-1",
+  });
+}
+
+// The unverified-org rejection surfaced as a stream error part, the shape the
+// probe sees when OpenAI 400s the whole request over `reasoning.summary`.
+function reasoningSummaryVerificationErrorChunks(): ModelStreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    {
+      type: "error",
+      error: new Error(
+        "Your organization must be verified to generate reasoning summaries.",
+      ),
+    },
+    { type: "finish", finishReason: { unified: "error", raw: "error" }, usage },
+  ];
 }
 
 describe("executeA2AMessage real stream boundary", () => {
@@ -422,6 +475,96 @@ describe("executeA2AMessage real stream boundary", () => {
       model.doStreamCalls[0].prompt.length,
     );
     expect(result.text).toBe("Recovered after trim");
+  });
+
+  test("requests OpenAI reasoning summaries on a Responses-routed a2a turn", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const model = modelEmitting(textChunks("Summarized answer"));
+    primeOpenAiAgent(model);
+
+    const result = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: "conv-1",
+    });
+
+    expect(result.text).toBe("Summarized answer");
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(model.doStreamCalls[0]?.providerOptions?.openai).toEqual({
+      store: false,
+      reasoningSummary: "auto",
+    });
+  });
+
+  test("omits reasoningSummary on an a2a turn while the credential is negative-cached", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const model = modelEmitting(textChunks("Plain answer"));
+    primeOpenAiAgent(model);
+    mockIsOpenAiReasoningSummaryMarkedUnsupported.mockResolvedValueOnce(true);
+
+    const result = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: "conv-1",
+    });
+
+    expect(result.text).toBe("Plain answer");
+    expect(model.doStreamCalls).toHaveLength(1);
+    expect(model.doStreamCalls[0]?.providerOptions?.openai).toEqual({
+      store: false,
+    });
+  });
+
+  test("negative-caches the resolved credential and retries without summaries on the verification 400", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const model = modelEmitting(
+      reasoningSummaryVerificationErrorChunks(),
+      textChunks("Recovered without summaries"),
+    );
+    primeOpenAiAgent(model);
+
+    const result = await executeA2AMessage({
+      agentId: agent.id,
+      message: "Handle this",
+      organizationId: org.id,
+      userId: user.id,
+      conversationId: "conv-1",
+    });
+
+    expect(result.text).toBe("Recovered without summaries");
+    expect(model.doStreamCalls).toHaveLength(2);
+    // the retry dropped only the summary option; store:false must survive
+    expect(model.doStreamCalls[1]?.providerOptions?.openai).toEqual({
+      store: false,
+    });
+    // the verdict is keyed by the credential the turn ran on, not the
+    // agent's configured key
+    expect(mockMarkOpenAiReasoningSummaryUnsupported).toHaveBeenCalledTimes(1);
+    expect(mockMarkOpenAiReasoningSummaryUnsupported).toHaveBeenCalledWith(
+      `openai-reasoning-summary-unsupported-${org.id}:credential-1`,
+    );
   });
 
   test("stops via the repeat-call ceiling and surfaces a termination notice as text", async ({

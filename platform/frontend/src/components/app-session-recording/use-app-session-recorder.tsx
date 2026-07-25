@@ -812,10 +812,24 @@ async function draftEnhancement(params: {
       body: { conversationId: params.conversationId, appName: params.appName },
     });
     const prompt = data?.prompt ?? null;
-    if (!prompt) return undefined;
+    const description = data?.description ?? null;
+    if (!prompt) {
+      // The build prompt didn't generate. Keep a partial ONLY when the model
+      // still produced a real description — so a good description isn't thrown
+      // away with the missing prompt (the recorder's readiness notice then
+      // flags just the build prompt, and submission falls back to the opening
+      // chat message for it). Nothing usable at all → no enhancement, and the
+      // player shows its fallbacks plus the readiness notice.
+      if (!description) return undefined;
+      return {
+        description,
+        prompt: "",
+        ...(data?.response ? { response: data.response } : {}),
+        ...(data?.category ? { category: data.category } : {}),
+      };
+    }
     return {
-      description:
-        data?.description ?? fallbackRecordingDescription(params.appName),
+      description: description ?? fallbackRecordingDescription(params.appName),
       prompt,
       // The one closing agent reply the enhanced replay shows in place of
       // the captured assistant prose; absent, the player uses a stock line.

@@ -40,10 +40,10 @@ describe("sanitizeHumanAsk", () => {
   });
 
   test("trims an over-long ask at a sentence boundary, never mid-clause", () => {
-    const rambling = `${"word ".repeat(60)}. And then it should also do something else entirely that nobody asked for, ${"more ".repeat(30)}.`;
+    const rambling = `${"word ".repeat(200)}. And then it should also do something else entirely that nobody asked for, ${"more ".repeat(120)}.`;
 
     const result = sanitizeHumanAsk(rambling);
-    expect(result.split(" ").length).toBeLessThanOrEqual(70);
+    expect(result.split(" ").length).toBeLessThanOrEqual(256);
     expect(result.endsWith(".")).toBe(true);
   });
 

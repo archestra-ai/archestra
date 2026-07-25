@@ -36,6 +36,11 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
+import {
+  isOpenAiReasoningSummaryMarkedUnsupported,
+  markOpenAiReasoningSummaryUnsupported,
+  openAiReasoningSummaryCacheKey,
+} from "@/agents/openai-reasoning-summary";
 import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import { CacheKey, cacheManager } from "@/cache-manager";
 import {
@@ -892,7 +897,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // (the inline connect card) rather than a generic server error.
                 // Pass agent's llmApiKeyId so it's used without a user access
                 // check; pass conversationId as sessionId to group the session.
-                const { model, anthropicNativeEndpoint } =
+                const { model, anthropicNativeEndpoint, chatApiKeyId } =
                   await createLLMModelForAgent({
                     organizationId,
                     userId: user.id,
@@ -1305,13 +1310,35 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // (Codex) backend, which forces store:false and therefore never
                 // has the referenced items ("Items are not persisted when
                 // `store` is set to false").
-                if (
+                //
+                // They also reason by default and bill reasoning tokens either
+                // way, but only stream human-readable summaries when asked —
+                // request them so chat surfaces thinking it already pays for.
+                // Unverified OpenAI orgs reject the whole request over the
+                // summary option, so it is skipped while the credential is
+                // negative-cached as unsupported (the runAgentStream recovery
+                // marks it and retries the rejected turn without summaries).
+                const openAiReasoningSummaryKey =
                   provider === "openai" &&
                   requiresOpenAiResponsesApi(selectedModel)
-                ) {
+                    ? openAiReasoningSummaryCacheKey({
+                        organizationId,
+                        llmApiKeyId: chatApiKeyId ?? null,
+                      })
+                    : null;
+                if (openAiReasoningSummaryKey !== null) {
+                  const summariesUnsupported =
+                    await isOpenAiReasoningSummaryMarkedUnsupported(
+                      openAiReasoningSummaryKey,
+                    );
                   streamTextConfig.providerOptions = {
                     ...streamTextConfig.providerOptions,
-                    openai: { store: false },
+                    openai: {
+                      store: false,
+                      ...(summariesUnsupported
+                        ? {}
+                        : { reasoningSummary: "auto" }),
+                    },
                   };
                 }
 
@@ -1389,6 +1416,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     config: streamTextConfig,
                     recovery: {
                       logContext: { conversationId },
+                      ...(openAiReasoningSummaryKey !== null
+                        ? {
+                            onReasoningSummaryUnsupported: () =>
+                              markOpenAiReasoningSummaryUnsupported(
+                                openAiReasoningSummaryKey,
+                              ),
+                          }
+                        : {}),
                       onEmptyResponseExhausted: async () => {
                         // Persist before the throw — nothing has merged yet, so the
                         // stream onError/onFinish won't fire to do it.

@@ -24,18 +24,18 @@ Archestra stores sensitive data like API keys, OAuth tokens, and MCP server cred
 
 Secrets are stored in the database by default. To explicitly configure database storage, set `ARCHESTRA_SECRETS_MANAGER` to `DB`.
 
-When secrets are stored in the database, they are automatically encrypted at rest using AES-256-GCM. The encryption key is derived from your `ARCHESTRA_AUTH_SECRET` environment variable.
+When secrets are stored in the database, they are automatically encrypted at rest using AES-256-GCM. The encryption key is derived from your `ARCHESTRA_SECRETS_ENCRYPTION_SECRET` environment variable.
 
-- Encryption and decryption are fully transparent — no configuration is needed beyond setting `ARCHESTRA_AUTH_SECRET`.
+- Encryption and decryption are fully transparent — no configuration is needed beyond setting `ARCHESTRA_SECRETS_ENCRYPTION_SECRET`.
 - Existing plaintext secrets are automatically migrated to encrypted format on startup.
 
-> **Warning:** Do not change `ARCHESTRA_AUTH_SECRET` after deployment. Rotating this secret will invalidate all user sessions (forcing re-login), make existing encrypted secrets unreadable, break JWT signing (JWKS private keys are encrypted with this secret), and break two-factor authentication for enrolled users.
+> **Warning:** Rotating `ARCHESTRA_SECRETS_ENCRYPTION_SECRET` makes existing encrypted secrets unreadable unless they are re-encrypted under the new key. Set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and restart — the app re-encrypts stored secrets under the new key on startup (idempotent).
 
-On every startup, Archestra verifies that the current `ARCHESTRA_AUTH_SECRET` still matches the key used to encrypt stored secrets. On a mismatch, startup aborts with an error that names the cause. This catches an accidental rotation — or a database restored from another environment — before it surfaces as scattered decryption failures.
+On every startup, Archestra verifies that the current `ARCHESTRA_SECRETS_ENCRYPTION_SECRET` still matches the key used to encrypt stored secrets. On a mismatch, startup aborts with an error that names the cause. This catches an accidental rotation — or a database restored from another environment — before it surfaces as scattered decryption failures.
 
-To accept a deliberate rotation, set `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY=true` for one boot, then unset it. Secrets encrypted with the previous key stay unreadable — re-enter them after the change.
+To accept a rotation without re-encrypting, set `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY=true` for one boot, then unset it; secrets encrypted with the previous key stay unreadable and must be re-entered.
 
-See [`ARCHESTRA_AUTH_SECRET`](./platform-deployment#authentication--security) for more info.
+See [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](./platform-deployment#authentication--security) for more info.
 
 ## HashiCorp Vault
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.18](https://github.com/archestra-ai/archestra/compare/platform-v1.3.17...platform-v1.3.18) (2026-07-24)
+
+
+### Features
+
+* **chat:** show Anthropic thinking text for models that think by default ([#6826](https://github.com/archestra-ai/archestra/issues/6826)) ([b797500](https://github.com/archestra-ai/archestra/commit/b797500740360b3eb098a9b096f6c5ec743fe7a4))
+* **chat:** surface Gemini reasoning by requesting thought summaries ([#6830](https://github.com/archestra-ai/archestra/issues/6830)) ([4eeb84a](https://github.com/archestra-ai/archestra/commit/4eeb84aa607b51bceb759d4a51ef22d54ea5584d))
+* **secrets:** support independent session and secret-encryption keys ([#6839](https://github.com/archestra-ai/archestra/issues/6839)) ([bb2afe6](https://github.com/archestra-ai/archestra/commit/bb2afe675ad1babaa99664fdfc1c341ae9a33197))
+
+
+### Bug Fixes
+
+* **chat:** only auto-collapse thinking blocks that streamed live ([#6828](https://github.com/archestra-ai/archestra/issues/6828)) ([1913309](https://github.com/archestra-ai/archestra/commit/191330926238bfceb81bb908f110f305ddddac64))
+* **llm-providers:** render native Ollama thinking above the answer ([#6827](https://github.com/archestra-ai/archestra/issues/6827)) ([eb22162](https://github.com/archestra-ai/archestra/commit/eb2216272588f136bdcf1d2b13ebd2cffa313364))
+* **llm:** round-trip reasoning_content for DeepSeek-style thinking mode ([#6790](https://github.com/archestra-ai/archestra/issues/6790)) ([b512c8a](https://github.com/archestra-ai/archestra/commit/b512c8a7a9de4060a9d29e803ba35116fb6a4fce))
+* **mcp:** make trimmed tool-name slugs injective per server name ([#6810](https://github.com/archestra-ai/archestra/issues/6810)) ([2f3f6e2](https://github.com/archestra-ai/archestra/commit/2f3f6e278fd9aae73b064180dbb3b0bc4b3895a2))
+
 ## [1.3.17](https://github.com/archestra-ai/archestra/compare/platform-v1.3.16...platform-v1.3.17) (2026-07-24)
 
 

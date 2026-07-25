@@ -2627,6 +2627,7 @@ export type PerplexityChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     stream?: boolean | null;
+    stream_mode?: 'full' | 'concise';
 };
 
 export type PerplexityChatCompletionResponseInput = {
@@ -8421,6 +8422,7 @@ export type PerplexityChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     stream?: boolean | null;
+    stream_mode?: 'full' | 'concise';
 };
 
 export type PerplexityChatCompletionResponse = {
@@ -17300,6 +17302,90 @@ export type DownloadAppRecordingVideoData = {
 };
 
 export type DownloadAppRecordingVideoResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ReviewAppRecordingData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Absolute https://raw.githubusercontent.com/... URL of the submission's recording.json.
+         */
+        src: string;
+    };
+    url: '/api/app-recording/review';
+};
+
+export type ReviewAppRecordingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReviewAppRecordingError = ReviewAppRecordingErrors[keyof ReviewAppRecordingErrors];
+
+export type ReviewAppRecordingResponses = {
     /**
      * Default Response
      */
@@ -38083,10 +38169,10 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
-            request: XaiChatCompletionRequest | {
+            request: PerplexityChatCompletionRequest | {
                 [key: string]: unknown;
             };
-            processedRequest?: XaiChatCompletionRequest | {
+            processedRequest?: PerplexityChatCompletionRequest | {
                 [key: string]: unknown;
             } | null;
             response: PerplexityChatCompletionResponse | {
@@ -44047,10 +44133,10 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
-        request: XaiChatCompletionRequest | {
+        request: PerplexityChatCompletionRequest | {
             [key: string]: unknown;
         };
-        processedRequest?: XaiChatCompletionRequest | {
+        processedRequest?: PerplexityChatCompletionRequest | {
             [key: string]: unknown;
         } | null;
         response: PerplexityChatCompletionResponse | {
@@ -69625,7 +69711,7 @@ export type GetOrganizationMemberResponses = {
 export type GetOrganizationMemberResponse = GetOrganizationMemberResponses[keyof GetOrganizationMemberResponses];
 
 export type PerplexityChatCompletionsWithDefaultAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: PerplexityChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -69716,7 +69802,7 @@ export type PerplexityChatCompletionsWithDefaultAgentResponses = {
 export type PerplexityChatCompletionsWithDefaultAgentResponse = PerplexityChatCompletionsWithDefaultAgentResponses[keyof PerplexityChatCompletionsWithDefaultAgentResponses];
 
 export type PerplexityChatCompletionsWithAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: PerplexityChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client

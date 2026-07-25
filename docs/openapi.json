@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.17"
+    "version": "1.3.18"
   },
   "components": {
     "schemas": {
@@ -8122,6 +8122,13 @@
           "stream": {
             "nullable": true,
             "type": "boolean"
+          },
+          "stream_mode": {
+            "type": "string",
+            "enum": [
+              "full",
+              "concise"
+            ]
           }
         },
         "required": [
@@ -27316,6 +27323,13 @@
           "stream": {
             "nullable": true,
             "type": "boolean"
+          },
+          "stream_mode": {
+            "type": "string",
+            "enum": [
+              "full",
+              "concise"
+            ]
           }
         },
         "required": [
@@ -60049,6 +60063,270 @@
           "permissions": [
             "chat:update"
           ]
+        }
+      }
+    },
+    "/api/app-recording/review": {
+      "get": {
+        "operationId": "reviewAppRecording",
+        "tags": [
+          "App Recordings"
+        ],
+        "description": "Fetch a hackathon submission's recording bundle from GitHub (raw.githubusercontent.com only), validate it against the recording contract, and return it for the on-platform, read-only review player. The fetch runs server-side so the frontend's CSP never has to reach GitHub; the bundle is public data and nothing is stored.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "src",
+            "required": true,
+            "description": "Absolute https://raw.githubusercontent.com/... URL of the submission's recording.json."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -139972,7 +140250,7 @@
                               "request": {
                                 "anyOf": [
                                   {
-                                    "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                                    "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                                   },
                                   {
                                     "type": "object",
@@ -139984,7 +140262,7 @@
                                 "nullable": true,
                                 "anyOf": [
                                   {
-                                    "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                                    "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                                   },
                                   {
                                     "type": "object",
@@ -169309,7 +169587,7 @@
                         "request": {
                           "anyOf": [
                             {
-                              "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                              "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                             },
                             {
                               "type": "object",
@@ -169321,7 +169599,7 @@
                           "nullable": true,
                           "anyOf": [
                             {
-                              "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                              "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                             },
                             {
                               "type": "object",
@@ -270575,7 +270853,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
               }
             }
           }
@@ -270854,7 +271132,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
               }
             }
           }

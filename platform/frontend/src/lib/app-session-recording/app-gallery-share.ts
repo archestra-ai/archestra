@@ -4,7 +4,37 @@ import {
   healBundleMcpServers,
   slugify,
 } from "@archestra/shared";
-import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
+import {
+  fallbackRecordingBuildPrompt,
+  fallbackRecordingDescription,
+} from "@/lib/app-session-recording/app-recording.query";
+import type {
+  AppRecordingBundle,
+  AppRecordingEnhancement,
+} from "@/lib/app-session-recording/app-recording-store";
+
+/**
+ * The enhancement a submission ships, guaranteed non-empty on BOTH fields so a
+ * recording is NEVER blocked from the gallery on a missing AI draft: the
+ * builder's own description or an app-name fallback, and the builder's own build
+ * prompt or a fallback to the opening chat message (the ask that started the
+ * app). Whatever else the enhancement already carries — closing response,
+ * category — is preserved. The recorder UI nudges the builder to fill both in
+ * for a better gallery card, but an ignored nudge degrades to these fallbacks
+ * here rather than dead-ending the submission.
+ */
+export function ensureSubmittableEnhancement(
+  bundle: AppRecordingBundle,
+): AppRecordingEnhancement {
+  const existing = bundle.enhancement;
+  return {
+    ...existing,
+    description:
+      existing?.description?.trim() ||
+      fallbackRecordingDescription(bundle.app.name),
+    prompt: existing?.prompt?.trim() || fallbackRecordingBuildPrompt(bundle),
+  };
+}
 
 /**
  * Shares a recorded app session to the public App Gallery as a pull request

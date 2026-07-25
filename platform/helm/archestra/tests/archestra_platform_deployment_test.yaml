@@ -447,6 +447,18 @@ tests:
                 secretKeyRef:
                   name: RELEASE-NAME-archestra-platform-auth
                   key: auth-secret
+            - name: ARCHESTRA_AUTH_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: RELEASE-NAME-archestra-platform-auth
+                  key: session-secret
+                  optional: true
+            - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: RELEASE-NAME-archestra-platform-auth
+                  key: secrets-encryption-secret
+                  optional: true
             - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
               value: NAMESPACE
             - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER

@@ -173,6 +173,53 @@ describe("ToolModel", () => {
       expect(b).toHaveLength(64);
       expect(a).not.toBe(b);
     });
+
+    test("does not collide two long server names sharing a trimmed prefix", () => {
+      // Two catalogs whose names differ only past the trim point must never
+      // mint the same tool name — tool calls route purely by name string.
+      const east = ToolModel.slugifyName(
+        "acme-mcp-server-production-cluster-primary-region-deploy-us-east",
+        "get_data",
+      );
+      const west = ToolModel.slugifyName(
+        "acme-mcp-server-production-cluster-primary-region-deploy-us-west",
+        "get_data",
+      );
+      expect(east).not.toBe(west);
+      expect(east).toHaveLength(64);
+      expect(west).toHaveLength(64);
+      expect(east.endsWith(`${MCP_SERVER_TOOL_NAME_SEPARATOR}get_data`)).toBe(
+        true,
+      );
+      expect(west.endsWith(`${MCP_SERVER_TOOL_NAME_SEPARATOR}get_data`)).toBe(
+        true,
+      );
+    });
+
+    test("trimmed-prefix format is frozen", () => {
+      // The hash is part of stored tool names: changing the algorithm or
+      // layout would orphan every stored trimmed name. Never update this
+      // literal to make the test pass — fix the code instead.
+      expect(
+        ToolModel.slugifyName(
+          "acme-mcp-server-production-cluster-primary-region-deploy-us-east",
+          "get_data",
+        ),
+      ).toBe(
+        "acme-mcp-server-production-cluster-primary-re-efb229fa__get_data",
+      );
+    });
+
+    test("keeps long server names distinct when the suffix leaves no prefix room", () => {
+      // suffix = "__" + 53 chars = 55: no room for a prefix plus hash, so the
+      // whole-slug hash fallback must still keep distinct servers apart.
+      const tool = "t".repeat(53);
+      const a = ToolModel.slugifyName(`${"s".repeat(80)}a`, tool);
+      const b = ToolModel.slugifyName(`${"s".repeat(80)}b`, tool);
+      expect(a).toHaveLength(64);
+      expect(b).toHaveLength(64);
+      expect(a).not.toBe(b);
+    });
   });
 
   describe("unslugifyName", () => {
@@ -1462,6 +1509,81 @@ describe("ToolModel", () => {
       // The original tool should still belong to catalog1
       const originalTool = await ToolModel.findById(existingTool.id);
       expect(originalTool?.catalogId).toBe(catalog1.id);
+    });
+
+    test("matches a legacy-format trimmed name instead of inserting a duplicate", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalogName =
+        "acme-mcp-server-production-cluster-primary-region-deploy-us-east";
+      const legacyName =
+        "acme-mcp-server-production-cluster-primary-region-depl__get_data";
+      const catalog = await makeInternalMcpCatalog({ name: catalogName });
+
+      const existing = await makeTool({
+        name: legacyName,
+        description: "Tool",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      const currentName = ToolModel.slugifyName(catalogName, "get_data");
+      const result = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: currentName,
+          rawToolName: "get_data",
+          description: "Tool",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+        },
+      ]);
+
+      // The grandfathered row is matched and returned under its stored legacy
+      // name; no duplicate row appears under the current hashed format.
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(existing.id);
+      expect(result[0].name).toBe(legacyName);
+      expect(await ToolModel.countByName(currentName)).toBe(0);
+      expect(await ToolModel.countByName(legacyName)).toBe(1);
+    });
+
+    test("keeps the legacy name when refreshing a legacy-matched row", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const catalogName =
+        "acme-mcp-server-production-cluster-primary-region-deploy-us-east";
+      const legacyName =
+        "acme-mcp-server-production-cluster-primary-region-depl__get_data";
+      const catalog = await makeInternalMcpCatalog({ name: catalogName });
+
+      const existing = await makeTool({
+        name: legacyName,
+        description: "Old description",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      const currentName = ToolModel.slugifyName(catalogName, "get_data");
+      const result = await ToolModel.bulkCreateToolsIfNotExists([
+        {
+          name: currentName,
+          rawToolName: "get_data",
+          description: "New description",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+        },
+      ]);
+
+      // The schema refresh must update fields in place and never rename the
+      // grandfathered row to the current hashed format.
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe(existing.id);
+      expect(result[0].name).toBe(legacyName);
+      expect(result[0].description).toBe("New description");
+      expect(await ToolModel.countByName(currentName)).toBe(0);
+      expect(await ToolModel.countByName(legacyName)).toBe(1);
     });
   });
 
@@ -2765,6 +2887,139 @@ describe("ToolModel", () => {
 
       expect(result.unchanged).toHaveLength(1);
       expect(result.updated).toHaveLength(0);
+    });
+
+    test("keeps a legacy-format trimmed name in place instead of renaming it", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalogName =
+        "acme-mcp-server-production-cluster-primary-region-deploy-us-east";
+      const legacyName =
+        "acme-mcp-server-production-cluster-primary-region-depl__get_data";
+      const catalog = await makeInternalMcpCatalog({ name: catalogName });
+      await makeMcpServer({ catalogId: catalog.id });
+
+      const existing = await makeTool({
+        name: legacyName,
+        description: "Tool",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      const result = await ToolModel.syncToolsForCatalog([
+        {
+          name: ToolModel.slugifyName(catalogName, "get_data"),
+          description: "Tool",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          rawToolName: "get_data",
+        },
+      ]);
+
+      // The stored pre-hash name must survive a routine sync untouched: no
+      // rename, no duplicate row, no delete.
+      expect(result.created).toHaveLength(0);
+      expect(result.deleted).toHaveLength(0);
+      expect(result.updated).toHaveLength(0);
+      expect(result.unchanged).toHaveLength(1);
+      expect(result.unchanged[0].id).toBe(existing.id);
+      expect(result.unchanged[0].name).toBe(legacyName);
+    });
+
+    test("keeps the legacy name when only the description changes", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+    }) => {
+      const catalogName =
+        "acme-mcp-server-production-cluster-primary-region-deploy-us-east";
+      const legacyName =
+        "acme-mcp-server-production-cluster-primary-region-depl__get_data";
+      const catalog = await makeInternalMcpCatalog({ name: catalogName });
+      await makeMcpServer({ catalogId: catalog.id });
+
+      const existing = await makeTool({
+        name: legacyName,
+        description: "Old description",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      const result = await ToolModel.syncToolsForCatalog([
+        {
+          name: ToolModel.slugifyName(catalogName, "get_data"),
+          description: "New description",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          rawToolName: "get_data",
+        },
+      ]);
+
+      expect(result.updated).toHaveLength(1);
+      expect(result.updated[0].id).toBe(existing.id);
+      expect(result.updated[0].name).toBe(legacyName);
+      expect(result.updated[0].description).toBe("New description");
+    });
+
+    test("mints the current hashed format for newly discovered long-named tools", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const catalogName =
+        "acme-mcp-server-production-cluster-primary-region-deploy-us-east";
+      const catalog = await makeInternalMcpCatalog({ name: catalogName });
+      await makeMcpServer({ catalogId: catalog.id });
+
+      const result = await ToolModel.syncToolsForCatalog([
+        {
+          name: ToolModel.slugifyName(catalogName, "get_data"),
+          description: "Tool",
+          parameters: { type: "object" },
+          catalogId: catalog.id,
+          rawToolName: "get_data",
+        },
+      ]);
+
+      expect(result.created).toHaveLength(1);
+      expect(result.created[0].name).toBe(
+        "acme-mcp-server-production-cluster-primary-re-efb229fa__get_data",
+      );
+    });
+  });
+
+  describe("renameToolPrefixesForCatalog", () => {
+    test("re-mints legacy trimmed names to the current format on an explicit rename", async ({
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      // A catalog rename is the one consented path where grandfathered
+      // pre-hash names convert to the injective format.
+      const oldName =
+        "acme-mcp-server-production-cluster-primary-region-deploy-us-east";
+      const newName =
+        "acme-mcp-server-production-cluster-primary-region-deploy-us-west";
+      const legacyName =
+        "acme-mcp-server-production-cluster-primary-region-depl__get_data";
+      const catalog = await makeInternalMcpCatalog({ name: oldName });
+
+      const existing = await makeTool({
+        name: legacyName,
+        description: "Tool",
+        parameters: { type: "object" },
+        catalogId: catalog.id,
+      });
+
+      const pairs = await ToolModel.renameToolPrefixesForCatalog({
+        catalogId: catalog.id,
+        newName,
+      });
+
+      const expectedName = ToolModel.slugifyName(newName, "get_data");
+      expect(pairs).toEqual([{ oldName: legacyName, newName: expectedName }]);
+      const renamed = await ToolModel.findByName(expectedName);
+      expect(renamed?.id).toBe(existing.id);
     });
   });
 

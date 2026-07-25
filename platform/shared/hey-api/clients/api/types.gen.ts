@@ -5068,10 +5068,56 @@ export type ArchestraChatCompletionResponseInput = {
 
 export type MinimaxChatCompletionRequestInput = {
     model: string;
-    /**
-     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
-     */
     messages: Array<{
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | null;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | null;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+         */
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | null;
+        name?: string;
+        reasoning_content?: string | null;
+        refusal?: string | null;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+        reasoning_details?: Array<{
+            text: string;
+        }>;
+    } | {
         content: string | Array<{
             type: 'text';
             text: string;
@@ -5360,6 +5406,7 @@ export type MinimaxChatCompletionRequestInput = {
         type: 'text' | 'json_object';
     };
     user?: string;
+    reasoning_split?: boolean;
     extra_body?: {
         reasoning_split?: boolean;
     };
@@ -5380,6 +5427,7 @@ export type MinimaxChatCompletionResponseInput = {
             reasoning_details?: Array<{
                 text: string;
             }>;
+            reasoning_content?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
              */
@@ -10863,10 +10911,56 @@ export type ArchestraChatCompletionResponse = {
 
 export type MinimaxChatCompletionRequest = {
     model: string;
-    /**
-     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
-     */
     messages: Array<{
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | null;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | null;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+         */
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | null;
+        name?: string;
+        reasoning_content?: string | null;
+        refusal?: string | null;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+        reasoning_details?: Array<{
+            text: string;
+        }>;
+    } | {
         content: string | Array<{
             type: 'text';
             text: string;
@@ -11155,6 +11249,7 @@ export type MinimaxChatCompletionRequest = {
         type: 'text' | 'json_object';
     };
     user?: string;
+    reasoning_split?: boolean;
     extra_body?: {
         reasoning_split?: boolean;
     };
@@ -11175,6 +11270,7 @@ export type MinimaxChatCompletionResponse = {
             reasoning_details?: Array<{
                 text: string;
             }>;
+            reasoning_content?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
              */

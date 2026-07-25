@@ -934,6 +934,7 @@ export function SandboxIframe({
   onRecordingEvents,
   onConnected,
   onInitialized,
+  onContentLoaded,
   ownedApp,
 }: {
   html: string;
@@ -974,6 +975,11 @@ export function SandboxIframe({
   /** Fired when the app inside the inner document reports `initialized` —
    * the injected SDK has actually run in the document that is on screen. */
   onInitialized?: () => void;
+  /** Fired when the sandbox proxy reports the GUEST document finished loading
+   * — the app's markup and its subresources are on screen. The only signal
+   * here that says anything about pixels: proxy-ready and bridge connect both
+   * resolve while the inner frame is still empty. */
+  onContentLoaded?: () => void;
   /** Archestra-owned app: its envelope carries the platform CSP, so the proxy
    * must not inject a second one. A trusted host signal, not derived from HTML. */
   ownedApp?: boolean;
@@ -998,6 +1004,7 @@ export function SandboxIframe({
   const onRecordingEventsRef = useRef(onRecordingEvents);
   const onConnectedRef = useRef(onConnected);
   const onInitializedRef = useRef(onInitialized);
+  const onContentLoadedRef = useRef(onContentLoaded);
   // Read at iframe-creation time only; a ref keeps it out of the effect deps so
   // the iframe never remounts when the height changes.
   const initialHeightRef = useRef(initialHeight);
@@ -1024,6 +1031,7 @@ export function SandboxIframe({
     onRecordingEventsRef.current = onRecordingEvents;
     onConnectedRef.current = onConnected;
     onInitializedRef.current = onInitialized;
+    onContentLoadedRef.current = onContentLoaded;
     initialHeightRef.current = initialHeight;
     maxHeightRef.current = maxHeight;
   });
@@ -1150,6 +1158,8 @@ export function SandboxIframe({
         // live frames of the same app (one per rendered app message, plus the
         // right panel), and the recorder must keep exactly one of them.
         onRecordingEventsRef.current?.(event.data, iframe);
+      } else if (type === "mcp-apps:sandbox-content-loaded") {
+        onContentLoadedRef.current?.();
       }
     };
 

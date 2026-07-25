@@ -9,11 +9,13 @@ import {
   classifyCut,
   classifyTimelineGesture,
   consolidatedTranscript,
+  deferThirdPartyStylesheets,
   dominantViewport,
   keptTimelineRanges,
   neutralizeAppScripts,
   planPaintFlush,
   presentedTranscript,
+  relocalizeSandboxAssets,
   replayRegionLayout,
   replayStageFit,
   revealSchedule,
@@ -986,6 +988,94 @@ describe("neutralizeAppScripts", () => {
     expect(html).toContain("scrollbar-width: none");
     expect(html).toContain("::-webkit-scrollbar");
     expect(html).toContain("<body>app</body>");
+  });
+});
+
+describe("deferThirdPartyStylesheets", () => {
+  it("parks a remote stylesheet on media=print and remembers what to restore", () => {
+    // A render-blocking third-party sheet has no browser timeout: until it
+    // resolves the replayed document paints NOTHING, which is how a recording
+    // whose app links Google Fonts replayed as a white stage for many seconds.
+    const html = deferThirdPartyStylesheets(
+      `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&amp;display=swap">`,
+    );
+    expect(html).toContain(`media="print"`);
+    expect(html).toContain(`data-archestra-replay-css="all"`);
+    expect(html).toContain("fonts.googleapis.com");
+  });
+
+  it("keeps the app's own media query so promotion restores it", () => {
+    const html = deferThirdPartyStylesheets(
+      `<link rel="stylesheet" media="screen and (min-width: 600px)" href="https://cdn.jsdelivr.net/x.css">`,
+    );
+    expect(html).toContain(`media="print"`);
+    expect(html).toContain(
+      `data-archestra-replay-css="screen and (min-width: 600px)"`,
+    );
+    expect(html).not.toContain(`media="screen and (min-width: 600px)"`);
+  });
+
+  it("leaves platform and relative stylesheets render-blocking", () => {
+    // The baseline theme IS the app's look and is same-origin + preloaded, so
+    // its (bounded) blocking is wanted — deferring it would flash unstyled.
+    const platform = `<link rel="stylesheet" href="https://abc.sandbox.example.com/_sandbox/archestra-app-base.css">`;
+    const relative = `<link rel="stylesheet" href="/styles/app.css">`;
+    expect(deferThirdPartyStylesheets(platform)).toBe(platform);
+    expect(deferThirdPartyStylesheets(relative)).toBe(relative);
+  });
+
+  it("ignores non-stylesheet links", () => {
+    const icon = `<link rel="icon" href="https://example.com/favicon.png">`;
+    expect(deferThirdPartyStylesheets(icon)).toBe(icon);
+  });
+
+  it("is opt-out for the offline renderer, which must film the real fonts", () => {
+    // Nobody waits on an export, and its frames are the artifact the gallery
+    // keeps — so filming keeps the sheet render-blocking rather than risking
+    // opening frames drawn in a fallback face.
+    const html = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee">`;
+    expect(
+      neutralizeAppScripts(html, { deferRemoteStylesheets: false }),
+    ).toContain(html);
+    expect(neutralizeAppScripts(html)).toContain(`media="print"`);
+  });
+});
+
+describe("relocalizeSandboxAssets", () => {
+  const base = "https://abc123.sandbox.example.com";
+
+  it("points every recorded /_sandbox/ URL — script, CSP meta, bootstrap sdkUrl, stylesheet — at the replaying sandbox origin", () => {
+    // A segment captured on another deployment carries that deployment's
+    // absolute asset URLs in four shapes at once; all must move together or
+    // the frame mixes origins (and the CSP meta blocks the moved ones).
+    const recorded =
+      `<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://frontend.other.dev/_sandbox/ext-apps-app.js https://frontend.other.dev/_sandbox/archestra-app-sdk.js; style-src https://frontend.other.dev/_sandbox/archestra-app-base.css">` +
+      `<link rel="stylesheet" href="https://frontend.other.dev/_sandbox/archestra-app-base.css">` +
+      `<script data-archestra-app-bootstrap>window.__ARCHESTRA_APP_CONTEXT__={"sdkUrl":"https://frontend.other.dev/_sandbox/ext-apps-app.js"};</script>` +
+      `<script data-archestra-app-sdk src="https://frontend.other.dev/_sandbox/archestra-app-sdk.js"></script>`;
+    const html = relocalizeSandboxAssets(recorded, base);
+    expect(html).not.toContain("frontend.other.dev");
+    expect(html).toContain(`src="${base}/_sandbox/archestra-app-sdk.js"`);
+    expect(html).toContain(`href="${base}/_sandbox/archestra-app-base.css"`);
+    expect(html).toContain(`"sdkUrl":"${base}/_sandbox/ext-apps-app.js"`);
+    expect(html).toContain(
+      `script-src 'unsafe-inline' ${base}/_sandbox/ext-apps-app.js ${base}/_sandbox/archestra-app-sdk.js;`,
+    );
+  });
+
+  it("leaves URLs outside /_sandbox/ alone and tolerates a trailing slash on the base", () => {
+    const recorded =
+      `<img src="https://cdn.jsdelivr.net/pic.png">` +
+      `<script src="https://frontend.other.dev/_sandbox/archestra-app-sdk.js"></script>`;
+    const html = relocalizeSandboxAssets(recorded, `${base}/`);
+    expect(html).toContain(`https://cdn.jsdelivr.net/pic.png`);
+    expect(html).toContain(`src="${base}/_sandbox/archestra-app-sdk.js"`);
+    expect(html).not.toContain(`${base}//_sandbox`);
+  });
+
+  it("returns the html unchanged when there is no base to point at", () => {
+    const recorded = `<script src="https://a.dev/_sandbox/x.js"></script>`;
+    expect(relocalizeSandboxAssets(recorded, "")).toBe(recorded);
   });
 });
 

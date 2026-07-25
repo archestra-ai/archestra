@@ -335,19 +335,25 @@ const PREROLL_MS = 1_200;
  * always the announcement; these only stop a silent frame from freezing the
  * replay forever.
  *
- * The `initialized` fuse is short: that signal comes from the app SDK RUNNING
- * inside the inner document, so the document is on screen and only the
- * announcement is missing. The `connect` fuse is long: connect is a
- * proxy-level signal that resolves while the inner document may not even be
- * written yet — on a cold sandbox subdomain the document's own chain (proxy
- * handshake, HTML delivery, the parser-blocking SDK fetch) runs many seconds
- * behind it. Arming the clock off connect after 1.5s is exactly what played
- * the replay's whole head against a blank white stage: the chat animated,
- * the app frame was still loading, and when it finally announced, the
- * catch-up made it pop in fully formed mid-timeline.
+ * BOTH fuses hang off a signal that means the guest document is actually on
+ * screen — the app SDK reporting `initialized` (it ran INSIDE that document),
+ * or the sandbox proxy reporting the guest document's load event. Nothing
+ * arms off the bridge connect any more: connect is a PROXY-level signal that
+ * resolves while the inner frame is still empty, so a fuse hung off it starts
+ * playback against a blank stage — the replay's whole head played white, and
+ * the app popped in fully formed mid-timeline when it finally loaded. A
+ * signal that can lie about pixels must never gate the clock, however long
+ * its fuse.
  */
 const INITIALIZED_READY_FALLBACK_MS = 1_500;
-const CONNECT_READY_FALLBACK_MS = 8_000;
+const CONTENT_LOADED_READY_FALLBACK_MS = 1_500;
+/**
+ * How long the frame may take before the loading state says so out loud. Under
+ * this, a fast load just flashes — worse than showing nothing.
+ */
+const LOADING_NOTICE_DELAY_MS = 250;
+/** When to admit the load is slow rather than merely in progress. */
+const LOADING_SLOW_AFTER_MS = 4_000;
 
 type ReplayActivity = { kind: "tool"; name: string } | null;
 
@@ -648,7 +654,14 @@ export function AppSessionPlayer({
             </div>
           </div>
           {recording ? (
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
+            // Top-aligned, not centered: the surface's height is derived from
+            // the SCREEN (replayRegionLayout), so in this docked host it is
+            // usually shorter than the panel — centering floated it into the
+            // middle and opened a dead band between the heading above and the
+            // replay's cards, which read as broken layout. Pinned to the top,
+            // the cards sit right under the heading and the slack falls below
+            // the transport where trailing space is normal.
+            <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto p-4">
               <PlayerSurface
                 key={review.submission.sub}
                 conversationId={review.submission.sub}
@@ -1204,6 +1217,33 @@ function PlayerSurface({
   // a mid-timeline version switch that remounts the frame).
   const [frameReady, setFrameReady] = useState(false);
   /**
+   * How the held clock is presented: nothing at first (a fast load must not
+   * flash a spinner), then "loading", then an explicit slow state. A silent
+   * frozen player is indistinguishable from a broken one — the whole reason
+   * the hold got reported as a hang.
+   */
+  const [loadingNotice, setLoadingNotice] = useState<
+    "none" | "loading" | "slow"
+  >("none");
+  useEffect(() => {
+    if (frameReady || filming) {
+      setLoadingNotice("none");
+      return;
+    }
+    const show = setTimeout(
+      () => setLoadingNotice("loading"),
+      LOADING_NOTICE_DELAY_MS,
+    );
+    const slow = setTimeout(
+      () => setLoadingNotice("slow"),
+      LOADING_SLOW_AFTER_MS,
+    );
+    return () => {
+      clearTimeout(show);
+      clearTimeout(slow);
+    };
+  }, [frameReady, filming]);
+  /**
    * Bumped per replay-frame announcement. The sandbox can navigate its inner
    * document more than once while settling, and each document announces for
    * itself — every announcement gets its own full catch-up delivery, so the
@@ -1689,6 +1729,28 @@ function PlayerSurface({
     setFrameReady(true);
     setFrameReadyNonce((nonce) => nonce + 1);
   }, [segments, events]);
+
+  /**
+   * Arm a stale-SDK ready fallback, replacing any pending one.
+   *
+   * Only signals that mean the guest document is really on screen may call
+   * this (see the fallback constants). Re-arming rather than first-wins keeps
+   * the fuse tied to the LATEST such signal: a settling sandbox can navigate
+   * its inner document more than once, and the fuse must measure from the
+   * document that ended up there.
+   */
+  const armReadyFallback = useCallback(
+    (delayMs: number) => {
+      if (frameReadyRef.current) return;
+      if (legacyReadyTimerRef.current) {
+        clearTimeout(legacyReadyTimerRef.current);
+      }
+      legacyReadyTimerRef.current = setTimeout(() => {
+        if (!frameReadyRef.current) armReplayFrame();
+      }, delayMs);
+    },
+    [armReplayFrame],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: frameReadyNonce re-delivers to each announcing document
   useEffect(() => {
@@ -2382,7 +2444,7 @@ function PlayerSurface({
     () =>
       getMcpSandboxBaseUrl(
         mcpSandboxDomain,
-        `archestra-app-replay-${conversationId}`,
+        replaySandboxPrefix(conversationId),
       ),
     [mcpSandboxDomain, conversationId],
   );
@@ -2532,12 +2594,24 @@ function PlayerSurface({
   }, [nextMessage, transcript, displayClock, duration]);
 
   const segment = segments[segmentIndex] ?? segments[0];
-  // Recomputed only when the shown version changes — rebuilding this string on
-  // every render would hand SandboxIframe new HTML each time and remount the
-  // app, throwing away the very run we are trying to reproduce.
+  // Recomputed only when the shown version (or the sandbox origin) changes —
+  // rebuilding this string on every render would hand SandboxIframe new HTML
+  // each time and remount the app, throwing away the very run we are trying
+  // to reproduce. Assets are pointed at the replaying sandbox origin FIRST so
+  // the frame loads them same-origin (see relocalizeSandboxAssets), then the
+  // app's own scripts are neutralized.
   const replayHtml = useMemo(
-    () => neutralizeAppScripts(segment?.html ?? ""),
-    [segment?.html],
+    () =>
+      neutralizeAppScripts(
+        relocalizeSandboxAssets(segment?.html ?? "", sandboxResult.baseUrl),
+        // Deferring a remote stylesheet trades font fidelity for a fast first
+        // paint — the right trade for someone watching, the wrong one for an
+        // export. Nobody is waiting on the offline renderer, and its output is
+        // the artifact the gallery keeps, so there the sheet stays
+        // render-blocking and every filmed frame carries the real fonts.
+        { deferRemoteStylesheets: !filming },
+      ),
+    [segment?.html, sandboxResult.baseUrl, filming],
   );
 
   return (
@@ -2642,6 +2716,26 @@ function PlayerSurface({
               <ReplayActivityChip activity={activity} />
             </div>
           )}
+          {/* The frame's loading state, made visible: while the clock is held
+              for the app frame (cold sandbox origin, remount after a seek or
+              version switch), the stage would otherwise sit silently blank and
+              read as a hung player — which is exactly how the hold was
+              reported. Never while filming: the renderer waits out readiness
+              between frames, and this must not be filmed into an export.
+              z-10 with the stage content: above the frame, below the
+              play/pause hover affordance. */}
+          {loadingNotice !== "none" && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+              <div className="flex max-w-[80%] items-center gap-2 rounded-md bg-foreground/60 px-3 py-2 text-center text-xs font-medium text-background shadow-sm backdrop-blur-sm">
+                <Loader size={14} />
+                <span>
+                  {loadingNotice === "slow"
+                    ? "Still loading the recorded app…"
+                    : "Loading the recorded app…"}
+                </span>
+              </div>
+            </div>
+          )}
           {/* The whole stage is a play/pause surface: hovering names the
               action, clicking toggles it — same contract as the transport
               button below. */}
@@ -2713,28 +2807,23 @@ function PlayerSurface({
                 // on screen — only the announcement is missing. Re-armed per
                 // announcing document (a settling sandbox can navigate more
                 // than once); the announcement itself clears it.
-                onInitialized={() => {
-                  if (legacyReadyTimerRef.current) {
-                    clearTimeout(legacyReadyTimerRef.current);
-                  }
-                  legacyReadyTimerRef.current = setTimeout(() => {
-                    if (!frameReadyRef.current) armReplayFrame();
-                  }, INITIALIZED_READY_FALLBACK_MS);
-                }}
-                // Stale-SDK fallback, tier 2 (last resort): connect is a
-                // proxy-level signal that resolves while the inner document
-                // may not even be written yet, so its fuse is LONG — arming
-                // the clock 1.5s after connect is what used to play the
-                // replay's head against a blank white stage on every cold
-                // sandbox origin (see the fallback constants). This tier only
-                // exists so a frame whose SDK never runs at all cannot freeze
-                // the replay forever.
-                onConnected={() => {
-                  if (legacyReadyTimerRef.current) return;
-                  legacyReadyTimerRef.current = setTimeout(() => {
-                    if (!frameReadyRef.current) armReplayFrame();
-                  }, CONNECT_READY_FALLBACK_MS);
-                }}
+                onInitialized={() =>
+                  armReadyFallback(INITIALIZED_READY_FALLBACK_MS)
+                }
+                // Stale-SDK fallback, tier 2: the proxy says the guest
+                // document finished loading. Also about pixels — it fires on
+                // the inner frame's own load event — so arming after it is
+                // honest even when the SDK is too old to announce or never
+                // runs at all (a document whose script 404s still renders its
+                // markup, and that markup IS the replay's first frame).
+                //
+                // There is deliberately NO fallback on the bridge connect: it
+                // resolves before the guest document exists, and gating the
+                // clock on it is what played the replay's head against a
+                // blank stage.
+                onContentLoaded={() =>
+                  armReadyFallback(CONTENT_LOADED_READY_FALLBACK_MS)
+                }
               />
             ) : null}
           </ReplayAppStage>
@@ -6110,6 +6199,51 @@ function formatMs(ms: number): string {
 const MAX_EXPORT_SECONDS = Math.round(APP_RECORDING_MAX_EXPORT_MS / 1000);
 
 /**
+ * Point the recorded document's platform assets at the origin that will
+ * actually replay it.
+ *
+ * A segment's HTML is captured from the served resource, so its SDK scripts,
+ * baseline stylesheet, CSP meta sources and bootstrap `sdkUrl` all carry
+ * ABSOLUTE `/_sandbox/…` URLs of the deployment the RECORDING was made on.
+ * Replayed as-is, the sandboxed frame must open fresh cross-origin
+ * connections back to that frontend for every one of those fetches — a
+ * parser-blocking chain of cold DNS+TLS handshakes that is what a viewer on a
+ * cold tab actually waits on before the replay can start (and a recording
+ * from another deployment would phone that other deployment entirely).
+ *
+ * Rewriting every `/_sandbox/` asset URL to the replaying sandbox origin
+ * makes each of them same-origin with the proxy document: one already-warm
+ * connection, the proxy's preload links apply, and gallery bundles replay
+ * self-contained on whatever deployment shows them. The backend serves the
+ * identical files on both origins, and one regex covers attributes, the CSP
+ * meta and the bootstrap JSON alike because the segment is a single
+ * serialized string in which those URLs only ever appear verbatim.
+ *
+ * @public — exported for testability
+ */
+export function relocalizeSandboxAssets(
+  html: string,
+  sandboxBaseUrl: string,
+): string {
+  const base = sandboxBaseUrl.replace(/\/+$/, "");
+  if (!base) return html;
+  return html.replace(
+    /https?:\/\/[^"'`\s\\]*\/_sandbox\//g,
+    `${base}/_sandbox/`,
+  );
+}
+
+/**
+ * The sandbox server-prefix a conversation's replay frame runs under — the
+ * value that picks its dedicated sandbox subdomain. Shared with the review
+ * host so it can PRECONNECT to that exact origin while the recording bundle
+ * is still downloading, taking the cold DNS+TLS handshake off the critical
+ * path the frame pays on mount.
+ */
+export const replaySandboxPrefix = (conversationId: string | undefined) =>
+  `archestra-app-replay-${conversationId}`;
+
+/**
  * Stop the app's own code from running in a replay.
  *
  * A recorded session is replayed from what the app produced, not by running it
@@ -6121,24 +6255,76 @@ const MAX_EXPORT_SECONDS = Math.round(APP_RECORDING_MAX_EXPORT_MS / 1000);
  *
  * @public — exported for testability
  */
-export function neutralizeAppScripts(html: string): string {
+export function neutralizeAppScripts(
+  html: string,
+  { deferRemoteStylesheets = true }: { deferRemoteStylesheets?: boolean } = {},
+): string {
   return (
     REPLAY_CHROME_CSS +
-    html.replace(/<script\b([^>]*)>/gi, (tag: string, attrs: string) => {
-      if (/data-archestra-app-(sdk|bootstrap)/i.test(attrs)) return tag;
-      // Any `type` the app set must be REMOVED, not merely followed by the
-      // replay type: the HTML parser drops duplicate attributes and keeps the
-      // FIRST, so `<script type="module" type="application/…">` still parses
-      // as a module — and executes. That is how a module-based app re-ran
-      // itself inside its own replay, rolling fresh Math.random state and
-      // repainting its canvas over the recorded frames.
-      const rest = attrs.replace(
-        /\stype(\s*=\s*("[^"]*"|'[^']*'|[^\s]*))?(?=\s|$)/gi,
-        "",
-      );
-      return `<script${rest} type="application/archestra-replayed-script">`;
-    })
+    (deferRemoteStylesheets ? deferThirdPartyStylesheets(html) : html).replace(
+      /<script\b([^>]*)>/gi,
+      (tag: string, attrs: string) => {
+        if (/data-archestra-app-(sdk|bootstrap)/i.test(attrs)) return tag;
+        // Any `type` the app set must be REMOVED, not merely followed by the
+        // replay type: the HTML parser drops duplicate attributes and keeps the
+        // FIRST, so `<script type="module" type="application/…">` still parses
+        // as a module — and executes. That is how a module-based app re-ran
+        // itself inside its own replay, rolling fresh Math.random state and
+        // repainting its canvas over the recorded frames.
+        const rest = attrs.replace(
+          /\stype(\s*=\s*("[^"]*"|'[^']*'|[^\s]*))?(?=\s|$)/gi,
+          "",
+        );
+        return `<script${rest} type="application/archestra-replayed-script">`;
+      },
+    )
   );
+}
+
+/**
+ * Stop a remote stylesheet from holding the replay's first paint hostage.
+ *
+ * A recorded app may link a third-party stylesheet — Google Fonts is the
+ * common one, and the platform's own app CSP allowlists it. A
+ * `<link rel="stylesheet">` is RENDER-BLOCKING and, unlike a script, has no
+ * browser timeout: until it resolves, the replayed document paints nothing at
+ * all, however fast everything the platform serves is. That is a stall of
+ * unbounded length on a surface whose whole job is to play back at a fixed
+ * pace, for a resource that only changes which font the recording is drawn
+ * in.
+ *
+ * So remote sheets load NON-blocking: parked on `media="print"` (fetched,
+ * never render-blocking) and promoted to `media="all"` on load, the standard
+ * async-CSS pattern. The app paints immediately in fallback fonts and adopts
+ * the real ones a moment later, instead of showing nothing for as long as the
+ * third party takes. Platform assets are untouched — by this point
+ * {@link relocalizeSandboxAssets} has pointed them at the replaying sandbox
+ * origin, so they are same-origin, already preloaded by the proxy, and their
+ * blocking is both bounded and wanted (the app's baseline theme).
+ *
+ * @public — exported for testability
+ */
+export function deferThirdPartyStylesheets(html: string): string {
+  return html.replace(/<link\b[^>]*>/gi, (tag: string) => {
+    if (!/\brel\s*=\s*["']?stylesheet\b/i.test(tag)) return tag;
+    // Same-origin/relative hrefs are the platform's own; only a remote sheet
+    // (an origin this deployment does not serve) gets deferred.
+    const href = /\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
+    const url = href ? (href[2] ?? href[3] ?? href[4] ?? "") : "";
+    if (!/^https?:\/\//i.test(url)) return tag;
+    if (url.includes("/_sandbox/")) return tag;
+    // An app that already set `media` gets it replaced: whatever it asked for
+    // is restored by the promoter below, keyed off the saved value.
+    const media = /\bmedia\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
+    const original = media
+      ? (media[2] ?? media[3] ?? media[4] ?? "all")
+      : "all";
+    const withoutMedia = media ? tag.replace(media[0], "") : tag;
+    return withoutMedia.replace(
+      /\s*\/?>$/,
+      ` media="print" data-archestra-replay-css="${original.replace(/"/g, "&quot;")}">`,
+    );
+  });
 }
 
 /**
@@ -6159,7 +6345,41 @@ export function neutralizeAppScripts(html: string): string {
 const REPLAY_CHROME_CSS = `<style data-archestra-replay-chrome>
   ::-webkit-scrollbar { width: 0; height: 0; }
   html { scrollbar-width: none; }
-</style>`;
+</style>
+<script data-archestra-replay-chrome>
+(function () {
+  // Promote the remote stylesheets parked by deferThirdPartyStylesheets: each
+  // applies the moment IT loads, so a slow third party delays only its own
+  // fonts instead of the whole document's first paint. Prepended with the
+  // chrome, i.e. AFTER the app's own scripts were neutralized, so this one
+  // still runs. Best-effort: if it is ever blocked, the replay simply keeps
+  // the app's fallback fonts.
+  var promote = function () {
+    try {
+      var parked = document.querySelectorAll("link[data-archestra-replay-css]");
+      for (var i = 0; i < parked.length; i++) {
+        (function (link) {
+          var restore = function () {
+            link.media = link.getAttribute("data-archestra-replay-css") || "all";
+          };
+          // Already loaded (a warm cache resolves it before this runs), else
+          // when it arrives.
+          if (link.sheet) restore();
+          else link.addEventListener("load", restore, { once: true });
+        })(parked[i]);
+      }
+    } catch (e) {}
+  };
+  // This script is prepended ahead of the document, so the parked links do not
+  // exist yet — wait for the parse. They are media="print" and therefore not
+  // render-blocking, so nothing here delays first paint.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", promote, { once: true });
+  } else {
+    promote();
+  }
+})();
+</script>`;
 
 // =============================================================================
 // Guided tour

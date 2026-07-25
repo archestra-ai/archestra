@@ -10,6 +10,7 @@ import { AppWindow, ExternalLink, GitPullRequest, Lock } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   AppSessionPlayer,
+  replaySandboxPrefix,
   useReviewPanelWidth,
 } from "@/components/app-session-recording/app-session-player";
 import { useAppSessionRecorder } from "@/components/app-session-recording/use-app-session-recorder";
@@ -21,6 +22,8 @@ import { ResizableRightPanel } from "@/components/chat/resizable-right-panel";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ScheduleRunsList } from "@/components/scheduled-tasks/schedule-runs-list";
 import type { ChatReviewContext } from "@/lib/chat/chat-review-context";
+import { getMcpSandboxBaseUrl } from "@/lib/config/config";
+import { useMcpSandboxDomain } from "@/lib/config/config.query";
 import { useScheduleTrigger } from "@/lib/schedule-trigger.query";
 
 export type RightPanelTab = "runs" | "files" | "browser" | "apps" | "review";
@@ -250,6 +253,29 @@ export function ReviewPanel({
     error,
     refetch,
   } = useReviewRecordingBundle(src);
+
+  // Warm the replay frame's sandbox origin WHILE the bundle downloads: the
+  // player will mount an iframe on `replaySandboxPrefix(sub).<domain>`, and on
+  // a cold tab that origin's DNS+TLS handshake is pure serial wait before the
+  // replay can start. A preconnect here overlaps it with the bundle fetch. No
+  // `crossorigin` attribute — the frame navigation and the guest's asset
+  // fetches ride the credentialed connection pool, which is the one this
+  // warms. Same-origin sandboxes (no dedicated domain) need nothing.
+  const mcpSandboxDomain = useMcpSandboxDomain();
+  useEffect(() => {
+    const { baseUrl, hasCrossOrigin } = getMcpSandboxBaseUrl(
+      mcpSandboxDomain,
+      replaySandboxPrefix(sub || src),
+    );
+    if (!hasCrossOrigin) return;
+    const link = document.createElement("link");
+    link.rel = "preconnect";
+    link.href = baseUrl;
+    document.head.appendChild(link);
+    return () => {
+      link.remove();
+    };
+  }, [mcpSandboxDomain, sub, src]);
 
   return (
     <div className="flex h-full flex-col">

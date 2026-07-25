@@ -2397,5 +2397,30 @@
   // SDK parsed AFTER the host had already marked it ready. Every document
   // announces for itself, so the player re-delivers to whichever document
   // ends up being the one on screen.
-  post({ type: EVENT_TYPE, replayReady: true });
+  //
+  // Announced AFTER THE DOCUMENT HAS PAINTED, not when this script runs. This
+  // script is injected first in <head> and is parser-blocking, so at execution
+  // time there is no <body>, no app stylesheet and no app markup: announcing
+  // here told the player "ready" while the frame was still empty, and the
+  // replay then played its whole head against a blank stage, with the app
+  // popping in fully formed once the document finally painted.
+  //
+  // A double animation frame after DOMContentLoaded is the signal: rAF
+  // callbacks do not run until render-blocking stylesheets have resolved, so
+  // the second one lands after the first paint. `origRaf` (not the patched
+  // window.requestAnimationFrame) is deliberate — the patched one queues
+  // callbacks while the replay is frozen, which is the state a paused player
+  // hands a fresh frame, and the announcement would never be posted.
+  const announceReplayReady = () => {
+    origRaf(() => {
+      origRaf(() => post({ type: EVENT_TYPE, replayReady: true }));
+    });
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", announceReplayReady, {
+      once: true,
+    });
+  } else {
+    announceReplayReady();
+  }
 })();

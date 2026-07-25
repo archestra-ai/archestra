@@ -24,7 +24,11 @@ import {
   USER_ID_HEADER,
 } from "@archestra/shared";
 import { context, propagation } from "@opentelemetry/api";
-import type { streamText } from "ai";
+import {
+  extractReasoningMiddleware,
+  type streamText,
+  wrapLanguageModel,
+} from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
@@ -254,6 +258,14 @@ export async function createLLMModelForAgent(params: {
    * proxy's `anthropic-beta` header gating so the two can't drift.
    */
   anthropicNativeEndpoint: boolean;
+  /**
+   * The resolved credential row id, when a stored key was used (undefined for
+   * environment-variable keys and keyless auth). This is the credential the
+   * turn actually runs on — resolution can land on a personal/team/org key or
+   * substitute a per-user ChatGPT-subscription credential, not just the
+   * agent's own configured key.
+   */
+  chatApiKeyId?: string;
 }> {
   const {
     organizationId,
@@ -357,7 +369,13 @@ export async function createLLMModelForAgent(params: {
     baseUrl,
   });
 
-  return { model, provider, apiKeySource, anthropicNativeEndpoint };
+  return {
+    model,
+    provider,
+    apiKeySource,
+    anthropicNativeEndpoint,
+    chatApiKeyId,
+  };
 }
 
 // =============================================================================
@@ -514,8 +532,33 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   openrouter: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      if (!baseURL) {
+        throw new ApiError(400, "OpenRouter base URL is required.");
+      }
+      // OpenRouter streams thinking as a `reasoning` delta field that the
+      // strict @ai-sdk/openai chat parser drops — so reasoning models' thinking
+      // never reaches the UI. @ai-sdk/openai-compatible parses
+      // `reasoning_content` / `reasoning` into native reasoning parts.
+      return createOpenAICompatible({
+        name: "openrouter",
+        apiKey,
+        baseURL,
+        headers,
+        fetch,
+        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+        // provider only sends it when asked. Keep it on so the final usage chunk
+        // still arrives and cost/usage metrics are unaffected.
+        includeUsage: true,
+        // @ai-sdk/openai always sends `response_format: json_schema` for
+        // structured outputs; the compatible provider defaults to a schema-less
+        // `json_object` (and nothing else carries the schema to the model), which
+        // breaks generateObject flows (KB reranker, dual-LLM subagents) pointed
+        // at OpenRouter. OpenRouter supports json_schema; providers that can't
+        // honor it ignore it, exactly as with the strict client.
+        supportsStructuredOutputs: true,
+      }).chatModel(modelName);
+    },
     defaultBaseUrl: config.llm.openrouter.baseUrl,
     apiKeyRequiredMessage:
       "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",
@@ -524,7 +567,21 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
 
   perplexity: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+      // Perplexity reasoning models (sonar-reasoning-pro, sonar-deep-research)
+      // stream their chain of thought as inline <think>…</think> text in
+      // `content` — there is no reasoning_content field — so no provider
+      // parser can surface it. The middleware extracts the tags into native
+      // reasoning parts; tagless responses (sonar, sonar-pro) pass through
+      // unchanged, at the accepted cost that literal <think> text in a real
+      // answer is also treated as reasoning. Reasoning parts are dropped from
+      // outgoing messages by the strict openai converter, which is correct
+      // here: Perplexity does not accept reasoning back.
+      wrapLanguageModel({
+        model: createOpenAI({ apiKey, baseURL, headers, fetch }).chat(
+          modelName,
+        ),
+        middleware: extractReasoningMiddleware({ tagName: "think" }),
+      }),
     defaultBaseUrl: config.llm.perplexity.baseUrl,
     apiKeyRequiredMessage:
       "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",

@@ -11,6 +11,15 @@ import {
 } from "./app-gallery-share-dialog";
 
 vi.mock("@/lib/config/config.query");
+// The share dialog pulls in the player graph, which imports the audio decoder
+// (WebCodecs/opus-decoder) — irrelevant to submission and unresolvable in
+// jsdom. Stub that boundary so the submission path is exercised for real.
+vi.mock("@/lib/app-session-recording/app-recording-audio", () => ({
+  AudioPlaybackController: class {},
+  buildPlaybackAudio: vi.fn(),
+  preparePlaybackAudio: vi.fn(),
+  recordingHasAudio: vi.fn(() => false),
+}));
 
 // Only the async/network boundary is mocked — every pure helper
 // (gallerySubmissionSlug, oversizedGallerySubmissionFile,
@@ -188,14 +197,35 @@ describe("AppGalleryShareButton — category gate", () => {
     );
   });
 
-  it("blocks submission with a clear message when the recording has no description or prompt yet", async () => {
+  it("never blocks a recording with no AI enhancement — synthesizes a submittable description and build prompt", async () => {
     await recordingStore.put(`${CONVERSATION_ID}-incomplete`, {
       ...testBundle(),
       enhancement: undefined,
     } as unknown as AppRecordingBundle);
-    await openDialog(`${CONVERSATION_ID}-incomplete`);
+    const user = await openDialog(`${CONVERSATION_ID}-incomplete`);
 
-    await screen.findByText(/no description or build prompt yet/i);
+    // No hard gate on the missing enhancement: the flow proceeds to the
+    // category screen (a category is still a required choice) rather than
+    // dead-ending on "Recording incomplete".
+    await screen.findByText("Choose a category");
     expect(mockSubmit).not.toHaveBeenCalled();
+    await user.type(
+      screen.getByPlaceholderText(/name your own category/i),
+      "Utilities",
+    );
+    await user.click(
+      screen.getByRole("button", { name: /create pull request/i }),
+    );
+
+    await waitFor(() => expect(mockSubmit).toHaveBeenCalledTimes(1));
+    const submitted = mockSubmit.mock.calls[0][0].bundle;
+    // Build prompt falls back to the opening chat message ("hi"); description
+    // to the app-name fallback — both non-empty, so a working recording is
+    // never blocked and the gallery card is never blank.
+    expect(submitted.enhancement?.prompt).toBe("hi");
+    expect(submitted.enhancement?.description).toBe(
+      "Test App — an interactive app built in chat.",
+    );
+    expect(submitted.enhancement?.category).toBe("Utilities");
   });
 });

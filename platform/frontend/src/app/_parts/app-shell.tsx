@@ -62,6 +62,10 @@ export function AppShell({ children }: AppShellProps) {
   // namespace is chrome-less by construction — no per-route regexes to keep in
   // sync. (The /apps gallery itself keeps the shell.)
   const isAppRuntime = pathname.startsWith("/a/");
+  // The hackathon submission review host is its own full-page surface (banner +
+  // metadata + the read-only replay player); it brings its own chrome, so the
+  // app sidebar/header stay out of its way.
+  const isReview = pathname === "/review" || pathname.startsWith("/review/");
   // Driven by the offline video renderer: its frames must contain the replay
   // and nothing of the surrounding app.
   const isRecordingRender = pathname.startsWith(APP_RECORDING_RENDER_ROUTE);
@@ -83,12 +87,13 @@ export function AppShell({ children }: AppShellProps) {
       canReadSiteNotification === true &&
       !isAuthPage &&
       !isBrowserPreview &&
-      !isAppRuntime,
+      !isAppRuntime &&
+      !isReview,
   });
 
-  // Chromeless surfaces (browser preview, app runtime, video render): no
-  // sidebar/header/version.
-  if (isBrowserPreview || isAppRuntime || isRecordingRender) {
+  // Chromeless surfaces (browser preview, app runtime, video render, review):
+  // no sidebar/header/version.
+  if (isBrowserPreview || isAppRuntime || isRecordingRender || isReview) {
     return (
       <>
         <MaintenanceModeOverlay />

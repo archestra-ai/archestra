@@ -83,12 +83,15 @@ import TrustedDataPolicyModel from "./trusted-data-policy";
 const MCP_TOOL_NAME_MAX_LENGTH = 64;
 
 /**
- * Small deterministic hash (djb2, 8 hex chars) used only to disambiguate slugs
- * that must be hard-truncated because the raw tool name alone exceeds the
- * 64-char cap. Not security-sensitive: a 32-bit collision between two distinct
- * over-long names on the same catalog would surface as a (catalog_id, name)
- * unique-constraint insert failure, not silent data corruption — and the
- * precondition (two >64-char raw names sharing a djb2 hash) is negligible.
+ * Small deterministic hash (djb2, 8 hex chars) used to disambiguate slugs that
+ * must be shortened to fit the 64-char cap: trimmed server prefixes embed a
+ * hash of the full server slug (so two long server names can never trim to
+ * the same tool name), and hard-truncated over-long slugs get a hash of the
+ * whole slug. Not security-sensitive: a 32-bit collision between two distinct
+ * names would surface as duplicate-name routing ambiguity or a
+ * (catalog_id, name) unique-constraint insert failure, and the precondition
+ * (two colliding long names sharing a djb2 hash) is negligible. The output is
+ * part of stored tool names — never change the algorithm.
  */
 function shortSlugHash(value: string): string {
   let hash = 5381;
@@ -96,6 +99,53 @@ function shortSlugHash(value: string): string {
     hash = (Math.imul(hash, 33) + value.charCodeAt(i)) | 0;
   }
   return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+/**
+ * The pre-hash trimmed slug format: server prefix bare-sliced to fit the
+ * 64-char cap, without the disambiguating hash that
+ * {@link ToolModel.slugifyName} now embeds. Stored rows minted by that format
+ * are grandfathered: `syncToolsForCatalog` keeps a stored name matching this
+ * shape so existing tool names never change invisibly (stale clients cache
+ * them and `limits` rows are keyed on them). Legacy rows re-mint to the
+ * current format only through an explicit user action — a catalog rename
+ * (`renameToolPrefixesForCatalog`). Grandfathering is scoped to the catalog's
+ * current display name: a stored prefix minted under an older name never
+ * matches this shape and keeps the pre-existing sync-rename behavior. Returns
+ * null when the combo needs no trimming, or when it leaves no prefix room at
+ * all — the legacy and current formats agree in both of those cases.
+ */
+function legacySlugifyName(
+  mcpServerName: string,
+  toolName: string,
+): string | null {
+  const serverSlug = ToolModel.sanitizeServerNameForSlug(mcpServerName);
+  const rawSlug = ToolModel.sanitizeServerNameForSlug(toolName);
+  const suffix = `${MCP_SERVER_TOOL_NAME_SEPARATOR}${rawSlug}`;
+  const prefixBudget = MCP_TOOL_NAME_MAX_LENGTH - suffix.length;
+  if (serverSlug.length <= prefixBudget || prefixBudget < 1) {
+    return null;
+  }
+  return `${serverSlug.slice(0, prefixBudget)}${suffix}`;
+}
+
+/**
+ * Look up a tool by its incoming current-format name, falling back to the
+ * grandfathered legacy-format name the stored row may still carry (see
+ * `legacySlugifyName`).
+ */
+function getByCurrentOrLegacyName<T>(params: {
+  byName: Map<string, T>;
+  name: string;
+  legacyNameByInputName: Map<string, string>;
+}): T | undefined {
+  const { byName, name, legacyNameByInputName } = params;
+  const current = byName.get(name);
+  if (current !== undefined) {
+    return current;
+  }
+  const legacyName = legacyNameByInputName.get(name);
+  return legacyName === undefined ? undefined : byName.get(legacyName);
 }
 
 /**
@@ -136,7 +186,10 @@ class ToolModel {
    * name cap). Over-long slugs are shortened by trimming ONLY the server-name
    * prefix (before the last `__`), never the raw-tool-name suffix, so the raw
    * upstream name stays recoverable (see {@link unslugifyName} and
-   * `tools.raw_name`).
+   * `tools.raw_name`). The trimmed prefix embeds a hash of the full server
+   * slug so two distinct server names can never trim to the same tool name
+   * (rows minted by the pre-hash format are grandfathered — see
+   * `legacySlugifyName`).
    */
   /**
    * Sanitize a catalog/server display name into the tool-slug prefix
@@ -168,22 +221,29 @@ class ToolModel {
 
     // Over the provider tool-name limit. Preserve the raw-tool-name suffix (and
     // its `__` separator) verbatim and trim only the server-name prefix to fit,
-    // so the stored name still ends with the exact raw tool name.
-    const prefixBudget = MCP_TOOL_NAME_MAX_LENGTH - suffix.length;
+    // so the stored name still ends with the exact raw tool name. A bare prefix
+    // slice is NOT injective — two long server names sharing the surviving
+    // chars would mint byte-identical tool names across catalogs, and
+    // name-string routing (findByName/findByNameForAgent) would dispatch to an
+    // arbitrary one — so the trimmed prefix embeds a hash of the FULL server
+    // slug, making the trimmed name unique per server name.
+    const serverHash = shortSlugHash(serverSlug);
+    const prefixBudget =
+      MCP_TOOL_NAME_MAX_LENGTH - suffix.length - serverHash.length - 1;
     if (prefixBudget < 1) {
-      // The raw tool name alone exceeds the limit (an upstream name longer than
-      // the provider cap). It cannot be kept in the slug — the exact name is
-      // still recovered from tools.raw_name at dispatch — so append a
-      // deterministic hash so two distinct over-long names on the same server
-      // can't collide on the (catalog_id, name) unique constraint.
+      // The raw-tool-name suffix leaves no room for a disambiguated server
+      // prefix (or exceeds the cap outright). The exact raw name cannot be
+      // kept in the slug — it is still recovered from tools.raw_name at
+      // dispatch — so hard-truncate the whole slug and append a hash of it,
+      // which keeps two distinct over-long slugs from colliding.
       logger.warn(
         { mcpServerName, toolName, slugLength: slug.length },
-        "Tool name exceeds the 64-char limit; truncating (raw name preserved in raw_name)",
+        "Tool name leaves no room for a server prefix within the 64-char limit; truncating (raw name preserved in raw_name)",
       );
       const hash = shortSlugHash(slug);
       return `${slug.slice(0, MCP_TOOL_NAME_MAX_LENGTH - hash.length - 1)}-${hash}`;
     }
-    return `${serverSlug.slice(0, prefixBudget)}${suffix}`;
+    return `${serverSlug.slice(0, prefixBudget)}-${serverHash}${suffix}`;
   }
 
   /**
@@ -932,7 +992,31 @@ class ToolModel {
 
     // Group tools by catalogId (all tools should have the same catalogId in practice)
     const catalogId = tools[0].catalogId;
-    const toolNames = tools.map((t) => t.name);
+
+    // Callers mint incoming names from the catalog's display name. Rows minted
+    // by the pre-hash trimmed format are grandfathered: they must match under
+    // their stored legacy name and keep it, never be re-inserted as duplicates
+    // under the current format.
+    const [catalog] = await db
+      .select({ name: schema.internalMcpCatalogTable.name })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, catalogId));
+    const legacyNameByInputName = new Map<string, string>();
+    if (catalog !== undefined) {
+      for (const tool of tools) {
+        const legacyName = legacySlugifyName(
+          catalog.name,
+          tool.rawToolName ?? ToolModel.unslugifyName(tool.name),
+        );
+        if (legacyName !== null && legacyName !== tool.name) {
+          legacyNameByInputName.set(tool.name, legacyName);
+        }
+      }
+    }
+    const toolNames = [
+      ...tools.map((t) => t.name),
+      ...legacyNameByInputName.values(),
+    ];
 
     // Upgrade proxy-discovered tools (catalogId=NULL) to this catalog.
     // Preserves existing tool IDs, agent_tools links, and policies.
@@ -971,7 +1055,11 @@ class ToolModel {
 
     for (const tool of tools) {
       const rawName = tool.rawToolName ?? ToolModel.unslugifyName(tool.name);
-      const existingTool = existingToolsByName.get(tool.name);
+      const existingTool = getByCurrentOrLegacyName({
+        byName: existingToolsByName,
+        name: tool.name,
+        legacyNameByInputName,
+      });
       if (existingTool) {
         // Refresh cached schema fields when the upstream tool changed, so
         // re-discovery (install/reinstall) propagates new descriptions and
@@ -1063,10 +1151,17 @@ class ToolModel {
       }
     }
 
-    // Return tools in the same order as input
+    // Return tools in the same order as input (a grandfathered legacy row is
+    // keyed under its stored name, not the incoming current-format one)
     const resultToolsByName = new Map(resultTools.map((t) => [t.name, t]));
     return tools
-      .map((t) => resultToolsByName.get(t.name))
+      .map((t) =>
+        getByCurrentOrLegacyName({
+          byName: resultToolsByName,
+          name: t.name,
+          legacyNameByInputName,
+        }),
+      )
       .filter((t): t is Tool => t !== undefined);
   }
 
@@ -1202,6 +1297,10 @@ class ToolModel {
 
     const confirmedToolIds: string[] = [];
     const toDelete: string[] = [];
+    // Accepted narrow gap: a provisional row cloned before the hashed trimmed
+    // slug format shipped carries a legacy-format name that never matches the
+    // freshly minted discovered names, so it is deleted here and recreated by
+    // the sync as a fresh install — its cloned policies are dropped.
     for (const tool of provisional) {
       if (discoveredToolNames.has(tool.name)) {
         confirmedToolIds.push(tool.id);
@@ -2591,6 +2690,15 @@ class ToolModel {
     const catalogId = tools[0].catalogId;
     const toolNames = tools.map((t) => t.name);
 
+    // Callers mint incoming names from the catalog's display name
+    // (slugifyName(catalogItem.name, rawToolName)); the legacy-format
+    // grandfather check below recomputes the pre-hash slug from that same
+    // name.
+    const [catalog] = await db
+      .select({ name: schema.internalMcpCatalogTable.name })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, catalogId));
+
     // Upgrade proxy-discovered tools (catalogId=NULL) to this catalog.
     // Defensive: proxy tools could be created between install and reinstall.
     if (toolNames.length > 0) {
@@ -2692,8 +2800,18 @@ class ToolModel {
       const existingTool = existingToolsByRawName.get(rawName.toLowerCase());
 
       if (existingTool) {
+        // Grandfather stored names minted by the pre-hash trimmed format:
+        // renaming them in a routine sync would invisibly break clients
+        // caching the old name and strand name-keyed limits. Legacy rows
+        // re-mint only via an explicit catalog rename.
+        const targetName =
+          catalog !== undefined &&
+          existingTool.name === legacySlugifyName(catalog.name, rawName)
+            ? existingTool.name
+            : tool.name;
+
         // Check what needs updating
-        const nameChanged = existingTool.name !== tool.name;
+        const nameChanged = existingTool.name !== targetName;
         const descriptionChanged =
           existingTool.description !== tool.description;
         const parametersChanged =
@@ -2716,7 +2834,7 @@ class ToolModel {
             db
               .update(schema.toolsTable)
               .set({
-                name: tool.name,
+                name: targetName,
                 rawName,
                 description: tool.description,
                 parameters: tool.parameters,

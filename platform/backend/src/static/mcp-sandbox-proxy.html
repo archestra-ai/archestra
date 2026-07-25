@@ -55,6 +55,33 @@ const ARCHESTRA_APP_SDK_URL = location.origin + "/_sandbox/archestra-app-sdk.js"
 // resolves against this proxy origin, so style-src must allowlist this URL.
 const ARCHESTRA_APP_BASE_CSS_URL = location.origin + "/_sandbox/archestra-app-base.css";
 
+// Warm the guest-SDK assets NOW, while the host handshake (proxy-ready →
+// bridge connect → resource-ready) is still in flight: the inner document is
+// about to load these same-origin files, its parser blocks on the SDK script,
+// and on a cold sandbox origin those fetches are exactly what a viewer waits
+// on before an app (or a replay) can appear. All three are served cacheable,
+// so the preloads land in the HTTP cache the inner document reads from. The
+// ext-apps preload carries `crossorigin` to match the SDK's module import
+// (cors request mode); the classic script and stylesheet must not, or the
+// preload wouldn't match their no-cors fetches. Best-effort — a failed
+// preload costs nothing, the inner document just fetches as before.
+try {
+  [
+    [ARCHESTRA_APP_SDK_URL, "script", false],
+    [APP_SDK_URL, "script", true],
+    [ARCHESTRA_APP_BASE_CSS_URL, "style", false],
+  ].forEach(function (spec) {
+    var warm = document.createElement("link");
+    warm.rel = "preload";
+    warm.href = spec[0];
+    warm.as = spec[1];
+    if (spec[2]) warm.crossOrigin = "anonymous";
+    document.head.appendChild(warm);
+  });
+} catch (e) {
+  // never let warming break the proxy
+}
+
 function buildAllowAttribute(permissions) {
   if (!permissions) return "";
 
@@ -126,9 +153,19 @@ function buildCSP(csp) {
 }
 
 /**
- * Build CSP violation listener script (Inspector pattern).
- * Forwards securitypolicyviolation events to the host via postMessage
- * so violations can be surfaced for debugging.
+ * Build the guest's inline bootstrap: a CSP-violation listener plus a
+ * document-ready announcement.
+ *
+ * Forwards securitypolicyviolation events to the host via postMessage so
+ * violations can be surfaced for debugging, and posts
+ * `mcp-apps:sandbox-content-loaded` at DOMContentLoaded — the one signal a
+ * host can trust to mean the GUEST document is really on screen. Everything
+ * else the host observes (proxy-ready, bridge connect, resource-ready)
+ * happens while the inner frame is still empty, and the inner frame's own
+ * load event cannot be told apart from the about:blank it starts on. It
+ * comes from the guest document itself, so there is no such ambiguity, and
+ * it fires even when the app's SDK script fails to load — the recorded
+ * markup is still on screen, which is what the app-session player waits for.
  *
  * Violations originating from a platform-served guest SDK file are not
  * forwarded: the SDK probes code-generation support at load with a try/catch
@@ -156,6 +193,9 @@ document.addEventListener("securitypolicyviolation", function(e) {\
     timestamp: Date.now()\
   };\
   window.parent.postMessage(violation, "*");\
+});\
+document.addEventListener("DOMContentLoaded", function() {\
+  window.parent.postMessage({ type: "mcp-apps:sandbox-content-loaded" }, "*");\
 });\
 <\/script>';
 }
@@ -277,6 +317,7 @@ const RESOURCE_READY_NOTIFICATION =
 const PROXY_READY_NOTIFICATION =
   "ui/notifications/sandbox-proxy-ready";
 
+
 // Message relay: This Sandbox (outer iframe) acts as a bidirectional bridge,
 // forwarding messages between:
 //
@@ -364,7 +405,8 @@ window.addEventListener("message", async (event) => {
         data.type === "mcp-apps:csp-violation" ||
         data.type === "mcp-apps:runtime-error" ||
         data.type === "mcp-apps:screenshot" ||
-        data.type === "mcp-apps:recording-event"
+        data.type === "mcp-apps:recording-event" ||
+        data.type === "mcp-apps:sandbox-content-loaded"
       ) {
         window.parent.postMessage(data, EXPECTED_HOST_ORIGIN || "*");
       }

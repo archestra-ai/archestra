@@ -458,6 +458,7 @@ describe("createDirectLLMModel", () => {
 
     it("requests summarized thinking for models that think by default", async () => {
       for (const model of [
+        "claude-opus-5",
         "claude-sonnet-5",
         "claude-sonnet-5-20250929",
         "claude-fable-5",

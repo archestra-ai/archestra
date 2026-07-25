@@ -1028,6 +1028,17 @@ describe("deferThirdPartyStylesheets", () => {
     const icon = `<link rel="icon" href="https://example.com/favicon.png">`;
     expect(deferThirdPartyStylesheets(icon)).toBe(icon);
   });
+
+  it("is opt-out for the offline renderer, which must film the real fonts", () => {
+    // Nobody waits on an export, and its frames are the artifact the gallery
+    // keeps — so filming keeps the sheet render-blocking rather than risking
+    // opening frames drawn in a fallback face.
+    const html = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee">`;
+    expect(
+      neutralizeAppScripts(html, { deferRemoteStylesheets: false }),
+    ).toContain(html);
+    expect(neutralizeAppScripts(html)).toContain(`media="print"`);
+  });
 });
 
 describe("relocalizeSandboxAssets", () => {

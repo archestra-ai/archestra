@@ -2604,8 +2604,14 @@ function PlayerSurface({
     () =>
       neutralizeAppScripts(
         relocalizeSandboxAssets(segment?.html ?? "", sandboxResult.baseUrl),
+        // Deferring a remote stylesheet trades font fidelity for a fast first
+        // paint — the right trade for someone watching, the wrong one for an
+        // export. Nobody is waiting on the offline renderer, and its output is
+        // the artifact the gallery keeps, so there the sheet stays
+        // render-blocking and every filmed frame carries the real fonts.
+        { deferRemoteStylesheets: !filming },
       ),
-    [segment?.html, sandboxResult.baseUrl],
+    [segment?.html, sandboxResult.baseUrl, filming],
   );
 
   return (
@@ -6249,10 +6255,13 @@ export const replaySandboxPrefix = (conversationId: string | undefined) =>
  *
  * @public — exported for testability
  */
-export function neutralizeAppScripts(html: string): string {
+export function neutralizeAppScripts(
+  html: string,
+  { deferRemoteStylesheets = true }: { deferRemoteStylesheets?: boolean } = {},
+): string {
   return (
     REPLAY_CHROME_CSS +
-    deferThirdPartyStylesheets(html).replace(
+    (deferRemoteStylesheets ? deferThirdPartyStylesheets(html) : html).replace(
       /<script\b([^>]*)>/gi,
       (tag: string, attrs: string) => {
         if (/data-archestra-app-(sdk|bootstrap)/i.test(attrs)) return tag;

@@ -153,9 +153,19 @@ function buildCSP(csp) {
 }
 
 /**
- * Build CSP violation listener script (Inspector pattern).
- * Forwards securitypolicyviolation events to the host via postMessage
- * so violations can be surfaced for debugging.
+ * Build the guest's inline bootstrap: a CSP-violation listener plus a
+ * document-ready announcement.
+ *
+ * Forwards securitypolicyviolation events to the host via postMessage so
+ * violations can be surfaced for debugging, and posts
+ * `mcp-apps:sandbox-content-loaded` at DOMContentLoaded — the one signal a
+ * host can trust to mean the GUEST document is really on screen. Everything
+ * else the host observes (proxy-ready, bridge connect, resource-ready)
+ * happens while the inner frame is still empty, and the inner frame's own
+ * load event cannot be told apart from the about:blank it starts on. It
+ * comes from the guest document itself, so there is no such ambiguity, and
+ * it fires even when the app's SDK script fails to load — the recorded
+ * markup is still on screen, which is what the app-session player waits for.
  *
  * Violations originating from a platform-served guest SDK file are not
  * forwarded: the SDK probes code-generation support at load with a try/catch
@@ -183,6 +193,9 @@ document.addEventListener("securitypolicyviolation", function(e) {\
     timestamp: Date.now()\
   };\
   window.parent.postMessage(violation, "*");\
+});\
+document.addEventListener("DOMContentLoaded", function() {\
+  window.parent.postMessage({ type: "mcp-apps:sandbox-content-loaded" }, "*");\
 });\
 <\/script>';
 }
@@ -304,21 +317,6 @@ const RESOURCE_READY_NOTIFICATION =
 const PROXY_READY_NOTIFICATION =
   "ui/notifications/sandbox-proxy-ready";
 
-// The one signal that says the guest document is REALLY on screen: the inner
-// frame's own load event, after its content was written. Everything else the
-// host can observe (proxy-ready, bridge connect, resource-ready) happens while
-// the inner document is still empty — a host that treats those as "the app is
-// showing" paints nothing and looks broken. Guarded by `contentWritten`
-// because appending an iframe fires a load for its initial about:blank, which
-// would announce an empty frame as ready.
-let contentWritten = false;
-inner.addEventListener("load", function () {
-  if (!contentWritten) return;
-  window.parent.postMessage(
-    { type: "mcp-apps:sandbox-content-loaded" },
-    EXPECTED_HOST_ORIGIN || "*",
-  );
-});
 
 // Message relay: This Sandbox (outer iframe) acts as a bidirectional bridge,
 // forwarding messages between:
@@ -369,11 +367,6 @@ window.addEventListener("message", async (event) => {
         // One code path for all modes — CSP is always in the HTML, not HTTP headers.
         const processedHtml = injectCSP(html, buildCSP(csp), ownedApp === true);
 
-        // From here on, an inner load event means the GUEST document finished
-        // loading (document.close() and srcdoc both fire one), which is what
-        // the host waits for before it may treat the app as on screen.
-        contentWritten = true;
-
         if (IS_OPAQUE_ORIGIN) {
           // Opaque origin (production fallback): use srcdoc
           inner.srcdoc = processedHtml;
@@ -412,7 +405,8 @@ window.addEventListener("message", async (event) => {
         data.type === "mcp-apps:csp-violation" ||
         data.type === "mcp-apps:runtime-error" ||
         data.type === "mcp-apps:screenshot" ||
-        data.type === "mcp-apps:recording-event"
+        data.type === "mcp-apps:recording-event" ||
+        data.type === "mcp-apps:sandbox-content-loaded"
       ) {
         window.parent.postMessage(data, EXPECTED_HOST_ORIGIN || "*");
       }

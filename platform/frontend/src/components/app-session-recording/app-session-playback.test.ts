@@ -9,6 +9,7 @@ import {
   classifyCut,
   classifyTimelineGesture,
   consolidatedTranscript,
+  deferThirdPartyStylesheets,
   dominantViewport,
   keptTimelineRanges,
   neutralizeAppScripts,
@@ -987,6 +988,45 @@ describe("neutralizeAppScripts", () => {
     expect(html).toContain("scrollbar-width: none");
     expect(html).toContain("::-webkit-scrollbar");
     expect(html).toContain("<body>app</body>");
+  });
+});
+
+describe("deferThirdPartyStylesheets", () => {
+  it("parks a remote stylesheet on media=print and remembers what to restore", () => {
+    // A render-blocking third-party sheet has no browser timeout: until it
+    // resolves the replayed document paints NOTHING, which is how a recording
+    // whose app links Google Fonts replayed as a white stage for many seconds.
+    const html = deferThirdPartyStylesheets(
+      `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&amp;display=swap">`,
+    );
+    expect(html).toContain(`media="print"`);
+    expect(html).toContain(`data-archestra-replay-css="all"`);
+    expect(html).toContain("fonts.googleapis.com");
+  });
+
+  it("keeps the app's own media query so promotion restores it", () => {
+    const html = deferThirdPartyStylesheets(
+      `<link rel="stylesheet" media="screen and (min-width: 600px)" href="https://cdn.jsdelivr.net/x.css">`,
+    );
+    expect(html).toContain(`media="print"`);
+    expect(html).toContain(
+      `data-archestra-replay-css="screen and (min-width: 600px)"`,
+    );
+    expect(html).not.toContain(`media="screen and (min-width: 600px)"`);
+  });
+
+  it("leaves platform and relative stylesheets render-blocking", () => {
+    // The baseline theme IS the app's look and is same-origin + preloaded, so
+    // its (bounded) blocking is wanted — deferring it would flash unstyled.
+    const platform = `<link rel="stylesheet" href="https://abc.sandbox.example.com/_sandbox/archestra-app-base.css">`;
+    const relative = `<link rel="stylesheet" href="/styles/app.css">`;
+    expect(deferThirdPartyStylesheets(platform)).toBe(platform);
+    expect(deferThirdPartyStylesheets(relative)).toBe(relative);
+  });
+
+  it("ignores non-stylesheet links", () => {
+    const icon = `<link rel="icon" href="https://example.com/favicon.png">`;
+    expect(deferThirdPartyStylesheets(icon)).toBe(icon);
   });
 });
 

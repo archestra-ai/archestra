@@ -6252,21 +6252,70 @@ export const replaySandboxPrefix = (conversationId: string | undefined) =>
 export function neutralizeAppScripts(html: string): string {
   return (
     REPLAY_CHROME_CSS +
-    html.replace(/<script\b([^>]*)>/gi, (tag: string, attrs: string) => {
-      if (/data-archestra-app-(sdk|bootstrap)/i.test(attrs)) return tag;
-      // Any `type` the app set must be REMOVED, not merely followed by the
-      // replay type: the HTML parser drops duplicate attributes and keeps the
-      // FIRST, so `<script type="module" type="application/…">` still parses
-      // as a module — and executes. That is how a module-based app re-ran
-      // itself inside its own replay, rolling fresh Math.random state and
-      // repainting its canvas over the recorded frames.
-      const rest = attrs.replace(
-        /\stype(\s*=\s*("[^"]*"|'[^']*'|[^\s]*))?(?=\s|$)/gi,
-        "",
-      );
-      return `<script${rest} type="application/archestra-replayed-script">`;
-    })
+    deferThirdPartyStylesheets(html).replace(
+      /<script\b([^>]*)>/gi,
+      (tag: string, attrs: string) => {
+        if (/data-archestra-app-(sdk|bootstrap)/i.test(attrs)) return tag;
+        // Any `type` the app set must be REMOVED, not merely followed by the
+        // replay type: the HTML parser drops duplicate attributes and keeps the
+        // FIRST, so `<script type="module" type="application/…">` still parses
+        // as a module — and executes. That is how a module-based app re-ran
+        // itself inside its own replay, rolling fresh Math.random state and
+        // repainting its canvas over the recorded frames.
+        const rest = attrs.replace(
+          /\stype(\s*=\s*("[^"]*"|'[^']*'|[^\s]*))?(?=\s|$)/gi,
+          "",
+        );
+        return `<script${rest} type="application/archestra-replayed-script">`;
+      },
+    )
   );
+}
+
+/**
+ * Stop a remote stylesheet from holding the replay's first paint hostage.
+ *
+ * A recorded app may link a third-party stylesheet — Google Fonts is the
+ * common one, and the platform's own app CSP allowlists it. A
+ * `<link rel="stylesheet">` is RENDER-BLOCKING and, unlike a script, has no
+ * browser timeout: until it resolves, the replayed document paints nothing at
+ * all, however fast everything the platform serves is. That is a stall of
+ * unbounded length on a surface whose whole job is to play back at a fixed
+ * pace, for a resource that only changes which font the recording is drawn
+ * in.
+ *
+ * So remote sheets load NON-blocking: parked on `media="print"` (fetched,
+ * never render-blocking) and promoted to `media="all"` on load, the standard
+ * async-CSS pattern. The app paints immediately in fallback fonts and adopts
+ * the real ones a moment later, instead of showing nothing for as long as the
+ * third party takes. Platform assets are untouched — by this point
+ * {@link relocalizeSandboxAssets} has pointed them at the replaying sandbox
+ * origin, so they are same-origin, already preloaded by the proxy, and their
+ * blocking is both bounded and wanted (the app's baseline theme).
+ *
+ * @public — exported for testability
+ */
+export function deferThirdPartyStylesheets(html: string): string {
+  return html.replace(/<link\b[^>]*>/gi, (tag: string) => {
+    if (!/\brel\s*=\s*["']?stylesheet\b/i.test(tag)) return tag;
+    // Same-origin/relative hrefs are the platform's own; only a remote sheet
+    // (an origin this deployment does not serve) gets deferred.
+    const href = /\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
+    const url = href ? (href[2] ?? href[3] ?? href[4] ?? "") : "";
+    if (!/^https?:\/\//i.test(url)) return tag;
+    if (url.includes("/_sandbox/")) return tag;
+    // An app that already set `media` gets it replaced: whatever it asked for
+    // is restored by the promoter below, keyed off the saved value.
+    const media = /\bmedia\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
+    const original = media
+      ? (media[2] ?? media[3] ?? media[4] ?? "all")
+      : "all";
+    const withoutMedia = media ? tag.replace(media[0], "") : tag;
+    return withoutMedia.replace(
+      /\s*\/?>$/,
+      ` media="print" data-archestra-replay-css="${original.replace(/"/g, "&quot;")}">`,
+    );
+  });
 }
 
 /**
@@ -6287,7 +6336,41 @@ export function neutralizeAppScripts(html: string): string {
 const REPLAY_CHROME_CSS = `<style data-archestra-replay-chrome>
   ::-webkit-scrollbar { width: 0; height: 0; }
   html { scrollbar-width: none; }
-</style>`;
+</style>
+<script data-archestra-replay-chrome>
+(function () {
+  // Promote the remote stylesheets parked by deferThirdPartyStylesheets: each
+  // applies the moment IT loads, so a slow third party delays only its own
+  // fonts instead of the whole document's first paint. Prepended with the
+  // chrome, i.e. AFTER the app's own scripts were neutralized, so this one
+  // still runs. Best-effort: if it is ever blocked, the replay simply keeps
+  // the app's fallback fonts.
+  var promote = function () {
+    try {
+      var parked = document.querySelectorAll("link[data-archestra-replay-css]");
+      for (var i = 0; i < parked.length; i++) {
+        (function (link) {
+          var restore = function () {
+            link.media = link.getAttribute("data-archestra-replay-css") || "all";
+          };
+          // Already loaded (a warm cache resolves it before this runs), else
+          // when it arrives.
+          if (link.sheet) restore();
+          else link.addEventListener("load", restore, { once: true });
+        })(parked[i]);
+      }
+    } catch (e) {}
+  };
+  // This script is prepended ahead of the document, so the parked links do not
+  // exist yet — wait for the parse. They are media="print" and therefore not
+  // render-blocking, so nothing here delays first paint.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", promote, { once: true });
+  } else {
+    promote();
+  }
+})();
+</script>`;
 
 // =============================================================================
 // Guided tour

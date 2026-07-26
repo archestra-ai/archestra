@@ -6,6 +6,13 @@ import type { SupportedProvider } from "@archestra/shared";
  * but the SVGs are bundled under `public/model-logos/` and served from our own
  * origin so icons render even when third-party requests are blocked (mobile
  * content blockers, restrictive networks, air-gapped deployments).
+ *
+ * All logos must be monochrome (black / currentColor): the render sites apply
+ * `dark:invert`, which would distort a colored logo. Most files come from
+ * models.dev; the three providers models.dev has no logo for are sourced
+ * elsewhere — `archestra.svg` is our own brand icon (same mark as
+ * `logo-icon.svg`), `vllm.svg` and `microsoft-365-copilot.svg` are the
+ * monochrome marks from @lobehub/icons-static-svg.
  */
 export const providerToLogoProvider: Record<SupportedProvider, string> = {
   openai: "openai",

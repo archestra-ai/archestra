@@ -562,8 +562,27 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   minimax: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      if (!baseURL) {
+        throw new ApiError(400, "MiniMax base URL is required.");
+      }
+      // MiniMax M-series models always think; the proxy's minimax adapter
+      // mirrors the thinking text into DeepSeek-style `reasoning_content`
+      // deltas. The strict @ai-sdk/openai chat converter drops reasoning parts
+      // from outgoing messages and its parser drops `reasoning_content` from
+      // responses; @ai-sdk/openai-compatible round-trips both.
+      return createOpenAICompatible({
+        name: "minimax",
+        apiKey,
+        baseURL,
+        headers,
+        fetch,
+        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+        // provider only sends it when asked. Keep it on so the final usage chunk
+        // still arrives and cost/usage metrics are unaffected.
+        includeUsage: true,
+      }).chatModel(modelName);
+    },
     defaultBaseUrl: config.llm.minimax.baseUrl,
     apiKeyRequiredMessage:
       "MiniMax API key is required. Please configure ARCHESTRA_CHAT_MINIMAX_API_KEY.",

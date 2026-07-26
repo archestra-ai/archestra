@@ -5,5 +5,6 @@ export * as tokenizers from "@/tokenizers";
 export { resolveInteractionBillingMode } from "./billing-mode";
 export * as costOptimization from "./cost-optimization";
 export * as headers from "./headers";
+export { checkModelTeamAccess } from "./model-team-access";
 export * as tools from "./tools";
 export * as toonConversion from "./toon-conversion";

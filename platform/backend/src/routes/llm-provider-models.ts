@@ -26,6 +26,7 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   type ModelSyncState,
+  ModelTeamModel,
   OrganizationModel,
   TeamModel,
 } from "@/models";
@@ -39,6 +40,7 @@ import {
   type LlmProviderApiKeyWithScopeInfo,
   type Model,
   ModelCapabilitiesSchema,
+  type ModelTeamDetail,
   ModelWithApiKeysSchema,
   PatchModelBodySchema,
   SelectModelSchema,
@@ -249,12 +251,32 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const models = [...keyLinkedModels, ...perUserModels];
 
+      // Hide models restricted to teams the caller is not part of. Catalog
+      // managers (llmModel:update) keep full visibility so they can see what
+      // they are restricting.
+      const isModelCatalogAdmin = await userHasPermission(
+        user.id,
+        organizationId,
+        "llmModel",
+        "update",
+      );
+      let visibleModels = models;
+      if (!isModelCatalogAdmin) {
+        const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
+          modelIds: models.map((model) => model.dbId),
+          principalTeamIds: userTeamIds,
+        });
+        visibleModels = models.filter((model) =>
+          allowedModelIds.has(model.dbId),
+        );
+      }
+
       logger.info(
-        { organizationId, provider, totalModels: models.length },
+        { organizationId, provider, totalModels: visibleModels.length },
         "Returning available LLM models from database",
       );
 
-      return reply.send(models);
+      return reply.send(visibleModels);
     },
   );
 
@@ -327,12 +349,27 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         (model) => !linkedModelIds.has(model.id),
       );
 
+      const teamsByModelId = await ModelTeamModel.getTeamDetailsForModels([
+        ...modelsWithApiKeys.map((item) => item.model.id),
+        ...unlinkedLlmProxyModels.map((model) => model.id),
+      ]);
+
       const response = [
         ...modelsWithApiKeys.map(({ model, isBest, apiKeys }) =>
-          toModelWithApiKeysResponse({ model, isBest, apiKeys }),
+          toModelWithApiKeysResponse({
+            model,
+            isBest,
+            apiKeys,
+            teams: teamsByModelId.get(model.id) ?? [],
+          }),
         ),
         ...unlinkedLlmProxyModels.map((model) =>
-          toModelWithApiKeysResponse({ model, isBest: false, apiKeys: [] }),
+          toModelWithApiKeysResponse({
+            model,
+            isBest: false,
+            apiKeys: [],
+            teams: teamsByModelId.get(model.id) ?? [],
+          }),
         ),
       ];
 
@@ -412,9 +449,14 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const updated = await ModelModel.update(id, body);
+      const { teamIds, ...modelUpdates } = body;
+      const updated = await ModelModel.update(id, modelUpdates);
       if (!updated) {
         throw new ApiError(500, "Failed to update model");
+      }
+
+      if (teamIds !== undefined) {
+        await ModelTeamModel.syncModelTeams(id, teamIds);
       }
 
       return reply.send(updated);
@@ -702,13 +744,15 @@ function toModelWithApiKeysResponse(params: {
   model: Model;
   isBest: boolean;
   apiKeys: LinkedApiKey[];
+  teams: ModelTeamDetail[];
 }) {
-  const { model, isBest, apiKeys } = params;
+  const { model, isBest, apiKeys, teams } = params;
   const capabilities = ModelModel.toCapabilities(model);
   return {
     ...model,
     isBest,
     apiKeys,
+    teams,
     // The spread above carries the architectural `contextLength`, which stays
     // the ceiling for `num_ctx` validation. Displaying it would over-promise
     // when Ollama enforces a smaller window, so the resolved one rides along.

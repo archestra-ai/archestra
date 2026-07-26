@@ -18,6 +18,7 @@ import {
   LlmProviderApiKeyModelLinkModel,
   MemberModel,
   ModelModel,
+  ModelTeamModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
   TeamModel,
@@ -717,18 +718,32 @@ async function listModels(params: { auth: ModelRouterAuth }) {
     .map((mapping) => mapping.providerApiKeyId);
   const linkedModels =
     await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
+  const candidateModels = linkedModels
+    .map(({ model }) => model)
+    .filter((model) => {
+      if (!modelRouterSupportedProviders.has(model.provider)) {
+        return false;
+      }
+      return (
+        ModelModel.supportsTextChat(model) ||
+        ModelModel.supportsEmbeddings(model)
+      );
+    });
+
+  // Hide team-restricted models the caller cannot invoke: user-attributed auth
+  // is filtered by the user's team memberships (mirroring the proxy-time
+  // guard); auth without a user identity cannot satisfy a team restriction,
+  // so restricted models are omitted entirely.
+  const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
+    modelIds: candidateModels.map((model) => model.id),
+    principalTeamIds:
+      params.auth.authMethod === "oauth_user"
+        ? await TeamModel.getUserTeamIds(params.auth.userId)
+        : [],
+  });
+
   const chatModels = sortRoutableModels(
-    linkedModels
-      .map(({ model }) => model)
-      .filter((model) => {
-        if (!modelRouterSupportedProviders.has(model.provider)) {
-          return false;
-        }
-        return (
-          ModelModel.supportsTextChat(model) ||
-          ModelModel.supportsEmbeddings(model)
-        );
-      }),
+    candidateModels.filter((model) => allowedModelIds.has(model.id)),
   );
 
   return {

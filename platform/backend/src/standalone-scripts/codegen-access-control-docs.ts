@@ -154,6 +154,12 @@ Examples:
 
 These resources do **not** use \`:team-admin\`.
 
+### Team-Restricted Models
+
+You can limit an LLM model to specific teams. Open the model on the Models page and pick teams under "Limit to teams" — dev teams get frontier models while test teams use cheaper ones, for example.
+
+A model with no teams selected stays available to everyone. A restricted model is hidden from model pickers and \`/models\` listings for users outside its teams, and the LLM Proxy rejects their requests to it with \`403\`. Users with \`llmModel:update\`, including organization admins, keep full access.
+
 ### Chat Access And Optional UI Controls
 
 Chat access is controlled separately from optional chat UI controls:

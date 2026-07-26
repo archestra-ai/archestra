@@ -23,6 +23,7 @@ import {
   RefreshCw,
   RotateCcw,
   Server,
+  Users,
   X,
 } from "lucide-react";
 import Image from "next/image";
@@ -59,6 +60,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -76,6 +78,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -86,6 +89,7 @@ import {
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 import { formatContextLength } from "@/lib/utils";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import {
@@ -228,6 +232,30 @@ export default function ModelsPage() {
                 )}
                 {row.original.embeddingDimensions !== null && (
                   <EmbeddingModelBadge />
+                )}
+                {row.original.teams.length > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="text-xs gap-1">
+                          <Users className="h-3 w-3 shrink-0" />
+                          <span>
+                            {row.original.teams.length === 1
+                              ? "1 team"
+                              : `${row.original.teams.length} teams`}
+                          </span>
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>
+                          Limited to:{" "}
+                          {row.original.teams
+                            .map((team) => team.name)
+                            .join(", ")}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </div>
             </div>
@@ -591,6 +619,7 @@ interface EditModelFormValues {
   customPricePerMillionCacheRead: string;
   customPricePerMillionCacheWrite: string;
   ignored: boolean;
+  teamIds: string[];
   embeddingDimensions: EditModelEmbeddingDimensionsValue;
   inputModalities: string[];
   outputModalities: string[];
@@ -610,6 +639,13 @@ function EditModelDialog({
   const [inputModalityToAdd, setInputModalityToAdd] = useState("");
   const [outputModalityToAdd, setOutputModalityToAdd] = useState("");
   const updateModel = useUpdateModel();
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  // Model catalog managers restrict models across the whole org, so the
+  // picker offers every team (not just the editor's own).
+  const { data: assignableTeams = [] } = useAssignableTeams({
+    isResourceAdmin: true,
+    enabled: !!canReadTeams,
+  });
   const { data: organization } = useOrganization();
   const { data: apiKeys = [] } = useLlmProviderApiKeys();
   const providerConfig = PROVIDER_CONFIG[model.provider];
@@ -667,6 +703,7 @@ function EditModelDialog({
       customPricePerMillionCacheRead: cacheReadPrice,
       customPricePerMillionCacheWrite: cacheWritePrice,
       ignored: values.ignored,
+      teamIds: values.teamIds,
       embeddingDimensions,
       inputModalities: values.inputModalities as ModelInputModality[],
       outputModalities: values.outputModalities as ModelOutputModality[],
@@ -1080,6 +1117,43 @@ function EditModelDialog({
             )}
           />
 
+          <FormField
+            control={form.control}
+            name="teamIds"
+            render={({ field }) => (
+              <FormItem className="rounded-lg border p-3">
+                <div className="space-y-1">
+                  <FormLabel>Limit to teams</FormLabel>
+                  <p className="text-sm text-muted-foreground">
+                    When teams are selected, only their members can see and use
+                    this model. Leave empty to keep the model available to
+                    everyone.
+                  </p>
+                </div>
+                <FormControl>
+                  <MultiSelectCombobox
+                    disabled={!canReadTeams || assignableTeams.length === 0}
+                    options={assignableTeams.map((team) => ({
+                      value: team.id,
+                      label: team.name,
+                    }))}
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder={
+                      !canReadTeams
+                        ? "Teams unavailable"
+                        : assignableTeams.length === 0
+                          ? "No teams available"
+                          : "Search teams..."
+                    }
+                    emptyMessage="No teams found."
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           {model.provider === "ollama" &&
             model.defaultParameters &&
             Object.keys(model.defaultParameters).length > 0 && (
@@ -1409,6 +1483,7 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
     customPricePerMillionCacheWrite:
       model.customPricePerMillionCacheWrite ?? "",
     ignored: model.ignored,
+    teamIds: model.teams.map((team) => team.id),
     embeddingDimensions: model.embeddingDimensions
       ? getEmbeddingDimensionsString(model.embeddingDimensions)
       : "",

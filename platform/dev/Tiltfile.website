@@ -1,0 +1,21 @@
+# Runs the archestra-ai/website dev server (marketing site + MCP catalog API)
+# from a sibling checkout (../../website relative to platform/). Only loaded
+# when that checkout exists (see the guard in the root Tiltfile), and manual
+# start — it is only useful when working on the MCP catalog.
+#
+# The site serves on http://localhost:3001; the catalog API on
+# http://localhost:3001/mcp-catalog/api. To point the platform's registry at
+# it, set ARCHESTRA_MCP_CATALOG_API_BASE_URL=http://localhost:3001/mcp-catalog/api
+# in platform/.env (see .env.example) and restart pnpm-dev-frontend (the
+# catalog base URL is baked into the Next.js rewrite at server start).
+local_resource(
+  'website',
+  cmd='cd ../../website/app && pnpm install',
+  cmd_bat='cd ..\\..\\website\\app && pnpm install',
+  serve_cmd='trap "pkill -TERM -P $$" EXIT INT TERM; cd ../../website/app && pnpm dev & wait $!',
+  serve_cmd_bat='cd ..\\..\\website\\app && pnpm dev',
+  links=['http://localhost:3001/mcp-catalog'],
+  labels=['website'],
+  auto_init=False,
+  trigger_mode=TRIGGER_MODE_MANUAL,
+)

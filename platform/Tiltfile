@@ -65,3 +65,9 @@ if os.getenv('ARCHESTRA_FILE_STORAGE_PROVIDER') == 's3':
 load_dynamic('./dev/Tiltfile.dev')
 load_dynamic('./dev/Tiltfile.test')
 load_dynamic('./dev/Tiltfile.integrations')
+
+# Archestra website (marketing site + MCP catalog API) — only when the
+# archestra-ai/website repo is checked out as a sibling of this repo.
+# Manual start; see dev/Tiltfile.website.
+if os.path.exists('../../website/app/package.json'):
+  load_dynamic('./dev/Tiltfile.website')

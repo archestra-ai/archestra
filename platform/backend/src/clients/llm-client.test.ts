@@ -223,6 +223,20 @@ describe("createDirectLLMModel", () => {
     expect((model as { provider: string }).provider).toBe("kimi.chat");
   });
 
+  it("creates MiniMax models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "minimax",
+      apiKey: "test-key",
+      modelName: "MiniMax-M2.5",
+      baseUrl: null,
+    });
+    // The proxy's minimax adapter surfaces thinking as DeepSeek-style
+    // `reasoning_content`; the strict openai provider ("openai.chat") drops
+    // that field in both directions, while the openai-compatible provider
+    // round-trips it.
+    expect((model as { provider: string }).provider).toBe("minimax.chat");
+  });
+
   it("creates OpenRouter models on the openai-compatible provider", () => {
     const model = createDirectLLMModel({
       provider: "openrouter",

@@ -5,6 +5,10 @@ import {
   isChatErrorResponse,
   RetryableErrorCodes,
 } from "@archestra/shared";
+import {
+  getUserFacingApiErrorMessage,
+  isHtmlDocumentMessage,
+} from "@archestra/shared/api-error";
 
 /**
  * AI SDK internal error type names that aren't useful to show users
@@ -148,6 +152,16 @@ export function mapClientError(error: Error): ChatErrorResponse {
         isRetryable: RetryableErrorCodes.has(pattern.code),
       };
     }
+  }
+
+  // An HTML error page (a proxy/ingress 502 reaching the client instead of a
+  // JSON envelope) must not be rendered verbatim — surface friendly copy.
+  if (isHtmlDocumentMessage(msg)) {
+    return {
+      code: ChatErrorCode.ServerError,
+      message: getUserFacingApiErrorMessage(msg),
+      isRetryable: RetryableErrorCodes.has(ChatErrorCode.ServerError),
+    };
   }
 
   // Try to extract message + type from backend's { error: { message, type } } format

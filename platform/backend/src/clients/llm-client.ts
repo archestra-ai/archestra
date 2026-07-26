@@ -417,6 +417,40 @@ function providerHeaders(
 }
 
 /**
+ * Shared `createModel` for OpenAI-compatible providers whose models stream
+ * reasoning in the `reasoning_content` delta field and expect it passed back
+ * on tool-call turns. The strict @ai-sdk/openai chat converter drops reasoning
+ * parts from outgoing messages and its parser drops `reasoning_content` from
+ * responses; @ai-sdk/openai-compatible round-trips both.
+ */
+function reasoningCompatibleCreateModel(params: {
+  /** Provider id — becomes the AI-SDK model provider id (`<name>.chat`). */
+  name: string;
+  /** Thrown when no base URL resolves (per-key override or provider default). */
+  missingBaseUrlMessage: string;
+  /** Substitute the placeholder key when none is set (vllm, ollama). */
+  keyless?: boolean;
+}): ProviderModelConfig["createModel"] {
+  const { name, missingBaseUrlMessage, keyless = false } = params;
+  return ({ apiKey, modelName, baseURL, headers, fetch }) => {
+    if (!baseURL) {
+      throw new ApiError(400, missingBaseUrlMessage);
+    }
+    return createOpenAICompatible({
+      name,
+      apiKey: keyless ? apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER : apiKey,
+      baseURL,
+      headers,
+      fetch,
+      // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+      // provider only sends it when asked. Keep it on so the final usage chunk
+      // still arrives and cost/usage metrics are unaffected.
+      includeUsage: true,
+    }).chatModel(modelName);
+  };
+}
+
+/**
  * Unified registry of model configs for each provider.
  * TypeScript enforces that ALL providers in SupportedProvider have an entry.
  * Adding a new provider to SupportedProvider will cause a compile error here
@@ -589,27 +623,12 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   deepseek: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
-      if (!baseURL) {
-        throw new ApiError(400, "DeepSeek base URL is required.");
-      }
-      // DeepSeek thinking mode requires the assistant's `reasoning_content` to
-      // be passed back on tool-call turns (the API 400s without it). The strict
-      // @ai-sdk/openai chat converter drops reasoning parts from outgoing
-      // messages and its parser drops `reasoning_content` from responses;
-      // @ai-sdk/openai-compatible round-trips both.
-      return createOpenAICompatible({
-        name: "deepseek",
-        apiKey,
-        baseURL,
-        headers,
-        fetch,
-        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
-        // provider only sends it when asked. Keep it on so the final usage chunk
-        // still arrives and cost/usage metrics are unaffected.
-        includeUsage: true,
-      }).chatModel(modelName);
-    },
+    // DeepSeek thinking mode 400s when the assistant's `reasoning_content` is
+    // not passed back on tool-call turns.
+    createModel: reasoningCompatibleCreateModel({
+      name: "deepseek",
+      missingBaseUrlMessage: "DeepSeek base URL is required.",
+    }),
     defaultBaseUrl: config.llm.deepseek.baseUrl,
     apiKeyRequiredMessage:
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
@@ -626,8 +645,12 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   kimi: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    // Kimi thinking models (kimi-k3, kimi-k2.6, ...) stream reasoning in
+    // `reasoning_content` and expect it passed back on tool-call turns.
+    createModel: reasoningCompatibleCreateModel({
+      name: "kimi",
+      missingBaseUrlMessage: "Kimi base URL is required.",
+    }),
     defaultBaseUrl: config.llm.kimi.baseUrl,
     apiKeyRequiredMessage:
       "Kimi API key is required. Please configure ARCHESTRA_CHAT_KIMI_API_KEY.",
@@ -695,38 +718,25 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // --- OpenAI-compatible providers with optional API key ---
 
   vllm: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({
-        apiKey: apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER,
-        baseURL,
-        headers,
-        fetch,
-      }).chat(modelName),
+    // vLLM serves DeepSeek-style reasoning models. There is no default base
+    // URL (PROVIDERS_REQUIRING_BASE_URL): without the factory's guard a
+    // missing URL would silently route to api.openai.com.
+    createModel: reasoningCompatibleCreateModel({
+      name: "vllm",
+      missingBaseUrlMessage: "vLLM base URL is required.",
+      keyless: true,
+    }),
     defaultBaseUrl: config.llm.vllm.baseUrl,
     // No apiKeyRequiredMessage — key is optional
   },
 
   ollama: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
-      if (!baseURL) {
-        throw new ApiError(400, "Ollama base URL is required.");
-      }
-      // Ollama is OpenAI-compatible, but streams reasoning ("thinking") in a
-      // `reasoning_content` delta field that @ai-sdk/openai's chat parser drops
-      // — so qwen3-style thinking never reaches the UI. @ai-sdk/openai-compatible
-      // parses `reasoning_content` / `reasoning` into native reasoning parts.
-      return createOpenAICompatible({
-        name: "ollama",
-        apiKey: apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER,
-        baseURL,
-        headers,
-        fetch,
-        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
-        // provider only sends it when asked. Keep it on so the final usage chunk
-        // still arrives and cost/usage metrics are unaffected.
-        includeUsage: true,
-      }).chatModel(modelName);
-    },
+    // Ollama streams reasoning ("thinking", e.g. qwen3) in `reasoning_content`.
+    createModel: reasoningCompatibleCreateModel({
+      name: "ollama",
+      missingBaseUrlMessage: "Ollama base URL is required.",
+      keyless: true,
+    }),
     defaultBaseUrl: config.llm.ollama.baseUrl,
     // No apiKeyRequiredMessage — key is optional
   },

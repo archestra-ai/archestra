@@ -159,14 +159,31 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("creates a model for vllm provider without API key", () => {
+  it("creates keyless vLLM models on the openai-compatible provider", () => {
     const model = createDirectLLMModel({
       provider: "vllm",
       apiKey: undefined,
-      modelName: "default",
-      baseUrl: null,
+      modelName: "deepseek-ai/DeepSeek-R1",
+      baseUrl: "http://localhost:8000/v1",
     });
-    expect(model).toBeDefined();
+    // vLLM serves DeepSeek-style reasoning models that stream
+    // `reasoning_content` and expect it passed back on tool-call turns; the
+    // strict openai provider ("openai.chat") drops it in both directions,
+    // while the openai-compatible provider round-trips it.
+    expect((model as { provider: string }).provider).toBe("vllm.chat");
+  });
+
+  it("rejects vllm models without a base URL", () => {
+    // vLLM has no default base URL; without the guard a missing URL would
+    // silently route the request to api.openai.com.
+    expect(() =>
+      createDirectLLMModel({
+        provider: "vllm",
+        apiKey: undefined,
+        modelName: "default",
+        baseUrl: null,
+      }),
+    ).toThrow("vLLM base URL is required.");
   });
 
   it("creates a model for ollama provider without API key", () => {
@@ -190,6 +207,20 @@ describe("createDirectLLMModel", () => {
     // tool-call turns; the strict openai provider ("openai.chat") drops it in
     // both directions, while the openai-compatible provider round-trips it.
     expect((model as { provider: string }).provider).toBe("deepseek.chat");
+  });
+
+  it("creates Kimi models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "kimi",
+      apiKey: "test-key",
+      modelName: "kimi-k3",
+      baseUrl: null,
+    });
+    // Kimi thinking models stream reasoning in `reasoning_content` and expect
+    // it passed back on tool-call turns; the strict openai provider
+    // ("openai.chat") drops it in both directions, while the openai-compatible
+    // provider round-trips it.
+    expect((model as { provider: string }).provider).toBe("kimi.chat");
   });
 
   it("creates MiniMax models on the openai-compatible provider", () => {

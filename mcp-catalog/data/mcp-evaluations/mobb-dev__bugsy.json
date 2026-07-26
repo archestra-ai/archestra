@@ -1,6 +1,6 @@
 {
-  "name": "mobb-dev__bugsy?tab=readme-ov-file-model-context-protocol-mcp-server",
-  "display_name": "bugsy?tab=readme-ov-file#model-context-protocol-mcp-server",
+  "name": "mobb-dev__bugsy",
+  "display_name": "Bugsy",
   "description": "MCP server from mobb-dev/bugsy?tab=readme-ov-file#model-context-protocol-mcp-server",
   "author": {
     "name": "mobb-dev"
@@ -16,14 +16,12 @@
   },
   "readme": null,
   "category": "AI Tools",
-  "quality_score": 24,
   "programming_language": "TypeScript",
-  "framework": null,
   "github_info": {
     "owner": "mobb-dev",
     "repo": "bugsy?tab=readme-ov-file#model-context-protocol-mcp-server",
-    "url": "https://github.com/mobb-dev/bugsy?tab=readme-ov-file#model-context-protocol-mcp-server",
-    "name": "mobb-dev__bugsy?tab=readme-ov-file#model-context-protocol-mcp-server",
+    "url": "https://github.com/mobb-dev/bugsy",
+    "name": "mobb-dev__bugsy",
     "path": null,
     "stars": 58,
     "contributors": 1,
@@ -32,35 +30,6 @@
     "ci_cd": false,
     "latest_commit_hash": null
   },
-  "protocol_features": {
-    "implementing_tools": false,
-    "implementing_prompts": false,
-    "implementing_resources": false,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": false,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [
-    {
-      "name": "@modelcontextprotocol/sdk",
-      "importance": 10
-    },
-    {
-      "name": "express",
-      "importance": 8
-    },
-    {
-      "name": "mark3labs/mcp-go",
-      "importance": 9
-    },
-    {
-      "name": "axios",
-      "importance": 6
-    }
-  ],
   "user_config": {
     "slack_mcp_xoxc_token": {
       "type": "string",
@@ -84,8 +53,5 @@
       "required": false
     },
     "works_in_archestra": false
-  },
-  "evaluation_model": "gemini-2.5-flash",
-  "raw_dependencies": null,
-  "last_scraped_at": "2025-09-09T13:06:34.429Z"
+  }
 }

@@ -37,7 +37,6 @@
   },
   "readme": "",
   "category": "Cloud",
-  "quality_score": 0,
   "github_info": {
     "owner": "streamnative",
     "repo": "snmcp",
@@ -51,21 +50,5 @@
     "ci_cd": false,
     "latest_commit_hash": null
   },
-  "programming_language": null,
-  "framework": null,
-  "last_scraped_at": null,
-  "evaluation_model": null,
-  "protocol_features": {
-    "implementing_tools": false,
-    "implementing_prompts": false,
-    "implementing_resources": false,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": true,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [],
-  "raw_dependencies": ""
+  "programming_language": null
 }

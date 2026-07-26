@@ -13,9 +13,7 @@
   },
   "readme": null,
   "category": "Development",
-  "quality_score": 32,
   "programming_language": "TypeScript",
-  "framework": null,
   "github_info": {
     "owner": "bucketco",
     "repo": "bucket-javascript-sdk",
@@ -29,43 +27,6 @@
     "ci_cd": true,
     "latest_commit_hash": "c84de685346c3c6fe22cc5369bab8081872a0eaf"
   },
-  "protocol_features": {
-    "implementing_tools": false,
-    "implementing_prompts": false,
-    "implementing_resources": false,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": false,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [
-    {
-      "importance": 9,
-      "name": "@bucketco/browser"
-    },
-    {
-      "importance": 9,
-      "name": "@bucketco/node"
-    },
-    {
-      "importance": 8,
-      "name": "@bucketco/react"
-    },
-    {
-      "importance": 8,
-      "name": "@bucketco/vue"
-    },
-    {
-      "importance": 6,
-      "name": "axios"
-    },
-    {
-      "importance": 6,
-      "name": "ws"
-    }
-  ],
   "user_config": {},
   "archestra_config": {
     "oauth": {
@@ -74,8 +35,5 @@
     },
     "client_config_permutations": null,
     "works_in_archestra": false
-  },
-  "evaluation_model": "gemini-2.5-pro",
-  "raw_dependencies": null,
-  "last_scraped_at": "2025-08-22T11:23:53.281Z"
+  }
 }

@@ -1,6 +1,6 @@
 {
-  "name": "rusiaaman__wcgw__src__wcgw__client__mcp_server__readme.md",
-  "display_name": "Readme.md",
+  "name": "rusiaaman__wcgw",
+  "display_name": "wcgw",
   "description": "Shell and coding agent on claude desktop app",
   "author": {
     "name": "rusiaaman"
@@ -17,15 +17,13 @@
   },
   "readme": null,
   "category": "Development",
-  "quality_score": 46,
   "programming_language": "Python",
-  "framework": null,
   "github_info": {
     "owner": "rusiaaman",
     "repo": "wcgw",
-    "url": "https://github.com/rusiaaman/wcgw/blob/main/src/wcgw/client/mcp_server/Readme.md",
-    "name": "rusiaaman__wcgw__src__wcgw__client__mcp_server__readme.md",
-    "path": "src/wcgw/client/mcp_server/Readme.md",
+    "url": "https://github.com/rusiaaman/wcgw",
+    "name": "rusiaaman__wcgw",
+    "path": null,
     "stars": 571,
     "contributors": 10,
     "issues": 28,
@@ -33,23 +31,6 @@
     "ci_cd": true,
     "latest_commit_hash": "02caebc4976cb6c5e4cb684865c626dea7226816"
   },
-  "protocol_features": {
-    "implementing_tools": false,
-    "implementing_prompts": false,
-    "implementing_resources": false,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": false,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [
-    {
-      "name": "@modelcontextprotocol/sdk",
-      "importance": 10
-    }
-  ],
   "user_config": {
     "claude_api_key": {
       "type": "string",
@@ -80,8 +61,5 @@
       "required": false
     },
     "works_in_archestra": false
-  },
-  "evaluation_model": "gemini-2.5-flash",
-  "raw_dependencies": null,
-  "last_scraped_at": "2025-09-09T13:06:52.086Z"
+  }
 }

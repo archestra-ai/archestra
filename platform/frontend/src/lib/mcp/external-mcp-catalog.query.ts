@@ -36,7 +36,7 @@ export function useMcpRegistryServersInfinite(
           category: categoryParam,
           limit,
           offset: pageParam,
-          sortBy: "quality", // Sort by quality score (highest first)
+          sortBy: "stars", // Sort by GitHub stars (highest first)
           worksInArchestra: true,
         },
       });

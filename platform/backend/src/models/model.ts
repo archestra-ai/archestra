@@ -15,7 +15,6 @@ import {
 import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
-import ModelTeamModel from "./model-team";
 import type {
   CreateModel,
   Model,
@@ -24,6 +23,7 @@ import type {
   PatchModelBody,
   PriceSource,
 } from "@/types";
+import ModelTeamModel from "./model-team";
 
 /**
  * Effective pricing result with source tracking. All prices are per-million

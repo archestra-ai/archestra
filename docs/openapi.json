@@ -217257,6 +217257,25 @@
                           "additionalProperties": false
                         }
                       },
+                      "teams": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "pricePerMillionInput": {
                         "nullable": true,
                         "type": "string"
@@ -217332,6 +217351,7 @@
                       "updatedAt",
                       "isBest",
                       "apiKeys",
+                      "teams",
                       "pricePerMillionInput",
                       "pricePerMillionOutput",
                       "isCustomPrice",
@@ -217707,6 +217727,12 @@
                           "high"
                         ]
                       }
+                    }
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   }
                 }

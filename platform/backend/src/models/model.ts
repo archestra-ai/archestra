@@ -23,6 +23,7 @@ import type {
   PatchModelBody,
   PriceSource,
 } from "@/types";
+import ModelTeamModel from "./model-team";
 
 /**
  * Effective pricing result with source tracking. All prices are per-million
@@ -973,12 +974,18 @@ class ModelModel {
     if (!row) return null;
 
     const caps = ModelModel.toCapabilities(row);
+    const teamsByModelId = await ModelTeamModel.getTeamDetailsForModels([
+      row.id,
+    ]);
     return {
       id: row.id,
       modelId: row.modelId,
       provider: row.provider,
       description: row.description ?? null,
       ignored: row.ignored,
+      restrictedToTeams: (teamsByModelId.get(row.id) ?? []).map(
+        (team) => team.name,
+      ),
       embeddingDimensions: row.embeddingDimensions,
       inputModalities: row.inputModalities ?? null,
       outputModalities: row.outputModalities ?? null,

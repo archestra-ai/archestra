@@ -23,6 +23,7 @@ import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import {
   LlmProviderApiKeyModel,
   ModelModel,
+  ModelTeamModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -1549,5 +1550,107 @@ describe("LLM Proxy Handler — per-user provider connect required", () => {
     expect(body.error.internal_code).toBe("provider_auth_required");
     expect(body.error.message).toContain("GitHub Copilot");
     expect(body.error.message).toContain("/settings");
+  });
+});
+
+describe("LLM Proxy Handler — team-restricted models", () => {
+  let app: FastifyInstance;
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient({}) as never,
+    );
+    vi.spyOn(virtualKeyRateLimiter, "check").mockResolvedValue(undefined);
+    vi.spyOn(virtualKeyRateLimiter, "recordFailure").mockResolvedValue(
+      undefined,
+    );
+
+    testAgent = await makeAgent({ name: "Test Restricted Models Agent" });
+    metrics.llm.initializeMetrics([]);
+    mockEvaluatePolicies.mockResolvedValue(null);
+
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
+    });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  async function injectChatCompletionAs(passthroughToken: string) {
+    return await app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "x-archestra-virtual-key": passthroughToken,
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+  }
+
+  test("blocks a restricted model for users outside its teams and allows team members", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const model = await ModelModel.findByProviderAndModelId("openai", "gpt-4o");
+    if (!model) throw new Error("expected gpt-4o model row");
+
+    const insider = await makeUser();
+    await makeMember(insider.id, testAgent.organizationId);
+    const outsider = await makeUser();
+    await makeMember(outsider.id, testAgent.organizationId);
+
+    const devTeam = await makeTeam(testAgent.organizationId, insider.id);
+    await makeTeamMember(devTeam.id, insider.id);
+    await ModelTeamModel.syncModelTeams(model.id, [devTeam.id]);
+
+    const { value: outsiderToken } = await VirtualApiKeyModel.create({
+      organizationId: testAgent.organizationId,
+      name: "outsider-pt",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: outsider.id,
+    });
+    const blocked = await injectChatCompletionAs(outsiderToken);
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json().error).toMatchObject({
+      type: "api_authorization_error",
+      internal_code: "model_restricted_to_teams",
+    });
+
+    const { value: insiderToken } = await VirtualApiKeyModel.create({
+      organizationId: testAgent.organizationId,
+      name: "insider-pt",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: insider.id,
+    });
+    const allowed = await injectChatCompletionAs(insiderToken);
+    expect(allowed.statusCode).toBe(200);
   });
 });

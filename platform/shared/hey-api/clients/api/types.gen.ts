@@ -55595,6 +55595,10 @@ export type GetModelsWithApiKeysResponses = {
             scope: string;
             isSystem: boolean;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         pricePerMillionInput: string | null;
         pricePerMillionOutput: string | null;
         isCustomPrice: boolean;
@@ -55630,6 +55634,7 @@ export type UpdateModelData = {
             num_predict?: number;
             reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
         } | null;
+        teamIds?: Array<string>;
     };
     path: {
         id: string;

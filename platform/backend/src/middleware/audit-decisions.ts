@@ -375,6 +375,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: catalog × team; parent (catalog) audited",
   },
+  modelTeamsTable: {
+    audited: false,
+    reason:
+      "join: model × team; parent (model) audited, snapshot includes restrictedToTeams",
+  },
   oauthClientTeamsTable: {
     audited: false,
     reason: "join: oauth client × team; parent (oauth client) audited",

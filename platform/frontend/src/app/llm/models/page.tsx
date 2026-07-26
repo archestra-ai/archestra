@@ -19,10 +19,12 @@ import {
   Eye,
   EyeOff,
   Fingerprint,
+  Globe,
   Pencil,
   RefreshCw,
   RotateCcw,
   Server,
+  Users,
   X,
 } from "lucide-react";
 import Image from "next/image";
@@ -59,6 +61,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -76,6 +79,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  type VisibilityOption,
+  VisibilitySelector,
+} from "@/components/visibility-selector";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -86,6 +94,7 @@ import {
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 import { formatContextLength } from "@/lib/utils";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import {
@@ -228,6 +237,30 @@ export default function ModelsPage() {
                 )}
                 {row.original.embeddingDimensions !== null && (
                   <EmbeddingModelBadge />
+                )}
+                {row.original.teams.length > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="text-xs gap-1">
+                          <Users className="h-3 w-3 shrink-0" />
+                          <span>
+                            {row.original.teams.length === 1
+                              ? "1 team"
+                              : `${row.original.teams.length} teams`}
+                          </span>
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>
+                          Limited to:{" "}
+                          {row.original.teams
+                            .map((team) => team.name)
+                            .join(", ")}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </div>
             </div>
@@ -585,12 +618,32 @@ type EditModelEmbeddingDimensionsValue =
   | ""
   | keyof typeof EMBEDDING_DIMENSION_MAP;
 
+type ModelAccessScope = "everyone" | "team";
+
+const modelAccessScopeOptions: VisibilityOption<ModelAccessScope>[] = [
+  {
+    value: "everyone",
+    label: "Everyone",
+    description: "All members of the organization can see and use this model.",
+    icon: Globe,
+  },
+  {
+    value: "team",
+    label: "Specific teams",
+    description:
+      "Only members of the selected teams can see and use this model.",
+    icon: Users,
+  },
+];
+
 interface EditModelFormValues {
   customPricePerMillionInput: string;
   customPricePerMillionOutput: string;
   customPricePerMillionCacheRead: string;
   customPricePerMillionCacheWrite: string;
   ignored: boolean;
+  accessScope: ModelAccessScope;
+  teamIds: string[];
   embeddingDimensions: EditModelEmbeddingDimensionsValue;
   inputModalities: string[];
   outputModalities: string[];
@@ -610,6 +663,13 @@ function EditModelDialog({
   const [inputModalityToAdd, setInputModalityToAdd] = useState("");
   const [outputModalityToAdd, setOutputModalityToAdd] = useState("");
   const updateModel = useUpdateModel();
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  // Model catalog managers restrict models across the whole org, so the
+  // picker offers every team (not just the editor's own).
+  const { data: assignableTeams = [] } = useAssignableTeams({
+    isResourceAdmin: true,
+    enabled: !!canReadTeams,
+  });
   const { data: organization } = useOrganization();
   const { data: apiKeys = [] } = useLlmProviderApiKeys();
   const providerConfig = PROVIDER_CONFIG[model.provider];
@@ -620,6 +680,18 @@ function EditModelDialog({
     availableApiKeys: apiKeys,
   });
   const fallbackPricing = getFallbackPricing(model);
+  const teamScopeUnavailable = !canReadTeams || assignableTeams.length === 0;
+  const accessScopeOptions = modelAccessScopeOptions.map((option) =>
+    option.value === "team" && teamScopeUnavailable
+      ? {
+          ...option,
+          disabled: true,
+          disabledReason: !canReadTeams
+            ? "Team selection requires permission to view teams."
+            : "No teams available. Create a team first.",
+        }
+      : option,
+  );
   // The model's provider supports prompt caching when the backend resolved a
   // cache price for it (synced, custom, or multiplier-derived).
   const supportsCachePricing = model.cachePriceSource !== null;
@@ -635,6 +707,7 @@ function EditModelDialog({
     defaultValues: getDefaults(model),
   });
   const selectedEmbeddingDimensions = form.watch("embeddingDimensions");
+  const accessScope = form.watch("accessScope");
 
   // Top-level field errors, surfaced next to the submit button — see the footer
   // for why. Nested `configuredParameters.*` errors are deliberately not
@@ -667,6 +740,7 @@ function EditModelDialog({
       customPricePerMillionCacheRead: cacheReadPrice,
       customPricePerMillionCacheWrite: cacheWritePrice,
       ignored: values.ignored,
+      teamIds: values.accessScope === "team" ? values.teamIds : [],
       embeddingDimensions,
       inputModalities: values.inputModalities as ModelInputModality[],
       outputModalities: values.outputModalities as ModelOutputModality[],
@@ -736,30 +810,122 @@ function EditModelDialog({
     >
       <Form {...form}>
         <div className="space-y-4">
-          {/* Read-only: Provider */}
-          <div className="space-y-1">
-            <span className="text-sm font-medium">Provider</span>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {providerConfig && (
-                <Image
-                  src={providerConfig.icon}
-                  alt={providerConfig.name}
-                  width={20}
-                  height={20}
-                  className="rounded dark:invert"
-                />
-              )}
-              <span>{providerConfig?.name ?? model.provider}</span>
+          {/* Read-only: Provider + Model ID */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <span className="text-sm font-medium">Provider</span>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {providerConfig && (
+                  <Image
+                    src={providerConfig.icon}
+                    alt={providerConfig.name}
+                    width={20}
+                    height={20}
+                    className="rounded dark:invert"
+                  />
+                )}
+                <span>{providerConfig?.name ?? model.provider}</span>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <span className="text-sm font-medium">Model ID</span>
+              <p className="text-sm font-mono text-muted-foreground break-all">
+                {model.modelId}
+              </p>
             </div>
           </div>
 
-          {/* Read-only: Model ID */}
-          <div className="space-y-1">
-            <span className="text-sm font-medium">Model ID</span>
-            <p className="text-sm font-mono text-muted-foreground">
-              {model.modelId}
-            </p>
+          <Separator />
+
+          {/* Availability: hide toggle + team restriction */}
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <span className="text-sm font-medium">Availability</span>
+              <p className="text-sm text-muted-foreground">
+                Control who can see and use this model.
+              </p>
+            </div>
+
+            <FormField
+              control={form.control}
+              name="ignored"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <FormLabel>Hide this model</FormLabel>
+                      <p className="text-sm text-muted-foreground">
+                        Hidden models remain synced and editable in this
+                        catalog, but they are excluded anywhere {appName} offers
+                        model selection.
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="teamIds"
+              rules={{
+                validate: (teamIds) =>
+                  form.getValues("accessScope") === "team" &&
+                  teamIds.length === 0
+                    ? "Select at least one team"
+                    : true,
+              }}
+              render={({ field }) => (
+                <FormItem>
+                  <VisibilitySelector
+                    label="Limit to teams"
+                    value={accessScope}
+                    options={accessScopeOptions}
+                    onValueChange={(scope) => {
+                      form.setValue("accessScope", scope);
+                      // Re-run the teamIds rule so a stale "select at least
+                      // one team" error clears when switching back.
+                      void form.trigger("teamIds");
+                    }}
+                  >
+                    {accessScope === "team" && (
+                      <FormControl>
+                        <MultiSelectCombobox
+                          disabled={
+                            !canReadTeams || assignableTeams.length === 0
+                          }
+                          options={assignableTeams.map((team) => ({
+                            value: team.id,
+                            label: team.name,
+                          }))}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder={
+                            !canReadTeams
+                              ? "Teams unavailable"
+                              : assignableTeams.length === 0
+                                ? "No teams available"
+                                : "Search teams..."
+                          }
+                          emptyMessage="No teams found."
+                        />
+                      </FormControl>
+                    )}
+                  </VisibilitySelector>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
+
+          <Separator />
 
           {/* Pricing */}
           <div className="space-y-2">
@@ -1051,34 +1217,6 @@ function EditModelDialog({
               )}
             />
           </div>
-
-          <Separator />
-
-          <FormField
-            control={form.control}
-            name="ignored"
-            render={({ field }) => (
-              <FormItem className="rounded-lg border p-3">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <FormLabel>Hide this model</FormLabel>
-                    <p className="text-sm text-muted-foreground">
-                      Hidden models remain synced and editable in this catalog,
-                      but they are excluded anywhere {appName} offers model
-                      selection.
-                    </p>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
 
           {model.provider === "ollama" &&
             model.defaultParameters &&
@@ -1409,6 +1547,9 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
     customPricePerMillionCacheWrite:
       model.customPricePerMillionCacheWrite ?? "",
     ignored: model.ignored,
+    accessScope:
+      model.teams.length > 0 ? ("team" as const) : ("everyone" as const),
+    teamIds: model.teams.map((team) => team.id),
     embeddingDimensions: model.embeddingDimensions
       ? getEmbeddingDimensionsString(model.embeddingDimensions)
       : "",

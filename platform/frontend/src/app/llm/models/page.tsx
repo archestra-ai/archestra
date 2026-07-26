@@ -680,6 +680,18 @@ function EditModelDialog({
     availableApiKeys: apiKeys,
   });
   const fallbackPricing = getFallbackPricing(model);
+  const teamScopeUnavailable = !canReadTeams || assignableTeams.length === 0;
+  const accessScopeOptions = modelAccessScopeOptions.map((option) =>
+    option.value === "team" && teamScopeUnavailable
+      ? {
+          ...option,
+          disabled: true,
+          disabledReason: !canReadTeams
+            ? "Team selection requires permission to view teams."
+            : "No teams available. Create a team first.",
+        }
+      : option,
+  );
   // The model's provider supports prompt caching when the backend resolved a
   // cache price for it (synced, custom, or multiplier-derived).
   const supportsCachePricing = model.cachePriceSource !== null;
@@ -875,7 +887,7 @@ function EditModelDialog({
                   <VisibilitySelector
                     label="Limit to teams"
                     value={accessScope}
-                    options={modelAccessScopeOptions}
+                    options={accessScopeOptions}
                     onValueChange={(scope) => {
                       form.setValue("accessScope", scope);
                       // Re-run the teamIds rule so a stale "select at least

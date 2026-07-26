@@ -1,6 +1,6 @@
 {
-  "name": "j3k0__speech.sh__mcp_readme.md",
-  "display_name": "MCP_README.md",
+  "name": "j3k0__speech.sh",
+  "display_name": "speech.sh",
   "description": "Simple curl script to play aloud what you type, useful if your voice is suddenly broken.",
   "author": {
     "name": "j3k0"
@@ -17,9 +17,9 @@
   "github_info": {
     "owner": "j3k0",
     "repo": "speech.sh",
-    "url": "https://github.com/j3k0/speech.sh/blob/main/MCP_README.md",
-    "name": "j3k0__speech.sh__mcp_readme.md",
-    "path": "MCP_README.md",
+    "url": "https://github.com/j3k0/speech.sh",
+    "name": "j3k0__speech.sh",
+    "path": null,
     "stars": 4,
     "contributors": 2,
     "issues": 0,

@@ -1,6 +1,6 @@
 {
-  "name": "mobb-dev__bugsy?tab=readme-ov-file-model-context-protocol-mcp-server",
-  "display_name": "bugsy?tab=readme-ov-file#model-context-protocol-mcp-server",
+  "name": "mobb-dev__bugsy",
+  "display_name": "Bugsy",
   "description": "MCP server from mobb-dev/bugsy?tab=readme-ov-file#model-context-protocol-mcp-server",
   "author": {
     "name": "mobb-dev"
@@ -20,8 +20,8 @@
   "github_info": {
     "owner": "mobb-dev",
     "repo": "bugsy?tab=readme-ov-file#model-context-protocol-mcp-server",
-    "url": "https://github.com/mobb-dev/bugsy?tab=readme-ov-file#model-context-protocol-mcp-server",
-    "name": "mobb-dev__bugsy?tab=readme-ov-file#model-context-protocol-mcp-server",
+    "url": "https://github.com/mobb-dev/bugsy",
+    "name": "mobb-dev__bugsy",
     "path": null,
     "stars": 58,
     "contributors": 1,

@@ -1,6 +1,6 @@
 {
-  "name": "rusiaaman__wcgw__src__wcgw__client__mcp_server__readme.md",
-  "display_name": "Readme.md",
+  "name": "rusiaaman__wcgw",
+  "display_name": "wcgw",
   "description": "Shell and coding agent on claude desktop app",
   "author": {
     "name": "rusiaaman"
@@ -21,9 +21,9 @@
   "github_info": {
     "owner": "rusiaaman",
     "repo": "wcgw",
-    "url": "https://github.com/rusiaaman/wcgw/blob/main/src/wcgw/client/mcp_server/Readme.md",
-    "name": "rusiaaman__wcgw__src__wcgw__client__mcp_server__readme.md",
-    "path": "src/wcgw/client/mcp_server/Readme.md",
+    "url": "https://github.com/rusiaaman/wcgw",
+    "name": "rusiaaman__wcgw",
+    "path": null,
     "stars": 571,
     "contributors": 10,
     "issues": 28,

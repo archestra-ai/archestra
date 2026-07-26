@@ -1,6 +1,6 @@
 {
-  "name": "safedep__vet__docs__mcp.md",
-  "display_name": "mcp.md",
+  "name": "safedep__vet",
+  "display_name": "vet",
   "description": "Protect against malicious open source packages 🤖",
   "author": {
     "name": "safedep"
@@ -17,9 +17,9 @@
   "github_info": {
     "owner": "safedep",
     "repo": "vet",
-    "url": "https://github.com/safedep/vet/blob/main/docs/mcp.md",
-    "name": "safedep__vet__docs__mcp.md",
-    "path": "docs/mcp.md",
+    "url": "https://github.com/safedep/vet",
+    "name": "safedep__vet",
+    "path": null,
     "stars": 691,
     "contributors": 22,
     "issues": 189,

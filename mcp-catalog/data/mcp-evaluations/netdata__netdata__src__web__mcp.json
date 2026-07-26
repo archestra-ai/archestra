@@ -1,6 +1,6 @@
 {
-  "name": "netdata__netdata__src__web__mcp__readme.md",
-  "display_name": "README.md",
+  "name": "netdata__netdata__src__web__mcp",
+  "display_name": "Netdata",
   "description": "The fastest path to AI-powered full stack observability, even for lean teams.",
   "author": {
     "name": "netdata"
@@ -17,9 +17,9 @@
   "github_info": {
     "owner": "netdata",
     "repo": "netdata",
-    "url": "https://github.com/netdata/netdata/blob/master/src/web/mcp/README.md",
-    "name": "netdata__netdata__src__web__mcp__readme.md",
-    "path": "src/web/mcp/README.md",
+    "url": "https://github.com/netdata/netdata/tree/master/src/web/mcp",
+    "name": "netdata__netdata__src__web__mcp",
+    "path": "src/web/mcp",
     "stars": 75677,
     "contributors": 663,
     "issues": 8117,

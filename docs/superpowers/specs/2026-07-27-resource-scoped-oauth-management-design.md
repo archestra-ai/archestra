@@ -9,6 +9,7 @@ Remove the standalone Client Credentials area without losing any OAuth client or
 - LLM Proxy Connect dialogs retain their existing virtual-key and OAuth client management.
 - MCP Gateway Connect dialogs gain an OAuth clients authentication tab.
 - Agent Connect dialogs gain an OAuth clients authentication option alongside platform tokens.
+- The LLM Proxy Virtual keys and Passthrough tabs each open a creation dialog fixed to that tab's key type. The dialog does not repeat the key-type selector.
 - Every OAuth client surface supports listing applicable clients, creating a client with the current resource preselected, editing it, copying its client ID, rotating its secret, and deleting it.
 - Rotated and newly created secrets are shown once in the existing credentials reveal dialog.
 - Actions and data remain gated by the existing OAuth client read, create, update, and delete permissions.
@@ -37,6 +38,7 @@ No backend, database, or API contract changes are expected. The feature reuses t
 ## Validation
 
 - Add or update focused component tests for resource filtering and the create/edit/rotate/delete flows in Agent and MCP Gateway dialogs.
+- Verify each LLM Proxy key tab opens the matching creation form without a key-type selector.
 - Update navigation tests to confirm Client Credentials is absent.
 - Run focused frontend tests, frontend type checking, and linting for touched files.
 - Audit product documentation for links or instructions that refer to the standalone Client Credentials pages and update any affected pages separately under the repository’s documentation conventions.

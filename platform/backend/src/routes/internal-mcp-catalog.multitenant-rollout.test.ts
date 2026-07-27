@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { type Mock, vi } from "vitest";
 import db, { schema } from "@/database";
-import { InternalMcpCatalogModel } from "@/models";
+import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -53,6 +53,15 @@ describe("PUT /api/internal_mcp_catalog/:id — multi-tenant shared-pod rollout"
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
     mockHasPermission.mockResolvedValue({ success: true, error: null });
+    // The recreate's second phase syncs tools per install, which otherwise
+    // reaches the real MCP client. Its failure path writes exactly the
+    // `reinstallRequired` / `reinstallReason` fields these tests assert on, so
+    // leaving it live would decide those assertions by whether a doomed
+    // connection attempt happens to settle inside `drainCascade` — and the
+    // pending promise would outlive this file's database (see test/setup.ts).
+    vi.spyOn(McpServerModel, "getToolsFromServer").mockResolvedValue([
+      { name: "test-tool", description: "A test tool", inputSchema: {} },
+    ]);
 
     user = await makeUser();
     const organization = await makeOrganization();
@@ -251,6 +260,37 @@ describe("PUT /api/internal_mcp_catalog/:id — multi-tenant shared-pod rollout"
     // catch, otherwise this passes for a deferral that never tried.
     expect(reinstallSharedSpy).toHaveBeenCalledWith(catalog.id);
     // Pod is still on the old spec — the admin needs a retry affordance.
+    expect((await getCatalogRow(catalog.id)).catalogReinstallRequired).toBe(
+      true,
+    );
+  });
+
+  test("a queued recreate stands down when the catalog already owes a manual reinstall", async ({
+    makeMcpServer,
+  }) => {
+    const { catalog, name } = await makeCatalogWithInstalls(makeMcpServer, {
+      multitenant: true,
+    });
+    // An earlier edit needed input no tenant has supplied yet.
+    await InternalMcpCatalogModel.update(catalog.id, {
+      catalogReinstallRequired: true,
+    });
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        name,
+        serverType: "local",
+        localConfig: { ...localConfig, dockerImage: "example/image:2.0" },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    await drainCascade();
+
+    // Rolling now would bring the pod back on a spec nobody can satisfy, and
+    // clear the flag that asks for the values.
+    expect(reinstallSharedSpy).not.toHaveBeenCalled();
     expect((await getCatalogRow(catalog.id)).catalogReinstallRequired).toBe(
       true,
     );

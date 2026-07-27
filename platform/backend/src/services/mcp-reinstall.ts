@@ -133,15 +133,20 @@ export function manualReinstallReason(
 
 /**
  * True when an edit changes what a multi-tenant local catalog's single shared
- * pod runs — execution config, or the non-prompted env vars baked into its
- * spec. Prompted entries are per-install secrets resolved at request time and
- * never reach the shared pod, so they're excluded (they're tracked separately
- * by `promptedEnvVarsChanged`). Shared env is compared on `key + type + value`
- * only; `description`, `required`, and other metadata don't reach the pod env.
+ * pod runs. The catalog edit route recreates the shared deployment when this is
+ * true and no manual reason applies. Mirrored on the frontend by the
+ * identically-named predicate in `frontend/.../cascade-decision.ts`.
  *
- * The catalog edit route recreates the shared deployment when this is true and
- * no manual reason applies. Mirrored on the frontend by the identically-named
- * predicate in `frontend/.../cascade-decision.ts`.
+ * Covers exactly two dimensions: execution config, and the non-prompted entries
+ * of `localConfig.environment` compared on `key + type + value` (`description`,
+ * `required`, and friends don't reach the pod env). Prompted entries are
+ * per-install secrets resolved at request time, never on the shared pod —
+ * `promptedEnvVarsChanged` tracks those.
+ *
+ * Deliberately NOT covered, despite also reaching the pod: `envFrom` and
+ * `imagePullSecrets`. Those fall through to the per-install auto path, which
+ * predates this predicate. Widening the projection changes which edits trigger
+ * a shared recreate, so it needs its own change with its own scenarios.
  */
 export function multitenantSharedPodChanged(
   oldCatalogItem: InternalMcpCatalog,

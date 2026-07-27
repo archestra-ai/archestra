@@ -398,8 +398,8 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
     expected: "auto",
     sharedPredicate: "non-metadata-diff",
     rationale:
-      "Diverges from `docker-image-change` on multitenancy alone. One shared pod serves every tenant and it belongs to the admin doing the edit — nobody else's workload is disturbed and no tenant owes a value — so the recreate runs on save instead of parking behind a second click. The single-tenant case stays manual because each install owns its own pod.",
-    ref: "staging report: image bump showed 'Save change — shared deployment will need a Reinstall'",
+      "Diverges from `docker-image-change` on multitenancy alone. One shared pod serves every tenant and it belongs to the admin doing the edit — nobody else's workload is disturbed and no tenant owes a value — so the recreate runs on save instead of parking behind a second click. The single-tenant case stays manual because each install owns its own pod. Regression: an image bump used to show the manual bar claiming the change 'needs a new value', which no dialog ever collected.",
+    ref: "#6870",
   },
   {
     id: "command-change-multitenant",

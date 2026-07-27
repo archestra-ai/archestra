@@ -237,10 +237,14 @@ function localExecutionConfigChanged(
 }
 
 /**
- * Mirror of the backend route's `catalogScopeChangeOnMultitenant`. True when
- * an edit changes what the one shared pod runs — execution config, or the
- * non-prompted env vars baked into its spec. Prompted entries are per-install
- * secrets resolved at request time, so they never reach the shared pod.
+ * Mirror of `multitenantSharedPodChanged` in
+ * `backend/src/services/mcp-reinstall.ts`. True when an edit changes what the
+ * one shared pod runs: execution config, or the non-prompted entries of
+ * `localConfig.environment`. Prompted entries are per-install secrets resolved
+ * at request time, so they never reach the shared pod.
+ *
+ * `envFrom` and `imagePullSecrets` reach the pod too but are deliberately out
+ * of scope on both sides — see the backend docstring.
  */
 function multitenantSharedPodChanged(
   prev: CascadeSnapshot,

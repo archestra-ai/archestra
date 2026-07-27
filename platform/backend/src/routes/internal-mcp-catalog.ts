@@ -2148,7 +2148,25 @@ function reinstallMultitenantCatalogInBackground(
 ): void {
   setImmediate(async () => {
     try {
-      await reinstallMultitenantCatalog(catalogItem);
+      // Re-read rather than closing over the caller's row: another edit can
+      // land while this sits queued, and the recreate both syncs tools against
+      // whichever row it's handed and clears `catalogReinstallRequired`
+      // unconditionally when it succeeds.
+      const current = await InternalMcpCatalogModel.findById(catalogItem.id, {
+        expandSecrets: false,
+      });
+      if (!current) return;
+      // That later edit deferred its own rollout because it needs values no
+      // tenant has supplied. Recreating now would roll a spec nobody can
+      // satisfy and clear the very flag asking for those values.
+      if (current.catalogReinstallRequired) {
+        logger.info(
+          { catalogId: catalogItem.id },
+          "Newer catalog edit is awaiting manual reinstall - skipping background recreate",
+        );
+        return;
+      }
+      await reinstallMultitenantCatalog(current);
     } catch (error) {
       logger.error(
         { err: error, catalogId: catalogItem.id },

@@ -365,4 +365,61 @@ describe("LlmProviderApiKeyForm", () => {
       expect(form.getValues("apiKey")).toBe("sk-openai-secret");
     });
   });
+
+  describe("Bedrock region", () => {
+    it("asks for a region instead of requiring a base URL", async () => {
+      renderForm({ defaults: { provider: "bedrock" } });
+
+      // AWS publishes no "base URL" for Bedrock, so demanding one was a dead end.
+      await waitFor(() => {
+        expect(screen.getByLabelText("Region")).toBeInTheDocument();
+      });
+      expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("Base URL is required for this provider"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows the region carried by an existing key's endpoint", async () => {
+      renderForm({
+        defaults: {
+          provider: "bedrock",
+          baseUrl: "https://bedrock-runtime.ap-southeast-2.amazonaws.com",
+        },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Region")).toHaveTextContent(
+          "ap-southeast-2",
+        );
+      });
+    });
+
+    it("defaults to the region Bedrock would fall back to anyway", async () => {
+      renderForm({ defaults: { provider: "bedrock" } });
+
+      // Not an arbitrary default: it mirrors the backend's getBedrockRegion
+      // fallback, so an untouched picker shows what would actually be used.
+      await waitFor(() => {
+        expect(screen.getByLabelText("Region")).toHaveTextContent("us-east-1");
+      });
+    });
+
+    it("warns when a custom endpoint carries no recognizable region", async () => {
+      renderForm({
+        defaults: {
+          provider: "bedrock",
+          baseUrl: "https://my-bedrock-gateway.internal/v1",
+        },
+      });
+
+      // The backend silently falls back to us-east-1 here, which is exactly the
+      // surprise this copy exists to prevent.
+      await waitFor(() => {
+        expect(
+          screen.getByText(/carries no recognizable region/),
+        ).toBeInTheDocument();
+      });
+    });
+  });
 });

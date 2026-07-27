@@ -2,7 +2,11 @@
 
 import {
   type archestraApiTypes,
+  BEDROCK_REGIONS,
+  bedrockRegionFromBaseUrl,
+  bedrockRuntimeBaseUrl,
   CHATGPT_SUBSCRIPTION_LABEL,
+  DEFAULT_BEDROCK_REGION,
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
   isProviderApiKeyOptional,
@@ -319,7 +323,10 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://console.aws.amazon.com/bedrock",
     consoleName: "AWS Console",
-    baseUrlRequired: true,
+    // No baseUrlRequired: Bedrock asks for a region instead. AWS publishes no
+    // "base URL" for Bedrock — the SDK builds the endpoint from the region — so
+    // demanding one was a dead end. The region picker writes the runtime
+    // endpoint, and the custom-endpoint field stays available underneath it.
   },
   minimax: {
     name: "MiniMax",
@@ -444,6 +451,8 @@ export function LlmProviderApiKeyForm({
   const bedrockAuthMethod = form.watch("bedrockAuthMethod");
   const isBedrockSigV4 =
     provider === "bedrock" && bedrockAuthMethod === "sigv4";
+  const baseUrl = form.watch("baseUrl");
+  const isBedrock = provider === "bedrock";
   const openaiAuthMethod = form.watch("openaiAuthMethod");
   // OpenAI "ChatGPT subscription" (Codex) auth mode: the credential is an
   // individual's ChatGPT subscription, so it behaves like the per-user Copilot
@@ -473,6 +482,20 @@ export function LlmProviderApiKeyForm({
     : providerConfig.name;
   const isBaseUrlRequired =
     providerConfig.baseUrlRequired && !providerBaseUrls?.[provider];
+
+  // Bedrock's effective region, in the same precedence order the backend's
+  // getBedrockRegion applies: this key's own endpoint, then the server-wide
+  // Bedrock endpoint, then the SDK default. Showing the resolved value means the
+  // picker always reflects the region the key will really run against, so
+  // leaving it untouched can't silently mean something else.
+  const bedrockRegion =
+    bedrockRegionFromBaseUrl(baseUrl) ??
+    bedrockRegionFromBaseUrl(providerBaseUrls?.bedrock) ??
+    DEFAULT_BEDROCK_REGION;
+  // A custom endpoint carrying no recognizable region: the backend falls back to
+  // the default region, which is the trap worth naming out loud in the UI.
+  const hasUnresolvedBedrockRegion =
+    isBedrock && Boolean(baseUrl) && bedrockRegionFromBaseUrl(baseUrl) === null;
 
   const allowedProviderSet = useMemo(
     () =>
@@ -1330,10 +1353,52 @@ export function LlmProviderApiKeyForm({
             </div>
           )}
 
+        {/* Region is a primary Bedrock field, not an advanced one: AWS enables
+            models per region, so a key is unusable until it points at the right
+            one. The endpoint it writes lives under Advanced settings below. */}
+        {!isSubscriptionFlow && isBedrock && (
+          <div className="space-y-2">
+            <Label htmlFor="llm-provider-api-key-bedrock-region">Region</Label>
+            <p className="text-xs text-muted-foreground">
+              The AWS region to send Bedrock requests to. Models are enabled per
+              region, so pick the one where your models are available.
+            </p>
+            <Select
+              value={bedrockRegion}
+              onValueChange={(region) =>
+                form.setValue("baseUrl", bedrockRuntimeBaseUrl(region), {
+                  shouldDirty: true,
+                })
+              }
+              disabled={isPending}
+            >
+              <SelectTrigger id="llm-provider-api-key-bedrock-region">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BEDROCK_REGIONS.map(({ id, label }) => (
+                  <SelectItem key={id} value={id}>
+                    {label} — {id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hasUnresolvedBedrockRegion && (
+              <p className="text-xs text-amber-600 dark:text-amber-500">
+                The custom endpoint in Advanced settings carries no recognizable
+                region, so requests will run against{" "}
+                <code>{DEFAULT_BEDROCK_REGION}</code>. Use a{" "}
+                <code>bedrock-runtime.&lt;region&gt;.amazonaws.com</code>{" "}
+                endpoint to pin a different one.
+              </p>
+            )}
+          </div>
+        )}
+
         {!isSubscriptionFlow && (isBaseUrlRequired || showAdvancedSettings) && (
           <div className="space-y-2">
             <Label htmlFor="llm-provider-api-key-base-url">
-              Base URL{" "}
+              {isBedrock ? "Custom endpoint" : "Base URL"}{" "}
               {!isBaseUrlRequired && (
                 <span className="font-normal text-muted-foreground">
                   (optional)
@@ -1341,8 +1406,9 @@ export function LlmProviderApiKeyForm({
               )}
             </Label>
             <p className="text-xs text-muted-foreground">
-              Override the default API endpoint. Useful for self-hosted or proxy
-              setups.
+              {isBedrock
+                ? "Filled in from the region above. Change it only for a VPC/PrivateLink endpoint or a Bedrock-compatible gateway."
+                : "Override the default API endpoint. Useful for self-hosted or proxy setups."}
             </p>
             {isSelfHostedProvider(provider) && (
               <p className="text-xs text-muted-foreground">
@@ -1362,6 +1428,7 @@ export function LlmProviderApiKeyForm({
               id="llm-provider-api-key-base-url"
               type="url"
               placeholder={
+                (isBedrock ? bedrockRuntimeBaseUrl(bedrockRegion) : "") ||
                 providerBaseUrls?.[provider] ||
                 DEFAULT_PROVIDER_BASE_URLS[provider] ||
                 "https://..."

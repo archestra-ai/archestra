@@ -293,6 +293,61 @@ export const MICROSOFT_365_COPILOT_MODELS = [
 ] as const;
 
 /**
+ * AWS regions that serve the Bedrock runtime, for the key form's region picker.
+ * AWS adds regions faster than this list can track, so it is a convenience
+ * shortlist rather than an authoritative set — a region missing here is still
+ * reachable by typing its runtime endpoint into the form's custom-endpoint
+ * field, which is what `bedrockRegionFromBaseUrl` reads back.
+ */
+export const BEDROCK_REGIONS = [
+  { id: "us-east-1", label: "US East (N. Virginia)" },
+  { id: "us-east-2", label: "US East (Ohio)" },
+  { id: "us-west-2", label: "US West (Oregon)" },
+  { id: "ca-central-1", label: "Canada (Central)" },
+  { id: "sa-east-1", label: "South America (São Paulo)" },
+  { id: "eu-west-1", label: "Europe (Ireland)" },
+  { id: "eu-west-2", label: "Europe (London)" },
+  { id: "eu-west-3", label: "Europe (Paris)" },
+  { id: "eu-central-1", label: "Europe (Frankfurt)" },
+  { id: "eu-north-1", label: "Europe (Stockholm)" },
+  { id: "eu-south-1", label: "Europe (Milan)" },
+  { id: "ap-south-1", label: "Asia Pacific (Mumbai)" },
+  { id: "ap-northeast-1", label: "Asia Pacific (Tokyo)" },
+  { id: "ap-northeast-2", label: "Asia Pacific (Seoul)" },
+  { id: "ap-northeast-3", label: "Asia Pacific (Osaka)" },
+  { id: "ap-southeast-1", label: "Asia Pacific (Singapore)" },
+  { id: "ap-southeast-2", label: "Asia Pacific (Sydney)" },
+] as const;
+
+/**
+ * The region Bedrock falls back to when none can be determined. Mirrors the
+ * backend's `getBedrockRegion` default so the form shows the region a key would
+ * actually run against rather than an empty control.
+ */
+export const DEFAULT_BEDROCK_REGION = "us-east-1";
+
+/** The Bedrock runtime (data-plane) endpoint for a region. */
+export function bedrockRuntimeBaseUrl(region: string): string {
+  return `https://bedrock-runtime.${region}.amazonaws.com`;
+}
+
+/**
+ * Recover the AWS region from a Bedrock runtime endpoint. This is the single
+ * definition of that parse — the backend resolves a key's region with it at
+ * request time, and the key form uses it to show the region back when editing.
+ *
+ * Deliberately anchored on the `bedrock-runtime.` host label, so it also reads
+ * VPC/PrivateLink endpoints that embed it. Returns null when no region can be
+ * read, which is what makes an unparseable custom endpoint visible in the UI
+ * instead of silently resolving to the default region.
+ */
+export function bedrockRegionFromBaseUrl(
+  baseUrl: string | null | undefined,
+): string | null {
+  return baseUrl?.match(/bedrock-runtime\.([a-z0-9-]+)\./)?.[1] ?? null;
+}
+
+/**
  * Default provider base URLs.
  * Used as placeholder hints in the UI and as fallback values when no per-key base URL is configured.
  */

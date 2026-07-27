@@ -335,7 +335,7 @@ function LlmProxyAuthSurface({
         onOpenChange={(open) => {
           if (!open) setCreateKeyType(null);
         }}
-        initialKeyType={createKeyType ?? "standard"}
+        keyType={createKeyType ?? "standard"}
       />
       <OauthClientCreateFlow
         proxyId={proxy.id}

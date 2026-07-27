@@ -25,7 +25,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import {
@@ -53,11 +52,11 @@ export type VirtualKeyType = NonNullable<
 export function CreateVirtualKeyDialogWithData({
   open,
   onOpenChange,
-  initialKeyType,
+  keyType,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialKeyType?: VirtualKeyType;
+  keyType: VirtualKeyType;
 }) {
   const { data: apiKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
@@ -83,7 +82,7 @@ export function CreateVirtualKeyDialogWithData({
     <CreateVirtualKeyDialog
       open={open}
       onOpenChange={onOpenChange}
-      initialKeyType={initialKeyType}
+      keyType={keyType}
       parentableKeys={apiKeys}
       defaultExpirationSeconds={defaultExpirationSeconds ?? null}
       visibilityOptions={visibilityOptions}
@@ -94,29 +93,10 @@ export function CreateVirtualKeyDialogWithData({
   );
 }
 
-const KEY_TYPE_OPTIONS: {
-  value: VirtualKeyType;
-  label: string;
-  description: string;
-}[] = [
-  {
-    value: "standard",
-    label: "Standard",
-    description:
-      "Maps to provider API keys and is sent in the Authorization header as a provider key replacement.",
-  },
-  {
-    value: "passthrough",
-    label: "Passthrough",
-    description:
-      "Carries no provider key. Sent in the X-Archestra-Virtual-Key header to attribute a request to a user when the provider credential is passed through (e.g. a Claude Code subscription token).",
-  },
-];
-
 export function CreateVirtualKeyDialog({
   open,
   onOpenChange,
-  initialKeyType = "standard",
+  keyType,
   parentableKeys,
   defaultExpirationSeconds,
   visibilityOptions,
@@ -126,8 +106,7 @@ export function CreateVirtualKeyDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Key type preselected when the dialog opens (deep links). */
-  initialKeyType?: VirtualKeyType;
+  keyType: VirtualKeyType;
   parentableKeys: LlmProviderApiKeyResponse[];
   defaultExpirationSeconds: number | null;
   visibilityOptions: VisibilityOption<VirtualKeyScope>[];
@@ -137,7 +116,6 @@ export function CreateVirtualKeyDialog({
 }) {
   const createMutation = useCreateVirtualApiKey();
 
-  const [keyType, setKeyType] = useState<VirtualKeyType>("standard");
   const [newKeyName, setNewKeyName] = useState("");
   const [ownerId, setOwnerId] = useState("");
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
@@ -166,7 +144,6 @@ export function CreateVirtualKeyDialog({
         defaultExpirationSeconds,
       );
       const initialScope = getDefaultVirtualKeyScope(visibilityOptions);
-      setKeyType(initialKeyType);
       setNewKeyName("");
       setExpiresAt(initialExpiresAt);
       setScope(initialScope);
@@ -174,7 +151,7 @@ export function CreateVirtualKeyDialog({
       setProviderApiKeyIds({});
       setOwnerId("");
       initialSnapshotRef.current = {
-        keyType: initialKeyType,
+        keyType,
         newKeyName: "",
         ownerId: "",
         expiresAt: initialExpiresAt,
@@ -183,7 +160,7 @@ export function CreateVirtualKeyDialog({
         providerApiKeyIds: {},
       };
     }
-  }, [open, defaultExpirationSeconds, visibilityOptions, initialKeyType]);
+  }, [open, defaultExpirationSeconds, visibilityOptions, keyType]);
 
   const isPassthrough = keyType === "passthrough";
   // Passthrough keys are always personal. Admins can mint a key on behalf of
@@ -303,8 +280,6 @@ export function CreateVirtualKeyDialog({
                 />
               </div>
 
-              <KeyTypeField value={keyType} onChange={setKeyType} />
-
               {isPassthrough ? (
                 <>
                   {showOwnerField && (
@@ -419,45 +394,6 @@ export function VirtualKeyVisibilityField({
         </div>
       )}
     </VisibilitySelector>
-  );
-}
-
-function KeyTypeField({
-  value,
-  onChange,
-}: {
-  value: VirtualKeyType;
-  onChange: (value: VirtualKeyType) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>Key type</Label>
-      <RadioGroup
-        value={value}
-        onValueChange={(next) => onChange(next as VirtualKeyType)}
-        className="gap-2"
-      >
-        {KEY_TYPE_OPTIONS.map((option) => (
-          <Label
-            key={option.value}
-            htmlFor={`virtual-key-type-${option.value}`}
-            className="flex cursor-pointer items-start gap-3 rounded-md border p-3 font-normal has-[:checked]:border-primary"
-          >
-            <RadioGroupItem
-              id={`virtual-key-type-${option.value}`}
-              value={option.value}
-              className="mt-0.5"
-            />
-            <div className="space-y-1">
-              <div className="font-medium">{option.label}</div>
-              <p className="text-sm text-muted-foreground">
-                {option.description}
-              </p>
-            </div>
-          </Label>
-        ))}
-      </RadioGroup>
-    </div>
   );
 }
 

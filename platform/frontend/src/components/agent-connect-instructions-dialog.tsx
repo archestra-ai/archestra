@@ -213,35 +213,24 @@ function LlmProxyAuthSurface({
 
       {tab === "virtual-keys" && (
         <div className="space-y-3">
-          <AuthFacts
-            rows={[
-              ["For", "teammates and services without their own provider keys"],
-              [
-                "Model Router",
-                "selects the mapped provider key for the requested model",
-              ],
-              [
-                "Provider routes",
-                "use the mapped key for that route's provider",
-              ],
-              ["Send", "the virtual key as the API key (Authorization header)"],
-            ]}
-          />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <p className="max-w-3xl text-xs text-muted-foreground">
+              Use a virtual key in your app instead of a provider API key.
+              Assign one API key per provider, and the matching key is used for
+              each request. Send the virtual key in the Authorization header.
+            </p>
+            {canCreateKey ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => setCreateKeyType("standard")}
+              >
+                Create virtual key
+              </Button>
+            ) : null}
+          </div>
           <VirtualKeyManagement keyType="standard" />
-          <AuthActionsRow
-            summary={null}
-            action={
-              canCreateKey ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCreateKeyType("standard")}
-                >
-                  + Create virtual key
-                </Button>
-              ) : null
-            }
-          />
         </div>
       )}
 
@@ -355,17 +344,11 @@ function ModelRouterAlert() {
   return (
     <Alert variant="info">
       <Info />
-      <AlertTitle>Using Model Router</AlertTitle>
+      <AlertTitle>How Model Router works</AlertTitle>
       <AlertDescription>
-        <p>
-          Model Router sends each model request to the right provider. For
-          example, an OpenAI model uses the OpenAI key you assign.
-        </p>
-        <ol className="list-decimal space-y-1 pl-4">
-          <li>Create a virtual key.</li>
-          <li>Assign provider API keys to it.</li>
-          <li>Use the virtual key in your app.</li>
-        </ol>
+        Use one endpoint for models from different providers. The provider at
+        the start of the model name tells Model Router where to send the
+        request.
       </AlertDescription>
     </Alert>
   );
@@ -838,9 +821,9 @@ function AuthActionsRow({
 function ConnectionGuideFooter({ href }: { href: string }) {
   return (
     <p className="text-xs text-muted-foreground">
-      Setting up a specific client?{" "}
+      Need setup steps for your app?{" "}
       <Link href={href} className="text-primary hover:underline">
-        Connect page
+        Open the Connect page.
       </Link>
     </p>
   );

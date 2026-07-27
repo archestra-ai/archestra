@@ -39,12 +39,15 @@ vi.mock("@/components/proxy-auth-provider-key-fields", () => ({
   }: {
     onProviderApiKeyIdsChange: (value: Record<string, string>) => void;
   }) => (
-    <button
-      type="button"
-      onClick={() => onProviderApiKeyIdsChange({ openai: "provider-key-1" })}
-    >
-      Map provider key
-    </button>
+    <section>
+      <h3>Provider Keys</h3>
+      <button
+        type="button"
+        onClick={() => onProviderApiKeyIdsChange({ openai: "provider-key-1" })}
+      >
+        Map provider key
+      </button>
+    </section>
   ),
 }));
 
@@ -98,6 +101,19 @@ describe("CreateVirtualKeyDialog", () => {
     expect(screen.getByLabelText("Name")).toHaveValue(
       "Self Admin's virtual key (2)",
     );
+    expect(
+      screen
+        .getByLabelText("Name")
+        .compareDocumentPosition(screen.getByText("Provider Keys")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByText("Provider Keys")
+        .compareDocumentPosition(
+          screen.getByText("Who can use this virtual key"),
+        ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Map provider key" }));
     await user.click(screen.getByRole("button", { name: "Create" }));

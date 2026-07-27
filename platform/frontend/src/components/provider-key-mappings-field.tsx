@@ -5,7 +5,7 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
-import { Trash2 } from "lucide-react";
+import { KeyRound, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
@@ -14,7 +14,6 @@ import {
   PROVIDER_CONFIG,
 } from "@/components/llm-provider-api-key-form";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 
 export type ProviderApiKeyMap = Partial<Record<SupportedProvider, string>>;
 
@@ -71,30 +70,44 @@ export function ProviderKeyMappingsField({
 
   return (
     <div className={className ?? "space-y-4"}>
-      <div className="space-y-2">
-        <Label>Add provider key</Label>
-        <LlmProviderApiKeyDropdown
-          availableKeys={availableProviderApiKeys}
-          selectedApiKeyId={null}
-          disabled={availableProviderApiKeys.length === 0}
-          open={apiKeySelectorOpen}
-          onOpenChange={setApiKeySelectorOpen}
-          onSelectKey={handleSelectProviderKey}
-          triggerVariant="select"
-          triggerClassName="w-full text-sm"
-          popoverClassName="w-[var(--radix-popover-trigger-width)]"
-          popoverPortal={false}
-          searchPlaceholder="Search provider keys..."
-          emptyTriggerLabel="Select a provider key"
-          triggerTestId={E2eTestId.VirtualKeyParentKeySelect}
-        />
-      </div>
+      <LlmProviderApiKeyDropdown
+        availableKeys={availableProviderApiKeys}
+        selectedApiKeyId={null}
+        disabled={availableProviderApiKeys.length === 0}
+        open={apiKeySelectorOpen}
+        onOpenChange={setApiKeySelectorOpen}
+        onSelectKey={handleSelectProviderKey}
+        triggerVariant="select"
+        triggerClassName="w-full text-sm"
+        popoverClassName="w-[var(--radix-popover-trigger-width)]"
+        popoverPortal={false}
+        searchPlaceholder="Search provider keys..."
+        emptyTriggerLabel={
+          availableProviderApiKeys.length > 0
+            ? "Select a provider key"
+            : configuredMappings.length > 0
+              ? "All providers configured"
+              : "No provider keys available"
+        }
+        triggerTestId={E2eTestId.VirtualKeyParentKeySelect}
+      />
 
-      <div className="space-y-2">
-        <Label>Configured Provider Keys</Label>
+      <div>
         {configuredMappings.length === 0 ? (
-          <div className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
-            No provider keys configured.
+          <div className="flex flex-col items-center rounded-md border border-dashed px-4 py-6 text-center">
+            <div className="mb-2 rounded-full bg-muted p-2 text-muted-foreground">
+              <KeyRound className="h-4 w-4" />
+            </div>
+            <p className="text-sm font-medium">
+              {providerApiKeys.length > 0
+                ? "No provider keys added"
+                : "No provider keys available"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {providerApiKeys.length > 0
+                ? "Select a key above to add one."
+                : "Create a provider API key first."}
+            </p>
           </div>
         ) : (
           <div className="space-y-2">

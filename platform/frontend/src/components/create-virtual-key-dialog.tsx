@@ -360,6 +360,14 @@ export function CreateVirtualKeyDialog({
                 />
               </div>
 
+              {!isPassthrough && (
+                <ProviderKeyAccessFields
+                  providerApiKeyIds={providerApiKeyIds}
+                  onProviderApiKeyIdsChange={setProviderApiKeyIds}
+                  providerApiKeys={parentableKeys}
+                />
+              )}
+
               {isPassthrough ? (
                 <>
                   {showOwnerField && (
@@ -424,12 +432,6 @@ export function CreateVirtualKeyDialog({
                       formatExpiration={formatExpiration}
                     />
                   </div>
-
-                  <ProviderKeyAccessFields
-                    providerApiKeyIds={providerApiKeyIds}
-                    onProviderApiKeyIdsChange={setProviderApiKeyIds}
-                    providerApiKeys={parentableKeys}
-                  />
                 </>
               )}
             </>

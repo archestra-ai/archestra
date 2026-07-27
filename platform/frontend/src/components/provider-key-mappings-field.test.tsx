@@ -96,13 +96,26 @@ describe("ProviderKeyMappingsField", () => {
 
     await user.click(screen.getByRole("button", { name: "Remove OpenAI key" }));
 
+    expect(screen.getByText("No provider keys added")).toBeInTheDocument();
     expect(
-      screen.getByText("No provider keys configured."),
+      screen.getByText("Select a key above to add one."),
+    ).toBeInTheDocument();
+  });
+
+  it("explains when no provider keys are available", () => {
+    renderField({}, []);
+
+    expect(screen.getAllByText("No provider keys available")).toHaveLength(2);
+    expect(
+      screen.getByText("Create a provider API key first."),
     ).toBeInTheDocument();
   });
 });
 
-function renderField(initialMappings: ProviderApiKeyMap = {}) {
+function renderField(
+  initialMappings: ProviderApiKeyMap = {},
+  availableKeys = providerApiKeys,
+) {
   function ControlledField() {
     const [mappings, setMappings] =
       useState<ProviderApiKeyMap>(initialMappings);
@@ -111,7 +124,7 @@ function renderField(initialMappings: ProviderApiKeyMap = {}) {
       <ProviderKeyMappingsField
         providerApiKeyIds={mappings}
         onProviderApiKeyIdsChange={setMappings}
-        providerApiKeys={providerApiKeys}
+        providerApiKeys={availableKeys}
       />
     );
   }

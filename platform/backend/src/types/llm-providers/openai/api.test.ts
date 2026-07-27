@@ -1,5 +1,26 @@
 import { describe, expect, test } from "vitest";
-import { ResponsesRequestSchema } from "./api";
+import { ChatCompletionResponseSchema, ResponsesRequestSchema } from "./api";
+
+describe("ChatCompletionResponseSchema", () => {
+  test("accepts a choice that omits index (nonconforming upstreams)", () => {
+    // Some OpenAI-compatible upstreams omit `index` on choices; the response
+    // schema must not fail serialization (500) on it.
+    const result = ChatCompletionResponseSchema.safeParse({
+      id: "chatcmpl-1",
+      choices: [
+        {
+          finish_reason: "stop",
+          logprobs: null,
+          message: { content: "hi", role: "assistant" },
+        },
+      ],
+      created: 1700000000,
+      model: "some-model",
+      object: "chat.completion",
+    });
+    expect(result.success).toBe(true);
+  });
+});
 
 describe("ResponsesRequestSchema", () => {
   test("accepts easy-input message items that omit a top-level type", () => {

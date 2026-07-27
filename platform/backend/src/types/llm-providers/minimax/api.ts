@@ -32,7 +32,9 @@ export const FinishReasonSchema = z.enum([
 const ChoiceSchema = z
   .object({
     finish_reason: FinishReasonSchema,
-    index: z.number(),
+    // Some OpenAI-compatible upstreams omit `index` on choices; without
+    // optional() the response fails serialization (500).
+    index: z.number().optional(),
     logprobs: z.any().nullable().optional(),
     message: z
       .object({

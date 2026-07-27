@@ -106,6 +106,9 @@ function isNonActionableError(error: unknown): boolean {
   if (error instanceof ApiError) {
     // 4xx client errors (not found, validation, upstream client errors).
     if (error.statusCode >= 400 && error.statusCode < 500) return true;
+    // Relayed upstream provider failures (marked at the LLM proxy's error
+    // boundary): the provider's own 5xx, not a crash of ours.
+    if (error.upstream) return true;
     // Handled transient upstream conditions.
     if (
       error.internalCode === ArchestraInternalErrorCode.UpstreamEmptyResponse ||

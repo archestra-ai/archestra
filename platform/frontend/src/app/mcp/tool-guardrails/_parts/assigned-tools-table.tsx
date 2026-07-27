@@ -1235,6 +1235,10 @@ export function AssignedToolsTable({
       <DataTable
         columns={columns}
         data={tools}
+        // The policy toggle group, badges, and selects cannot shrink, so on
+        // narrow screens the table scrolls horizontally instead of squishing
+        // its columns until the contents overlap.
+        tableClassName="min-w-[1000px]"
         sorting={sorting}
         onSortingChange={handleSortingChange}
         manualSorting

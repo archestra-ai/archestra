@@ -24,6 +24,7 @@ export const actions = [
   "manage",
   "read-all",
   "share-org",
+  "impersonate",
 ] as const;
 
 export const resources = [

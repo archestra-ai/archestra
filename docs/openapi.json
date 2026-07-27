@@ -256721,7 +256721,8 @@
                                   "deploy-to-restricted",
                                   "manage",
                                   "read-all",
-                                  "share-org"
+                                  "share-org",
+                                  "impersonate"
                                 ]
                               }
                             }
@@ -257081,7 +257082,8 @@
                           "deploy-to-restricted",
                           "manage",
                           "read-all",
-                          "share-org"
+                          "share-org",
+                          "impersonate"
                         ]
                       }
                     }
@@ -257139,7 +257141,8 @@
                             "deploy-to-restricted",
                             "manage",
                             "read-all",
-                            "share-org"
+                            "share-org",
+                            "impersonate"
                           ]
                         }
                       }
@@ -257486,7 +257489,8 @@
                             "deploy-to-restricted",
                             "manage",
                             "read-all",
-                            "share-org"
+                            "share-org",
+                            "impersonate"
                           ]
                         }
                       }
@@ -257798,7 +257802,8 @@
                           "deploy-to-restricted",
                           "manage",
                           "read-all",
-                          "share-org"
+                          "share-org",
+                          "impersonate"
                         ]
                       }
                     }
@@ -257877,7 +257882,8 @@
                             "deploy-to-restricted",
                             "manage",
                             "read-all",
-                            "share-org"
+                            "share-org",
+                            "impersonate"
                           ]
                         }
                       }
@@ -305112,7 +305118,8 @@
                         "deploy-to-restricted",
                         "manage",
                         "read-all",
-                        "share-org"
+                        "share-org",
+                        "impersonate"
                       ]
                     }
                   }
@@ -305362,7 +305369,7 @@
         "tags": [
           "User"
         ],
-        "description": "List users in the caller's organization that admins can impersonate (role debugger)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`member:update`: Change member roles and settings",
+        "description": "List users in the caller's organization that admins can impersonate (role debugger)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`member:impersonate`: Temporarily sign in as another member to see the app with their access (role debugging)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -305631,7 +305638,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "member:update"
+            "member:impersonate"
           ]
         }
       }

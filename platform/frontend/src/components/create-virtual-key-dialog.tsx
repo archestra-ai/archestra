@@ -239,12 +239,20 @@ export function CreateVirtualKeyDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={
-        createdKeyValue ? "Virtual API Key Created" : "Create Virtual API Key"
+        createdKeyValue
+          ? isPassthrough
+            ? "Passthrough Key Created"
+            : "Virtual API Key Created"
+          : isPassthrough
+            ? "Create Passthrough Key"
+            : "Create Virtual API Key"
       }
       description={
         createdKeyValue
           ? undefined
-          : "Map provider API keys, or create a passthrough key to attribute requests to a user."
+          : isPassthrough
+            ? "Create an attribution key for requests that pass a provider credential through."
+            : "Map this virtual key to provider API keys."
       }
       size="medium"
       isDirty={isDirty}
@@ -276,7 +284,9 @@ export function CreateVirtualKeyDialog({
                   id="virtual-key-name"
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
-                  placeholder="My virtual key"
+                  placeholder={
+                    isPassthrough ? "My passthrough key" : "My virtual key"
+                  }
                 />
               </div>
 

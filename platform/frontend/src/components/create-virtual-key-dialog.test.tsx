@@ -38,6 +38,12 @@ describe("CreateVirtualKeyDialog", () => {
     const user = userEvent.setup();
     renderDialog("passthrough");
 
+    expect(
+      screen.getByRole("heading", { name: "Create Passthrough Key" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("My passthrough key"),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
     expect(screen.queryByText("Standard")).not.toBeInTheDocument();
     expect(screen.queryByText("Passthrough")).not.toBeInTheDocument();
@@ -59,6 +65,10 @@ describe("CreateVirtualKeyDialog", () => {
     const user = userEvent.setup();
     renderDialog("standard");
 
+    expect(
+      screen.getByRole("heading", { name: "Create Virtual API Key" }),
+    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("My virtual key")).toBeInTheDocument();
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Name"), "My virtual key");
     await user.click(screen.getByRole("button", { name: "Map provider key" }));

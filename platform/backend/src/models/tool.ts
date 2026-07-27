@@ -436,6 +436,8 @@ class ToolModel {
     toolId: string,
     options?: {
       invocationAction?: ToolInvocation.ToolInvocationPolicyAction;
+      /** Shown in the policy editor to explain a non-org-default stamp. */
+      invocationReason?: string | null;
       resultAction?: TrustedData.TrustedDataPolicyAction;
     },
   ): Promise<void> {
@@ -444,7 +446,7 @@ class ToolModel {
       toolId,
       conditions: [],
       action: options?.invocationAction ?? "block_when_context_is_untrusted",
-      reason: null,
+      reason: options?.invocationReason ?? null,
     });
 
     // Create default result policy
@@ -3024,6 +3026,17 @@ class ToolModel {
       name: string;
       description?: string | null;
       parameters?: Record<string, unknown>;
+      /**
+       * Per-tool override of the default invocation policy stamped at
+       * discovery, taking precedence over `defaults.invocationAction` (e.g.
+       * native coding-CLI tools default to allow so the client stays usable).
+       * The reason is recorded on the policy row so the override is
+       * self-explaining in the policy editor.
+       */
+      invocationDefaultOverride?: {
+        action: ToolInvocation.ToolInvocationPolicyAction;
+        reason: string;
+      };
     }>,
     /** @deprecated No longer used. Proxy tools are shared (agentId=NULL). Kept for call-site compatibility. */
     _agentId: string,
@@ -3078,8 +3091,23 @@ class ToolModel {
         .returning();
 
       // Create default policies for newly inserted tools
+      const overridesByName = new Map(
+        tools
+          .filter((t) => t.invocationDefaultOverride)
+          .map((t) => [t.name, t.invocationDefaultOverride]),
+      );
       for (const tool of insertedTools) {
-        await ToolModel.createDefaultPolicies(tool.id, defaults);
+        const override = overridesByName.get(tool.name);
+        await ToolModel.createDefaultPolicies(
+          tool.id,
+          override
+            ? {
+                ...defaults,
+                invocationAction: override.action,
+                invocationReason: override.reason,
+              }
+            : defaults,
+        );
       }
 
       // If some tools weren't inserted due to conflict, fetch them

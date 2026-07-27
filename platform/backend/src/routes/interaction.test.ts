@@ -667,7 +667,7 @@ describe("interaction routes", () => {
     });
   });
 
-  test("does not leak the name of a connector from another organization", async ({
+  test("hides a KB interaction whose connector belongs to another organization", async ({
     makeOrganization,
     makeKnowledgeBase,
     makeKnowledgeBaseConnector,
@@ -699,8 +699,9 @@ describe("interaction routes", () => {
       url: `/api/interactions/${interaction.id}`,
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.json().connectorName).toBeNull();
+    // Not merely a nulled name: the payload itself carries the indexed document
+    // text, so the row must not cross the tenant boundary at all.
+    expect(response.statusCode).toBe(404);
   });
 
   test("reports a null connector name when the connector has been deleted", async ({

@@ -344,16 +344,25 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Interaction not found");
       }
 
-      // Resolved after the access check, and scoped to the caller's
-      // organization, so a foreign connector's name is never disclosed.
-      const connectorName = interaction.connectorId
-        ? await KnowledgeBaseConnectorModel.findNameInOrganization({
-            id: interaction.connectorId,
-            organizationId,
-          })
+      // `interactions` carries no organization of its own, and findById waives
+      // its access check for agent admins — so for a KB interaction, whose
+      // profile is always null, the connector is the only thing tying the row to
+      // an organization. Treat a connector owned by another one as not found
+      // rather than serving the row's payload across the tenant boundary.
+      // A connector that no longer exists cannot be placed, and stays readable
+      // so its logs survive the connector.
+      const connector = interaction.connectorId
+        ? await KnowledgeBaseConnectorModel.findById(interaction.connectorId)
         : null;
 
-      return reply.send({ ...interaction, connectorName });
+      if (connector && connector.organizationId !== organizationId) {
+        throw new ApiError(404, "Interaction not found");
+      }
+
+      return reply.send({
+        ...interaction,
+        connectorName: connector?.name ?? null,
+      });
     },
   );
 };

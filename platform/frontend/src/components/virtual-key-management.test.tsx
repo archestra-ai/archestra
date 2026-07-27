@@ -101,6 +101,7 @@ describe("VirtualKeyManagement", () => {
       expect.objectContaining({ limit: 20, offset: 0 }),
     );
     expect(screen.getByText("1–20 of 45")).toBeInTheDocument();
+    expect(screen.queryByText(/Client Credentials/)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(useAllVirtualApiKeys).toHaveBeenLastCalledWith(
       expect.objectContaining({ limit: 20, offset: 20 }),

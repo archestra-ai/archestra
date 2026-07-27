@@ -323,7 +323,7 @@ exports[`skill and sandbox tool text > archestra__run_command 1`] = `
     "properties": {
       "command": {
         "description": "Shell command to execute (bash). Runs in the sandbox's working directory (or \`cwd\` when provided). Returns text output only — use download_file for generated files.",
-        "maxLength": 16384,
+        "maxLength": 262144,
         "minLength": 1,
         "type": "string",
       },

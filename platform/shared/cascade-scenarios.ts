@@ -390,6 +390,45 @@ export const CASCADE_SCENARIOS: CascadeScenario[] = [
     rationale:
       "dockerImage is a runtime field. Pods on the old tag must reinstall to pick up the new image.",
   },
+  {
+    id: "docker-image-change-multitenant",
+    shape: "multitenantLocalShared",
+    userAction: "Admin bumps dockerImage tag on a multitenant local catalog",
+    edit: replaceDockerImage("mendhak/http-https-echo:31"),
+    expected: "auto",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "Diverges from `docker-image-change` on multitenancy alone. One shared pod serves every tenant and it belongs to the admin doing the edit — nobody else's workload is disturbed and no tenant owes a value — so the recreate runs on save instead of parking behind a second click. The single-tenant case stays manual because each install owns its own pod. Regression: an image bump used to show the manual bar claiming the change 'needs a new value', which no dialog ever collected.",
+    ref: "#6870",
+  },
+  {
+    id: "command-change-multitenant",
+    shape: "multitenantLocalShared",
+    userAction:
+      "Admin changes localConfig.command on a multitenant local catalog",
+    edit: replaceCommand("bash"),
+    expected: "auto",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "The multitenant rollout is keyed on execution config as a whole, not on dockerImage specifically — pins that `command` takes the same shared-pod recreate path as an image bump.",
+  },
+  {
+    id: "docker-image-change-multitenant-plus-required-prompt",
+    shape: "multitenantLocalShared",
+    userAction:
+      "Admin bumps dockerImage AND adds a required prompted env var on a multitenant local catalog",
+    edit: (base) =>
+      addEnvVar({
+        key: "NEW_REQUIRED_PROMPT",
+        type: "plain_text",
+        promptOnInstallation: true,
+        required: true,
+      })(replaceDockerImage("mendhak/http-https-echo:31")(base)),
+    expected: "manual",
+    sharedPredicate: "non-metadata-diff",
+    rationale:
+      "Re-prompt beats the shared-pod rollout: the pod can't come back on a spec whose new required field no tenant has supplied yet. The recreate is deferred to the catalog Reinstall button and every install is marked new-input.",
+  },
 
   // ── env var schema evolution (the optional-vs-required distinction) ─
   {

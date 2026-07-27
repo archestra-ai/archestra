@@ -120,31 +120,35 @@ describe("ResourceScopeFilter owner selector gating", () => {
 describe("useScopeFilterParams", () => {
   // structural type: ReturnType<> of an overloaded hook only sees the last
   // overload, which is too narrow for the includeBuiltIn variant.
-  let result:
-    | {
-        scope: string | undefined;
-        teamIds: string[] | undefined;
-        authorIds: string[] | undefined;
-        excludeAuthorIds: string[] | undefined;
-        excludeOtherPersonal: true | undefined;
-        hasActiveScopeFilters: boolean;
-      }
-    | undefined;
+  interface ParsedScopeParams {
+    scope: string | undefined;
+    teamIds: string[] | undefined;
+    authorIds: string[] | undefined;
+    excludeAuthorIds: string[] | undefined;
+    excludeOtherPersonal: true | undefined;
+    hasActiveScopeFilters: boolean;
+  }
+
+  // probes append instead of assigning a captured `let`: TS doesn't track
+  // closure assignments, so a plain variable would narrow to `never` after
+  // the guard below.
+  const results: ParsedScopeParams[] = [];
 
   function ProbeDefault() {
-    result = useScopeFilterParams();
+    results.push(useScopeFilterParams());
     return null;
   }
 
   function ProbeBuiltIn() {
-    result = useScopeFilterParams({ includeBuiltIn: true });
+    results.push(useScopeFilterParams({ includeBuiltIn: true }));
     return null;
   }
 
   function readParams(query: string, options?: { includeBuiltIn: true }) {
     mockSearchParams(query);
-    result = undefined;
+    results.length = 0;
     render(options ? <ProbeBuiltIn /> : <ProbeDefault />);
+    const result = results.at(-1);
     if (!result) throw new Error("hook did not run");
     return result;
   }

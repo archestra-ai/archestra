@@ -4206,6 +4206,7 @@ export type ZhipuaiChatCompletionRequestInput = {
     } | {
         role: 'assistant';
         content?: string | null;
+        reasoning_content?: string | null;
         name?: string;
         tool_calls?: Array<{
             id: string;
@@ -10049,6 +10050,7 @@ export type ZhipuaiChatCompletionRequest = {
     } | {
         role: 'assistant';
         content?: string | null;
+        reasoning_content?: string | null;
         name?: string;
         tool_calls?: Array<{
             id: string;

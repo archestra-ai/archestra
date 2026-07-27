@@ -13580,6 +13580,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -33209,6 +33213,10 @@
                       ]
                     },
                     "content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "reasoning_content": {
                       "nullable": true,
                       "type": "string"
                     },

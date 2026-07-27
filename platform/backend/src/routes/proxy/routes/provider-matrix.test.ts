@@ -2177,7 +2177,9 @@ describe("LLM proxy provider matrix", () => {
       // proxy must round-trip the field in both directions: request body
       // validation must not strip it before it reaches the upstream, and
       // response serialization must not strip it before it reaches the client.
-      test.skipIf(config.family !== "openai")(
+      // The zhipuai family shares the wire format: GLM thinking mode uses the
+      // same `reasoning_content` field through its bespoke adapter.
+      test.skipIf(config.family !== "openai" && config.family !== "zhipuai")(
         "round-trips reasoning_content for thinking-mode tool calls",
         async ({ makeAgent }) => {
           const agent = await makeAgent({

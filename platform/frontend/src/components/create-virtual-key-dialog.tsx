@@ -31,12 +31,15 @@ import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
-import { useCreateVirtualApiKey } from "@/lib/virtual-api-keys.query";
+import {
+  useAllVirtualApiKeys,
+  useCreateVirtualApiKey,
+} from "@/lib/virtual-api-keys.query";
 
 export type VirtualKeyScope = NonNullable<
   archestraApiTypes.CreateVirtualApiKeyData["body"]["scope"]
@@ -44,6 +47,8 @@ export type VirtualKeyScope = NonNullable<
 export type VirtualKeyType = NonNullable<
   archestraApiTypes.CreateVirtualApiKeyData["body"]["keyType"]
 >;
+type VirtualKeySummary =
+  archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
 
 /**
  * Self-contained variant for resource connection surfaces: gathers the option
@@ -59,6 +64,14 @@ export function CreateVirtualKeyDialogWithData({
   keyType: VirtualKeyType;
 }) {
   const { data: apiKeys = [] } = useLlmProviderApiKeys({ enabled: open });
+  const { data: session } = useSession();
+  const { data: existingKeys } = useAllVirtualApiKeys({
+    keyType,
+    limit: 100,
+    offset: 0,
+    enabled: open && keyType === "standard",
+    toastOnError: false,
+  });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isVirtualKeyAdmin } = useHasPermissions({
     llmVirtualKey: ["admin"],
@@ -89,6 +102,15 @@ export function CreateVirtualKeyDialogWithData({
       teams={teams}
       canReadTeams={!!canReadTeams}
       isVirtualKeyAdmin={!!isVirtualKeyAdmin}
+      currentUser={
+        session?.user
+          ? {
+              id: session.user.id,
+              name: session.user.name ?? session.user.email ?? null,
+            }
+          : null
+      }
+      existingKeys={existingKeys?.data ?? []}
     />
   );
 }
@@ -103,6 +125,8 @@ export function CreateVirtualKeyDialog({
   teams,
   canReadTeams,
   isVirtualKeyAdmin,
+  currentUser,
+  existingKeys,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -113,11 +137,16 @@ export function CreateVirtualKeyDialog({
   teams: Array<{ id: string; name: string }>;
   canReadTeams: boolean;
   isVirtualKeyAdmin: boolean;
+  currentUser: { id: string; name: string | null } | null;
+  existingKeys: VirtualKeySummary[];
 }) {
   const createMutation = useCreateVirtualApiKey();
 
   const [newKeyName, setNewKeyName] = useState("");
   const [ownerId, setOwnerId] = useState("");
+  const [selectedOwnerName, setSelectedOwnerName] = useState<string | null>(
+    null,
+  );
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [scope, setScope] = useState<VirtualKeyScope>(
     getDefaultVirtualKeyScope(visibilityOptions),
@@ -133,6 +162,30 @@ export function CreateVirtualKeyDialog({
 
   const prevOpenRef = useRef(open);
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
+  const generatedNameRef = useRef("");
+
+  const isPassthrough = keyType === "passthrough";
+  // Passthrough keys are always personal. Admins can mint a key on behalf of
+  // another org member; left unset, the key belongs to the creator.
+  const showOwnerField = shouldShowOwnerField(
+    isVirtualKeyAdmin,
+    isPassthrough ? "personal" : scope,
+  );
+  const effectiveOwnerId =
+    showOwnerField && ownerId ? ownerId : currentUser?.id;
+  const effectiveOwnerName =
+    showOwnerField && ownerId ? selectedOwnerName : currentUser?.name;
+  const generatedName = useMemo(
+    () =>
+      isPassthrough
+        ? ""
+        : getGeneratedVirtualKeyName({
+            ownerId: effectiveOwnerId,
+            ownerName: effectiveOwnerName,
+            existingKeys,
+          }),
+    [effectiveOwnerId, effectiveOwnerName, existingKeys, isPassthrough],
+  );
 
   useEffect(() => {
     const wasOpen = prevOpenRef.current;
@@ -144,15 +197,17 @@ export function CreateVirtualKeyDialog({
         defaultExpirationSeconds,
       );
       const initialScope = getDefaultVirtualKeyScope(visibilityOptions);
-      setNewKeyName("");
+      setNewKeyName(generatedName);
+      generatedNameRef.current = generatedName;
       setExpiresAt(initialExpiresAt);
       setScope(initialScope);
       setTeamIds([]);
       setProviderApiKeyIds({});
       setOwnerId("");
+      setSelectedOwnerName(null);
       initialSnapshotRef.current = {
         keyType,
-        newKeyName: "",
+        newKeyName: generatedName,
         ownerId: "",
         expiresAt: initialExpiresAt,
         scope: initialScope,
@@ -160,15 +215,30 @@ export function CreateVirtualKeyDialog({
         providerApiKeyIds: {},
       };
     }
-  }, [open, defaultExpirationSeconds, visibilityOptions, keyType]);
+  }, [
+    open,
+    defaultExpirationSeconds,
+    visibilityOptions,
+    keyType,
+    generatedName,
+  ]);
 
-  const isPassthrough = keyType === "passthrough";
-  // Passthrough keys are always personal. Admins can mint a key on behalf of
-  // another org member; left unset, the key belongs to the creator.
-  const showOwnerField = shouldShowOwnerField(
-    isVirtualKeyAdmin,
-    isPassthrough ? "personal" : scope,
-  );
+  useEffect(() => {
+    if (!open || createdKeyValue) return;
+    setNewKeyName((currentName) => {
+      const shouldUpdate =
+        currentName.length === 0 || currentName === generatedNameRef.current;
+      generatedNameRef.current = generatedName;
+      if (!shouldUpdate) return currentName;
+      if (initialSnapshotRef.current) {
+        initialSnapshotRef.current = {
+          ...initialSnapshotRef.current,
+          newKeyName: generatedName,
+        };
+      }
+      return generatedName;
+    });
+  }, [createdKeyValue, generatedName, open]);
   const standardReady =
     (scope !== "team" || teamIds.length > 0) &&
     providerApiKeyMapToArray(providerApiKeyIds).length > 0;
@@ -293,7 +363,17 @@ export function CreateVirtualKeyDialog({
               {isPassthrough ? (
                 <>
                   {showOwnerField && (
-                    <OwnerSelectField value={ownerId} onChange={setOwnerId} />
+                    <OwnerSelectField
+                      value={ownerId}
+                      onChange={setOwnerId}
+                      onSelectedOwnerChange={(owner) =>
+                        setSelectedOwnerName(
+                          owner.userId === currentUser?.id
+                            ? null
+                            : (owner.name ?? owner.email ?? null),
+                        )
+                      }
+                    />
                   )}
 
                   <div className="space-y-2">
@@ -323,7 +403,17 @@ export function CreateVirtualKeyDialog({
                   />
 
                   {showOwnerField && (
-                    <OwnerSelectField value={ownerId} onChange={setOwnerId} />
+                    <OwnerSelectField
+                      value={ownerId}
+                      onChange={setOwnerId}
+                      onSelectedOwnerChange={(owner) =>
+                        setSelectedOwnerName(
+                          owner.userId === currentUser?.id
+                            ? null
+                            : (owner.name ?? owner.email ?? null),
+                        )
+                      }
+                    />
                   )}
 
                   <div className="space-y-2">
@@ -409,6 +499,26 @@ export function VirtualKeyVisibilityField({
 
 export function formatExpiration(date: Date | string | null): string {
   return formatRelativeTime(date);
+}
+
+function getGeneratedVirtualKeyName({
+  ownerId,
+  ownerName,
+  existingKeys,
+}: {
+  ownerId: string | undefined;
+  ownerName: string | null | undefined;
+  existingKeys: VirtualKeySummary[];
+}): string {
+  const ownerLabel = ownerName?.trim();
+  const baseName = ownerLabel
+    ? `${ownerLabel.endsWith("s") ? `${ownerLabel}'` : `${ownerLabel}'s`} virtual key`
+    : "My virtual key";
+  const sequence =
+    existingKeys.filter(
+      (key) => key.authorId === ownerId && key.keyType === "standard",
+    ).length + 1;
+  return `${baseName} (${sequence})`;
 }
 
 function computeDefaultExpiresAt(defaultSeconds: number | null): Date | null {

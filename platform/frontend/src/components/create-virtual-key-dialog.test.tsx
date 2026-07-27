@@ -8,6 +8,31 @@ import { CreateVirtualKeyDialog } from "./create-virtual-key-dialog";
 vi.mock("@/lib/virtual-api-keys.query", () => ({
   useCreateVirtualApiKey: vi.fn(),
 }));
+vi.mock("@/components/owner-select-field", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/components/owner-select-field")
+  >("@/components/owner-select-field");
+  return {
+    ...actual,
+    OwnerSelectField: ({
+      onChange,
+      onSelectedOwnerChange,
+    }: {
+      onChange: (userId: string) => void;
+      onSelectedOwnerChange?: (owner: { userId: string; name: string }) => void;
+    }) => (
+      <button
+        type="button"
+        onClick={() => {
+          onSelectedOwnerChange?.({ userId: "u-bob", name: "Bob Brown" });
+          onChange("u-bob");
+        }}
+      >
+        Choose Bob
+      </button>
+    ),
+  };
+});
 vi.mock("@/components/proxy-auth-provider-key-fields", () => ({
   ProviderKeyAccessFields: ({
     onProviderApiKeyIdsChange,
@@ -44,6 +69,7 @@ describe("CreateVirtualKeyDialog", () => {
     expect(
       screen.getByPlaceholderText("My passthrough key"),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveValue("");
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
     expect(screen.queryByText("Standard")).not.toBeInTheDocument();
     expect(screen.queryByText("Passthrough")).not.toBeInTheDocument();
@@ -69,14 +95,16 @@ describe("CreateVirtualKeyDialog", () => {
       screen.getByRole("heading", { name: "Create Virtual API Key" }),
     ).toBeInTheDocument();
     expect(screen.getByPlaceholderText("My virtual key")).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveValue(
+      "Self Admin's virtual key (2)",
+    );
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText("Name"), "My virtual key");
     await user.click(screen.getByRole("button", { name: "Map provider key" }));
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
       data: {
-        name: "My virtual key",
+        name: "Self Admin's virtual key (2)",
         keyType: "standard",
         expiresAt: undefined,
         scope: "personal",
@@ -88,9 +116,39 @@ describe("CreateVirtualKeyDialog", () => {
       },
     });
   });
+
+  it("updates the generated name when the key owner changes", async () => {
+    const user = userEvent.setup();
+    renderDialog("standard", {
+      isVirtualKeyAdmin: true,
+      existingKeys: [
+        { authorId: "u-self", keyType: "standard" },
+        { authorId: "u-bob", keyType: "standard" },
+      ],
+    });
+
+    expect(screen.getByLabelText("Name")).toHaveValue(
+      "Self Admin's virtual key (2)",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Choose Bob" }));
+
+    expect(screen.getByLabelText("Name")).toHaveValue(
+      "Bob Brown's virtual key (2)",
+    );
+  });
 });
 
-function renderDialog(keyType: "standard" | "passthrough") {
+function renderDialog(
+  keyType: "standard" | "passthrough",
+  options: {
+    isVirtualKeyAdmin?: boolean;
+    existingKeys?: Array<{
+      authorId: string;
+      keyType: "standard" | "passthrough";
+    }>;
+  } = {},
+) {
   return render(
     <CreateVirtualKeyDialog
       open
@@ -108,7 +166,16 @@ function renderDialog(keyType: "standard" | "passthrough") {
       ]}
       teams={[]}
       canReadTeams={false}
-      isVirtualKeyAdmin={false}
+      isVirtualKeyAdmin={options.isVirtualKeyAdmin ?? false}
+      currentUser={{ id: "u-self", name: "Self Admin" }}
+      existingKeys={
+        (options.existingKeys ?? [
+          {
+            authorId: "u-self",
+            keyType,
+          },
+        ]) as never[]
+      }
     />,
   );
 }

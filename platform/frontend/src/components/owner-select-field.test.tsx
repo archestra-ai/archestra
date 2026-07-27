@@ -95,6 +95,25 @@ describe("OwnerSelectField", () => {
     expect(onChange).toHaveBeenCalledWith("u-b");
   });
 
+  it("reports the picked owner details", async () => {
+    const user = userEvent.setup();
+    const onSelectedOwnerChange = vi.fn();
+    render(
+      <OwnerSelectField
+        value=""
+        onChange={vi.fn()}
+        onSelectedOwnerChange={onSelectedOwnerChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByRole("button", { name: /Bob Brown/i }));
+
+    expect(onSelectedOwnerChange).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: "u-b", name: "Bob Brown" }),
+    );
+  });
+
   it("resets to an empty owner when 'Yourself' is re-picked", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

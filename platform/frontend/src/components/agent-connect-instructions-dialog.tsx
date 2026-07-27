@@ -355,16 +355,16 @@ function ModelRouterAlert() {
   return (
     <Alert variant="info">
       <Info />
-      <AlertTitle>How Model Router uses provider keys</AlertTitle>
+      <AlertTitle>Using Model Router</AlertTitle>
       <AlertDescription>
         <p>
-          Model Router reads the provider from the requested model. Each virtual
-          key maps that provider to an API key saved under Model Providers.
+          Model Router sends each model request to the right provider. For
+          example, an OpenAI model uses the OpenAI key you assign.
         </p>
         <ol className="list-decimal space-y-1 pl-4">
           <li>Create a virtual key.</li>
-          <li>Choose one stored provider API key for each provider it uses.</li>
-          <li>Send the virtual key as your API key.</li>
+          <li>Assign provider API keys to it.</li>
+          <li>Use the virtual key in your app.</li>
         </ol>
       </AlertDescription>
     </Alert>

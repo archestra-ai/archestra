@@ -731,10 +731,11 @@ export default function ApiKeysPage() {
             onOpenChange={(open) => {
               if (!open) setSubscriptionToConnect(null);
             }}
-            title={`Connect ${subscriptionToConnect.name}`}
+            title={`Sign in with ${subscriptionToConnect.name}`}
             description={`Connect your ${subscriptionToConnect.name} subscription`}
             defaultValues={subscriptionToConnect.defaultValues}
             allowedProviders={[subscriptionToConnect.provider]}
+            credentialMode="subscription"
           />
         )}
 

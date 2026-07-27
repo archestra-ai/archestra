@@ -38,6 +38,8 @@ export type CreateLlmProviderApiKeyDialogProps = {
   /** Restrict the provider picker to this allowlist (e.g. the providers the
    * selected connect client can actually route). Omit to allow all providers. */
   allowedProviders?: LlmProviderApiKeyFormValues["provider"][];
+  /** Selects the focused progressive flow shown by this dialog. */
+  credentialMode?: "api-key" | "subscription";
   showConsoleLink?: boolean;
   onSuccess?: () => void;
 };
@@ -49,6 +51,7 @@ export function CreateLlmProviderApiKeyDialog({
   description,
   defaultValues,
   allowedProviders,
+  credentialMode = "api-key",
   showConsoleLink = false,
   onSuccess,
 }: CreateLlmProviderApiKeyDialogProps) {
@@ -88,7 +91,7 @@ export function CreateLlmProviderApiKeyDialog({
     values: formValues,
   });
 
-  const handleCreate = form.handleSubmit(async (values) => {
+  const createCredential = async (values: LlmProviderApiKeyFormValues) => {
     const isBedrockSigV4 =
       values.provider === "bedrock" && values.bedrockAuthMethod === "sigv4";
     try {
@@ -131,7 +134,12 @@ export function CreateLlmProviderApiKeyDialog({
     } catch {
       // Error handled by mutation
     }
-  });
+  };
+  const handleCreate = form.handleSubmit(createCredential);
+  const handleSubscriptionCredential = (credential: string) => {
+    const values = { ...form.getValues(), apiKey: credential };
+    void createCredential(values);
+  };
 
   return (
     <FormDialog
@@ -155,18 +163,27 @@ export function CreateLlmProviderApiKeyDialog({
             existingKeys={existingKeys}
             isPending={createMutation.isPending}
             allowedProviders={allowedProviders}
+            credentialMode={credentialMode}
+            progressive
+            allowPersonalSubscriptions={credentialMode === "subscription"}
+            onSubscriptionCredential={handleSubscriptionCredential}
             bedrockIamAuthEnabled={bedrockIamAuthEnabled}
             geminiVertexAiEnabled={geminiVertexAiEnabled}
           />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
           <DialogCancelButton>Cancel</DialogCancelButton>
-          <Button type="submit" disabled={!isValid || createMutation.isPending}>
-            {createMutation.isPending && (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            )}
-            Test & Create
-          </Button>
+          {credentialMode === "api-key" && (
+            <Button
+              type="submit"
+              disabled={!isValid || createMutation.isPending}
+            >
+              {createMutation.isPending && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              Test & Create
+            </Button>
+          )}
         </DialogStickyFooter>
       </DialogForm>
     </FormDialog>

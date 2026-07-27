@@ -23,6 +23,8 @@ type SubscriptionConnectOption = {
   scope: "personal";
   isChatgptSubscription?: boolean;
   connectRequired: true;
+  dialogTitle: string;
+  dialogDescription: string;
   defaultValues: Partial<LlmProviderApiKeyFormValues>;
 };
 
@@ -34,6 +36,8 @@ const SUBSCRIPTION_CONNECT_OPTIONS: SubscriptionConnectOption[] = [
     scope: "personal",
     isChatgptSubscription: true,
     connectRequired: true,
+    dialogTitle: "Sign in with ChatGPT",
+    dialogDescription: "Connect your ChatGPT account to use your subscription",
     defaultValues: {
       name: CHATGPT_SUBSCRIPTION_LABEL,
       provider: "openai",
@@ -47,6 +51,8 @@ const SUBSCRIPTION_CONNECT_OPTIONS: SubscriptionConnectOption[] = [
     provider: "github-copilot",
     scope: "personal",
     connectRequired: true,
+    dialogTitle: "Sign in with GitHub Copilot",
+    dialogDescription: "Connect your GitHub Copilot subscription",
     defaultValues: {
       name: "GitHub Copilot",
       provider: "github-copilot",
@@ -59,6 +65,8 @@ const SUBSCRIPTION_CONNECT_OPTIONS: SubscriptionConnectOption[] = [
     provider: "microsoft-365-copilot",
     scope: "personal",
     connectRequired: true,
+    dialogTitle: "Sign in with Microsoft 365 Copilot",
+    dialogDescription: "Connect your Microsoft 365 Copilot subscription",
     defaultValues: {
       name: "Microsoft 365 Copilot",
       provider: "microsoft-365-copilot",
@@ -389,10 +397,11 @@ export function LlmProviderApiKeySelector({
           onOpenChange={(dialogOpen) => {
             if (!dialogOpen) setSubscriptionToConnect(null);
           }}
-          title={`Connect ${subscriptionToConnect.name}`}
-          description={`Connect your ${subscriptionToConnect.name} subscription`}
+          title={subscriptionToConnect.dialogTitle}
+          description={subscriptionToConnect.dialogDescription}
           defaultValues={subscriptionToConnect.defaultValues}
           allowedProviders={[subscriptionToConnect.provider]}
+          credentialMode="subscription"
           onSuccess={() =>
             setConnectedProviderToSelect(subscriptionToConnect.provider)
           }

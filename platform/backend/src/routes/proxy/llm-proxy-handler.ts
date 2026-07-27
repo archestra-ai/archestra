@@ -701,6 +701,7 @@ export async function handleLLMProxy<
                 resultAction: organization.defaultDiscoveredToolResultPolicy,
               }
             : undefined,
+          { userId, externalAgentId },
         );
       }
     }

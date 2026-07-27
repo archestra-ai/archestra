@@ -78882,6 +78882,14 @@ export type GetToolsWithAssignmentsData = {
          */
         origin?: string;
         /**
+         * Only tools observed in this user's LLM proxy traffic
+         */
+        observedByUserId?: string;
+        /**
+         * Only tools observed from this client app family (e.g. claude, codex)
+         */
+        observedByClient?: 'claude' | 'codex';
+        /**
          * Hide built-in Archestra tools
          */
         excludeArchestraTools?: boolean;
@@ -79018,6 +79026,94 @@ export type GetToolsWithAssignmentsResponses = {
 };
 
 export type GetToolsWithAssignmentsResponse = GetToolsWithAssignmentsResponses[keyof GetToolsWithAssignmentsResponses];
+
+export type GetToolObserversData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tools/observers';
+};
+
+export type GetToolObserversErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetToolObserversError = GetToolObserversErrors[keyof GetToolObserversErrors];
+
+export type GetToolObserversResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        clients: Array<'claude' | 'codex'>;
+    };
+};
+
+export type GetToolObserversResponse = GetToolObserversResponses[keyof GetToolObserversResponses];
 
 export type DeleteToolData = {
     body?: never;

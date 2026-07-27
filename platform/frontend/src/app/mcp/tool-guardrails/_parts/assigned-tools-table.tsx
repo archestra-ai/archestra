@@ -3,6 +3,7 @@
 import {
   AGENT_TOOL_PREFIX,
   type archestraApiTypes,
+  ClientFilterSchema,
   isAgentTool,
   parseFullToolName,
 } from "@archestra/shared";
@@ -50,6 +51,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  ClientFilterSelect,
+  UserFilterSelect,
+} from "@/components/user-client-filter-selects";
+import {
   DEFAULT_FILTER_ALL,
   DEFAULT_SORT_BY,
   DEFAULT_TABLE_LIMIT,
@@ -74,6 +79,7 @@ import {
 } from "@/lib/policy.utils";
 import {
   type ToolWithAssignmentsData,
+  useToolObservers,
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
 import { isMcpToolByProperties } from "@/lib/tools/tool.utils";
@@ -147,6 +153,8 @@ export function AssignedToolsTable({
   // Get URL params
   const searchFromUrl = searchParams.get("search");
   const originFromUrl = searchParams.get("origin");
+  const observedByFromUrl = searchParams.get("observedBy");
+  const clientFromUrl = searchParams.get("client");
   const sortByFromUrl = searchParams.get("sortBy") as ToolsSortByValues;
   const sortDirectionFromUrl = searchParams.get(
     "sortDirection",
@@ -155,6 +163,12 @@ export function AssignedToolsTable({
   // State
   const [originFilter, setOriginFilter] = useState(
     originFromUrl || DEFAULT_FILTER_ALL,
+  );
+  const [observedByFilter, setObservedByFilter] = useState(
+    observedByFromUrl || DEFAULT_FILTER_ALL,
+  );
+  const [clientFilter, setClientFilter] = useState(
+    clientFromUrl || DEFAULT_FILTER_ALL,
   );
   const [sorting, setSorting] = useState<SortingState>([
     {
@@ -174,6 +188,16 @@ export function AssignedToolsTable({
   const [bulkResultPolicyValue, setBulkResultPolicyValue] =
     useState<string>("");
 
+  // The user/client attribution filters only make sense for observed tools —
+  // MCP-server-sourced tools never appear in LLM proxy requests under their
+  // catalog names, so they carry no observations. Both filters are shown and
+  // applied only while the source filter is "Observed tools".
+  const observationFiltersActive = originFilter === "llm-proxy";
+
+  // The observed-by client filter only accepts known client families; anything
+  // else in the URL is treated as unset.
+  const parsedClientFilter = ClientFilterSchema.safeParse(clientFilter);
+
   // Fetch tools with assignments with server-side pagination, filtering, and sorting
   // Only use initialData for first page with default sorting and no filters
   const useInitialData =
@@ -181,6 +205,8 @@ export function AssignedToolsTable({
     pageSize === DEFAULT_TABLE_LIMIT &&
     !searchFromUrl &&
     originFilter === DEFAULT_FILTER_ALL &&
+    observedByFilter === DEFAULT_FILTER_ALL &&
+    clientFilter === DEFAULT_FILTER_ALL &&
     (sorting[0]?.id === DEFAULT_SORT_BY || !sorting[0]?.id) &&
     sorting[0]?.desc !== false;
 
@@ -197,10 +223,20 @@ export function AssignedToolsTable({
     filters: {
       search: searchFromUrl || undefined,
       origin: originFilter !== "all" ? originFilter : undefined,
+      observedByUserId:
+        observationFiltersActive && observedByFilter !== DEFAULT_FILTER_ALL
+          ? observedByFilter
+          : undefined,
+      observedByClient:
+        observationFiltersActive && parsedClientFilter.success
+          ? parsedClientFilter.data
+          : undefined,
       excludeArchestraTools: true,
       includeKnowledgeSourcesTool: true,
     },
   });
+
+  const { data: toolObservers } = useToolObservers();
 
   const tools = toolsData?.data ?? [];
 
@@ -242,8 +278,46 @@ export function AssignedToolsTable({
   const handleOriginFilterChange = useCallback(
     (value: string) => {
       setOriginFilter(value);
+      // Leaving "Observed tools" hides the attribution filters, so clear them
+      // too — a hidden filter must not keep narrowing the list.
+      const leavingObservedTools = value !== "llm-proxy";
+      if (leavingObservedTools) {
+        setObservedByFilter(DEFAULT_FILTER_ALL);
+        setClientFilter(DEFAULT_FILTER_ALL);
+      }
       updateQueryParams({
         origin: value === "all" ? null : value,
+        ...(leavingObservedTools && { observedBy: null, client: null }),
+        page: "1", // Reset to first page
+      });
+      setRowSelection({});
+      setSelectedTools([]);
+      setBulkCallPolicyValue("");
+      setBulkResultPolicyValue("");
+    },
+    [updateQueryParams],
+  );
+
+  const handleObservedByFilterChange = useCallback(
+    (value: string) => {
+      setObservedByFilter(value);
+      updateQueryParams({
+        observedBy: value === DEFAULT_FILTER_ALL ? null : value,
+        page: "1", // Reset to first page
+      });
+      setRowSelection({});
+      setSelectedTools([]);
+      setBulkCallPolicyValue("");
+      setBulkResultPolicyValue("");
+    },
+    [updateQueryParams],
+  );
+
+  const handleClientFilterChange = useCallback(
+    (value: string) => {
+      setClientFilter(value);
+      updateQueryParams({
+        client: value === DEFAULT_FILTER_ALL ? null : value,
         page: "1", // Reset to first page
       });
       setRowSelection({});
@@ -384,10 +458,14 @@ export function AssignedToolsTable({
 
   const clearFilters = useCallback(() => {
     setOriginFilter(DEFAULT_FILTER_ALL);
+    setObservedByFilter(DEFAULT_FILTER_ALL);
+    setClientFilter(DEFAULT_FILTER_ALL);
     handleSearchChange();
     updateQueryParams({
       search: null,
       origin: null,
+      observedBy: null,
+      client: null,
       page: "1",
     });
   }, [handleSearchChange, updateQueryParams]);
@@ -847,6 +925,27 @@ export function AssignedToolsTable({
           ]}
           className="w-[200px]"
         />
+
+        {/* Observed-tool attribution filters: narrow the list to tools seen in
+            one user's LLM proxy traffic, from one client app family. Only
+            shown while the source filter is "Observed tools" — MCP-sourced
+            tools carry no observations — and once someone has observed tools. */}
+        {observationFiltersActive && (toolObservers?.users.length ?? 0) > 0 && (
+          <UserFilterSelect
+            value={observedByFilter}
+            onValueChange={handleObservedByFilterChange}
+            users={toolObservers?.users}
+          />
+        )}
+
+        {observationFiltersActive &&
+          (toolObservers?.clients.length ?? 0) > 0 && (
+            <ClientFilterSelect
+              value={clientFilter}
+              onValueChange={handleClientFilterChange}
+              clients={toolObservers?.clients}
+            />
+          )}
       </div>
 
       {/* Bulk actions - Desktop */}
@@ -1151,7 +1250,10 @@ export function AssignedToolsTable({
         getRowId={(row) => row.id}
         isLoading={isLoading}
         hasActiveFilters={
-          !!searchFromUrl || originFilter !== DEFAULT_FILTER_ALL
+          !!searchFromUrl ||
+          originFilter !== DEFAULT_FILTER_ALL ||
+          observedByFilter !== DEFAULT_FILTER_ALL ||
+          clientFilter !== DEFAULT_FILTER_ALL
         }
         emptyMessage="No tools have been assigned yet."
         filteredEmptyMessage="No tools match your filters. Try adjusting your search."

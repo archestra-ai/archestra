@@ -1,3 +1,4 @@
+import { ClientFilterSchema } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -97,6 +98,13 @@ export const ToolFilterSchema = z.object({
     .string()
     .optional()
     .describe("Can be 'llm-proxy', 'agent', or a catalogId"),
+  observedByUserId: z
+    .string()
+    .optional()
+    .describe("Only tools observed in this user's LLM proxy traffic"),
+  observedByClient: ClientFilterSchema.optional().describe(
+    "Only tools observed from this client app family (e.g. claude, codex)",
+  ),
   excludeArchestraTools: z.coerce
     .boolean()
     .optional()

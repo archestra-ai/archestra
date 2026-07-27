@@ -125,6 +125,11 @@ export const AUDIT_DECISIONS = {
     audited: true,
     model: ToolInvocationPolicyModel,
   },
+  toolObservationsTable: {
+    audited: false,
+    reason:
+      "runtime attribution metadata written by the LLM proxy (who observed a tool, via which client); not admin-mutable state",
+  },
   trustedDataPoliciesTable: { audited: true, model: TrustedDataPolicyModel },
   userTokensTable: { audited: true, model: UserTokenModel },
   virtualApiKeysTable: { audited: true, model: VirtualApiKeyModel },

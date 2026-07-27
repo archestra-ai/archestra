@@ -146,6 +146,7 @@ export const RouteId = {
   GetTool: "getTool",
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
+  GetToolObservers: "getToolObservers",
   GetUnassignedTools: "getUnassignedTools",
   DeleteTool: "deleteTool",
 

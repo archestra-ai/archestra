@@ -717,6 +717,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetToolsWithAssignments]: {
     toolPolicy: ["read"],
   },
+  [RouteId.GetToolObservers]: {
+    toolPolicy: ["read"],
+  },
   [RouteId.DeleteTool]: {
     toolPolicy: ["delete"],
   },

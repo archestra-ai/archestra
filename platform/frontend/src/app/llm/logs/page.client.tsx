@@ -572,7 +572,7 @@ function SessionsTable({
               selectedContent: <ProfileFilterOption profile={agent} />,
             })) || []),
           ]}
-          className="w-[200px]"
+          className="w-full sm:w-[200px]"
         />
 
         <UserFilterSelect
@@ -600,7 +600,7 @@ function SessionsTable({
               }),
             ),
           ]}
-          className="w-[200px]"
+          className="w-full sm:w-[200px]"
         />
 
         <ClientFilterSelect

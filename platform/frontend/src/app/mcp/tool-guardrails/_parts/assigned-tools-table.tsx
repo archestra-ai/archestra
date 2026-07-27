@@ -923,7 +923,7 @@ export function AssignedToolsTable({
               ),
             })),
           ]}
-          className="w-[200px]"
+          className="w-full sm:w-[200px]"
         />
 
         {/* Observed-tool attribution filters: narrow the list to tools seen in

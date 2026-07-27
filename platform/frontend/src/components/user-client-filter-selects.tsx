@@ -16,7 +16,7 @@ export function UserFilterSelect({
   value,
   onValueChange,
   users,
-  className = "w-[200px]",
+  className = "w-full sm:w-[200px]",
 }: {
   value: string;
   onValueChange: (value: string) => void;
@@ -51,7 +51,7 @@ export function ClientFilterSelect({
   value,
   onValueChange,
   clients,
-  className = "w-[200px]",
+  className = "w-full sm:w-[200px]",
 }: {
   value: string;
   onValueChange: (value: string) => void;

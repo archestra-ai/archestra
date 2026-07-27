@@ -25,21 +25,16 @@ export function ProviderKeyAccessFields({
   return (
     <div className="space-y-4">
       <Separator />
-      <div className="space-y-1">
+      <div className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-semibold">Provider Keys</h3>
-        <p className="text-sm text-muted-foreground">
-          Choose which provider API keys this credential can use. Each request
-          uses the key matching its provider — from the proxy route, or the
-          model&apos;s provider prefix for Model Router requests.{" "}
-          <a
-            href={docsUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="underline underline-offset-2"
-          >
-            View docs
-          </a>
-        </p>
+        <a
+          href={docsUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-muted-foreground underline underline-offset-2"
+        >
+          View docs
+        </a>
       </div>
 
       <ProviderKeyMappingsField

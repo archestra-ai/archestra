@@ -22,9 +22,11 @@ export function shouldShowOwnerField(isAdmin: boolean, scope: string): boolean {
 export function OwnerSelectField({
   value,
   onChange,
+  onSelectedOwnerChange,
 }: {
   value: string;
   onChange: (userId: string) => void;
+  onSelectedOwnerChange?: (owner: UserSelectOption) => void;
 }) {
   const { data: session } = useSession();
   const [search, setSearch] = useState("");
@@ -84,7 +86,13 @@ export function OwnerSelectField({
       <UserSearchableSelect
         className="w-full"
         value={value || selfId}
-        onValueChange={(userId) => onChange(userId === selfId ? "" : userId)}
+        onValueChange={(userId) => {
+          const owner = users.find((user) => user.userId === userId);
+          if (owner) {
+            onSelectedOwnerChange?.(owner);
+          }
+          onChange(userId === selfId ? "" : userId);
+        }}
         users={users}
         placeholder="Yourself"
         onSearchQueryChange={setSearch}

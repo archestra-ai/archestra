@@ -6,16 +6,16 @@ import type {
 } from "@archestra/shared";
 import { useEffect, useState } from "react";
 import {
-  GatewayGrantField,
-  ProxyGrantField,
-  parseRedirectUris,
-  RedirectUrisField,
-} from "@/app/credentials/_parts/oauth-client-form-fields";
-import {
   AgentSelector,
   type AgentSelectorAgent,
 } from "@/components/agent-selector";
 import { FormDialog } from "@/components/form-dialog";
+import {
+  GatewayGrantField,
+  ProxyGrantField,
+  parseRedirectUris,
+  RedirectUrisField,
+} from "@/components/oauth-client-form-fields";
 import { OauthClientVisibilityField } from "@/components/oauth-client-visibility-field";
 import {
   type ProviderApiKeyMap,
@@ -44,6 +44,7 @@ export function CreateOAuthClientDialog({
   open,
   onOpenChange,
   defaultClientType = "mcp",
+  fixedClientType,
   defaultAllowedGatewayIds,
   defaultAllowedProxyIds,
   gateways,
@@ -55,6 +56,8 @@ export function CreateOAuthClientDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultClientType?: OAuthClientType;
+  /** Restricts resource-scoped dialogs to the kind managed by that surface. */
+  fixedClientType?: OAuthClientType;
   /** Pre-selected allowed gateways/agents (deep link from a connect dialog). */
   defaultAllowedGatewayIds?: string[];
   /** Pre-selected allowed LLM proxies (deep link from a proxy connect dialog). */
@@ -80,7 +83,7 @@ export function CreateOAuthClientDialog({
 
   useEffect(() => {
     if (open) {
-      setClientType(defaultClientType);
+      setClientType(fixedClientType ?? defaultClientType);
       setName("");
       setGrantType("client_credentials");
       setSelectedGatewayIds(defaultAllowedGatewayIds ?? []);
@@ -92,6 +95,7 @@ export function CreateOAuthClientDialog({
     }
   }, [
     open,
+    fixedClientType,
     defaultClientType,
     defaultAllowedGatewayIds,
     defaultAllowedProxyIds,
@@ -150,19 +154,21 @@ export function CreateOAuthClientDialog({
         }}
       >
         <DialogBody className="space-y-4">
-          <RadioCardField
-            label="What will this client access?"
-            options={CLIENT_TYPE_OPTIONS}
-            value={clientType}
-            onChange={(next) => {
-              setClientType(next as OAuthClientType);
-              // Visibility permissions are per-resource (mcpOauthClient vs
-              // llmOauthClient), so a scope picked under one type may be
-              // forbidden under the other.
-              setScope("personal");
-              setTeamIds([]);
-            }}
-          />
+          {!fixedClientType && (
+            <RadioCardField
+              label="What will this client access?"
+              options={CLIENT_TYPE_OPTIONS}
+              value={clientType}
+              onChange={(next) => {
+                setClientType(next as OAuthClientType);
+                // Visibility permissions are per-resource (mcpOauthClient vs
+                // llmOauthClient), so a scope picked under one type may be
+                // forbidden under the other.
+                setScope("personal");
+                setTeamIds([]);
+              }}
+            />
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="oauth-client-name">Name</Label>

@@ -3,7 +3,7 @@ title: Authentication
 category: LLM Proxy
 order: 3
 description: Authentication methods for the LLM Proxy
-lastUpdated: 2026-07-14
+lastUpdated: 2026-07-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,7 +16,7 @@ The LLM Proxy supports direct provider API keys, virtual API keys, passthrough v
 | Virtual API key | Provider-specific LLM clients, generic Model Router clients, and individual developers | Yes | Works as a provider key replacement on provider-specific proxy routes, or as the `apiKey` for Model Router clients. |
 | Passthrough virtual key | Authenticating proxy user while passing provider credentials through (e.g. a Claude Code subscription) | N/A | Sent in the `X-Archestra-Virtual-Key` header alongside another credential; carries no provider key of its own. |
 | LLM OAuth client access token | Backend services, production apps, and external bots | Yes | OAuth `client_credentials` grant; the client brings its own provider keys. |
-| User OAuth access token | Apps acting for an individual user | Yes | Authorization code flow with the `llm:proxy` scope; the app can self-register or be pre-registered (confidential) on the OAuth Clients page. Resolves the user's own provider keys. |
+| User OAuth access token | Apps acting for an individual user | Yes | Authorization code flow with the `llm:proxy` scope; the app can self-register or use a confidential client configured from the LLM Proxy Connect dialog. Resolves the user's own provider keys. |
 | JWKS | Enterprise IdP JWT callers | Provider routes | Resolves a user from an external IdP JWT. |
 
 ## Direct Provider API Key
@@ -39,8 +39,8 @@ Virtual API keys are platform-managed bearer tokens that map to one or more prov
 
 ### Creating Virtual Keys
 
-1. Go to **Client Credentials > Virtual Keys**
-2. Create a virtual key
+1. Open the LLM Proxy's **Connect** dialog
+2. Under **Virtual keys**, create a virtual key
 3. Map at least one provider API key
 4. Copy the generated token (shown only once)
 
@@ -90,8 +90,8 @@ Unlike the unauthenticated `X-Archestra-User-Id` header, a passthrough key is a 
 
 ### Creating Passthrough Virtual Keys
 
-1. Go to **Client Credentials > Virtual Keys**
-2. Create a virtual key and choose the **Passthrough** type
+1. Open the LLM Proxy's **Connect** dialog
+2. Under **Passthrough**, create a passthrough key
 3. As an admin, optionally pick the owner
 4. Copy the generated token (shown only once)
 
@@ -140,8 +140,8 @@ Virtual keys are still the recommended path for generic LLM clients that cannot 
 
 ### Managing OAuth Clients
 
-1. Go to **Client Credentials > OAuth Clients**
-2. Create an OAuth client, pick the **LLM proxies** client type, then its grant type
+1. Open the LLM Proxy's **Connect** dialog
+2. Under **OAuth clients**, create a client and choose its grant type
 3. For an application (client credentials): select the LLM proxies it can access and map the provider API keys it can use
 4. For acting on behalf of users (authorization code): add the application's redirect URIs
 5. Copy the generated `client_id` and `client_secret` (the secret is shown only once)
@@ -191,8 +191,8 @@ An application can act on behalf of an individual **user** instead of as itself.
 
 Register such an application one of two ways:
 
-- **Pre-registered (recommended for known apps)**: create an OAuth client on the **OAuth Clients** page with the "On behalf of users" grant type and add its redirect URIs. It is confidential — it gets a `client_id` and one-time `client_secret`, and PKCE is required — so only that application can complete the flow. To allow only pre-registered clients, set `ARCHESTRA_AUTH_DCR_ENABLED=false`.
-- **Self-registered**: a client registers dynamically (DCR) or via a client-ID metadata document (CIMD) and runs the same flow. These do not use the OAuth Clients page.
+- **Pre-registered (recommended for known apps)**: create an OAuth client from the LLM Proxy's **Connect** dialog with the "On behalf of users" grant type and add its redirect URIs. It is confidential — it gets a `client_id` and one-time `client_secret`, and PKCE is required — so only that application can complete the flow. To allow only pre-registered clients, set `ARCHESTRA_AUTH_DCR_ENABLED=false`.
+- **Self-registered**: a client registers dynamically (DCR) or via a client-ID metadata document (CIMD) and runs the same flow. These do not use a pre-registered client from an LLM Proxy Connect dialog.
 
 The application redirects the user to `GET /api/auth/oauth2/authorize` (`response_type=code`, `scope=llm:proxy`, add `offline_access` for a refresh token, the registered `redirect_uri`, and a PKCE challenge), then exchanges the code at `POST /api/auth/oauth2/token` (`grant_type=authorization_code`, `client_id`, `client_secret`, PKCE verifier).
 

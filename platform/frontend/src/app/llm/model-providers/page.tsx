@@ -831,7 +831,6 @@ function DeleteApiKeyDescription({
 
   const hasBlockingAssociations =
     totalVirtualKeys > 0 || oauthClients.length > 0;
-  const encodedApiKeyId = encodeURIComponent(apiKey.id);
 
   if (!hasBlockingAssociations) {
     return (
@@ -859,7 +858,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">Virtual API keys</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href={`/credentials/virtual-keys?providerApiKeyId=${encodedApiKeyId}`}
+              href="/llm/proxies"
             >
               View all
             </Link>
@@ -892,7 +891,7 @@ function DeleteApiKeyDescription({
             <p className="font-medium">OAuth clients</p>
             <Link
               className="text-primary underline-offset-4 hover:underline"
-              href={`/credentials/oauth-clients?providerApiKeyId=${encodedApiKeyId}`}
+              href="/llm/proxies"
             >
               View all
             </Link>

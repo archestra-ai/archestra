@@ -833,4 +833,23 @@ describe("reconcileOrganizationDefault", () => {
       (config.skillsSandbox as { enabled: boolean }).enabled = originalEnabled;
     }
   });
+
+  // If the engine pod can't be removed, its egress policy must stay — pruning it
+  // would leave a running privileged pod egressing unrestricted.
+  it("keeps the egress policy when the StatefulSet delete fails", async () => {
+    clients.appsApi.deleteNamespacedStatefulSet.mockRejectedValueOnce(
+      new Error("apiserver unavailable"),
+    );
+
+    await daggerEnvironmentRuntimeManager.teardownEnvironmentEngine(
+      makeEnv({ namespace: "env-ns" }),
+    );
+
+    expect(
+      clients.networkingApi.deleteNamespacedNetworkPolicy,
+    ).not.toHaveBeenCalled();
+    expect(
+      clients.customObjectsApi.deleteNamespacedCustomObject,
+    ).not.toHaveBeenCalled();
+  });
 });

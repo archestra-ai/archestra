@@ -107,7 +107,6 @@ export function LlmProxyConnectInstructionsDialog({
         {selected === "model-router" && <ModelRouterAlert />}
         <LlmProxyAuthSurface
           proxy={proxy}
-          baseUrl={baseUrl}
           onClose={() => onOpenChange(false)}
         />
         <ConnectionGuideFooter
@@ -163,11 +162,9 @@ type ProxyAuthTab = "virtual-keys" | "passthrough" | "oauth" | "idp";
 
 function LlmProxyAuthSurface({
   proxy,
-  baseUrl,
   onClose,
 }: {
   proxy: ConnectTarget;
-  baseUrl: string;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<ProxyAuthTab>("virtual-keys");
@@ -193,9 +190,6 @@ function LlmProxyAuthSurface({
   const { data: canCreateOauth } = useHasPermissions({
     llmOauthClient: ["create"],
   });
-
-  // The OAuth token endpoint lives at the backend root, not under /v1.
-  const tokenEndpoint = `${baseUrl.replace(/\/v1\/?$/, "")}/api/auth/oauth2/token`;
 
   return (
     <div className="space-y-3 rounded-lg border bg-card p-4">
@@ -236,86 +230,50 @@ function LlmProxyAuthSurface({
 
       {tab === "passthrough" && (
         <div className="space-y-3">
-          <AuthFacts
-            rows={[
-              ["For", "users with their own provider key or subscription"],
-              [
-                "Downstream",
-                "the key goes straight to the provider; guardrails, logs, and costs still apply",
-              ],
-              [
-                "Routes",
-                "provider routes; Model Router if the model prefix matches",
-              ],
-            ]}
-          />
-          <TerminalBlock
-            rows={[
-              {
-                comment: "your provider key goes straight upstream",
-                code: "Authorization: Bearer <your-provider-key>",
-              },
-              {
-                comment: "optional — attribute requests to your Archestra user",
-                code: "X-Archestra-Virtual-Key: arch_<your-passthrough-key>",
-              },
-            ]}
-          />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <p className="max-w-3xl text-xs text-muted-foreground">
+              Send your own provider API key or subscription token in the
+              Authorization header. A passthrough key is optional. It links
+              requests to a user but does not grant access.
+            </p>
+            {canCreateKey ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => setCreateKeyType("passthrough")}
+              >
+                Create passthrough key
+              </Button>
+            ) : null}
+          </div>
           <VirtualKeyManagement keyType="passthrough" />
-          <AuthActionsRow
-            summary="Passthrough keys are attribution-only — they grant nothing."
-            action={
-              canCreateKey ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCreateKeyType("passthrough")}
-                >
-                  + Create passthrough key
-                </Button>
-              ) : null
-            }
-          />
         </div>
       )}
 
       {tab === "oauth" && (
         <div className="space-y-3">
-          <AuthFacts
-            rows={[
-              ["For", "applications calling as themselves or for a user"],
-              [
-                "Downstream",
-                "app tokens use mapped provider keys; user tokens use the signed-in user's keys",
-              ],
-              ["Routes", "Model Router + provider routes"],
-            ]}
-          />
-          <TerminalBlock
-            rows={[
-              {
-                comment: "client credentials example",
-                code: `POST ${tokenEndpoint}\n  grant_type=client_credentials\n  client_id=<client-id>  client_secret=<client-secret>`,
-              },
-            ]}
-          />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <p className="max-w-3xl text-xs text-muted-foreground">
+              Use OAuth clients for apps that connect to this proxy. App tokens
+              use the provider keys assigned to the client. User tokens use the
+              signed-in user&apos;s keys. Secrets are shown only when created or
+              rotated.
+            </p>
+            {canCreateOauth ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => setOauthCreateOpen(true)}
+              >
+                Create OAuth client
+              </Button>
+            ) : null}
+          </div>
           <OauthClientTable
             proxyId={proxy.id}
             clients={canReadOauth ? oauthClients : undefined}
-          />
-          <AuthActionsRow
-            summary="Secrets are shown once at creation or rotation."
-            action={
-              canCreateOauth ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setOauthCreateOpen(true)}
-                >
-                  + Create OAuth client
-                </Button>
-              ) : null
-            }
           />
         </div>
       )}
@@ -534,45 +492,41 @@ function IdentityProviderStatus({
   const orgHasIdps = (identityProviders?.length ?? 0) > 0;
 
   return (
-    <div className="space-y-3">
-      <AuthFacts
-        rows={[
-          ["For", "clients that already hold JWTs from your IdP"],
-          ["How", "JWT validated via JWKS; request attributed to its subject"],
-          ["Downstream", "org provider keys"],
-        ]}
-      />
-      <AuthActionsRow
-        summary={
-          idpId ? (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="space-y-1.5">
+        <p className="max-w-3xl text-xs text-muted-foreground">
+          Use a JWT from your identity provider. Requests are linked to the user
+          in the token and use that user&apos;s access.
+        </p>
+        <p className="text-xs">
+          {idpId ? (
             <span className="text-green-600 dark:text-green-500">
               ● {idpName ?? "Identity provider"} — configured
             </span>
           ) : (
             <>○ Not configured</>
-          )
-        }
-        action={
-          !canUpdate ? null : orgHasIdps ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                onClose();
-                updateUrlParams({ edit: target.id });
-              }}
-            >
-              Edit {target.agentType === "mcp_gateway" ? "gateway" : "proxy"}
-            </Button>
-          ) : (
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/settings/identity-providers">
-                Set up identity providers
-              </Link>
-            </Button>
-          )
-        }
-      />
+          )}
+        </p>
+      </div>
+      {!canUpdate ? null : orgHasIdps ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={() => {
+            onClose();
+            updateUrlParams({ edit: target.id });
+          }}
+        >
+          Edit {target.agentType === "mcp_gateway" ? "gateway" : "proxy"}
+        </Button>
+      ) : (
+        <Button variant="outline" size="sm" className="shrink-0" asChild>
+          <Link href="/settings/identity-providers">
+            Set up identity providers
+          </Link>
+        </Button>
+      )}
     </div>
   );
 }
@@ -799,22 +753,6 @@ function AuthFacts({ rows }: { rows: Array<[string, string]> }) {
         </div>
       ))}
     </dl>
-  );
-}
-
-function AuthActionsRow({
-  summary,
-  action,
-}: {
-  summary: React.ReactNode;
-  action: React.ReactNode;
-}) {
-  if (!summary && !action) return null;
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-      <span>{summary}</span>
-      {action}
-    </div>
   );
 }
 

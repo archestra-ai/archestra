@@ -98,7 +98,7 @@ describe("ProviderKeyMappingsField", () => {
 
     expect(screen.getByText("No provider keys added")).toBeInTheDocument();
     expect(
-      screen.getByText("Select a key above to add one."),
+      screen.getByText("Map this virtual API key to a real provider API key."),
     ).toBeInTheDocument();
   });
 

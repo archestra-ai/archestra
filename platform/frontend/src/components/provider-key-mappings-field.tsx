@@ -105,7 +105,7 @@ export function ProviderKeyMappingsField({
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               {providerApiKeys.length > 0
-                ? "Select a key above to add one."
+                ? "Map this virtual API key to a real provider API key."
                 : "Create a provider API key first."}
             </p>
           </div>

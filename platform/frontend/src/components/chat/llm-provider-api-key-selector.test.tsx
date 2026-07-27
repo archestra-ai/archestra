@@ -248,9 +248,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Connect ChatGPT Subscription"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("chatgpt-subscription")).toBeInTheDocument();
   });
 
@@ -262,9 +260,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
       screen.getByRole("button", { name: "ChatGPT Subscription Connect" }),
     );
 
-    expect(
-      screen.getByText("Connect ChatGPT Subscription"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("openai")).toBeInTheDocument();
     expect(screen.getByText("chatgpt-subscription")).toBeInTheDocument();
   });

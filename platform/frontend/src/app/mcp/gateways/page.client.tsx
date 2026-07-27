@@ -10,11 +10,6 @@ import { McpGatewayConnectInstructionsDialog } from "@/components/agent-connect-
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
-import {
-  ActiveFilterBadges,
-  AgentDeletedStatusFilter,
-  AgentScopeFilter,
-} from "@/components/agent-scope-filter";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -23,6 +18,12 @@ import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  ActiveFilterBadges,
+  ResourceDeletedStatusFilter,
+  ResourceScopeFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -120,15 +121,7 @@ function McpGateways({
     | "asc"
     | "desc"
     | null;
-  const scopeFromUrl = searchParams.get("scope") as
-    | "personal"
-    | "team"
-    | "org"
-    | "built_in"
-    | null;
-  const teamIdsFromUrl = searchParams.get("teamIds");
-  const authorIdsFromUrl = searchParams.get("authorIds");
-  const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
+  const scopeFilter = useScopeFilterParams({ includeBuiltIn: true });
   const labelsFromUrl = searchParams.get("labels");
   const statusFromUrl = searchParams.get("status") as
     | "active"
@@ -159,18 +152,11 @@ function McpGateways({
     sortDirection,
     name: nameFilter || undefined,
     agentTypes: gatewayAgentTypes,
-    scope: scopeFromUrl || undefined,
-    teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
-    authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
-    excludeAuthorIds: excludeAuthorIdsFromUrl
-      ? excludeAuthorIdsFromUrl.split(",")
-      : undefined,
-    excludeOtherPersonalAgents:
-      scopeFromUrl !== "personal" &&
-      !authorIdsFromUrl &&
-      !excludeAuthorIdsFromUrl
-        ? true
-        : undefined,
+    scope: scopeFilter.scope,
+    teamIds: scopeFilter.teamIds,
+    authorIds: scopeFilter.authorIds,
+    excludeAuthorIds: scopeFilter.excludeAuthorIds,
+    excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
   });
@@ -519,11 +505,12 @@ function McpGateways({
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter
+                <ResourceScopeFilter
+                  showLabels
                   ownerLabelPlural="MCP gateways"
                   adminPermission={{ mcpGateway: ["admin"] }}
                 />
-                <AgentDeletedStatusFilter
+                <ResourceDeletedStatusFilter
                   deletePermission={{ mcpGateway: ["delete"] }}
                 />
               </div>
@@ -552,10 +539,7 @@ function McpGateways({
                 onPaginationChange={handlePaginationChange}
                 hasActiveFilters={Boolean(
                   nameFilter ||
-                    scopeFromUrl ||
-                    teamIdsFromUrl ||
-                    authorIdsFromUrl ||
-                    excludeAuthorIdsFromUrl ||
+                    scopeFilter.hasActiveScopeFilters ||
                     labelsFromUrl ||
                     isDeletedView,
                 )}

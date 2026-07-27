@@ -24,6 +24,11 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  ActiveFilterBadges,
+  ResourceScopeFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -93,6 +98,7 @@ function SkillsList() {
   const pageSize = Number(searchParams.get("pageSize") || DEFAULT_TABLE_LIMIT);
   const search = searchParams.get("search") || "";
   const sourceRepo = searchParams.get("sourceRepo") || "";
+  const scopeFilter = useScopeFilterParams();
 
   type SkillSortBy = NonNullable<
     NonNullable<archestraApiTypes.GetSkillsData["query"]>["sortBy"]
@@ -114,6 +120,11 @@ function SkillsList() {
       offset: pageIndex * pageSize,
       search: search || undefined,
       sourceRepo: sourceRepo || undefined,
+      scope: scopeFilter.scope,
+      teamIds: scopeFilter.teamIds,
+      authorIds: scopeFilter.authorIds,
+      excludeAuthorIds: scopeFilter.excludeAuthorIds,
+      excludeOtherPersonalSkills: scopeFilter.excludeOtherPersonal,
       sortBy,
       sortDirection,
     },
@@ -202,13 +213,22 @@ function SkillsList() {
   }, [openEdit, items, searchParams, pathname, router]);
   const pagination = skills?.pagination;
   const totalSkills = pagination?.total ?? 0;
-  const hasActiveFilters = !!search || !!sourceRepo;
+  const hasActiveFilters =
+    !!search || !!sourceRepo || scopeFilter.hasActiveScopeFilters;
   const showEmptyState = !isPending && totalSkills === 0 && !hasActiveFilters;
 
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
-    params.delete("search");
-    params.delete("sourceRepo");
+    for (const key of [
+      "search",
+      "sourceRepo",
+      "scope",
+      "teamIds",
+      "authorIds",
+      "excludeAuthorIds",
+    ]) {
+      params.delete(key);
+    }
     params.set("page", "1");
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
   }, [pathname, router, searchParams]);
@@ -473,29 +493,41 @@ function SkillsList() {
           <SkillsEmptyState />
         ) : (
           <>
-            <div className="mb-6 flex flex-wrap items-center gap-3">
-              <SearchInput paramName="search" className="relative w-[370px]" />
-              <Select
-                value={sourceRepo || "all"}
-                onValueChange={(value) =>
-                  setSourceRepoFilter(value === "all" ? "" : value)
-                }
-              >
-                <SelectTrigger
-                  aria-label="Filter by repository"
-                  className="w-[260px]"
+            <div className="mb-6 flex flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <SearchInput
+                  paramName="search"
+                  className="relative w-[370px]"
+                />
+                <ResourceScopeFilter
+                  ownerLabelPlural="skills"
+                  adminPermission={{ skill: ["admin"] }}
+                />
+                <Select
+                  value={sourceRepo || "all"}
+                  onValueChange={(value) =>
+                    setSourceRepoFilter(value === "all" ? "" : value)
+                  }
                 >
-                  <SelectValue placeholder="All repositories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All repositories</SelectItem>
-                  {sourceRepos.map((repo) => (
-                    <SelectItem key={repo} value={repo}>
-                      <span className="truncate font-mono text-xs">{repo}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <SelectTrigger
+                    aria-label="Filter by repository"
+                    className="w-[260px]"
+                  >
+                    <SelectValue placeholder="All repositories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All repositories</SelectItem>
+                    {sourceRepos.map((repo) => (
+                      <SelectItem key={repo} value={repo}>
+                        <span className="truncate font-mono text-xs">
+                          {repo}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
             </div>
 
             <DataTable

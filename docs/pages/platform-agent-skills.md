@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-07-22
+lastUpdated: 2026-07-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,7 +12,7 @@ Agent Skills are markdown instruction sets an agent loads on demand. A skill is 
 
 This keeps specialized knowledge out of every system prompt. Write the steps for parsing a PDF or drafting a release note once; any agent in the org can pull it in mid-chat and pay the token cost only when the skill actually runs.
 
-Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, file count, and use count. Every activation — a `load_skill` call, a slash command, or a delegated run — counts one use. The list shows the most-used skills first, so you can see which skills your organization actually relies on.
+Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, file count, and use count. Filter the list by visibility — personal, team, or organization — or by source repository. Every activation — a `load_skill` call, a slash command, or a delegated run — counts one use. The list shows the most-used skills first, so you can see which skills your organization actually relies on.
 
 Click a skill's use count (or its chart action) to open usage analytics — a chart of who activated the skill over the last 30 days, and how often.
 

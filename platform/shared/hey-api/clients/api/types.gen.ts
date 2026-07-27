@@ -74084,6 +74084,26 @@ export type GetSkillsData = {
          * Restrict results to skills visible from this agent's environment (skills with no environment assignments and built-in skills are visible everywhere).
          */
         forAgentId?: string;
+        /**
+         * Filter by visibility scope: personal, team, or org.
+         */
+        scope?: 'personal' | 'team' | 'org';
+        /**
+         * Team IDs (comma-separated); only used when scope=team.
+         */
+        teamIds?: Array<string>;
+        /**
+         * Author user IDs (comma-separated). Admin-only; used with scope=personal.
+         */
+        authorIds?: Array<string>;
+        /**
+         * Exclude author user IDs (comma-separated). Admin-only; used with scope=personal.
+         */
+        excludeAuthorIds?: Array<string>;
+        /**
+         * Hide personal skills owned by other users. Admin-only; no-op for non-admins.
+         */
+        excludeOtherPersonalSkills?: boolean;
         sortBy?: 'usageCount' | 'lastUsedAt' | 'name' | 'createdAt';
         sortDirection?: 'asc' | 'desc';
     };

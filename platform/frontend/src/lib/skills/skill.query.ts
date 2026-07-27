@@ -35,6 +35,11 @@ type SkillsPaginatedParams = Pick<
   | "search"
   | "sourceRepo"
   | "forAgentId"
+  | "scope"
+  | "teamIds"
+  | "authorIds"
+  | "excludeAuthorIds"
+  | "excludeOtherPersonalSkills"
   | "sortBy"
   | "sortDirection"
 >;

@@ -3,10 +3,9 @@
 import {
   E2eTestId,
   providerDisplayNames,
-  providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
-import { Plus, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
@@ -16,13 +15,6 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 export type ProviderApiKeyMap = Partial<Record<SupportedProvider, string>>;
 
@@ -37,15 +29,7 @@ export function ProviderKeyMappingsField({
   providerApiKeys: LlmProviderApiKeyResponse[];
   className?: string;
 }) {
-  const [selectedProvider, setSelectedProvider] = useState<
-    SupportedProvider | ""
-  >("");
-  const [selectedApiKeyId, setSelectedApiKeyId] = useState("");
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
-  const providerGroups = useMemo(
-    () => groupProviderApiKeys(providerApiKeys),
-    [providerApiKeys],
-  );
   const configuredMappings = useMemo(() => {
     return providerApiKeyMapToArray(providerApiKeyIds)
       .map(({ provider, providerApiKeyId }) => {
@@ -58,46 +42,19 @@ export function ProviderKeyMappingsField({
         getProviderName(a.provider).localeCompare(getProviderName(b.provider)),
       );
   }, [providerApiKeyIds, providerApiKeys]);
-  const availableProviderGroups = providerGroups.filter(
-    ([provider]) => !providerApiKeyIds[provider],
-  );
-  const selectedProviderKeys = selectedProvider
-    ? (providerGroups.find(
-        ([provider]) => provider === selectedProvider,
-      )?.[1] ?? [])
-    : [];
-  // Per-user providers (e.g. GitHub Copilot) self-map to the caller's own
-  // account — there's no key to pick, so the provider change handler below
-  // auto-selects it and the key field renders read-only.
-  const isPerUserProvider = selectedProvider
-    ? providerRequiresPerUserCredential(selectedProvider)
-    : false;
-  const selectedKey = selectedProviderKeys.find(
-    (apiKey) => apiKey.id === selectedApiKeyId,
-  );
-
-  const handleProviderChange = (value: SupportedProvider) => {
-    setSelectedProvider(value);
-    if (providerRequiresPerUserCredential(value)) {
-      const keys =
-        providerGroups.find(([provider]) => provider === value)?.[1] ?? [];
-      setSelectedApiKeyId(keys[0]?.id ?? "");
-    } else {
-      setSelectedApiKeyId("");
-    }
-  };
-
-  const handleAddProviderKey = () => {
-    if (!selectedProvider || !selectedApiKeyId) {
+  const handleSelectProviderKey = (providerApiKeyId: string) => {
+    const selectedKey = providerApiKeys.find(
+      (apiKey) => apiKey.id === providerApiKeyId,
+    );
+    if (!selectedKey) {
       return;
     }
 
     onProviderApiKeyIdsChange({
       ...providerApiKeyIds,
-      [selectedProvider]: selectedApiKeyId,
+      [selectedKey.provider]: selectedKey.id,
     });
-    setSelectedProvider("");
-    setSelectedApiKeyId("");
+    setApiKeySelectorOpen(false);
   };
 
   const handleRemoveProviderKey = (provider: SupportedProvider) => {
@@ -108,86 +65,23 @@ export function ProviderKeyMappingsField({
 
   return (
     <div className={className ?? "space-y-4"}>
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]">
-        <div className="space-y-2">
-          <Label>Provider</Label>
-          <Select
-            value={selectedProvider}
-            onValueChange={(value) =>
-              handleProviderChange(value as SupportedProvider)
-            }
-          >
-            <SelectTrigger
-              className="w-full"
-              data-testid={E2eTestId.VirtualKeyProviderSelect}
-            >
-              <SelectValue placeholder="Select provider" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableProviderGroups.map(([provider]) => {
-                const config = PROVIDER_CONFIG[provider];
-                return (
-                  <SelectItem key={provider} value={provider}>
-                    <div className="flex items-center gap-2">
-                      <Image
-                        src={config.icon}
-                        alt={config.name}
-                        width={16}
-                        height={16}
-                        className="rounded dark:invert"
-                      />
-                      <span>{config.name}</span>
-                    </div>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Provider API Key</Label>
-          {isPerUserProvider ? (
-            <div
-              className="flex h-9 w-full items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground"
-              data-testid={E2eTestId.VirtualKeyParentKeySelect}
-            >
-              {selectedKey?.name ?? "Your own account"} — per-user
-            </div>
-          ) : (
-            <LlmProviderApiKeyDropdown
-              availableKeys={selectedProviderKeys}
-              selectedApiKeyId={selectedApiKeyId || null}
-              disabled={!selectedProvider}
-              open={apiKeySelectorOpen}
-              onOpenChange={setApiKeySelectorOpen}
-              onSelectKey={(keyId) => {
-                setSelectedApiKeyId(keyId);
-                setApiKeySelectorOpen(false);
-              }}
-              triggerVariant="select"
-              triggerClassName="w-full text-sm"
-              popoverClassName="w-[var(--radix-popover-trigger-width)]"
-              popoverPortal={false}
-              emptyTriggerLabel="Select key"
-              triggerTestId={E2eTestId.VirtualKeyParentKeySelect}
-            />
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label className="invisible">Add provider key</Label>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleAddProviderKey}
-            disabled={!selectedProvider || !selectedApiKeyId}
-            className="w-full md:w-auto"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add
-          </Button>
-        </div>
+      <div className="space-y-2">
+        <Label>Add provider key</Label>
+        <LlmProviderApiKeyDropdown
+          availableKeys={providerApiKeys}
+          selectedApiKeyId={null}
+          disabled={providerApiKeys.length === 0}
+          open={apiKeySelectorOpen}
+          onOpenChange={setApiKeySelectorOpen}
+          onSelectKey={handleSelectProviderKey}
+          triggerVariant="select"
+          triggerClassName="w-full text-sm"
+          popoverClassName="w-[var(--radix-popover-trigger-width)]"
+          popoverPortal={false}
+          searchPlaceholder="Search provider keys..."
+          emptyTriggerLabel="Select a provider key"
+          triggerTestId={E2eTestId.VirtualKeyParentKeySelect}
+        />
       </div>
 
       <div className="space-y-2">
@@ -278,19 +172,6 @@ export function formatProviderKeySummary(
       ),
     ),
   ].join(", ");
-}
-
-function groupProviderApiKeys(providerApiKeys: LlmProviderApiKeyResponse[]) {
-  const groups = new Map<SupportedProvider, LlmProviderApiKeyResponse[]>();
-  for (const key of providerApiKeys) {
-    const provider = key.provider as SupportedProvider;
-    const existing = groups.get(provider) ?? [];
-    existing.push(key);
-    groups.set(provider, existing);
-  }
-  return Array.from(groups.entries()).sort(([a], [b]) =>
-    getProviderName(a).localeCompare(getProviderName(b)),
-  );
 }
 
 function getProviderName(provider: SupportedProvider): string {

@@ -63,7 +63,9 @@ export function VirtualKeyManagement({
   if (!query.isPending && keys.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        No {keyType === "passthrough" ? "passthrough " : ""}keys yet.
+        {keyType === "passthrough"
+          ? "No passthrough keys yet."
+          : "No virtual keys yet. Create one and choose its provider key mappings."}
       </p>
     );
   }

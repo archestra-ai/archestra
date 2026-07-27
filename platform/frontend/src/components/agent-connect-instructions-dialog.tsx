@@ -211,15 +211,23 @@ function LlmProxyAuthSurface({
 
       {tab === "virtual-keys" && (
         <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Create a virtual key, then choose the stored provider API key it can
+            use for each provider. Model Router reads the provider from the
+            requested model and uses that mapping.
+          </p>
           <AuthFacts
             rows={[
               ["For", "teammates and services without their own provider keys"],
               [
-                "Downstream",
-                "resolves to stored provider keys (Model Providers)",
+                "Model Router",
+                "selects the mapped provider key for the requested model",
               ],
-              ["Routes", "Model Router + all provider routes"],
-              ["Send", "as the API key (Authorization header)"],
+              [
+                "Provider routes",
+                "use the mapped key for that route's provider",
+              ],
+              ["Send", "the virtual key as the API key (Authorization header)"],
             ]}
           />
           <VirtualKeyManagement keyType="standard" />

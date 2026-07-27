@@ -155,14 +155,22 @@ describe("VirtualKeyManagement", () => {
     expect(screen.getByText(/delete "Key 1"/)).toBeInTheDocument();
   });
 
-  it("renders the key-type empty state after a successful query", () => {
+  it("explains how to configure a virtual key in the empty state", () => {
     vi.mocked(useAllVirtualApiKeys).mockReturnValue({
       data: result(0, 0),
       isPending: false,
       isLoadingError: false,
       refetch: vi.fn(),
     } as unknown as ReturnType<typeof useAllVirtualApiKeys>);
-    render(<VirtualKeyManagement keyType="passthrough" />);
+
+    const { rerender } = render(<VirtualKeyManagement keyType="standard" />);
+    expect(
+      screen.getByText(
+        "No virtual keys yet. Create one and choose its provider key mappings.",
+      ),
+    ).toBeInTheDocument();
+
+    rerender(<VirtualKeyManagement keyType="passthrough" />);
     expect(screen.getByText("No passthrough keys yet.")).toBeInTheDocument();
   });
 });

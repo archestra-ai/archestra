@@ -162,4 +162,49 @@ describe("GeminiGenerateContentInteraction", () => {
       expect(gemini.getLastUserMessage()).toBe("Second message");
     });
   });
+
+  describe("modelName", () => {
+    it("prefers the stored interaction.model over response.modelVersion", () => {
+      const gemini = new GeminiGenerateContentInteraction({
+        model: "gemini-2.5-pro",
+        request: { contents: [] },
+        response: {},
+      } as unknown as Interaction);
+
+      expect(gemini.modelName).toBe("gemini-2.5-pro");
+    });
+  });
+
+  describe("getLastToolCallId", () => {
+    it("returns the last functionResponse id in a multi-tool user turn", () => {
+      const gemini = new GeminiGenerateContentInteraction({
+        request: {
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  functionResponse: {
+                    id: "fr_first",
+                    name: "a",
+                    response: {},
+                  },
+                },
+                {
+                  functionResponse: {
+                    id: "fr_second",
+                    name: "b",
+                    response: {},
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        response: { modelVersion: "gemini-2.5-pro" },
+      } as unknown as Interaction);
+
+      expect(gemini.getLastToolCallId()).toBe("fr_second");
+    });
+  });
 });

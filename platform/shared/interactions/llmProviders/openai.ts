@@ -1,4 +1,5 @@
-import { type archestraApiTypes, parseArchestraToolRefusal } from "../../index";
+import type * as archestraApiTypes from "../../hey-api/clients/api/types.gen";
+import { parseArchestraToolRefusal } from "../../tool-refusal";
 import type { PartialUIMessage } from "../types";
 import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
@@ -171,7 +172,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
               toolName: toolCall.function.name,
               toolCallId: toolCall.id,
               state: "input-available",
-              input: JSON.parse(toolCall.function.arguments),
+              input: tryParseJson(toolCall.function.arguments),
             });
           } else if (toolCall.type === "custom") {
             parts.push({
@@ -179,7 +180,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
               toolName: toolCall.custom.name,
               toolCallId: toolCall.id,
               state: "input-available",
-              input: JSON.parse(toolCall.custom.input),
+              input: tryParseJson(toolCall.custom.input),
             });
           }
         }
@@ -366,3 +367,11 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
 }
 
 export default OpenAiChatCompletionInteraction;
+
+function tryParseJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}

@@ -227,7 +227,7 @@ function SkillsList() {
           <SortIcon isSorted={column.getIsSorted()} />
         </Button>
       ),
-      size: 700,
+      size: 420,
       cell: ({ row }) => {
         const skill = row.original;
         const repo = parseRepoFromSourceRef(skill.sourceRef);
@@ -309,7 +309,7 @@ function SkillsList() {
     },
     {
       id: "visibility",
-      size: 160,
+      size: 130,
       header: "Visibility",
       cell: ({ row }) => (
         <ResourceVisibilityBadge
@@ -323,7 +323,7 @@ function SkillsList() {
     },
     {
       id: "files",
-      size: 150,
+      size: 90,
       header: () => <div className="text-right">Files</div>,
       cell: ({ row }) => (
         <div className="text-right text-sm text-muted-foreground">
@@ -335,9 +335,11 @@ function SkillsList() {
     {
       id: "usageCount",
       accessorKey: "usageCount",
-      size: 150,
+      size: 120,
       header: ({ column }) => (
-        <div className="flex justify-end">
+        // Right padding keeps the right-aligned value from sitting flush
+        // against the Actions buttons in the next cell.
+        <div className="flex justify-end pr-4">
           <Button
             variant="ghost"
             className="h-auto !p-0 font-medium hover:bg-transparent"
@@ -349,7 +351,7 @@ function SkillsList() {
         </div>
       ),
       cell: ({ row }) => (
-        <div className="flex justify-end">
+        <div className="flex justify-end pr-4">
           <Tooltip>
             <TooltipTrigger asChild>
               <button

@@ -22,7 +22,6 @@
   "user_config": {},
   "readme": null,
   "category": "Enterprise",
-  "quality_score": 80,
   "archestra_config": {
     "client_config_permutations": null,
     "oauth": {
@@ -31,10 +30,6 @@
     },
     "works_in_archestra": true
   },
-  "framework": null,
-  "last_scraped_at": "2026-05-13T00:00:00.000Z",
-  "evaluation_model": null,
-  "raw_dependencies": null,
   "author": {
     "name": "port"
   },

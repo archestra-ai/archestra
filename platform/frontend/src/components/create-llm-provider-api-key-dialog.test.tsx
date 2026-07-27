@@ -13,14 +13,29 @@ vi.mock("@/components/llm-provider-api-key-form", () => ({
   PROVIDER_CONFIG: { anthropic: { name: "Anthropic" } },
   LlmProviderApiKeyForm: ({
     form,
+    credentialMode,
+    onSubscriptionCredential,
   }: {
     form: { register: (name: string) => Record<string, unknown> };
+    credentialMode?: "api-key" | "subscription";
+    onSubscriptionCredential?: (credential: string) => void;
   }) => (
     <div>
-      <label htmlFor="chat-api-key-name">Name</label>
-      <input id="chat-api-key-name" {...form.register("name")} />
-      <label htmlFor="chat-api-key-value">API Key</label>
-      <input id="chat-api-key-value" {...form.register("apiKey")} />
+      {credentialMode === "subscription" ? (
+        <button
+          type="button"
+          onClick={() => onSubscriptionCredential?.("subscription-token")}
+        >
+          Sign in
+        </button>
+      ) : (
+        <>
+          <label htmlFor="chat-api-key-name">Name</label>
+          <input id="chat-api-key-name" {...form.register("name")} />
+          <label htmlFor="chat-api-key-value">API Key</label>
+          <input id="chat-api-key-value" {...form.register("apiKey")} />
+        </>
+      )}
     </div>
   ),
 }));
@@ -125,5 +140,44 @@ describe("CreateLlmProviderApiKeyDialog", () => {
     expect(mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ scope: "org" }),
     );
+  });
+
+  it("creates a subscription immediately after sign-in", async () => {
+    const user = userEvent.setup();
+    const onSuccess = vi.fn();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={vi.fn()}
+        onSuccess={onSuccess}
+        title="Sign in with ChatGPT"
+        description="Connect your ChatGPT account"
+        credentialMode="subscription"
+        allowedProviders={["openai"]}
+        defaultValues={{
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          scope: "personal",
+          openaiAuthMethod: "chatgpt-subscription",
+        }}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Test & Create" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "ChatGPT Subscription",
+        provider: "openai",
+        apiKey: "subscription-token",
+        scope: "personal",
+      }),
+    );
+    expect(onSuccess).toHaveBeenCalledOnce();
   });
 });

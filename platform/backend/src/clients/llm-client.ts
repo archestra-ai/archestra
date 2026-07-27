@@ -10,6 +10,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
 import type { InteractionSource } from "@archestra/shared";
 import {
+  anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   isProviderApiKeyOptional,
@@ -23,7 +24,11 @@ import {
   USER_ID_HEADER,
 } from "@archestra/shared";
 import { context, propagation } from "@opentelemetry/api";
-import type { streamText } from "ai";
+import {
+  extractReasoningMiddleware,
+  type streamText,
+  wrapLanguageModel,
+} from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
@@ -254,6 +259,14 @@ export async function createLLMModelForAgent(params: {
    * proxy's `anthropic-beta` header gating so the two can't drift.
    */
   anthropicNativeEndpoint: boolean;
+  /**
+   * The resolved credential row id, when a stored key was used (undefined for
+   * environment-variable keys and keyless auth). This is the credential the
+   * turn actually runs on — resolution can land on a personal/team/org key or
+   * substitute a per-user ChatGPT-subscription credential, not just the
+   * agent's own configured key.
+   */
+  chatApiKeyId?: string;
 }> {
   const {
     organizationId,
@@ -357,7 +370,13 @@ export async function createLLMModelForAgent(params: {
     baseUrl,
   });
 
-  return { model, provider, apiKeySource, anthropicNativeEndpoint };
+  return {
+    model,
+    provider,
+    apiKeySource,
+    anthropicNativeEndpoint,
+    chatApiKeyId,
+  };
 }
 
 // =============================================================================
@@ -399,6 +418,52 @@ function providerHeaders(
 }
 
 /**
+ * Shared `createModel` for OpenAI-compatible providers whose models stream
+ * reasoning in the `reasoning_content` delta field and expect it passed back
+ * on tool-call turns. The strict @ai-sdk/openai chat converter drops reasoning
+ * parts from outgoing messages and its parser drops `reasoning_content` from
+ * responses; @ai-sdk/openai-compatible round-trips both.
+ */
+function reasoningCompatibleCreateModel(params: {
+  /** Provider id — becomes the AI-SDK model provider id (`<name>.chat`). */
+  name: string;
+  /** Thrown when no base URL resolves (per-key override or provider default). */
+  missingBaseUrlMessage: string;
+  /** Substitute the placeholder key when none is set (vllm, ollama). */
+  keyless?: boolean;
+  /**
+   * Send `response_format: json_schema` for structured outputs. Off by default:
+   * the compatible provider falls back to a schema-less `json_object`, and only
+   * upstreams known to honor a schema should be told otherwise.
+   */
+  supportsStructuredOutputs?: boolean;
+}): ProviderModelConfig["createModel"] {
+  const {
+    name,
+    missingBaseUrlMessage,
+    keyless = false,
+    supportsStructuredOutputs = false,
+  } = params;
+  return ({ apiKey, modelName, baseURL, headers, fetch }) => {
+    if (!baseURL) {
+      throw new ApiError(400, missingBaseUrlMessage);
+    }
+    return createOpenAICompatible({
+      name,
+      apiKey: keyless ? apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER : apiKey,
+      baseURL,
+      headers,
+      fetch,
+      // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+      // provider only sends it when asked. Keep it on so the final usage chunk
+      // still arrives and cost/usage metrics are unaffected.
+      includeUsage: true,
+      supportsStructuredOutputs,
+    }).chatModel(modelName);
+  };
+}
+
+/**
  * Unified registry of model configs for each provider.
  * TypeScript enforces that ALL providers in SupportedProvider have an entry.
  * Adding a new provider to SupportedProvider will cause a compile error here
@@ -409,7 +474,14 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
 
   anthropic: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createAnthropic({ apiKey, baseURL, headers, fetch })(modelName),
+      createAnthropic({
+        apiKey,
+        baseURL,
+        headers,
+        // Models that think by default return their thinking text only on
+        // request — see createAnthropicThinkingDisplayFetch.
+        fetch: createAnthropicThinkingDisplayFetch(fetch),
+      })(modelName),
     defaultBaseUrl: config.llm.anthropic.baseUrl,
     apiKeyRequiredMessage:
       "Anthropic API key is required. Please configure ANTHROPIC_API_KEY.",
@@ -473,8 +545,33 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   openrouter: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      if (!baseURL) {
+        throw new ApiError(400, "OpenRouter base URL is required.");
+      }
+      // OpenRouter streams thinking as a `reasoning` delta field that the
+      // strict @ai-sdk/openai chat parser drops — so reasoning models' thinking
+      // never reaches the UI. @ai-sdk/openai-compatible parses
+      // `reasoning_content` / `reasoning` into native reasoning parts.
+      return createOpenAICompatible({
+        name: "openrouter",
+        apiKey,
+        baseURL,
+        headers,
+        fetch,
+        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+        // provider only sends it when asked. Keep it on so the final usage chunk
+        // still arrives and cost/usage metrics are unaffected.
+        includeUsage: true,
+        // @ai-sdk/openai always sends `response_format: json_schema` for
+        // structured outputs; the compatible provider defaults to a schema-less
+        // `json_object` (and nothing else carries the schema to the model), which
+        // breaks generateObject flows (KB reranker, dual-LLM subagents) pointed
+        // at OpenRouter. OpenRouter supports json_schema; providers that can't
+        // honor it ignore it, exactly as with the strict client.
+        supportsStructuredOutputs: true,
+      }).chatModel(modelName);
+    },
     defaultBaseUrl: config.llm.openrouter.baseUrl,
     apiKeyRequiredMessage:
       "OpenRouter API key is required. Please configure ARCHESTRA_CHAT_OPENROUTER_API_KEY.",
@@ -483,31 +580,75 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
 
   perplexity: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+      // Perplexity reasoning models (sonar-reasoning-pro, sonar-deep-research)
+      // stream their chain of thought as inline <think>…</think> text in
+      // `content` — there is no reasoning_content field — so no provider
+      // parser can surface it. The middleware extracts the tags into native
+      // reasoning parts; tagless responses (sonar, sonar-pro) pass through
+      // unchanged, at the accepted cost that literal <think> text in a real
+      // answer is also treated as reasoning. Reasoning parts are dropped from
+      // outgoing messages by the strict openai converter, which is correct
+      // here: Perplexity does not accept reasoning back.
+      wrapLanguageModel({
+        model: createOpenAI({ apiKey, baseURL, headers, fetch }).chat(
+          modelName,
+        ),
+        middleware: extractReasoningMiddleware({ tagName: "think" }),
+      }),
     defaultBaseUrl: config.llm.perplexity.baseUrl,
     apiKeyRequiredMessage:
       "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",
   },
 
   zhipuai: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    // GLM thinking mode (on by default; glm-4.7 thinks unconditionally) streams
+    // its chain of thought in `reasoning_content`. Z.ai accepts only
+    // `text`/`json_object` response formats, so this deliberately stays off
+    // supportsStructuredOutputs: generateObject falls back to bare
+    // `json_object` and the SDK validates the returned JSON against the schema.
+    createModel: reasoningCompatibleCreateModel({
+      name: "zhipuai",
+      missingBaseUrlMessage: "Zhipu AI base URL is required.",
+    }),
     defaultBaseUrl: config.llm.zhipuai.baseUrl,
     apiKeyRequiredMessage:
       "Zhipu AI API key is required. Please configure ZHIPUAI_API_KEY.",
   },
 
   minimax: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
+      if (!baseURL) {
+        throw new ApiError(400, "MiniMax base URL is required.");
+      }
+      // MiniMax M-series models always think; the proxy's minimax adapter
+      // mirrors the thinking text into DeepSeek-style `reasoning_content`
+      // deltas. The strict @ai-sdk/openai chat converter drops reasoning parts
+      // from outgoing messages and its parser drops `reasoning_content` from
+      // responses; @ai-sdk/openai-compatible round-trips both.
+      return createOpenAICompatible({
+        name: "minimax",
+        apiKey,
+        baseURL,
+        headers,
+        fetch,
+        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+        // provider only sends it when asked. Keep it on so the final usage chunk
+        // still arrives and cost/usage metrics are unaffected.
+        includeUsage: true,
+      }).chatModel(modelName);
+    },
     defaultBaseUrl: config.llm.minimax.baseUrl,
     apiKeyRequiredMessage:
       "MiniMax API key is required. Please configure ARCHESTRA_CHAT_MINIMAX_API_KEY.",
   },
 
   deepseek: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    // DeepSeek thinking mode 400s when the assistant's `reasoning_content` is
+    // not passed back on tool-call turns.
+    createModel: reasoningCompatibleCreateModel({
+      name: "deepseek",
+      missingBaseUrlMessage: "DeepSeek base URL is required.",
+    }),
     defaultBaseUrl: config.llm.deepseek.baseUrl,
     apiKeyRequiredMessage:
       "DeepSeek API key is required. Please configure DEEPSEEK_API_KEY.",
@@ -516,16 +657,32 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // Another Archestra instance's OpenAI-compatible LLM proxy. Base URL is always
   // supplied per key (no global default), so direct calls rely on that override.
   archestra: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    // The upstream Archestra streams thinking as DeepSeek-style
+    // `reasoning_content` deltas and, when it fronts DeepSeek, requires them
+    // passed back on tool-call turns. Failing closed on a missing base URL
+    // beats the old silent fallback to api.openai.com with a virtual key.
+    createModel: reasoningCompatibleCreateModel({
+      name: "archestra",
+      missingBaseUrlMessage: "Archestra base URL is required.",
+      // The upstream is another Archestra model router, which forwards
+      // `response_format: json_schema` the same way the strict openai client
+      // sent it before. Without this the compatible client downgrades
+      // generateObject flows (KB reranker, dual-LLM subagents) to a schema-less
+      // `json_object`, and nothing else carries the schema to the model.
+      supportsStructuredOutputs: true,
+    }),
     defaultBaseUrl: config.llm.archestra.baseUrl,
     apiKeyRequiredMessage:
       "Archestra API key is required. Please configure an Archestra API key.",
   },
 
   kimi: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName),
+    // Kimi thinking models (kimi-k3, kimi-k2.6, ...) stream reasoning in
+    // `reasoning_content` and expect it passed back on tool-call turns.
+    createModel: reasoningCompatibleCreateModel({
+      name: "kimi",
+      missingBaseUrlMessage: "Kimi base URL is required.",
+    }),
     defaultBaseUrl: config.llm.kimi.baseUrl,
     apiKeyRequiredMessage:
       "Kimi API key is required. Please configure ARCHESTRA_CHAT_KIMI_API_KEY.",
@@ -623,38 +780,25 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // --- OpenAI-compatible providers with optional API key ---
 
   vllm: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      createOpenAI({
-        apiKey: apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER,
-        baseURL,
-        headers,
-        fetch,
-      }).chat(modelName),
+    // vLLM serves DeepSeek-style reasoning models. There is no default base
+    // URL (PROVIDERS_REQUIRING_BASE_URL): without the factory's guard a
+    // missing URL would silently route to api.openai.com.
+    createModel: reasoningCompatibleCreateModel({
+      name: "vllm",
+      missingBaseUrlMessage: "vLLM base URL is required.",
+      keyless: true,
+    }),
     defaultBaseUrl: config.llm.vllm.baseUrl,
     // No apiKeyRequiredMessage — key is optional
   },
 
   ollama: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
-      if (!baseURL) {
-        throw new ApiError(400, "Ollama base URL is required.");
-      }
-      // Ollama is OpenAI-compatible, but streams reasoning ("thinking") in a
-      // `reasoning_content` delta field that @ai-sdk/openai's chat parser drops
-      // — so qwen3-style thinking never reaches the UI. @ai-sdk/openai-compatible
-      // parses `reasoning_content` / `reasoning` into native reasoning parts.
-      return createOpenAICompatible({
-        name: "ollama",
-        apiKey: apiKey || KEYLESS_PROVIDER_API_KEY_PLACEHOLDER,
-        baseURL,
-        headers,
-        fetch,
-        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
-        // provider only sends it when asked. Keep it on so the final usage chunk
-        // still arrives and cost/usage metrics are unaffected.
-        includeUsage: true,
-      }).chatModel(modelName);
-    },
+    // Ollama streams reasoning ("thinking", e.g. qwen3) in `reasoning_content`.
+    createModel: reasoningCompatibleCreateModel({
+      name: "ollama",
+      missingBaseUrlMessage: "Ollama base URL is required.",
+      keyless: true,
+    }),
     defaultBaseUrl: config.llm.ollama.baseUrl,
     // No apiKeyRequiredMessage — key is optional
   },
@@ -827,6 +971,62 @@ function createOllamaNativeFetch(
     }
 
     return baseFetch(input, { ...forwarded, body: JSON.stringify(body) });
+  };
+}
+
+/**
+ * Wraps fetch to surface thinking text on Anthropic models that think by
+ * default (see anthropicThinksByDefault).
+ *
+ * On those models thinking already runs — and is billed — on every request,
+ * but `display` defaults to `"omitted"`, so responses carry only empty
+ * thinking blocks with a signature and the UI has nothing to render.
+ * Requesting `thinking: {type: "adaptive", display: "summarized"}` returns the
+ * summary text. Per Anthropic's docs this changes neither billing nor prompt
+ * caching: `adaptive` is those models' default, and explicitly sending a
+ * default is equivalent to omitting it.
+ *
+ * The field is injected at the HTTP boundary because the installed
+ * @ai-sdk/anthropic (3.x) has no `display` provider option — its closed Zod
+ * schema strips unknown thinking keys, so no providerOptions value can carry
+ * it (same constraint as OLLAMA_THINK_EXPLICIT_HEADER above).
+ *
+ * A request that already carries a `thinking` configuration is forwarded
+ * untouched, as is any model where thinking is off by default (Opus 4.8 and
+ * earlier) — enabling thinking there would add cost.
+ */
+function createAnthropicThinkingDisplayFetch(
+  providedFetch?: typeof globalThis.fetch,
+): typeof globalThis.fetch {
+  const baseFetch = providedFetch ?? globalThis.fetch;
+
+  return (input, init) => {
+    if (typeof init?.body !== "string") {
+      return baseFetch(input, init);
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(init.body);
+      if (typeof parsed !== "object" || parsed === null) {
+        return baseFetch(input, init);
+      }
+      body = parsed as Record<string, unknown>;
+    } catch {
+      // Not JSON we understand — forward verbatim rather than guessing.
+      return baseFetch(input, init);
+    }
+
+    if (
+      typeof body.model !== "string" ||
+      !anthropicThinksByDefault(body.model) ||
+      "thinking" in body
+    ) {
+      return baseFetch(input, init);
+    }
+
+    body.thinking = { type: "adaptive", display: "summarized" };
+    return baseFetch(input, { ...init, body: JSON.stringify(body) });
   };
 }
 

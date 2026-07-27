@@ -82,6 +82,7 @@ export type OpenAiChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -300,7 +301,7 @@ export type OpenAiChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -318,6 +319,7 @@ export type OpenAiChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -1425,10 +1427,12 @@ export type AnthropicMessagesRequestInput = {
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
+        display?: 'summarized' | 'omitted';
     } | {
         type: 'disabled';
     } | {
         type: 'adaptive';
+        display?: 'summarized' | 'omitted';
     };
     tool_choice?: {
         type: 'auto';
@@ -1584,6 +1588,7 @@ export type CerebrasChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -1802,7 +1807,7 @@ export type CerebrasChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/Cerebras/cerebras-cloud-sdk-node/blob/main/src/resources/chat/completions.ts
@@ -1817,6 +1822,7 @@ export type CerebrasChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
              */
@@ -2049,6 +2055,7 @@ export type MistralChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -2267,7 +2274,7 @@ export type MistralChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -2285,6 +2292,7 @@ export type MistralChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -2406,6 +2414,7 @@ export type PerplexityChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -2618,13 +2627,14 @@ export type PerplexityChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     stream?: boolean | null;
+    stream_mode?: 'full' | 'concise';
 };
 
 export type PerplexityChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -2642,6 +2652,7 @@ export type PerplexityChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -2763,6 +2774,7 @@ export type GroqChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -2981,7 +2993,7 @@ export type GroqChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -2999,6 +3011,7 @@ export type GroqChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -3120,6 +3133,7 @@ export type OpenrouterChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -3342,7 +3356,7 @@ export type OpenrouterChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -3360,6 +3374,7 @@ export type OpenrouterChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -3504,6 +3519,7 @@ export type VllmChatCompletionRequestInput = {
             };
         }>;
         reasoning?: string | null;
+        reasoning_content?: string | null;
     } | {
         role: 'tool';
         content: string | Array<{
@@ -3680,7 +3696,7 @@ export type VllmChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * The assistant message in the response
@@ -3720,6 +3736,7 @@ export type VllmChatCompletionResponseInput = {
                 };
             }>;
             reasoning?: string | null;
+            reasoning_content?: string | null;
         };
     }>;
     created: number;
@@ -3809,6 +3826,7 @@ export type OllamaChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * A tool call in the assistant message
@@ -4005,7 +4023,7 @@ export type OllamaChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * The assistant message in the response
@@ -4020,6 +4038,7 @@ export type OllamaChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             /**
              * A tool call in the assistant message
              */
@@ -4187,6 +4206,7 @@ export type ZhipuaiChatCompletionRequestInput = {
     } | {
         role: 'assistant';
         content?: string | null;
+        reasoning_content?: string | null;
         name?: string;
         tool_calls?: Array<{
             id: string;
@@ -4269,7 +4289,7 @@ export type ZhipuaiChatCompletionResponseInput = {
     request_id?: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error';
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://docs.z.ai/api-reference/llm/chat-completion#response
@@ -4401,6 +4421,7 @@ export type DeepSeekChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -4620,7 +4641,7 @@ export type DeepSeekChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -4638,6 +4659,7 @@ export type DeepSeekChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -4759,6 +4781,7 @@ export type ArchestraChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -4978,7 +5001,7 @@ export type ArchestraChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -4996,6 +5019,7 @@ export type ArchestraChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -5045,10 +5069,56 @@ export type ArchestraChatCompletionResponseInput = {
 
 export type MinimaxChatCompletionRequestInput = {
     model: string;
-    /**
-     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
-     */
     messages: Array<{
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | null;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | null;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+         */
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | null;
+        name?: string;
+        reasoning_content?: string | null;
+        refusal?: string | null;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+        reasoning_details?: Array<{
+            text: string;
+        }>;
+    } | {
         content: string | Array<{
             type: 'text';
             text: string;
@@ -5117,6 +5187,7 @@ export type MinimaxChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -5336,6 +5407,7 @@ export type MinimaxChatCompletionRequestInput = {
         type: 'text' | 'json_object';
     };
     user?: string;
+    reasoning_split?: boolean;
     extra_body?: {
         reasoning_split?: boolean;
     };
@@ -5345,7 +5417,7 @@ export type MinimaxChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter';
-        index: number;
+        index?: number;
         logprobs?: unknown;
         /**
          * https://platform.minimax.io/docs/api-reference/text-openai-api#response
@@ -5356,6 +5428,7 @@ export type MinimaxChatCompletionResponseInput = {
             reasoning_details?: Array<{
                 text: string;
             }>;
+            reasoning_content?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
              */
@@ -5473,6 +5546,7 @@ export type XaiChatCompletionRequestInput = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -5691,7 +5765,7 @@ export type XaiChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -5709,6 +5783,7 @@ export type XaiChatCompletionResponseInput = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -5851,6 +5926,7 @@ export type OpenAiChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -6069,7 +6145,7 @@ export type OpenAiChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -6087,6 +6163,7 @@ export type OpenAiChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -7194,10 +7271,12 @@ export type AnthropicMessagesRequest = {
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
+        display?: 'summarized' | 'omitted';
     } | {
         type: 'disabled';
     } | {
         type: 'adaptive';
+        display?: 'summarized' | 'omitted';
     };
     tool_choice?: {
         type: 'auto';
@@ -7353,6 +7432,7 @@ export type CerebrasChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -7571,7 +7651,7 @@ export type CerebrasChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/Cerebras/cerebras-cloud-sdk-node/blob/main/src/resources/chat/completions.ts
@@ -7586,6 +7666,7 @@ export type CerebrasChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
              */
@@ -7818,6 +7899,7 @@ export type MistralChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -8036,7 +8118,7 @@ export type MistralChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -8054,6 +8136,7 @@ export type MistralChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -8175,6 +8258,7 @@ export type PerplexityChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -8387,13 +8471,14 @@ export type PerplexityChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     stream?: boolean | null;
+    stream_mode?: 'full' | 'concise';
 };
 
 export type PerplexityChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -8411,6 +8496,7 @@ export type PerplexityChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -8532,6 +8618,7 @@ export type GroqChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -8750,7 +8837,7 @@ export type GroqChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -8768,6 +8855,7 @@ export type GroqChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -8889,6 +8977,7 @@ export type OpenrouterChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -9111,7 +9200,7 @@ export type OpenrouterChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -9129,6 +9218,7 @@ export type OpenrouterChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -9273,6 +9363,7 @@ export type VllmChatCompletionRequest = {
             };
         }>;
         reasoning?: string | null;
+        reasoning_content?: string | null;
     } | {
         role: 'tool';
         content: string | Array<{
@@ -9449,7 +9540,7 @@ export type VllmChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * The assistant message in the response
@@ -9489,6 +9580,7 @@ export type VllmChatCompletionResponse = {
                 };
             }>;
             reasoning?: string | null;
+            reasoning_content?: string | null;
         };
     }>;
     created: number;
@@ -9578,6 +9670,7 @@ export type OllamaChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * A tool call in the assistant message
@@ -9774,7 +9867,7 @@ export type OllamaChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * The assistant message in the response
@@ -9789,6 +9882,7 @@ export type OllamaChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             /**
              * A tool call in the assistant message
              */
@@ -9956,6 +10050,7 @@ export type ZhipuaiChatCompletionRequest = {
     } | {
         role: 'assistant';
         content?: string | null;
+        reasoning_content?: string | null;
         name?: string;
         tool_calls?: Array<{
             id: string;
@@ -10038,7 +10133,7 @@ export type ZhipuaiChatCompletionResponse = {
     request_id?: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error';
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://docs.z.ai/api-reference/llm/chat-completion#response
@@ -10170,6 +10265,7 @@ export type DeepSeekChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -10389,7 +10485,7 @@ export type DeepSeekChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -10407,6 +10503,7 @@ export type DeepSeekChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -10528,6 +10625,7 @@ export type ArchestraChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -10747,7 +10845,7 @@ export type ArchestraChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -10765,6 +10863,7 @@ export type ArchestraChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -10814,10 +10913,56 @@ export type ArchestraChatCompletionResponse = {
 
 export type MinimaxChatCompletionRequest = {
     model: string;
-    /**
-     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
-     */
     messages: Array<{
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | null;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | null;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+         */
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | null;
+        name?: string;
+        reasoning_content?: string | null;
+        refusal?: string | null;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+        reasoning_details?: Array<{
+            text: string;
+        }>;
+    } | {
         content: string | Array<{
             type: 'text';
             text: string;
@@ -10886,6 +11031,7 @@ export type MinimaxChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -11105,6 +11251,7 @@ export type MinimaxChatCompletionRequest = {
         type: 'text' | 'json_object';
     };
     user?: string;
+    reasoning_split?: boolean;
     extra_body?: {
         reasoning_split?: boolean;
     };
@@ -11114,7 +11261,7 @@ export type MinimaxChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter';
-        index: number;
+        index?: number;
         logprobs?: unknown;
         /**
          * https://platform.minimax.io/docs/api-reference/text-openai-api#response
@@ -11125,6 +11272,7 @@ export type MinimaxChatCompletionResponse = {
             reasoning_details?: Array<{
                 text: string;
             }>;
+            reasoning_content?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
              */
@@ -11242,6 +11390,7 @@ export type XaiChatCompletionRequest = {
             name: string;
         } | null;
         name?: string;
+        reasoning_content?: string | null;
         refusal?: string | null;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -11460,7 +11609,7 @@ export type XaiChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -11478,6 +11627,7 @@ export type XaiChatCompletionResponse = {
                 arguments: string;
                 name: string;
             } | null;
+            reasoning_content?: string | null;
             tool_calls?: Array<{
                 id: string;
                 type: 'function';
@@ -17256,6 +17406,90 @@ export type DownloadAppRecordingVideoResponses = {
     200: unknown;
 };
 
+export type ReviewAppRecordingData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Absolute https://raw.githubusercontent.com/... URL of the submission's recording.json.
+         */
+        src: string;
+    };
+    url: '/api/app-recording/review';
+};
+
+export type ReviewAppRecordingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReviewAppRecordingError = ReviewAppRecordingErrors[keyof ReviewAppRecordingErrors];
+
+export type ReviewAppRecordingResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
 export type GetAppsData = {
     body?: never;
     path?: never;
@@ -19876,7 +20110,7 @@ export type GetAuditLogsResponses = {
             actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
             actorName: string | null;
             actorEmail: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -19996,7 +20230,7 @@ export type GetAuditLogResponses = {
         actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
         actorName: string | null;
         actorEmail: string | null;
-        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -21797,7 +22031,7 @@ export type AzureChatCompletionsWithDefaultAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -21815,6 +22049,7 @@ export type AzureChatCompletionsWithDefaultAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -22297,7 +22532,7 @@ export type AzureChatCompletionsWithAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -22315,6 +22550,7 @@ export type AzureChatCompletionsWithAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -24431,10 +24667,12 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
+            display?: 'summarized' | 'omitted';
         } | {
             type: 'disabled';
         } | {
             type: 'adaptive';
+            display?: 'summarized' | 'omitted';
         };
         tool_choice?: {
             type: 'auto';
@@ -24759,10 +24997,12 @@ export type BedrockInvokeWithAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
+            display?: 'summarized' | 'omitted';
         } | {
             type: 'disabled';
         } | {
             type: 'adaptive';
+            display?: 'summarized' | 'omitted';
         };
         tool_choice?: {
             type: 'auto';
@@ -25088,10 +25328,12 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
+            display?: 'summarized' | 'omitted';
         } | {
             type: 'disabled';
         } | {
             type: 'adaptive';
+            display?: 'summarized' | 'omitted';
         };
         tool_choice?: {
             type: 'auto';
@@ -25349,10 +25591,12 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
+            display?: 'summarized' | 'omitted';
         } | {
             type: 'disabled';
         } | {
             type: 'adaptive';
+            display?: 'summarized' | 'omitted';
         };
         tool_choice?: {
             type: 'auto';
@@ -33400,6 +33644,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
                 name: string;
             } | null;
             name?: string;
+            reasoning_content?: string | null;
             refusal?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -33702,7 +33947,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -33720,6 +33965,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -33845,6 +34091,7 @@ export type GithubCopilotChatCompletionsWithAgentData = {
                 name: string;
             } | null;
             name?: string;
+            reasoning_content?: string | null;
             refusal?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -34149,7 +34396,7 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -34167,6 +34414,7 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -35976,6 +36224,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36053,6 +36302,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -36064,6 +36314,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36248,6 +36499,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -36259,6 +36511,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36359,6 +36612,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -36368,6 +36622,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36468,6 +36723,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -36477,6 +36733,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36577,6 +36834,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -36586,6 +36844,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36663,6 +36922,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -36674,6 +36934,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36751,6 +37012,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -36762,6 +37024,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -37263,6 +37526,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -37274,6 +37538,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -37459,10 +37724,12 @@ export type GetInteractionsResponses = {
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
+                    display?: 'summarized' | 'omitted';
                 } | {
                     type: 'disabled';
                 } | {
                     type: 'adaptive';
+                    display?: 'summarized' | 'omitted';
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -37697,10 +37964,12 @@ export type GetInteractionsResponses = {
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
+                    display?: 'summarized' | 'omitted';
                 } | {
                     type: 'disabled';
                 } | {
                     type: 'adaptive';
+                    display?: 'summarized' | 'omitted';
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -37821,6 +38090,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -37832,6 +38102,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -37909,6 +38180,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -37920,6 +38192,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -37997,6 +38270,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38008,6 +38282,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38015,10 +38290,10 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
-            request: XaiChatCompletionRequest | {
+            request: PerplexityChatCompletionRequest | {
                 [key: string]: unknown;
             };
-            processedRequest?: XaiChatCompletionRequest | {
+            processedRequest?: PerplexityChatCompletionRequest | {
                 [key: string]: unknown;
             } | null;
             response: PerplexityChatCompletionResponse | {
@@ -38085,6 +38360,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38096,6 +38372,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38173,6 +38450,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38184,6 +38462,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38261,6 +38540,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38272,6 +38552,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38349,6 +38630,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38360,6 +38642,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38437,6 +38720,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -38446,6 +38730,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38523,6 +38808,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -38532,6 +38818,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38609,6 +38896,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -38618,6 +38906,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38695,6 +38984,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38706,6 +38996,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38783,6 +39074,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38794,6 +39086,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38871,6 +39164,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38882,6 +39176,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38963,6 +39258,7 @@ export type GetInteractionsResponses = {
                         name: string;
                     } | null;
                     name?: string;
+                    reasoning_content?: string | null;
                     refusal?: string | null;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -39253,6 +39549,7 @@ export type GetInteractionsResponses = {
                         name: string;
                     } | null;
                     name?: string;
+                    reasoning_content?: string | null;
                     refusal?: string | null;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -39473,7 +39770,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                    index: number;
+                    index?: number;
                     logprobs: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -39491,6 +39788,7 @@ export type GetInteractionsResponses = {
                             arguments: string;
                             name: string;
                         } | null;
+                        reasoning_content?: string | null;
                         tool_calls?: Array<{
                             id: string;
                             type: 'function';
@@ -39600,6 +39898,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -39611,6 +39910,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -39692,6 +39992,7 @@ export type GetInteractionsResponses = {
                         name: string;
                     } | null;
                     name?: string;
+                    reasoning_content?: string | null;
                     refusal?: string | null;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -39982,6 +40283,7 @@ export type GetInteractionsResponses = {
                         name: string;
                     } | null;
                     name?: string;
+                    reasoning_content?: string | null;
                     refusal?: string | null;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -40202,7 +40504,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                    index: number;
+                    index?: number;
                     logprobs: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -40220,6 +40522,7 @@ export type GetInteractionsResponses = {
                             arguments: string;
                             name: string;
                         } | null;
+                        reasoning_content?: string | null;
                         tool_calls?: Array<{
                             id: string;
                             type: 'function';
@@ -40329,6 +40632,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -40340,6 +40644,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -40421,6 +40726,7 @@ export type GetInteractionsResponses = {
                         name: string;
                     } | null;
                     name?: string;
+                    reasoning_content?: string | null;
                     refusal?: string | null;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -40711,6 +41017,7 @@ export type GetInteractionsResponses = {
                         name: string;
                     } | null;
                     name?: string;
+                    reasoning_content?: string | null;
                     refusal?: string | null;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -40931,7 +41238,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                    index: number;
+                    index?: number;
                     logprobs: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -40949,6 +41256,7 @@ export type GetInteractionsResponses = {
                             arguments: string;
                             name: string;
                         } | null;
+                        reasoning_content?: string | null;
                         tool_calls?: Array<{
                             id: string;
                             type: 'function';
@@ -41058,6 +41366,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -41069,6 +41378,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -41146,6 +41456,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -41157,6 +41468,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -41174,7 +41486,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                    index: number;
+                    index?: number;
                     logprobs: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -41192,6 +41504,7 @@ export type GetInteractionsResponses = {
                             arguments: string;
                             name: string;
                         } | null;
+                        reasoning_content?: string | null;
                         tool_calls?: Array<{
                             id: string;
                             type: 'function';
@@ -41301,6 +41614,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -41312,6 +41626,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -41496,6 +41811,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         }>;
@@ -41926,6 +42242,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42003,6 +42320,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -42014,6 +42332,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42198,6 +42517,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -42209,6 +42529,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42309,6 +42630,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -42318,6 +42640,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42418,6 +42741,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -42427,6 +42751,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42527,6 +42852,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -42536,6 +42862,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42613,6 +42940,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -42624,6 +42952,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42701,6 +43030,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -42712,6 +43042,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -43213,6 +43544,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -43224,6 +43556,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -43409,10 +43742,12 @@ export type GetInteractionResponses = {
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
+                display?: 'summarized' | 'omitted';
             } | {
                 type: 'disabled';
             } | {
                 type: 'adaptive';
+                display?: 'summarized' | 'omitted';
             };
             tool_choice?: {
                 type: 'auto';
@@ -43647,10 +43982,12 @@ export type GetInteractionResponses = {
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
+                display?: 'summarized' | 'omitted';
             } | {
                 type: 'disabled';
             } | {
                 type: 'adaptive';
+                display?: 'summarized' | 'omitted';
             };
             tool_choice?: {
                 type: 'auto';
@@ -43771,6 +44108,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -43782,6 +44120,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -43859,6 +44198,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -43870,6 +44210,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -43947,6 +44288,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -43958,6 +44300,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -43965,10 +44308,10 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
-        request: XaiChatCompletionRequest | {
+        request: PerplexityChatCompletionRequest | {
             [key: string]: unknown;
         };
-        processedRequest?: XaiChatCompletionRequest | {
+        processedRequest?: PerplexityChatCompletionRequest | {
             [key: string]: unknown;
         } | null;
         response: PerplexityChatCompletionResponse | {
@@ -44035,6 +44378,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44046,6 +44390,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44123,6 +44468,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44134,6 +44480,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44211,6 +44558,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44222,6 +44570,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44299,6 +44648,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44310,6 +44660,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44387,6 +44738,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -44396,6 +44748,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44473,6 +44826,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -44482,6 +44836,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44559,6 +44914,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -44568,6 +44924,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44645,6 +45002,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44656,6 +45014,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44733,6 +45092,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44744,6 +45104,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44821,6 +45182,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44832,6 +45194,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44913,6 +45276,7 @@ export type GetInteractionResponses = {
                     name: string;
                 } | null;
                 name?: string;
+                reasoning_content?: string | null;
                 refusal?: string | null;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -45203,6 +45567,7 @@ export type GetInteractionResponses = {
                     name: string;
                 } | null;
                 name?: string;
+                reasoning_content?: string | null;
                 refusal?: string | null;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -45423,7 +45788,7 @@ export type GetInteractionResponses = {
             id: string;
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                index: number;
+                index?: number;
                 logprobs: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -45441,6 +45806,7 @@ export type GetInteractionResponses = {
                         arguments: string;
                         name: string;
                     } | null;
+                    reasoning_content?: string | null;
                     tool_calls?: Array<{
                         id: string;
                         type: 'function';
@@ -45550,6 +45916,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -45561,6 +45928,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -45642,6 +46010,7 @@ export type GetInteractionResponses = {
                     name: string;
                 } | null;
                 name?: string;
+                reasoning_content?: string | null;
                 refusal?: string | null;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -45932,6 +46301,7 @@ export type GetInteractionResponses = {
                     name: string;
                 } | null;
                 name?: string;
+                reasoning_content?: string | null;
                 refusal?: string | null;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -46152,7 +46522,7 @@ export type GetInteractionResponses = {
             id: string;
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                index: number;
+                index?: number;
                 logprobs: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -46170,6 +46540,7 @@ export type GetInteractionResponses = {
                         arguments: string;
                         name: string;
                     } | null;
+                    reasoning_content?: string | null;
                     tool_calls?: Array<{
                         id: string;
                         type: 'function';
@@ -46279,6 +46650,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -46290,6 +46662,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -46371,6 +46744,7 @@ export type GetInteractionResponses = {
                     name: string;
                 } | null;
                 name?: string;
+                reasoning_content?: string | null;
                 refusal?: string | null;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -46661,6 +47035,7 @@ export type GetInteractionResponses = {
                     name: string;
                 } | null;
                 name?: string;
+                reasoning_content?: string | null;
                 refusal?: string | null;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -46881,7 +47256,7 @@ export type GetInteractionResponses = {
             id: string;
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                index: number;
+                index?: number;
                 logprobs: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -46899,6 +47274,7 @@ export type GetInteractionResponses = {
                         arguments: string;
                         name: string;
                     } | null;
+                    reasoning_content?: string | null;
                     tool_calls?: Array<{
                         id: string;
                         type: 'function';
@@ -47008,6 +47384,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -47019,6 +47396,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -47096,6 +47474,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -47107,6 +47486,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -47124,7 +47504,7 @@ export type GetInteractionResponses = {
             id: string;
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                index: number;
+                index?: number;
                 logprobs: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -47142,6 +47522,7 @@ export type GetInteractionResponses = {
                         arguments: string;
                         name: string;
                     } | null;
+                    reasoning_content?: string | null;
                     tool_calls?: Array<{
                         id: string;
                         type: 'function';
@@ -47251,6 +47632,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -47262,6 +47644,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -47446,6 +47829,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     };
@@ -50203,6 +50587,7 @@ export type KimiChatCompletionsWithDefaultAgentData = {
                 name: string;
             } | null;
             name?: string;
+            reasoning_content?: string | null;
             refusal?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -50505,7 +50890,7 @@ export type KimiChatCompletionsWithDefaultAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -50523,6 +50908,7 @@ export type KimiChatCompletionsWithDefaultAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -50648,6 +51034,7 @@ export type KimiChatCompletionsWithAgentData = {
                 name: string;
             } | null;
             name?: string;
+            reasoning_content?: string | null;
             refusal?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -50952,7 +51339,7 @@ export type KimiChatCompletionsWithAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -50970,6 +51357,7 @@ export type KimiChatCompletionsWithAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -54893,6 +55281,12 @@ export type GetLimitResponses = {
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
+        modelUsage?: Array<{
+            model: string;
+            tokensIn: number;
+            tokensOut: number;
+            cost: number;
+        }>;
     };
 };
 
@@ -55317,6 +55711,10 @@ export type GetModelsWithApiKeysResponses = {
             scope: string;
             isSystem: boolean;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         pricePerMillionInput: string | null;
         pricePerMillionOutput: string | null;
         isCustomPrice: boolean;
@@ -55352,6 +55750,7 @@ export type UpdateModelData = {
             num_predict?: number;
             reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
         } | null;
+        teamIds?: Array<string>;
     };
     path: {
         id: string;
@@ -60537,6 +60936,7 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
                 name: string;
             } | null;
             name?: string;
+            reasoning_content?: string | null;
             refusal?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -60839,7 +61239,7 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -60857,6 +61257,7 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -60982,6 +61383,7 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
                 name: string;
             } | null;
             name?: string;
+            reasoning_content?: string | null;
             refusal?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
@@ -61286,7 +61688,7 @@ export type Microsoft365CopilotChatCompletionsWithAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -61304,6 +61706,7 @@ export type Microsoft365CopilotChatCompletionsWithAgentResponses = {
                     arguments: string;
                     name: string;
                 } | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                     id: string;
                     type: 'function';
@@ -69525,7 +69928,7 @@ export type GetOrganizationMemberResponses = {
 export type GetOrganizationMemberResponse = GetOrganizationMemberResponses[keyof GetOrganizationMemberResponses];
 
 export type PerplexityChatCompletionsWithDefaultAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: PerplexityChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -69616,7 +70019,7 @@ export type PerplexityChatCompletionsWithDefaultAgentResponses = {
 export type PerplexityChatCompletionsWithDefaultAgentResponse = PerplexityChatCompletionsWithDefaultAgentResponses[keyof PerplexityChatCompletionsWithDefaultAgentResponses];
 
 export type PerplexityChatCompletionsWithAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: PerplexityChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -73681,6 +74084,26 @@ export type GetSkillsData = {
          * Restrict results to skills visible from this agent's environment (skills with no environment assignments and built-in skills are visible everywhere).
          */
         forAgentId?: string;
+        /**
+         * Filter by visibility scope: personal, team, or org.
+         */
+        scope?: 'personal' | 'team' | 'org';
+        /**
+         * Team IDs (comma-separated); only used when scope=team.
+         */
+        teamIds?: Array<string>;
+        /**
+         * Author user IDs (comma-separated). Admin-only; used with scope=personal.
+         */
+        authorIds?: Array<string>;
+        /**
+         * Exclude author user IDs (comma-separated). Admin-only; used with scope=personal.
+         */
+        excludeAuthorIds?: Array<string>;
+        /**
+         * Hide personal skills owned by other users. Admin-only; no-op for non-admins.
+         */
+        excludeOtherPersonalSkills?: boolean;
         sortBy?: 'usageCount' | 'lastUsedAt' | 'name' | 'createdAt';
         sortDirection?: 'asc' | 'desc';
     };
@@ -78479,6 +78902,14 @@ export type GetToolsWithAssignmentsData = {
          */
         origin?: string;
         /**
+         * Only tools observed in this user's LLM proxy traffic
+         */
+        observedByUserId?: string;
+        /**
+         * Only tools observed from this client app family (e.g. claude, codex)
+         */
+        observedByClient?: 'claude' | 'codex';
+        /**
          * Hide built-in Archestra tools
          */
         excludeArchestraTools?: boolean;
@@ -78615,6 +79046,94 @@ export type GetToolsWithAssignmentsResponses = {
 };
 
 export type GetToolsWithAssignmentsResponse = GetToolsWithAssignmentsResponses[keyof GetToolsWithAssignmentsResponses];
+
+export type GetToolObserversData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tools/observers';
+};
+
+export type GetToolObserversErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetToolObserversError = GetToolObserversErrors[keyof GetToolObserversErrors];
+
+export type GetToolObserversResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        clients: Array<'claude' | 'codex'>;
+    };
+};
+
+export type GetToolObserversResponse = GetToolObserversResponses[keyof GetToolObserversResponses];
 
 export type DeleteToolData = {
     body?: never;

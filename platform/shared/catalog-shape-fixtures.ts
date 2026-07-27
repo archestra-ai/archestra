@@ -303,6 +303,7 @@ export const CATALOG_SHAPES = {
       command: "node",
       arguments: ["server.js"],
       environment: [],
+      dockerImage: "mendhak/http-https-echo:30",
       transportType: "stdio",
     },
     userConfig: {},

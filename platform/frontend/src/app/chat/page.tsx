@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   Bot,
   CornerDownLeftIcon,
+  KeyRound,
   MicIcon,
   PaperclipIcon,
   Plus,
@@ -59,12 +60,14 @@ import {
 } from "@/components/chat/playwright-install-dialog";
 import {
   AppsPanelContent,
+  ReviewPanel,
   type RightPanelTab,
   RightSidePanel,
 } from "@/components/chat/right-side-panel";
 import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
+import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DefaultModelOnboardingStep } from "@/components/default-model-onboarding";
 import { LoadingSpinner } from "@/components/loading";
 import MessageThread, {
@@ -125,6 +128,12 @@ import {
 } from "@/lib/chat/chat.query";
 import { useSetChatMessageFeedback } from "@/lib/chat/chat-message.query";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
+import {
+  type ChatReviewContext,
+  getReviewContext,
+  setReviewContext,
+  subscribeReviewContext,
+} from "@/lib/chat/chat-review-context";
 import {
   useConversationShare,
   useForkConversation,
@@ -197,6 +206,7 @@ const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   "files",
   "browser",
   "apps",
+  "review",
 ];
 
 function parseRightPanelTab(value: string | null): RightPanelTab | null {
@@ -351,6 +361,9 @@ export function ChatPageContent({
   const [isAppsTabOpen, setIsAppsTabOpen] = useState(false);
   // The Runs tab, shown only for scheduled-run chats (a `?scheduleTriggerId=` URL).
   const [isRunsTabOpen, setIsRunsTabOpen] = useState(false);
+  // The Replay tab, shown only for submission-review chats (a `?reviewSrc=` deep
+  // link, from the Slack "Replay" button) — docks the read-only review player.
+  const [isReviewTabOpen, setIsReviewTabOpen] = useState(false);
   // Scheduled-run context from the chat URL the runs view links with; non-null
   // enables the right-side Runs tab.
   const scheduledRun = scheduledRunContext(searchParams);
@@ -488,6 +501,40 @@ export function ChatPageContent({
   const initialUserPrompt = useMemo(() => {
     return searchParams.get("user_prompt") || undefined;
   }, [searchParams]);
+
+  // Hackathon submission review, seeded from the chat deep link the Slack
+  // "Replay" button points at:
+  //   /chat/new?agent_id=…&user_prompt=…&review=<sub>&reviewSrc=<rawUrl>
+  //            &pr=&repo=&app=&by=&name=&cat=
+  // Present with `reviewSrc` (the raw recording.json URL). The `reviewSrc`/
+  // `review` names compose with agent_id/user_prompt; the full-page /review's
+  // `src`/`sub` are accepted as aliases. A one-shot signal, like user_prompt.
+  const urlReviewContext = useMemo<ChatReviewContext | null>(() => {
+    const src = searchParams.get("reviewSrc") || searchParams.get("src");
+    if (!src) return null;
+    return {
+      sub: searchParams.get("review") || searchParams.get("sub") || src,
+      src,
+      pr: searchParams.get("pr") || undefined,
+      repo: searchParams.get("repo") || undefined,
+      app: searchParams.get("app") || undefined,
+      by: searchParams.get("by") || undefined,
+      name: searchParams.get("name") || undefined,
+      cat: searchParams.get("cat") || undefined,
+    };
+  }, [searchParams]);
+  // Carried into createInitialConversation's onSuccess so a new conversation
+  // adopts the review under its fresh id (the pre-conversation deep-link case);
+  // a ref because the create choke point is shared by every new-chat flow.
+  const pendingReviewContextRef = useRef<ChatReviewContext | null>(null);
+  pendingReviewContextRef.current = urlReviewContext;
+  // This conversation's stored review context (survives the shallow
+  // /chat/new -> /chat/<id> navigation and a reload). Null for ordinary chats.
+  const reviewContext = useSyncExternalStore(
+    subscribeReviewContext,
+    useCallback(() => getReviewContext(conversationId), [conversationId]),
+    () => null,
+  );
 
   // A chat whose conversation was created up front (by the project composer, or
   // by the apps page for an external app whose tool needs inputs) stashes its
@@ -705,6 +752,7 @@ export function ChatPageContent({
       setIsBrowserPanelOpen(false);
       setIsAppsTabOpen(false);
       setIsRunsTabOpen(false);
+      setIsReviewTabOpen(false);
       return;
     }
 
@@ -723,6 +771,7 @@ export function ChatPageContent({
       setIsBrowserPanelOpen(isOpen && tab === "browser");
       setIsAppsTabOpen(isOpen && tab === "apps");
       setIsRunsTabOpen(isOpen && tab === "runs");
+      setIsReviewTabOpen(isOpen && tab === "review");
       setActiveRightTab(tab);
     } else if (conversation?.artifact) {
       // First time viewing this conversation with an artifact - auto-open Files.
@@ -730,6 +779,7 @@ export function ChatPageContent({
       setIsBrowserPanelOpen(false);
       setIsAppsTabOpen(false);
       setIsRunsTabOpen(false);
+      setIsReviewTabOpen(false);
       setActiveRightTab("files");
       localStorage.setItem(keys.rightPanelOpen, "true");
       localStorage.setItem(keys.rightPanelTab, "files");
@@ -739,6 +789,7 @@ export function ChatPageContent({
       setIsBrowserPanelOpen(false);
       setIsAppsTabOpen(false);
       setIsRunsTabOpen(false);
+      setIsReviewTabOpen(false);
     }
   }, [conversationId, conversation?.artifact, isLoadingConversation]);
 
@@ -2033,13 +2084,20 @@ export function ChatPageContent({
   };
 
   const isBrowserPanelVisible = isBrowserPanelOpen && !isPlaywrightSetupVisible;
+  const isReviewPanelVisible = isReviewTabOpen && !!reviewContext;
   const isRightPanelOpen =
-    isArtifactOpen || isBrowserPanelVisible || isAppsTabOpen || isRunsTabOpen;
+    isArtifactOpen ||
+    isBrowserPanelVisible ||
+    isAppsTabOpen ||
+    isRunsTabOpen ||
+    isReviewPanelVisible;
 
   // Keep the active-tab tracker in sync with which panel is actually shown,
   // so closing+reopening restores the user's last view.
   useEffect(() => {
-    if (isRunsTabOpen) {
+    if (isReviewPanelVisible) {
+      setActiveRightTab("review");
+    } else if (isRunsTabOpen) {
       setActiveRightTab("runs");
     } else if (isAppsTabOpen) {
       setActiveRightTab("apps");
@@ -2048,7 +2106,13 @@ export function ChatPageContent({
     } else if (isArtifactOpen) {
       setActiveRightTab("files");
     }
-  }, [isArtifactOpen, isBrowserPanelVisible, isAppsTabOpen, isRunsTabOpen]);
+  }, [
+    isArtifactOpen,
+    isBrowserPanelVisible,
+    isAppsTabOpen,
+    isRunsTabOpen,
+    isReviewPanelVisible,
+  ]);
 
   const openRightPanelTab = useCallback(
     (tab: RightPanelTab) => {
@@ -2058,6 +2122,7 @@ export function ChatPageContent({
       setIsBrowserPanelOpen(tab === "browser");
       setIsAppsTabOpen(tab === "apps");
       setIsRunsTabOpen(tab === "runs");
+      setIsReviewTabOpen(tab === "review");
       if (conversationId) {
         const keys = conversationStorageKeys(conversationId);
         localStorage.setItem(keys.rightPanelOpen, "true");
@@ -2072,6 +2137,7 @@ export function ChatPageContent({
     setIsBrowserPanelOpen(false);
     setIsAppsTabOpen(false);
     setIsRunsTabOpen(false);
+    setIsReviewTabOpen(false);
     if (conversationId) {
       // Leave the saved tab so reopening restores the last view.
       localStorage.setItem(
@@ -2090,6 +2156,37 @@ export function ChatPageContent({
     autoOpenedRunsRef.current = conversationId;
     openRightPanelTab("runs");
   }, [scheduledRunTriggerId, conversationId, openRightPanelTab]);
+
+  // A review deep link that lands directly on /chat/<id> (a refresh, or a link
+  // straight to a conversation) still carries the params: attach the review to
+  // this conversation and strip the one-shot params from the URL. The
+  // pre-conversation case (/chat/new -> /chat, then auto-create) instead adopts
+  // the review inside createInitialConversation's onSuccess, keyed by the fresh
+  // id — by the time /chat/<id> shows, the params are already gone.
+  useEffect(() => {
+    if (!conversationId || !urlReviewContext) return;
+    setReviewContext(conversationId, urlReviewContext);
+    clearReviewQueryParams({ pathname, router, searchParams });
+  }, [conversationId, urlReviewContext, pathname, router, searchParams]);
+
+  // Dock the review player the moment a conversation has a review context and no
+  // saved right-panel preference yet (the reviewer hasn't opened/closed it here).
+  // Once per conversation; a manual override is respected, since openRightPanelTab
+  // persists the preference and this then bails on the saved key.
+  const autoOpenedReviewRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!conversationId || !reviewContext) return;
+    if (autoOpenedReviewRef.current === conversationId) return;
+    autoOpenedReviewRef.current = conversationId;
+    if (
+      localStorage.getItem(
+        conversationStorageKeys(conversationId).rightPanelOpen,
+      ) !== null
+    ) {
+      return;
+    }
+    openRightPanelTab("review");
+  }, [conversationId, reviewContext, openRightPanelTab]);
 
   // When a conversation has an app but no saved right-panel preference yet (the
   // user hasn't manually opened/closed it in this chat), open the Apps tab once
@@ -2210,6 +2307,13 @@ export function ChatPageContent({
             // becomes this conversation's recording now that its id exists, so
             // the timer and buffered capture carry across the transition.
             appSessionRecorder.adoptConversation(newConversation.id);
+            // A review deep link (/chat/new -> /chat with reviewSrc) adopts the
+            // submission under the fresh id here, so the replay panel survives
+            // the navigation to /chat/<id> (which drops the URL params).
+            const pendingReview = pendingReviewContextRef.current;
+            if (pendingReview) {
+              setReviewContext(newConversation.id, pendingReview);
+            }
             void onSuccess?.(newConversation);
           }
         },
@@ -2584,6 +2688,13 @@ export function ChatPageContent({
     canSetDefaultModel === true &&
     Boolean(organization) &&
     !organization?.defaultModelId;
+
+  // Watching a read-only hackathon replay must NOT require an LLM key: when this
+  // chat is (or is about to become) a submission review, the key-setup and
+  // first-run onboarding screens are suppressed so the chat layout renders with
+  // the replay docked in the right panel. `urlReviewContext` covers the brief
+  // pre-conversation window on /chat/new before the store is keyed by an id.
+  const hasReviewContext = !!reviewContext || !!urlReviewContext;
   const handleFirstKeyAdded = useCallback(() => {
     setFirstKeyAdded(true);
     // Reset to a clean /chat URL after a key is added so no stale conversation
@@ -2640,13 +2751,17 @@ export function ChatPageContent({
   // First-run step 2: after the first key exists, set the org default model on
   // the same onboarding backdrop before the composer opens. Checked before the
   // no-key branch so it wins the moment a key is added (before the keys query
-  // has refetched), rather than flashing the add-key screen again.
-  if (showDefaultModelStep) {
+  // has refetched), rather than flashing the add-key screen again. Skipped for a
+  // review chat, which must reach the layout so the replay panel can dock.
+  if (showDefaultModelStep && !hasReviewContext) {
     return <DefaultModelOnboardingStep onDone={finishFirstRunOnboarding} />;
   }
 
-  // If API key is not configured, show setup prompt with inline creation dialog
-  if (!hasAnyApiKey) {
+  // If API key is not configured, show setup prompt with inline creation dialog.
+  // A review chat is exempt: the read-only replay plays without a key, so we
+  // render the full layout (docked replay) and prompt for a key inline in the
+  // composer slot instead of short-circuiting the whole page.
+  if (!hasAnyApiKey && !hasReviewContext) {
     return <NoApiKeySetup onKeyAdded={handleFirstKeyAdded} />;
   }
 
@@ -2763,6 +2878,8 @@ export function ChatPageContent({
             isArtifactOpen,
             isBrowserVisible: isBrowserPanelVisible,
             isAppsVisible: isAppsTabOpen,
+            isReviewVisible: isReviewPanelVisible,
+            hasReview: !!reviewContext,
             showBrowserButton,
             isPlaywrightSetupVisible,
             onClose: closeRightPanel,
@@ -2822,6 +2939,14 @@ export function ChatPageContent({
                   {activeRightTab === "apps" && isMobile && (
                     <div className="flex-1 min-h-0 overflow-hidden">
                       <AppsPanelContent agentId={browserToolsAgentId} />
+                    </div>
+                  )}
+                  {/* Mobile review: mount the review player directly (like the
+                      Apps tab above) so it mounts once, without the desktop
+                      resize frame. Gated on isMobile. */}
+                  {activeRightTab === "review" && reviewContext && isMobile && (
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      <ReviewPanel reviewContext={reviewContext} />
                     </div>
                   )}
                 </div>
@@ -2972,7 +3097,15 @@ export function ChatPageContent({
                         </div>
                       </div>
                     </div>
-                  ) : isAppOversight || isResolvingOversightApp ? null : (
+                  ) : isAppOversight ||
+                    isResolvingOversightApp ? null : !hasAnyApiKey ? (
+                    /* Review chat with no LLM key: the replay plays in the panel
+                       without a key, but chatting needs one — prompt for it here
+                       instead of the composer (which assumes a selected model). */
+                    <div className="sticky bottom-0 bg-background border-t p-4">
+                      <ReviewChatNoKeyNotice onKeyAdded={handleFirstKeyAdded} />
+                    </div>
+                  ) : (
                     activeAgentId && (
                       <div className="sticky bottom-0 bg-background border-t p-4">
                         {/* Shared-element pair with the centered New Chat
@@ -3161,64 +3294,78 @@ export function ChatPageContent({
                             default="none"
                           >
                             <div className="w-full">
-                              <ArchestraPromptInput
-                                onSubmit={handleInitialSubmit}
-                                toolsUnavailable={initialToolsUnavailable}
-                                status={
-                                  createConversationMutation.isPending
-                                    ? "submitted"
-                                    : "ready"
-                                }
-                                selectedModel={initialModel}
-                                onModelChange={handleInitialModelChange}
-                                agentId={newChatAgentId}
-                                currentProvider={initialProvider}
-                                textareaRef={textareaRef}
-                                initialApiKeyId={initialApiKeyId}
-                                onApiKeyChange={setInitialApiKeyId}
-                                onProviderChange={handleInitialProviderChange}
-                                allowFileUploads={
-                                  organization?.allowChatFileUploads ?? false
-                                }
-                                isModelsLoading={isModelsLoading}
-                                inputModalities={selectedModelInputModalities}
-                                agentLlmApiKeyId={
-                                  (
-                                    internalAgents.find(
-                                      (a) => a.id === initialAgentId,
-                                    ) as Record<string, unknown> | undefined
-                                  )?.llmApiKeyId as string | null
-                                }
-                                submitDisabled={
-                                  isPlaywrightSetupVisible ||
-                                  isAgentSubscriptionMetadataPending
-                                }
-                                subscriptionConnectRequired={
-                                  initialPerUserConnect.needsConnect
-                                }
-                                subscriptionProvider={
-                                  initialPerUserConnect.provider
-                                }
-                                isPlaywrightSetupVisible={
-                                  isPlaywrightSetupVisible
-                                }
-                                selectorAgentId={initialAgentId}
-                                onAgentChange={handleInitialAgentChange}
-                                modelSource={initialModelSource}
-                                onResetModelOverride={handleResetModelOverride}
-                                agentRequiresPerUserConnect={
-                                  isAgentSubscriptionMetadataPending ||
-                                  initialModelSource === "agent" ||
-                                  initialPerUserConnect.needsConnect
-                                }
-                                agentModelDisplayName={
-                                  initialPerUserConnect.needsConnect
-                                    ? initialPerUserConnect.modelName
-                                    : undefined
-                                }
-                                prefillText={composerPrefill}
-                                onPrefillApplied={handleComposerPrefillApplied}
-                              />
+                              {!hasAnyApiKey ? (
+                                /* Review deep link reached the splash without a key
+                                   (only review chats get here — non-review no-key
+                                   chats short-circuit above). Prompt for a key
+                                   rather than the model-dependent composer. */
+                                <ReviewChatNoKeyNotice
+                                  onKeyAdded={handleFirstKeyAdded}
+                                />
+                              ) : (
+                                <ArchestraPromptInput
+                                  onSubmit={handleInitialSubmit}
+                                  toolsUnavailable={initialToolsUnavailable}
+                                  status={
+                                    createConversationMutation.isPending
+                                      ? "submitted"
+                                      : "ready"
+                                  }
+                                  selectedModel={initialModel}
+                                  onModelChange={handleInitialModelChange}
+                                  agentId={newChatAgentId}
+                                  currentProvider={initialProvider}
+                                  textareaRef={textareaRef}
+                                  initialApiKeyId={initialApiKeyId}
+                                  onApiKeyChange={setInitialApiKeyId}
+                                  onProviderChange={handleInitialProviderChange}
+                                  allowFileUploads={
+                                    organization?.allowChatFileUploads ?? false
+                                  }
+                                  isModelsLoading={isModelsLoading}
+                                  inputModalities={selectedModelInputModalities}
+                                  agentLlmApiKeyId={
+                                    (
+                                      internalAgents.find(
+                                        (a) => a.id === initialAgentId,
+                                      ) as Record<string, unknown> | undefined
+                                    )?.llmApiKeyId as string | null
+                                  }
+                                  submitDisabled={
+                                    isPlaywrightSetupVisible ||
+                                    isAgentSubscriptionMetadataPending
+                                  }
+                                  subscriptionConnectRequired={
+                                    initialPerUserConnect.needsConnect
+                                  }
+                                  subscriptionProvider={
+                                    initialPerUserConnect.provider
+                                  }
+                                  isPlaywrightSetupVisible={
+                                    isPlaywrightSetupVisible
+                                  }
+                                  selectorAgentId={initialAgentId}
+                                  onAgentChange={handleInitialAgentChange}
+                                  modelSource={initialModelSource}
+                                  onResetModelOverride={
+                                    handleResetModelOverride
+                                  }
+                                  agentRequiresPerUserConnect={
+                                    isAgentSubscriptionMetadataPending ||
+                                    initialModelSource === "agent" ||
+                                    initialPerUserConnect.needsConnect
+                                  }
+                                  agentModelDisplayName={
+                                    initialPerUserConnect.needsConnect
+                                      ? initialPerUserConnect.modelName
+                                      : undefined
+                                  }
+                                  prefillText={composerPrefill}
+                                  onPrefillApplied={
+                                    handleComposerPrefillApplied
+                                  }
+                                />
+                              )}
                             </div>
                           </ViewTransition>
                         </div>
@@ -3244,6 +3391,7 @@ export function ChatPageContent({
                 onClose={closeRightPanel}
                 canShowBrowser={showBrowserButton && !isPlaywrightSetupVisible}
                 scheduledRun={scheduledRun}
+                reviewContext={reviewContext}
                 artifact={conversation?.artifact}
                 projectId={conversation?.projectId}
                 conversationId={conversationId}
@@ -3383,6 +3531,36 @@ function clearSkillIdQueryParam(params: {
   params.router.replace(nextUrl);
 }
 
+// The review deep-link params are one-shot too: once the review is stored under
+// the conversation, drop them so a remount can't re-seed and the URL is clean.
+// Both param spellings are cleared (chat `reviewSrc`/`review`, aliased
+// `src`/`sub`).
+function clearReviewQueryParams(params: {
+  pathname: string;
+  router: ReturnType<typeof useRouter>;
+  searchParams: URLSearchParams;
+}) {
+  const nextSearchParams = new URLSearchParams(params.searchParams.toString());
+  for (const key of [
+    "review",
+    "reviewSrc",
+    "src",
+    "sub",
+    "pr",
+    "repo",
+    "app",
+    "by",
+    "name",
+    "cat",
+  ]) {
+    nextSearchParams.delete(key);
+  }
+  const nextUrl = nextSearchParams.toString()
+    ? `${params.pathname}?${nextSearchParams.toString()}`
+    : params.pathname;
+  params.router.replace(nextUrl);
+}
+
 type ChatMessagePart =
   | { type: "text"; text: string }
   | { type: "file"; url: string; mediaType: string; filename?: string };
@@ -3401,6 +3579,43 @@ function noopRecorderSubscribe() {
 }
 function idleRecorderStatus() {
   return "idle" as const;
+}
+
+/**
+ * The compact composer-slot notice a review chat shows when the deployment has
+ * no LLM provider key. The read-only replay in the right panel plays without a
+ * key; chatting with the Hackathon agent needs one, so this prompts for it
+ * inline (the same create-key dialog `NoApiKeySetup` uses) instead of the
+ * model-dependent composer — which is why the whole page no longer
+ * short-circuits to the key-setup screen for a review chat.
+ */
+function ReviewChatNoKeyNotice({ onKeyAdded }: { onKeyAdded: () => void }) {
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  return (
+    <div className="max-w-4xl mx-auto">
+      <div className="flex flex-col gap-3 rounded-lg border border-muted bg-muted/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <KeyRound className="h-5 w-5 shrink-0 text-amber-500" />
+          <span className="text-sm">
+            Add an LLM provider key to chat with the Hackathon agent about this
+            submission. The replay on the right plays without a key.
+          </span>
+        </div>
+        <Button className="shrink-0" onClick={() => setIsDialogOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Add API key
+        </Button>
+      </div>
+      <CreateLlmProviderApiKeyDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        title="Add API Key"
+        description="Add an LLM provider API key to chat with the agent"
+        showConsoleLink
+        onSuccess={onKeyAdded}
+      />
+    </div>
+  );
 }
 
 function getAgentSubscriptionConnection(params: {

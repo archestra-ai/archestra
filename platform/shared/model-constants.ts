@@ -246,9 +246,28 @@ export const PERPLEXITY_MODELS = [
   { id: "sonar-pro", displayName: "Sonar Pro" },
   { id: "sonar", displayName: "Sonar" },
   { id: "sonar-reasoning-pro", displayName: "Sonar Reasoning Pro" },
-  { id: "sonar-reasoning", displayName: "Sonar Reasoning" },
   { id: "sonar-deep-research", displayName: "Sonar Deep Research" },
 ] as const;
+
+/**
+ * Perplexity models whose chain of thought is retrievable over the
+ * chat-completions API.
+ *
+ * Perplexity only emits reasoning when the request opts into the `concise`
+ * stream mode; the default `full` mode suppresses it entirely. The proxy sends
+ * that opt-in for these models only, so the plain Sonar models keep the
+ * default wire format.
+ *
+ * sonar-deep-research is deliberately absent: under `concise` it streams an
+ * empty reasoning stage (a bare `chat.reasoning.done`, no steps) — its
+ * research trace is not exposed on this API in any mode — so opting it in
+ * yields no reasoning while changing its wire format for nothing.
+ */
+export const PERPLEXITY_REASONING_MODELS = ["sonar-reasoning-pro"] as const;
+
+export function isPerplexityReasoningModel(model: string): boolean {
+  return (PERPLEXITY_REASONING_MODELS as readonly string[]).includes(model);
+}
 
 /**
  * MiniMax model definitions — single source of truth.
@@ -272,6 +291,61 @@ export const MINIMAX_MODELS = [
 export const MICROSOFT_365_COPILOT_MODELS = [
   { id: "microsoft-365-copilot", displayName: "Microsoft 365 Copilot" },
 ] as const;
+
+/**
+ * AWS regions that serve the Bedrock runtime, for the key form's region picker.
+ * AWS adds regions faster than this list can track, so it is a convenience
+ * shortlist rather than an authoritative set — a region missing here is still
+ * reachable by typing its runtime endpoint into the form's custom-endpoint
+ * field, which is what `bedrockRegionFromBaseUrl` reads back.
+ */
+export const BEDROCK_REGIONS = [
+  { id: "us-east-1", label: "US East (N. Virginia)" },
+  { id: "us-east-2", label: "US East (Ohio)" },
+  { id: "us-west-2", label: "US West (Oregon)" },
+  { id: "ca-central-1", label: "Canada (Central)" },
+  { id: "sa-east-1", label: "South America (São Paulo)" },
+  { id: "eu-west-1", label: "Europe (Ireland)" },
+  { id: "eu-west-2", label: "Europe (London)" },
+  { id: "eu-west-3", label: "Europe (Paris)" },
+  { id: "eu-central-1", label: "Europe (Frankfurt)" },
+  { id: "eu-north-1", label: "Europe (Stockholm)" },
+  { id: "eu-south-1", label: "Europe (Milan)" },
+  { id: "ap-south-1", label: "Asia Pacific (Mumbai)" },
+  { id: "ap-northeast-1", label: "Asia Pacific (Tokyo)" },
+  { id: "ap-northeast-2", label: "Asia Pacific (Seoul)" },
+  { id: "ap-northeast-3", label: "Asia Pacific (Osaka)" },
+  { id: "ap-southeast-1", label: "Asia Pacific (Singapore)" },
+  { id: "ap-southeast-2", label: "Asia Pacific (Sydney)" },
+] as const;
+
+/**
+ * The region Bedrock falls back to when none can be determined. Mirrors the
+ * backend's `getBedrockRegion` default so the form shows the region a key would
+ * actually run against rather than an empty control.
+ */
+export const DEFAULT_BEDROCK_REGION = "us-east-1";
+
+/** The Bedrock runtime (data-plane) endpoint for a region. */
+export function bedrockRuntimeBaseUrl(region: string): string {
+  return `https://bedrock-runtime.${region}.amazonaws.com`;
+}
+
+/**
+ * Recover the AWS region from a Bedrock runtime endpoint. This is the single
+ * definition of that parse — the backend resolves a key's region with it at
+ * request time, and the key form uses it to show the region back when editing.
+ *
+ * Deliberately anchored on the `bedrock-runtime.` host label, so it also reads
+ * VPC/PrivateLink endpoints that embed it. Returns null when no region can be
+ * read, which is what makes an unparseable custom endpoint visible in the UI
+ * instead of silently resolving to the default region.
+ */
+export function bedrockRegionFromBaseUrl(
+  baseUrl: string | null | undefined,
+): string | null {
+  return baseUrl?.match(/bedrock-runtime\.([a-z0-9-]+)\./)?.[1] ?? null;
+}
 
 /**
  * Default provider base URLs.
@@ -500,6 +574,32 @@ export function requiresOpenAiResponsesApi(modelId: string): boolean {
     /(?:^|\/)gpt-5\.6(?:$|[-.])/i.test(modelId)
   );
 }
+
+/**
+ * True for Anthropic models where thinking is on by default (Claude Opus 5,
+ * Sonnet 5, Fable 5, Mythos 5, Mythos Preview): the model reasons — and bills
+ * those tokens — on every request, but the API returns the thinking text only
+ * when the request opts in with `thinking: {display: "summarized"}`. Matched
+ * as substrings so dated snapshots (`claude-sonnet-5-20250929`) are covered.
+ *
+ * Models where thinking is off until requested (Opus 4.8/4.7, Sonnet 4.6 and
+ * earlier) are deliberately excluded: turning thinking on there would add
+ * cost, which is a product decision rather than a display fix.
+ */
+export function anthropicThinksByDefault(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  return ANTHROPIC_DEFAULT_THINKING_MODEL_MARKERS.some((marker) =>
+    id.includes(marker),
+  );
+}
+
+const ANTHROPIC_DEFAULT_THINKING_MODEL_MARKERS = [
+  "opus-5",
+  "sonnet-5",
+  "fable-5",
+  "mythos-5",
+  "mythos-preview",
+];
 
 /**
  * Maps models.dev provider IDs to Archestra provider names.

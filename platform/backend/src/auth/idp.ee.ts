@@ -177,7 +177,11 @@ export async function syncSsoRole(
         providerId: idpProvider.providerId,
       },
     },
-    "member",
+    // Only consulted when no rule matched, and this function returns early in
+    // that case rather than rewriting an established member's role — so this
+    // fallback never reaches a membership. New memberships get the org default
+    // via ssoConfig.organizationProvisioning → resolveSsoRole.
+    MEMBER_ROLE_NAME,
   );
   const extractedGroups = extractGroupsFromClaims(
     tokenClaims,

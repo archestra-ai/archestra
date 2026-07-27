@@ -15,11 +15,6 @@ import { A2AConnectionInstructions } from "@/components/a2a-connection-instructi
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
-import {
-  ActiveFilterBadges,
-  AgentDeletedStatusFilter,
-  AgentScopeFilter,
-} from "@/components/agent-scope-filter";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
   ConnectDialog,
@@ -31,6 +26,12 @@ import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  ActiveFilterBadges,
+  ResourceDeletedStatusFilter,
+  ResourceScopeFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
@@ -117,15 +118,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     | "asc"
     | "desc"
     | null;
-  const scopeFromUrl = searchParams.get("scope") as
-    | "personal"
-    | "team"
-    | "org"
-    | "built_in"
-    | null;
-  const teamIdsFromUrl = searchParams.get("teamIds");
-  const authorIdsFromUrl = searchParams.get("authorIds");
-  const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
+  const scopeFilter = useScopeFilterParams({ includeBuiltIn: true });
   const labelsFromUrl = searchParams.get("labels");
   const statusFromUrl = searchParams.get("status") as
     | "active"
@@ -149,18 +142,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     sortDirection,
     name: nameFilter || undefined,
     agentTypes: ["agent"],
-    scope: scopeFromUrl || undefined,
-    teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
-    authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
-    excludeAuthorIds: excludeAuthorIdsFromUrl
-      ? excludeAuthorIdsFromUrl.split(",")
-      : undefined,
-    excludeOtherPersonalAgents:
-      scopeFromUrl !== "personal" &&
-      !authorIdsFromUrl &&
-      !excludeAuthorIdsFromUrl
-        ? true
-        : undefined,
+    scope: scopeFilter.scope,
+    teamIds: scopeFilter.teamIds,
+    authorIds: scopeFilter.authorIds,
+    excludeAuthorIds: scopeFilter.excludeAuthorIds,
+    excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
   });
@@ -269,7 +255,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const isDeletedView = statusFromUrl === "deleted";
   const hasActiveFilters = !!(
     nameFilter ||
-    scopeFromUrl ||
+    scopeFilter.hasActiveScopeFilters ||
     labelsFromUrl ||
     isDeletedView
   );
@@ -462,12 +448,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter
+                <ResourceScopeFilter
                   showBuiltIn
+                  showLabels
                   ownerLabelPlural="agents"
                   adminPermission={{ agent: ["admin"] }}
                 />
-                <AgentDeletedStatusFilter
+                <ResourceDeletedStatusFilter
                   deletePermission={{ agent: ["delete"] }}
                 />
               </div>

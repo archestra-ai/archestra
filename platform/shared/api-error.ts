@@ -25,14 +25,21 @@ export function getUserFacingApiErrorMessage(
 ): string {
   const { message, type } = extractApiErrorParts(error);
 
-  if (message && !isRawStatusMessage(message)) {
+  if (
+    message &&
+    !isHtmlDocumentMessage(message) &&
+    !isRawStatusMessage(message)
+  ) {
     return message;
   }
 
   // A bare status token implies the error category even when `type` is absent
-  // (e.g. an Error("Forbidden") thrown far from the API layer).
-  const impliedType = message
-    ? RAW_STATUS_MESSAGE_TO_TYPE[message.trim().toLowerCase()]
+  // (e.g. an Error("Forbidden") thrown far from the API layer). An HTML error
+  // page — a proxy/ingress 502 reaching the client instead of the API's JSON
+  // envelope — implies it via the status line in its <title>/<h1>.
+  const statusToken = message ? extractStatusToken(message) : undefined;
+  const impliedType = statusToken
+    ? RAW_STATUS_MESSAGE_TO_TYPE[statusToken]
     : undefined;
 
   const friendly =
@@ -40,6 +47,16 @@ export function getUserFacingApiErrorMessage(
       (type as ApiErrorType | undefined) ?? impliedType ?? "unknown_api_error"
     ];
   return friendly ?? fallback;
+}
+
+/**
+ * Whether a message is an HTML/XML document rather than human-readable text —
+ * what the client receives when a proxy or ingress in front of the API answers
+ * with its own error page (e.g. nginx's 502) instead of the JSON envelope.
+ * Such a body must never be shown to the user verbatim.
+ */
+export function isHtmlDocumentMessage(message: string): boolean {
+  return /^\s*(<!doctype\b|<\?xml\b|<html\b|<head\b|<body\b)/i.test(message);
 }
 
 // === Internal helpers
@@ -75,12 +92,35 @@ const RAW_STATUS_MESSAGE_TO_TYPE: Record<string, ApiErrorType> = {
   conflict: "api_conflict_error",
   "payload too large": "api_payload_too_large_error",
   "service unavailable": "api_service_unavailable_error",
+  "bad gateway": "api_service_unavailable_error",
+  "gateway timeout": "api_service_unavailable_error",
+  "gateway time-out": "api_service_unavailable_error",
   "internal server error": "api_internal_server_error",
   "internal error": "api_internal_server_error",
 };
 
 function isRawStatusMessage(message: string): boolean {
-  return message.trim().toLowerCase() in RAW_STATUS_MESSAGE_TO_TYPE;
+  return normalizeStatusToken(message) in RAW_STATUS_MESSAGE_TO_TYPE;
+}
+
+/**
+ * The status token of a message, if it carries one: the status line of an HTML
+ * error page's <title>/<h1>, or the message itself for plain text. A leading
+ * HTTP status code ("502 Bad Gateway" -> "bad gateway") is dropped either way.
+ */
+function extractStatusToken(message: string): string | undefined {
+  if (!isHtmlDocumentMessage(message)) {
+    return normalizeStatusToken(message);
+  }
+  const match = /<(title|h1)[^>]*>([^<]+)<\/\1>/i.exec(message);
+  return match ? normalizeStatusToken(match[2]) : undefined;
+}
+
+function normalizeStatusToken(message: string): string {
+  return message
+    .trim()
+    .replace(/^\d{3}\s+/, "")
+    .toLowerCase();
 }
 
 /**

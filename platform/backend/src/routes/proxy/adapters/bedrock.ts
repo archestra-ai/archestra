@@ -1082,7 +1082,7 @@ class BedrockStreamAdapter
       if (
         blockDelta.delta &&
         "text" in blockDelta.delta &&
-        blockDelta.delta.text
+        typeof blockDelta.delta.text === "string"
       ) {
         this.state.text += blockDelta.delta.text;
         sseData =
@@ -1104,6 +1104,18 @@ class BedrockStreamAdapter
         }
         this.state.rawToolCallEvents.push(chunk);
         isToolCallChunk = true;
+      } else if (blockDelta.delta) {
+        // Any other delta kind — reasoningContent (text/signature/redacted)
+        // and whatever Bedrock adds next — streams through unmodified. Only
+        // toolUse deltas are held back for policy evaluation. Reasoning is
+        // deliberately not folded into state.text, which holds the final
+        // answer for interaction logging.
+        sseData =
+          rawBytes ??
+          encodeEventStreamMessage(
+            "contentBlockDelta",
+            chunk.contentBlockDelta,
+          );
       }
     } else if ("contentBlockStop" in chunk && chunk.contentBlockStop) {
       const isToolBlock =

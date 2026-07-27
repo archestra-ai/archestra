@@ -384,6 +384,106 @@ describe("limits routes", () => {
     });
   });
 
+  describe("GET /api/limits/:id", () => {
+    test("returns the limit for the caller's organization", async () => {
+      const created = await LimitModel.create({
+        entityType: "organization",
+        entityId: organizationId,
+        limitType: "token_cost",
+        limitValue: 1000,
+        model: ["gpt-4o"],
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/limits/${created.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        id: created.id,
+        entityType: "organization",
+        entityId: organizationId,
+        limitType: "token_cost",
+        limitValue: 1000,
+        model: ["gpt-4o"],
+      });
+    });
+
+    test("includes the per-model usage breakdown for token_cost limits", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      const created = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 500,
+        model: ["gpt-4o"],
+      });
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/limits/${created.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().modelUsage).toMatchObject([
+        { model: "gpt-4o", tokensIn: 0, tokensOut: 0, cost: 0 },
+      ]);
+    });
+
+    test("resets usage before reporting the breakdown", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      const created = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+      await LimitModel.updateTokenLimitUsage(
+        "agent",
+        agent.id,
+        "gpt-4o",
+        500,
+        500,
+      );
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/limits/${created.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().modelUsage).toMatchObject([
+        { model: "gpt-4o", tokensIn: 0, tokensOut: 0 },
+      ]);
+    });
+
+    test("omits the usage breakdown for non-token_cost limits", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      const created = await LimitModel.create({
+        entityType: "agent",
+        entityId: agent.id,
+        limitType: "tool_calls",
+        limitValue: 25,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/limits/${created.id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ limitType: "tool_calls" });
+      expect(response.json().modelUsage).toBeUndefined();
+    });
+  });
+
   describe("PATCH /api/limits/:id", () => {
     test("resets usage when cleanup interval changes", async ({
       makeAgent,

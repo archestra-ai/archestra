@@ -49,8 +49,8 @@ import {
 } from "@/services/mcp-install-policy";
 import {
   autoReinstallServer,
-  localExecutionConfigChanged,
   manualReinstallReason,
+  multitenantSharedPodChanged,
   onlyForwardCompatibleEnvDiff,
   reinstallMultitenantCatalog,
   requiresNewUserInputForReinstall,
@@ -1966,30 +1966,14 @@ async function cascadeReinstallForCatalog(
 
   // Multi-tenant local catalogs have one shared K8s Deployment across all
   // installs. Execution-config drift (image, command, args, transport) on
-  // this kind of catalog is a catalog-level event — one rollout serves
-  // every tenant — so we flag it on the catalog row instead of marking
-  // each install reinstall-required. An admin/owner clears the flag via
-  // POST /api/internal-mcp-catalog/:id/reinstall, which does the actual
-  // pod recreate + tool cascade. Single-tenant catalogs continue to use
-  // the per-install flag (see `requiresNewUserInputForReinstall`).
-  const catalogScopeChangeOnMultitenant =
-    catalogItem.multitenant === true &&
-    catalogItem.serverType === "local" &&
-    (localExecutionConfigChanged(originalCatalogItem, catalogItem) ||
-      multitenantSharedEnvChanged(originalCatalogItem, catalogItem));
-
-  if (catalogScopeChangeOnMultitenant) {
-    logger.info(
-      { catalogId: catalogItem.id, serverCount: installedServers.length },
-      "Catalog execution config changed on multi-tenant local catalog - setting catalogReinstallRequired",
-    );
-    await InternalMcpCatalogModel.update(catalogItem.id, {
-      catalogReinstallRequired: true,
-    });
-    // Fall through to also evaluate per-install marking: a prompt-input
-    // change could have landed in the same edit and still needs per-tenant
-    // input on top of the catalog-level rollout.
-  }
+  // this kind of catalog is a catalog-level event — one rollout serves every
+  // tenant — so it's handled as a single shared-pod recreate rather than by
+  // marking each install reinstall-required. Single-tenant catalogs continue
+  // to use the per-install flag (see `requiresNewUserInputForReinstall`).
+  const catalogScopeChangeOnMultitenant = multitenantSharedPodChanged(
+    originalCatalogItem,
+    catalogItem,
+  );
 
   // Manual path is authoritative: a re-prompt edit blocks both the
   // gate-decided auto path AND the forced auto path. Run it before any
@@ -1999,6 +1983,14 @@ async function cascadeReinstallForCatalog(
   // an install still owing input from an earlier edit.
   const manualReason = manualReinstallReason(originalCatalogItem, catalogItem);
   if (manualReason !== null) {
+    // A shared pod can't roll onto a spec whose new prompted fields no
+    // tenant has filled in yet, so the recreate waits for the catalog
+    // Reinstall button rather than firing now.
+    if (catalogScopeChangeOnMultitenant) {
+      await InternalMcpCatalogModel.update(catalogItem.id, {
+        catalogReinstallRequired: true,
+      });
+    }
     logger.info(
       {
         catalogId: catalogItem.id,
@@ -2019,18 +2011,17 @@ async function cascadeReinstallForCatalog(
     return;
   }
 
-  // If we set the catalog-level flag and nothing else needs handling per
-  // install, skip the auto-cascade. The pod is still running the old
-  // spec; the catalog-reinstall endpoint will recreate it and cascade
-  // tool sync to every install in one shot. Without this short-circuit,
-  // every install would auto-cascade against the unchanged pod, flipping
-  // statuses to "success" while the catalog flag still says "reinstall
-  // required" — a confusing mixed signal.
+  // Execution-only drift on a shared deployment. The admin who saved the
+  // edit is the sole owner of that pod and no tenant owes new input, so the
+  // recreate runs now instead of parking behind a second click. Not routed
+  // through `autoReinstallInstallsInBackground`: that reinstalls per install,
+  // which against one shared pod would recreate it N times.
   if (catalogScopeChangeOnMultitenant) {
     logger.info(
-      { catalogId: catalogItem.id },
-      "Catalog reinstall pending - skipping auto-cascade; admin clicks 'Reinstall catalog' to apply",
+      { catalogId: catalogItem.id, serverCount: installedServers.length },
+      "Catalog execution config changed on multi-tenant local catalog - recreating shared deployment",
     );
+    reinstallMultitenantCatalogInBackground(catalogItem);
     return;
   }
 
@@ -2144,6 +2135,58 @@ function autoReinstallInstallsInBackground(
 }
 
 /**
+ * Recreate a multi-tenant catalog's shared deployment and cascade tool sync to
+ * every install, off the request path.
+ *
+ * A failed recreate leaves the pod on the old spec, so the catalog falls back
+ * to `catalogReinstallRequired` — that surfaces the card's Reinstall button for
+ * a retry. `reinstallMultitenantCatalog` has already marked the installs
+ * themselves `error` by then.
+ */
+function reinstallMultitenantCatalogInBackground(
+  catalogItem: InternalMcpCatalog,
+): void {
+  setImmediate(async () => {
+    try {
+      // Re-read rather than closing over the caller's row: another edit can
+      // land while this sits queued, and the recreate both syncs tools against
+      // whichever row it's handed and clears `catalogReinstallRequired`
+      // unconditionally when it succeeds.
+      const current = await InternalMcpCatalogModel.findById(catalogItem.id, {
+        expandSecrets: false,
+      });
+      if (!current) return;
+      // That later edit deferred its own rollout because it needs values no
+      // tenant has supplied. Recreating now would roll a spec nobody can
+      // satisfy and clear the very flag asking for those values.
+      if (current.catalogReinstallRequired) {
+        logger.info(
+          { catalogId: catalogItem.id },
+          "Newer catalog edit is awaiting manual reinstall - skipping background recreate",
+        );
+        return;
+      }
+      await reinstallMultitenantCatalog(current);
+    } catch (error) {
+      logger.error(
+        { err: error, catalogId: catalogItem.id },
+        "Shared deployment recreate failed - flagging catalog for manual reinstall",
+      );
+      try {
+        await InternalMcpCatalogModel.update(catalogItem.id, {
+          catalogReinstallRequired: true,
+        });
+      } catch (flagError) {
+        logger.error(
+          { err: flagError, catalogId: catalogItem.id },
+          "Failed to flag catalog for manual reinstall after a failed recreate",
+        );
+      }
+    }
+  });
+}
+
+/**
  * Release the auto-reinstall that a gated catalog edit deferred: once an admin
  * approves the image, roll every install onto it. Single-tenant catalogs
  * auto-reinstall each pod; multi-tenant catalogs flag `catalogReinstallRequired`
@@ -2214,28 +2257,6 @@ function getSettledErrorMessage(result: PromiseRejectedResult): string {
   return result.reason instanceof Error
     ? result.reason.message
     : "Unknown error";
-}
-
-/**
- * Non-prompted env entries land directly in the shared K8s pod's env on a
- * multi-tenant local catalog, so any change to one of them requires a pod
- * recreate. Prompted entries are per-install secrets surfaced at request
- * time — they don't live on the shared pod and are tracked separately by
- * `promptedEnvVarsChanged`, so we exclude them here. Compared fields are
- * `key + type + value` only;
- * `description`, `required`, and other metadata don't reach the pod env.
- */
-function multitenantSharedEnvChanged(
-  oldCatalog: InternalMcpCatalog,
-  newCatalog: InternalMcpCatalog,
-): boolean {
-  const project = (cat: InternalMcpCatalog) =>
-    (cat.localConfig?.environment ?? [])
-      .filter((e) => !e.promptOnInstallation)
-      .map((e) => ({ key: e.key, type: e.type, value: e.value }));
-  return (
-    JSON.stringify(project(oldCatalog)) !== JSON.stringify(project(newCatalog))
-  );
 }
 
 /**

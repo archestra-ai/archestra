@@ -45,6 +45,11 @@ interface KbObservabilityParams<T> {
   model: string;
   source: InteractionSource;
   type: SupportedProviderDiscriminator;
+  /**
+   * Connector this call belongs to, or null when no single connector owns it
+   * (a batch or query spanning several).
+   */
+  connectorId?: string | null;
   callback: () => Promise<T>;
   /** Extract interaction data from a successful callback result. */
   buildInteraction: (result: T) => KbInteractionData;
@@ -103,6 +108,7 @@ export async function withKbObservability<T>(
 
       InteractionModel.create({
         profileId: null,
+        connectorId: params.connectorId ?? null,
         source: params.source,
         type: params.type,
         request: interaction.request as InteractionRequest,

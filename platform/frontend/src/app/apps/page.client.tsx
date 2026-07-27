@@ -13,6 +13,10 @@ import { LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  ResourceScopeFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
@@ -27,7 +31,6 @@ import { sortAppsPinnedFirst } from "@/lib/apps/app-sort";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
-import { AppsScopeFilter } from "./_parts/apps-scope-filter";
 import { AppsTable } from "./_parts/apps-table";
 
 const PAGE_SIZE = 100;
@@ -43,9 +46,7 @@ export default function AppsPage() {
   // Scope/owner filtering is server-side (mirroring the Projects list) so an
   // app admin's "Personal → Other users" view can reach apps that aren't in the
   // default page. The scope filter component owns these URL params.
-  const scope = searchParams.get("scope") ?? undefined;
-  const authorIdsParam = searchParams.get("authorIds");
-  const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
+  const { scope, authorIds, excludeAuthorIds } = useScopeFilterParams();
   const settingsId = searchParams.get("settings");
 
   const { data, isPending, isLoadingError, refetch } = useApps(
@@ -53,11 +54,9 @@ export default function AppsPage() {
       limit: PAGE_SIZE,
       offset: 0,
       search: search || undefined,
-      scope: (scope as "personal" | "team" | "org" | undefined) ?? undefined,
-      authorIds: authorIdsParam ? authorIdsParam.split(",") : undefined,
-      excludeAuthorIds: excludeAuthorIdsParam
-        ? excludeAuthorIdsParam.split(",")
-        : undefined,
+      scope,
+      authorIds,
+      excludeAuthorIds,
     },
     { toastOnError: false },
   );
@@ -137,7 +136,12 @@ export default function AppsPage() {
             <SelectItem value="external">MCP Server Apps</SelectItem>
           </SelectContent>
         </Select>
-        <AppsScopeFilter />
+        <ResourceScopeFilter
+          ownerLabelPlural="apps"
+          allLabel="All apps"
+          adminPermission={{ app: ["admin"] }}
+          showTeamSelect={false}
+        />
         <span className="ml-auto">
           <ListViewToggle value={viewMode} onChange={setViewMode} />
         </span>

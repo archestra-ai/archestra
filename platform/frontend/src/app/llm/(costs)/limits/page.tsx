@@ -71,7 +71,6 @@ import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useCreateLimit,
   useDeleteLimit,
-  useLimit,
   useLimits,
   useUpdateLimit,
 } from "@/lib/limits.query";
@@ -223,14 +222,16 @@ export default function LimitsPage() {
     useState<LimitFormState>(DEFAULT_FORM_STATE);
 
   const editId = searchParams.get("edit");
-  const { data: limitFromUrl } = useLimit(editId ?? undefined);
+  // The list is unfiltered and unpaginated, so every limit the `edit` param can
+  // name is already in it.
+  const limitFromUrl = limits.find((limit) => limit.id === editId) ?? null;
   const {
     entity: editingLimit,
     open: openEditDialog,
     close: closeEditDialog,
   } = useDialogUrlParam<LimitData>({
     paramName: "edit",
-    entityFromUrl: limitFromUrl ?? null,
+    entityFromUrl: limitFromUrl,
   });
 
   const llmLimits = useMemo(

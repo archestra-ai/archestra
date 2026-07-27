@@ -2,6 +2,10 @@ import {
   type AmazonBedrockProvider,
   createAmazonBedrock,
 } from "@ai-sdk/amazon-bedrock";
+import {
+  bedrockRegionFromBaseUrl,
+  DEFAULT_BEDROCK_REGION,
+} from "@archestra/shared";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
 import config from "@/config";
 
@@ -70,8 +74,7 @@ export function getBedrockRegion(baseUrl?: string): string {
     return config.llm.bedrock.region;
   }
   const url = baseUrl || config.llm.bedrock.baseUrl;
-  const match = url?.match(/bedrock-runtime\.([a-z0-9-]+)\./);
-  return match?.[1] || "us-east-1";
+  return bedrockRegionFromBaseUrl(url) || DEFAULT_BEDROCK_REGION;
 }
 
 /**

@@ -81,7 +81,10 @@ export default function SecuritySettingsPage() {
         description={
           <>
             Every new tool your agents use — whether discovered through the LLM
-            Proxy or added from an MCP server — starts with these guardrails.{" "}
+            Proxy or added from an MCP server — starts with these guardrails.
+            One exception: a coding CLI&apos;s own tools (Claude Code&apos;s
+            Bash, for example) start with an &quot;Allow always&quot; call
+            policy so the client keeps working in sensitive context.{" "}
             <ExternalDocsLink
               href={getDocsUrl(DocsPage.PlatformAiToolGuardrails)}
               className="text-primary hover:underline"

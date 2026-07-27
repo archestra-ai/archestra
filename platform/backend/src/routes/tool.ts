@@ -1,4 +1,5 @@
 import {
+  ClientFilterSchema,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   RouteId,
@@ -6,7 +7,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
-import { ToolModel } from "@/models";
+import { ToolModel, ToolObservationModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -65,6 +66,8 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sortDirection,
           search,
           origin,
+          observedByUserId,
+          observedByClient,
           excludeArchestraTools,
           includeKnowledgeSourcesTool,
         },
@@ -84,6 +87,8 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         filters: {
           search,
           origin,
+          observedByUserId,
+          observedByClient,
           excludeArchestraTools,
           includeKnowledgeSourcesTool,
         },
@@ -92,6 +97,33 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return reply.send(result);
+    },
+  );
+
+  fastify.get(
+    "/api/tools/observers",
+    {
+      schema: {
+        operationId: RouteId.GetToolObservers,
+        description:
+          "Get filter options for observed tools: the users who have observed tools in LLM proxy traffic, and the client app families their observations came from",
+        tags: ["Tools"],
+        response: constructResponseSchema(
+          z.object({
+            users: z.array(
+              z.object({
+                id: z.string(),
+                name: z.string(),
+                email: z.string(),
+              }),
+            ),
+            clients: z.array(ClientFilterSchema),
+          }),
+        ),
+      },
+    },
+    async (_request, reply) => {
+      return reply.send(await ToolObservationModel.getObserverFilterOptions());
     },
   );
 

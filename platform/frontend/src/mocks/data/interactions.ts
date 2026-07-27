@@ -79,6 +79,7 @@ export function makeInteraction(
   return {
     id: "test-interaction-id",
     profileId: "test-profile-id",
+    connectorId: null,
     externalAgentId: null,
     executionId: null,
     userId: null,

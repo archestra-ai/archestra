@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 /**
  * Whether `value` is a canonical UUID string. Guard with this before passing a
@@ -7,6 +7,28 @@ import { randomBytes } from "node:crypto";
  */
 export function isUuid(value: string): boolean {
   return UUID_REGEX.test(value);
+}
+
+/**
+ * Deterministic RFC 4122 v5 UUID from a `namespace` (canonical UUID) and a
+ * `name`. The same inputs always yield the same lowercase UUID, so it derives a
+ * stable UUID from a non-UUID key (e.g. an organization id) that other systems
+ * validate as a canonical UUID.
+ */
+export function uuidv5(name: string, namespace: string): string {
+  if (!isUuid(namespace)) {
+    throw new Error(`uuidv5 namespace is not a UUID: ${namespace}`);
+  }
+  const namespaceBytes = Buffer.from(namespace.replace(/-/g, ""), "hex");
+  const bytes = createHash("sha1")
+    .update(namespaceBytes)
+    .update(name, "utf8")
+    .digest()
+    .subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50; // version 5
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // RFC 4122 variant
+  const hex = bytes.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 /**

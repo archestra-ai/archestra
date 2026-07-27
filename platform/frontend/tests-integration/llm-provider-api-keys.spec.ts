@@ -188,6 +188,9 @@ test.describe("LLM Provider API Keys", () => {
       .getByRole("textbox", { name: /API Key/i })
       .fill(API_KEY_PLACEHOLDER);
 
+    // The primary-key control sits behind this dialog's progressive disclosure.
+    await page.getByRole("button", { name: "Advanced settings" }).click();
+
     const primarySwitch = page.getByRole("switch", { name: /Primary key/i });
     await expect(primarySwitch).toBeChecked();
 
@@ -215,6 +218,9 @@ test.describe("LLM Provider API Keys", () => {
     await page
       .getByRole("textbox", { name: /API Key/i })
       .fill(API_KEY_PLACEHOLDER);
+
+    // Reopening the dialog mounts a fresh form, collapsed again.
+    await page.getByRole("button", { name: "Advanced settings" }).click();
 
     const secondarySwitch = page.getByRole("switch", { name: /Primary key/i });
     await expect(secondarySwitch).not.toBeChecked();

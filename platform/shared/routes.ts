@@ -146,6 +146,7 @@ export const RouteId = {
   GetTool: "getTool",
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
+  GetToolObservers: "getToolObservers",
   GetUnassignedTools: "getUnassignedTools",
   DeleteTool: "deleteTool",
 
@@ -725,6 +726,10 @@ export const RouteId = {
   GetAppRecordingRenderStatus: "getAppRecordingRenderStatus",
   DownloadAppRecordingVideo: "downloadAppRecordingVideo",
   CancelAppRecordingRender: "cancelAppRecordingRender",
+  // Reviewer-facing: fetch a hackathon submission's recording bundle from
+  // GitHub (server-side, to dodge the frontend CSP) for the on-platform,
+  // read-only review player.
+  ReviewAppRecording: "reviewAppRecording",
   // Sharing a recording to the public App Gallery: the backend only relays
   // the GitHub device flow (browser CORS); the PR itself is filed client-side.
   AppGalleryDeviceAuthStart: "appGalleryDeviceAuthStart",

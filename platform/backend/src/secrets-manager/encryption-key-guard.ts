@@ -7,6 +7,7 @@ import {
   encryptSecretValue,
   isEncryptedSecret,
 } from "@/utils/crypto";
+import { reencryptStoredSecrets } from "./reencrypt";
 
 /**
  * Startup guard: prove that the key derived from the current
@@ -31,6 +32,16 @@ export async function verifySecretsEncryptionKey(): Promise<void> {
 
   if (canary) {
     if (canDecrypt(canary.encryptedCanary)) return;
+
+    // The current encryption key can't decrypt the canary — the encryption
+    // secret changed. If a previous secret is configured and still decrypts the
+    // stored secrets, this is a deliberate rotation (e.g. an upgrade that split
+    // ARCHESTRA_SECRETS_ENCRYPTION_SECRET out of ARCHESTRA_AUTH_SECRET): migrate
+    // every secret to the new key here, at startup, where both keys are present.
+    if (await reencryptForRotation()) {
+      await EncryptionKeyCanaryModel.replace(canary.id, newCanaryBlob());
+      return;
+    }
 
     const unreadableCount = await countUndecryptableSecrets();
     if (config.secretsManager.acceptNewEncryptionKey) {
@@ -69,6 +80,35 @@ function newCanaryBlob(): string {
   return encryptSecretValue(CANARY_PAYLOAD).__encrypted;
 }
 
+/**
+ * Attempt an encryption-key rotation: re-encrypt every stored secret from the
+ * previous key to the current one. Returns true only when the migration ran and
+ * left no secret unreadable, so the caller can trust the new key. A no-op (keys
+ * identical) or any secret that decrypts with neither key returns false, so the
+ * normal mismatch handling (abort / accept-new) still applies.
+ */
+async function reencryptForRotation(): Promise<boolean> {
+  const previousSecret = config.secretsManager.encryptionSecretPrevious;
+  const nextSecret = config.secretsManager.encryptionSecret;
+  if (!previousSecret || !nextSecret) return false;
+
+  const result = await reencryptStoredSecrets({ previousSecret, nextSecret });
+  if (result.status === "noop") return false;
+  if (result.unreadable > 0) {
+    logger.error(
+      { unreadable: result.unreadable, total: result.total },
+      "Encryption-key rotation: some stored secrets could not be decrypted with " +
+        "the previous key; not trusting the new ARCHESTRA_SECRETS_ENCRYPTION_SECRET.",
+    );
+    return false;
+  }
+  logger.info(
+    { reencrypted: result.reencrypted, alreadyNew: result.alreadyNew },
+    "Re-encrypted stored secrets under the new ARCHESTRA_SECRETS_ENCRYPTION_SECRET",
+  );
+  return true;
+}
+
 function canDecrypt(encrypted: string): boolean {
   try {
     decryptSecretValue({ __encrypted: encrypted });
@@ -90,11 +130,11 @@ async function countUndecryptableSecrets(): Promise<number> {
 
 function mismatchMessage(unreadableCount: number): string {
   return (
-    "Startup aborted: the key derived from the current ARCHESTRA_AUTH_SECRET does not match " +
+    "Startup aborted: the key derived from the current ARCHESTRA_SECRETS_ENCRYPTION_SECRET does not match " +
     `the key previously used to encrypt stored secrets (${unreadableCount} stored secret(s) are undecryptable). ` +
-    "The auth secret was changed, or this database came from an environment with a different auth secret. " +
-    "Restore the previous ARCHESTRA_AUTH_SECRET, or set ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY=true " +
-    "to accept the new key — secrets encrypted with the previous key will stay unreadable and must be re-entered, " +
-    "and all user sessions will be invalidated."
+    "The encryption secret was changed, or this database came from an environment with a different secret. " +
+    "Restore the previous secret, set ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS so startup re-encrypts them, " +
+    "or set ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY=true to accept the new key — secrets encrypted with the " +
+    "previous key will stay unreadable and must be re-entered."
   );
 }

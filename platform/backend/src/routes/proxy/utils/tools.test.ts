@@ -92,6 +92,88 @@ describe("persistTools", () => {
     expect(trusted[0].action).toBe("mark_as_trusted");
   });
 
+  test("defaults a coding CLI's native tools to Allow always, keeping the org default for its MCP tools", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "CLI Agent" });
+
+    await persistTools(
+      [
+        {
+          toolName: "Bash",
+          toolParameters: { type: "object", properties: {} },
+          toolDescription: "Run a shell command",
+        },
+        {
+          toolName: "mcp__github__create_issue",
+          toolParameters: { type: "object", properties: {} },
+          toolDescription: "Create a GitHub issue",
+        },
+      ],
+      agent.id,
+      // A strict org default: exactly the configuration that bricks a CLI.
+      {
+        invocationAction: "block_when_context_is_untrusted",
+        resultAction: "mark_as_untrusted",
+      },
+      { userId: undefined, externalAgentId: "anthropic_claude_code" },
+    );
+
+    const nativeTool = await ToolModel.findByName("Bash");
+    if (!nativeTool) throw new Error("expected native tool to be persisted");
+    const [nativePolicy] = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, nativeTool.id));
+    expect(nativePolicy.action).toBe("allow_when_context_is_untrusted");
+    expect(nativePolicy.reason).toContain("Native Claude client tool");
+
+    // The result policy is NOT overridden: native results still flip the
+    // session sensitive so downstream guardrails keep working.
+    const [nativeResultPolicy] = await db
+      .select()
+      .from(schema.trustedDataPoliciesTable)
+      .where(eq(schema.trustedDataPoliciesTable.toolId, nativeTool.id));
+    expect(nativeResultPolicy.action).toBe("mark_as_untrusted");
+
+    const mcpTool = await ToolModel.findByName("mcp__github__create_issue");
+    if (!mcpTool) throw new Error("expected MCP tool to be persisted");
+    const [mcpPolicy] = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, mcpTool.id));
+    expect(mcpPolicy.action).toBe("block_when_context_is_untrusted");
+    expect(mcpPolicy.reason).toBeNull();
+  });
+
+  test("keeps the org default for unattributed requests, even for unprefixed names", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "Unattributed Agent" });
+
+    await persistTools(
+      [
+        {
+          toolName: "some_custom_tool",
+          toolParameters: { type: "object", properties: {} },
+          toolDescription: "A tool from an unknown client",
+        },
+      ],
+      agent.id,
+      { invocationAction: "block_when_context_is_untrusted" },
+      // No client attribution: the request did not come from a known CLI.
+      { userId: undefined, externalAgentId: undefined },
+    );
+
+    const tool = await ToolModel.findByName("some_custom_tool");
+    if (!tool) throw new Error("expected tool to be persisted");
+    const [policy] = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
+    expect(policy.action).toBe("block_when_context_is_untrusted");
+  });
+
   test("handles empty tools array without errors", async ({ makeAgent }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 

@@ -601,6 +601,12 @@ export async function createAgentServer(
           toolInput: args ?? {},
           organizationId: tokenAuth?.organizationId,
           contextIsTrusted,
+          // The only way this path starts untrusted is the agent's own
+          // "treat context as sensitive" setting, so name that origin in
+          // any sensitive-context block.
+          sensitiveContextOrigin: contextIsTrusted
+            ? undefined
+            : { kind: "agent_configured" },
           ...(availableTool &&
             assignedToolNames && {
               enabledToolNames: new Set([...assignedToolNames, name]),

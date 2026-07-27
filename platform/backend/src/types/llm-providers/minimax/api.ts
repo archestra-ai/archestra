@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { MessageParamSchema, ToolCallSchema } from "./messages";
+import {
+  MessageParamSchema,
+  ReasoningDetailSchema,
+  ToolCallSchema,
+} from "./messages";
 import { ToolChoiceOptionSchema, ToolSchema } from "./tools";
 
 export const ChatCompletionUsageSchema = z
@@ -25,18 +29,12 @@ export const FinishReasonSchema = z.enum([
   "content_filter",
 ]);
 
-/**
- * Reasoning detail object in MiniMax responses
- * Contains the model's thinking process when reasoning_split=True
- */
-const ReasoningDetailSchema = z.object({
-  text: z.string(),
-});
-
 const ChoiceSchema = z
   .object({
     finish_reason: FinishReasonSchema,
-    index: z.number(),
+    // Some OpenAI-compatible upstreams omit `index` on choices; without
+    // optional() the response fails serialization (500).
+    index: z.number().optional(),
     logprobs: z.any().nullable().optional(),
     message: z
       .object({
@@ -47,6 +45,10 @@ const ChoiceSchema = z
          * Only present when reasoning_split=True is used in request
          */
         reasoning_details: z.array(ReasoningDetailSchema).optional(),
+        // DeepSeek-style alias for the same thinking text. The proxy emits it
+        // alongside reasoning_details so OpenAI-compatible clients (which only
+        // parse reasoning_content) can render thinking.
+        reasoning_content: z.string().nullable().optional(),
         tool_calls: z.array(ToolCallSchema).optional(),
       })
       .describe(
@@ -84,8 +86,19 @@ export const ChatCompletionRequestSchema = z
       .optional(),
     user: z.string().optional(),
     /**
-     * Extra parameters specific to MiniMax
-     * reasoning_split: Set to true to separate thinking content into reasoning_details field
+     * Separate thinking into `reasoning_details` instead of leaving it inline in
+     * `content` as `<think>` tags.
+     *
+     * MiniMax documents this as `extra_body.reasoning_split` because their
+     * examples use the OpenAI Python SDK, where `extra_body` is a client-side
+     * convention: the SDK merges those keys into the top level of the JSON body
+     * before sending. It is not a wire field, so over raw HTTP the flag has to be
+     * sent top-level or the server sees an unknown key and ignores it.
+     */
+    reasoning_split: z.boolean().optional(),
+    /**
+     * Accepted for compatibility with clients written against MiniMax's Python
+     * examples; the adapter unwraps it into the top-level body before sending.
      */
     extra_body: z
       .object({

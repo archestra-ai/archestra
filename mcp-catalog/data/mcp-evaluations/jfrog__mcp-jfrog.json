@@ -132,10 +132,6 @@
   },
   "readme": "# JFrog MCP Server\n\nThe official JFrog MCP server provides tools for interacting with the JFrog Platform through AI assistants.\n\n## Features\n\n- **Repository Management**: Create and manage local, remote, and virtual repositories\n- **Build Tracking**: List and inspect build information\n- **Runtime Monitoring**: Monitor runtime clusters and running container images\n- **Artifact Search**: Execute AQL queries to find artifacts\n- **Package Intelligence**: Get package info, versions, and vulnerability data\n- **Security Scanning**: Access Xray scan summaries organized by severity\n- **Curation**: Check package curation status\n\n## Environment Variables\n\n- `JFROG_ACCESS_TOKEN`: JFrog access or identity token for authentication (required)\n- `JFROG_URL`: Base URL for your JFrog platform instance (required)\n- `TRANSPORT`: Transport mode - 'stdio' (default) or 'sse'\n- `PORT`: Port for SSE transport (default: 8080)\n",
   "category": "Development",
-  "quality_score": 85,
-  "last_scraped_at": "2026-01-14T00:00:00.000Z",
-  "evaluation_model": "manual",
-  "raw_dependencies": "",
   "github_info": {
     "owner": "jfrog",
     "repo": "mcp-jfrog",
@@ -150,24 +146,6 @@
     "latest_commit_hash": null
   },
   "programming_language": "TypeScript",
-  "framework": null,
-  "protocol_features": {
-    "implementing_tools": true,
-    "implementing_prompts": false,
-    "implementing_resources": false,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": true,
-    "implementing_streamable_http": true,
-    "implementing_oauth2": false
-  },
-  "dependencies": [
-    {
-      "name": "@modelcontextprotocol/sdk",
-      "importance": 9
-    }
-  ],
   "archestra_config": {
     "client_config_permutations": null,
     "oauth": {

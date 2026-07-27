@@ -14,6 +14,18 @@ const CLAUDE_45_AND_NEWER_ONE_HOUR_CACHE_MODEL =
 // https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
 const CLAUDE_45_ONE_HOUR_CACHE_MODEL = /claude-(?:sonnet|haiku|opus)-4-5(?!\d)/;
 
+// Bedrock fronts many model families, and only Anthropic Claude and Amazon Nova
+// support prompt caching. Sending a cachePoint to any other family does not
+// degrade gracefully — AWS rejects the whole request with a 403 "You invoked an
+// unsupported model or your request did not allow prompt caching", so an
+// uncacheable model is unusable rather than merely uncached.
+//
+// This matches conservatively and fails closed: an id this does not recognize
+// gets no breakpoints, costing a cache hit rather than breaking the request.
+// Widen it when AWS documents caching for another Bedrock family.
+// https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
+const BEDROCK_PROMPT_CACHE_MODEL = /claude|nova-(?:micro|lite|pro|premier)/;
+
 // Per-provider cache-breakpoint marker, written into a message's
 // `providerOptions`. Anthropic and Amazon Bedrock both require explicit
 // breakpoints and both cap at 4 per request; only the providerOptions key and
@@ -32,11 +44,19 @@ const CACHE_BREAKPOINTS = {
     field: "cachePoint",
     type: "default",
     oneHourCacheModel: CLAUDE_45_ONE_HOUR_CACHE_MODEL,
+    promptCacheModel: BEDROCK_PROMPT_CACHE_MODEL,
   },
 } as const;
 
 type CacheBreakpointConfig =
-  (typeof CACHE_BREAKPOINTS)[keyof typeof CACHE_BREAKPOINTS];
+  (typeof CACHE_BREAKPOINTS)[keyof typeof CACHE_BREAKPOINTS] & {
+    /**
+     * Models that accept cache breakpoints at all. Absent means every model the
+     * provider serves does (Anthropic-direct), so only Bedrock — which fronts
+     * families that reject them outright — needs it.
+     */
+    promptCacheModel?: RegExp;
+  };
 
 // Matches bare ids ("claude-sonnet-4-5") and provider-specific ids
 // ("us.anthropic.claude-opus-4-5-..."). Claude Sonnet/Opus 4
@@ -104,6 +124,12 @@ export function applyPromptCacheBreakpoints(params: {
     provider
   ];
   if (!config || messages.length === 0) {
+    return messages;
+  }
+
+  // Fails closed on an unknown/absent model: a breakpoint the model cannot take
+  // fails the whole request, while skipping one only forfeits a cache hit.
+  if (config.promptCacheModel && !config.promptCacheModel.test(model ?? "")) {
     return messages;
   }
 

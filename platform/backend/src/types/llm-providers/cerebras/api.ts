@@ -30,7 +30,9 @@ import { ChatCompletionUsageSchema, FinishReasonSchema } from "../openai/api";
 const CerebrasChoiceSchema = z
   .object({
     finish_reason: FinishReasonSchema,
-    index: z.number(),
+    // Some OpenAI-compatible upstreams omit `index` on choices; without
+    // optional() the response fails serialization (500).
+    index: z.number().optional(),
     logprobs: z.any().nullable(),
     message: z
       .object({
@@ -49,6 +51,10 @@ const CerebrasChoiceSchema = z
           })
           .nullable()
           .optional(),
+        // DeepSeek-style reasoning models return thinking in `reasoning_content`
+        // and require it passed back on tool-call turns; response serialization
+        // must preserve it.
+        reasoning_content: z.string().nullable().optional(),
         tool_calls: z.array(ToolCallSchema).optional(),
       })
       .describe(

@@ -4,6 +4,10 @@ import { applyPromptCacheBreakpoints } from "./apply-prompt-cache";
 
 const EPHEMERAL = { type: "ephemeral" };
 
+// A Bedrock model that supports prompt caching but not the 1h TTL, so these
+// tests exercise breakpoint placement without also opting into a longer TTL.
+const BEDROCK_CACHEABLE_MODEL = "us.anthropic.claude-opus-4-6-v1:0";
+
 function userMessage(text: string): ModelMessage {
   return { role: "user", content: [{ type: "text", text }] };
 }
@@ -200,6 +204,7 @@ describe("applyPromptCacheBreakpoints", () => {
   it("marks the first and last message for Bedrock with cachePoint", () => {
     const result = applyPromptCacheBreakpoints({
       provider: "bedrock",
+      model: BEDROCK_CACHEABLE_MODEL,
       messages: [userMessage("a"), userMessage("b"), userMessage("c")],
     });
 
@@ -215,6 +220,7 @@ describe("applyPromptCacheBreakpoints", () => {
     // reject the request, so a document-bearing last message must not be marked.
     const result = applyPromptCacheBreakpoints({
       provider: "bedrock",
+      model: BEDROCK_CACHEABLE_MODEL,
       messages: [
         userMessage("first"),
         messageWithFile("here is a file", "application/pdf"),
@@ -234,6 +240,7 @@ describe("applyPromptCacheBreakpoints", () => {
 
     const result = applyPromptCacheBreakpoints({
       provider: "bedrock",
+      model: BEDROCK_CACHEABLE_MODEL,
       messages,
     });
 
@@ -245,6 +252,7 @@ describe("applyPromptCacheBreakpoints", () => {
   it("still marks a Bedrock message that carries an image (not a document)", () => {
     const result = applyPromptCacheBreakpoints({
       provider: "bedrock",
+      model: BEDROCK_CACHEABLE_MODEL,
       messages: [
         userMessage("first"),
         messageWithFile("here is an image", "image/png"),
@@ -283,6 +291,7 @@ describe("applyPromptCacheBreakpoints", () => {
 
     const result = applyPromptCacheBreakpoints({
       provider: "bedrock",
+      model: BEDROCK_CACHEABLE_MODEL,
       messages,
     });
 
@@ -366,5 +375,69 @@ describe("applyPromptCacheBreakpoints", () => {
 
     // The unmarked first message gets a marker (last already has its own), 5m.
     expect(anthropicCacheControl(result[0])).toEqual({ type: "ephemeral" });
+  });
+
+  describe("Bedrock families that cannot cache", () => {
+    // Bedrock answers a cachePoint on an uncacheable model with a 403 that fails
+    // the whole turn, so these models must be left unmarked rather than cached.
+    it.each([
+      ["openai.gpt-oss-120b-1:0", "GPT-OSS"],
+      ["meta.llama3-70b-instruct-v1:0", "Llama"],
+      ["mistral.mistral-large-2407-v1:0", "Mistral"],
+      ["deepseek.r1-v1:0", "DeepSeek"],
+    ])("adds no cachePoint for %s (%s)", (model) => {
+      const messages = [userMessage("a"), userMessage("b")];
+
+      const result = applyPromptCacheBreakpoints({
+        provider: "bedrock",
+        model,
+        messages,
+      });
+
+      expect(result).toBe(messages);
+      expect(bedrockCachePoint(result[0])).toBeUndefined();
+      expect(bedrockCachePoint(result[1])).toBeUndefined();
+    });
+
+    it.each([
+      ["us.anthropic.claude-opus-4-6-v1:0", "Claude via inference profile"],
+      ["amazon.nova-pro-v1:0", "Nova Pro"],
+      ["amazon.nova-lite-v1:0", "Nova Lite"],
+    ])("still adds a cachePoint for %s (%s)", (model) => {
+      const result = applyPromptCacheBreakpoints({
+        provider: "bedrock",
+        model,
+        messages: [userMessage("a"), userMessage("b")],
+      });
+
+      expect(bedrockCachePoint(result[0])).toEqual({ type: "default" });
+      expect(bedrockCachePoint(result[1])).toEqual({ type: "default" });
+    });
+
+    it("adds no cachePoint when the model is unknown", () => {
+      // Fails closed: forfeiting a cache hit costs money, sending an
+      // unsupported breakpoint costs the whole request.
+      const messages = [userMessage("a"), userMessage("b")];
+
+      const result = applyPromptCacheBreakpoints({
+        provider: "bedrock",
+        messages,
+      });
+
+      expect(result).toBe(messages);
+    });
+
+    it("leaves Anthropic-direct models unrestricted", () => {
+      // The gate is Bedrock-specific; Anthropic's own API caches every model it
+      // serves, so a model id it doesn't recognize must still be marked.
+      const result = applyPromptCacheBreakpoints({
+        provider: "anthropic",
+        model: "some-future-model",
+        messages: [userMessage("a"), userMessage("b")],
+      });
+
+      expect(anthropicCacheControl(result[0])).toEqual(EPHEMERAL);
+      expect(anthropicCacheControl(result[1])).toEqual(EPHEMERAL);
+    });
   });
 });

@@ -39,6 +39,12 @@ export class ApiError extends Error {
   type: z.infer<typeof ApiErrorTypeSchema>;
   statusCode: number;
   internalCode?: string;
+  /**
+   * True when this error relays a failure returned by an upstream provider
+   * (the provider's own HTTP error, not a fault of ours). Error tracking
+   * drops upstream 5xx relays as non-actionable noise.
+   */
+  upstream?: boolean;
 
   constructor(statusCode: number, message: string, internalCode?: string) {
     super(message);

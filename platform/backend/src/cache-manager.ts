@@ -34,6 +34,8 @@ export const CacheKey = {
   ChatActiveStream: "chat-active-stream",
   /** Pending MCP elicitation responses from the chat UI */
   ChatMcpElicitation: "chat-mcp-elicitation",
+  /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
+  OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */
   ChannelDiscovery: "channel-discovery",
   /** Slack user ID → email mapping */

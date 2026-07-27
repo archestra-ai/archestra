@@ -1224,6 +1224,152 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
   runnerHost.startsWith("tcp://") || runnerHost.startsWith("kube-pod://");
 
 /**
+ * Extra IPv4 CIDRs an unrestricted engine may not reach. A malformed entry would
+ * be rejected by the Kubernetes API when the egress NetworkPolicy is applied —
+ * and because the engine StatefulSet is created before its policy, that would
+ * leave a privileged engine running with no egress policy at all. Drop the bad
+ * entries loudly instead: the engine still gets its built-in RFC1918,
+ * link-local and metadata denials, and the operator sees what was ignored.
+ *
+ * @public — exported for testability
+ */
+export const parseEngineDeniedCidrs = (
+  envValue: string | undefined,
+): string[] => {
+  const entries = parseCommaSeparatedList(envValue ?? "");
+  const valid = entries.filter((entry) => IPV4_CIDR.test(entry));
+  const invalid = entries.filter((entry) => !IPV4_CIDR.test(entry));
+  if (invalid.length > 0) {
+    logger.error(
+      `ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS ignoring invalid IPv4 CIDRs: ${invalid.join(", ")}`,
+    );
+  }
+  return valid;
+};
+
+/**
+ * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
+ * undefined when it is not one.
+ *
+ * @public — exported for testability
+ */
+export const k8sMemoryQuantityToBytes = (
+  quantity: string,
+): number | undefined => {
+  const match = quantity
+    .trim()
+    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|k|M|G|T)?$/);
+  if (!match) return undefined;
+  const multipliers: Record<string, number> = {
+    Ki: 1024,
+    Mi: 1024 ** 2,
+    Gi: 1024 ** 3,
+    Ti: 1024 ** 4,
+    k: 1000,
+    M: 1000 ** 2,
+    G: 1000 ** 3,
+    T: 1000 ** 4,
+  };
+  // Floored because the only consumers are a cgroup limit and a byte
+  // comparison, neither of which takes a fraction.
+  return Math.floor(Number(match[1]) * (match[2] ? multipliers[match[2]] : 1));
+};
+
+const DEFAULT_ENGINE_SANDBOX_MEMORY_MAX_BYTES = 5 * 1024 ** 3;
+
+/**
+ * The sandbox memory ceiling, checked against the engine's memory request.
+ *
+ * The sandboxes are charged to a cgroup the scheduler cannot see, so the
+ * request is the only thing reserving node capacity for them. A ceiling at or
+ * above the request means the engine can hold more than it reserved and the
+ * shortfall lands on whatever else the node is running. Lowering the request
+ * alone is enough to get there, so say so rather than let it pass silently.
+ *
+ * @public — exported for testability
+ */
+export const parseSandboxMemoryMaxBytes = (
+  envValue: string | undefined,
+  memoryRequest: string,
+): number => {
+  let bytes = DEFAULT_ENGINE_SANDBOX_MEMORY_MAX_BYTES;
+  const configured = envValue?.trim();
+  if (configured) {
+    const parsed = k8sMemoryQuantityToBytes(configured);
+    // Falling back beats honouring a half-understood value: a ceiling read as a
+    // handful of bytes would kill every sandbox the moment it allocated.
+    if (parsed === undefined || parsed <= 0) {
+      logger.error(
+        `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX is not a Kubernetes quantity (${configured}); using the default`,
+      );
+    } else {
+      bytes = parsed;
+    }
+  }
+  const requestBytes = k8sMemoryQuantityToBytes(memoryRequest);
+  if (requestBytes !== undefined && bytes >= requestBytes) {
+    logger.error(
+      `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX (${configured ?? "default"}) is not below ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST (${memoryRequest}): the engine can hold more memory than it reserves on the node`,
+    );
+  }
+  return bytes;
+};
+
+const IPV4_CIDR =
+  /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\/(3[0-2]|[12]?\d)$/;
+
+/**
+ * Whether the code execution sandbox is enabled.
+ *
+ * - `ARCHESTRA_CODE_RUNTIME_ENABLED=false` is the documented kill switch and
+ *   wins over everything, including an operator-supplied runner host.
+ * - Otherwise an explicit Dagger runner host turns it on and no engine is
+ *   provisioned in code. Whether that needs Kubernetes depends on the scheme: a
+ *   `kube-pod://` host is reached by exec'ing into a pod (the quickstart image
+ *   does this against its embedded cluster), while a `tcp://` host needs no
+ *   Kubernetes at all and is the only way to run the sandbox without it.
+ * - Otherwise `ARCHESTRA_CODE_RUNTIME_ENABLED=true` plus a configured
+ *   orchestrator turns it on, and the backend provisions a per-organization
+ *   engine in code. Kubernetes is required because that mode has to create
+ *   StatefulSets and reach them over `kube-pod://`; without it no engine can
+ *   exist, so the runtime would report ready and then fail on the first command.
+ *   Requiring the explicit flag also keeps an orchestrator configured purely for
+ *   MCP server pods from silently provisioning privileged Dagger engines.
+ *
+ * The K8s-configured test mirrors `isK8sConfigured()` (`k8s/shared.ts`) but is
+ * computed from raw env here: `k8s/shared.ts` imports this config module at load,
+ * so importing it back would be a circular dependency.
+ *
+ * @public — exported for testability
+ */
+export const isCodeRuntimeEnabled = ({
+  runnerHost,
+  runnerHostEnv,
+  codeRuntimeEnabledEnv,
+  kubeconfig,
+  loadKubeconfigFromCurrentCluster,
+}: {
+  runnerHost: string | undefined;
+  runnerHostEnv: string | undefined;
+  codeRuntimeEnabledEnv: string | undefined;
+  kubeconfig: string | undefined;
+  loadKubeconfigFromCurrentCluster: string | undefined;
+}): boolean => {
+  if (codeRuntimeEnabledEnv === "false") return false;
+  if (runnerHost !== undefined) return true;
+  // A runner host that was set but rejected by the parser reaches here as
+  // `undefined`, indistinguishable from "unset" without the raw value. Falling
+  // through would provision code-managed engines an operator who named a runner
+  // never asked for, contradicting the parser's own "code runtime disabled" log.
+  const runnerHostRejected = (runnerHostEnv?.trim().length ?? 0) > 0;
+  if (runnerHostRejected) return false;
+  const k8sConfigured =
+    loadKubeconfigFromCurrentCluster === "true" ||
+    (kubeconfig?.trim().length ?? 0) > 0;
+  return codeRuntimeEnabledEnv === "true" && k8sConfigured;
+};
+
+/**
  * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
  * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
  * always wins (`"true"`/`"false"`); a blank or unset value falls back to
@@ -1337,21 +1483,35 @@ const hackathonGallery: {
   ),
 };
 
-// the code execution sandbox (run_command / upload_file / download_file, plus
-// skill activation-mounts) needs a Dagger runner host: it runs when a host is
-// configured and stays off otherwise — presence of the host is the switch. it
-// is independent of the skills *read* feature — skills can be listed/activated/
-// read with the sandbox off.
+// The code execution sandbox (run_command / upload_file / download_file, plus
+// skill activation-mounts) runs on a Dagger engine. Two ways it turns on:
+//   1. An explicit ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST — an operator-
+//      supplied engine (BYO tcp:// or external kube-pod://). When set it both
+//      enables the sandbox and serves as the process-default engine.
+//   2. ARCHESTRA_CODE_RUNTIME_ENABLED=true with the orchestrator (Kubernetes)
+//      configured — the backend then provisions a per-organization engine in
+//      code and routes each unbound run to its org's engine.
+// It is independent of the skills *read* feature — skills can be listed/
+// activated/read with the sandbox off.
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost(
   process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
 );
-const skillsSandboxEnabled = skillsSandboxDaggerRunnerHost !== undefined;
-
-// the Dagger runtime fronts the sandbox; enabling the sandbox lights up the
-// shared session + warm base.
+const skillsSandboxEnabled = isCodeRuntimeEnabled({
+  runnerHost: skillsSandboxDaggerRunnerHost,
+  runnerHostEnv: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
+  codeRuntimeEnabledEnv: process.env.ARCHESTRA_CODE_RUNTIME_ENABLED,
+  kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
+  loadKubeconfigFromCurrentCluster:
+    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER,
+});
+// the Dagger runtime fronts the sandbox; enabling the sandbox lights it up.
+// runnerHost is the optional process-default/BYO engine — unset in the
+// code-managed per-organization mode, where each run carries its own target.
+// Read before the config object so the sandbox ceiling can be checked against it.
+const daggerEngineMemoryRequest =
+  process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "6Gi";
 const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
-const daggerRuntimeEnabled =
-  skillsSandboxEnabled && daggerRuntimeRunnerHost !== undefined;
+const daggerRuntimeEnabled = skillsSandboxEnabled;
 
 // persistent "My Files" byte storage backend; the root is validated (required +
 // absolute) eagerly so a misconfigured filesystem provider fails boot loudly.
@@ -1480,7 +1640,16 @@ const config = {
     },
   },
   auth: {
-    secret: process.env.ARCHESTRA_AUTH_SECRET,
+    // Session-signing secret (better-auth session/cookie HMAC). Prefer the
+    // dedicated ARCHESTRA_AUTH_SESSION_SECRET; fall back to the legacy combined
+    // ARCHESTRA_AUTH_SECRET so existing single-secret deployments keep working.
+    // The new var is trimmed; the legacy fallback is deliberately left as-is —
+    // trimming it would change the key existing deployments already derive from
+    // it and break decryption of already-stored data. (Same for the
+    // encryption secrets below.)
+    secret:
+      process.env.ARCHESTRA_AUTH_SESSION_SECRET?.trim() ||
+      process.env.ARCHESTRA_AUTH_SECRET,
     trustedOrigins: getTrustedOrigins(),
     adminDefaultEmail:
       process.env[DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME] || DEFAULT_ADMIN_EMAIL,
@@ -2013,9 +2182,8 @@ const config = {
   /**
    * code execution sandbox runtime — the per-conversation Dagger container that
    * runs commands, holds uploaded files, and materializes activated skills.
-   * runs when a Dagger runner host is configured
-   * (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`), off otherwise.
-   */
+   * On when a Dagger runner host is configured, or `ARCHESTRA_CODE_RUNTIME_ENABLED`
+   * is set with the orchestrator (Kubernetes) configured.   */
   skillsSandbox: {
     enabled: skillsSandboxEnabled,
     cpuLimit: parsePositiveInt(
@@ -2050,10 +2218,11 @@ const config = {
     enabled: skillsSandboxEnabled,
   },
   /**
-   * unified Dagger runtime — one shared session with a pre-warmed base
-   * container that hosts the code execution sandbox commands. The Rust crate
-   * (`@archestra/sandbox-rs`) owns the session; this block only carries
-   * enable + connection knobs.
+   * unified Dagger runtime — a per-target pool of pre-warmed base-container
+   * sessions that host the code execution sandbox commands. The Rust crate
+   * (`@archestra/sandbox-rs`) owns the sessions; this block only carries
+   * enable + connection knobs. `runnerHost` is the optional process-default
+   * engine; it is unset in the code-managed per-organization mode.
    */
   daggerRuntime: {
     enabled: daggerRuntimeEnabled,
@@ -2070,6 +2239,42 @@ const config = {
       process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
       50,
     ),
+    // Resource requests/limits for a code-managed engine StatefulSet (K8s
+    // quantity strings). Two separate budgets, because the workloads live in
+    // two separate cgroups: the pod's request/limit cover the buildkit daemon,
+    // while `sandboxMemoryMaxBytes` caps the sandbox containers buildkit runs
+    // beside it. The memory request is sized to hold node capacity for both,
+    // since the sandbox cgroup sits outside the pod's accounting and the
+    // scheduler cannot see it; the limit tracks the request because Kubernetes
+    // requires `request <= limit`, and it stays far above the daemon's own
+    // footprint so ordinary sandbox load can never OOM-kill the engine.
+    engine: {
+      cpuRequest:
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST || "2",
+      memoryRequest: daggerEngineMemoryRequest,
+      memoryLimit:
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "6Gi",
+      cacheStorage:
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE || "50Gi",
+      // Ceiling on everything the sandboxes hold at once. Without it nothing
+      // bounds them: the per-run cap is an RLIMIT_AS, which the kernel applies
+      // per process, so one run that spawns N processes holds N times it. It is
+      // an engine-wide ceiling rather than a per-run allowance, so
+      // `maxConcurrent` runs each at the per-run limit can reach it; raise this
+      // and `memoryRequest` together, or lower `maxConcurrent`, for deployments
+      // that sustain that. Resolved to bytes because it lands in a cgroup.
+      sandboxMemoryMaxBytes: parseSandboxMemoryMaxBytes(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX,
+        daggerEngineMemoryRequest,
+      ),
+      // Extra IPv4 CIDRs to block from an unrestricted engine's public-egress
+      // floor (on top of the built-in RFC1918/link-local/metadata ranges). Set
+      // to the cluster's Service/Pod CIDRs when they fall outside RFC1918 so
+      // sandboxed code can't reach in-cluster ClusterIP services.
+      additionalDeniedCidrs: parseEngineDeniedCidrs(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS,
+      ),
+    },
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
@@ -2238,7 +2443,24 @@ const config = {
     type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",
     vaultKvVersion: process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION || "2",
     /**
-     * One-boot escape hatch for a deliberate ARCHESTRA_AUTH_SECRET rotation:
+     * Secret from which the AES key that encrypts DB-stored secrets is derived.
+     * Split out from the session-signing secret so the two rotate
+     * independently; falls back to the legacy combined ARCHESTRA_AUTH_SECRET so
+     * existing deployments are unchanged until they opt into the split.
+     */
+    encryptionSecret:
+      process.env.ARCHESTRA_SECRETS_ENCRYPTION_SECRET?.trim() ||
+      process.env.ARCHESTRA_AUTH_SECRET,
+    /**
+     * Previous encryption secret — used ONLY by the re-encryption migration to
+     * decrypt rows written under the prior key. Falls back to
+     * ARCHESTRA_AUTH_SECRET (the combined secret in use before the split).
+     */
+    encryptionSecretPrevious:
+      process.env.ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS?.trim() ||
+      process.env.ARCHESTRA_AUTH_SECRET,
+    /**
+     * One-boot escape hatch for a deliberate encryption-secret rotation:
      * lets startup accept an encryption key that cannot decrypt previously
      * stored secrets instead of aborting.
      */

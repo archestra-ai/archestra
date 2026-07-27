@@ -1,10 +1,11 @@
 import {
   buildBlockAlwaysPolicyReason,
+  buildNoPolicyUntrustedReason,
+  buildUntrustedContextPolicyReason,
   CONTEXT_EXTERNAL_AGENT_ID,
   CONTEXT_TEAM_IDS,
   isAgentTool,
-  TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON,
-  TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
+  type SensitiveContextOrigin,
 } from "@archestra/shared";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { get } from "lodash-es";
@@ -23,6 +24,13 @@ type EvaluationResult = {
 export type PolicyEvaluationContext = {
   teamIds: string[];
   externalAgentId?: string;
+  /**
+   * What flipped the session into the sensitive state, when the caller knows
+   * it (e.g. the LLM proxy's trusted-data evaluation tracked the boundary).
+   * Used only to phrase sensitive-context block reasons so they name the
+   * origin instead of guessing.
+   */
+  sensitiveContextOrigin?: SensitiveContextOrigin;
 };
 
 class ToolInvocationPolicyModel {
@@ -579,7 +587,9 @@ class ToolInvocationPolicyModel {
         if (policy.action === "block_when_context_is_untrusted") {
           // Allow when context is trusted, block when untrusted
           if (!isContextTrusted) {
-            return blocked(TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON);
+            return blocked(
+              buildUntrustedContextPolicyReason(context.sensitiveContextOrigin),
+            );
           }
           // Context is trusted, tool is allowed - continue to next tool
           continue;
@@ -596,7 +606,9 @@ class ToolInvocationPolicyModel {
       // If a specific policy matched, use its result (ignore default policies)
       if (hasMatchingSpecificPolicy) {
         if (!isContextTrusted && !specificAllowsUntrusted) {
-          return blocked(TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON);
+          return blocked(
+            buildUntrustedContextPolicyReason(context.sensitiveContextOrigin),
+          );
         }
         continue; // Tool is allowed, move to next tool
       }
@@ -613,7 +625,11 @@ class ToolInvocationPolicyModel {
           if (policy.action === "block_when_context_is_untrusted") {
             // Allow when context is trusted, block when untrusted
             if (!isContextTrusted) {
-              return blocked(TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON);
+              return blocked(
+                buildUntrustedContextPolicyReason(
+                  context.sensitiveContextOrigin,
+                ),
+              );
             }
             // Context is trusted, tool is allowed
             continue;
@@ -628,14 +644,18 @@ class ToolInvocationPolicyModel {
         }
         // Check if tool is allowed when context is untrusted
         if (!isContextTrusted && !defaultAllowsUntrusted) {
-          return blocked(TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON);
+          return blocked(
+            buildUntrustedContextPolicyReason(context.sensitiveContextOrigin),
+          );
         }
         continue; // Tool is allowed by default policy, skip global policy check
       }
 
       // No policies exist - block in untrusted context (restrictive mode only reaches here)
       if (!isContextTrusted) {
-        return blocked(TOOL_INVOCATION_NO_POLICY_UNTRUSTED_REASON);
+        return blocked(
+          buildNoPolicyUntrustedReason(context.sensitiveContextOrigin),
+        );
       }
     }
 

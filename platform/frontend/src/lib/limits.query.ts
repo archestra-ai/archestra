@@ -6,25 +6,26 @@ import { handleApiError, throwOnApiError } from "@/lib/utils";
 const { getLimits, createLimit, getLimit, updateLimit, deleteLimit } =
   archestraApiSdk;
 
-type LimitsQuery = NonNullable<archestraApiTypes.GetLimitsData["query"]>;
-type LimitsParams = Partial<LimitsQuery>;
 type UpdateLimitParams = archestraApiTypes.UpdateLimitData["path"] &
   Partial<archestraApiTypes.UpdateLimitData["body"]>;
 type DeleteLimitParams = archestraApiTypes.DeleteLimitData["path"];
 
-export function useLimits(params?: LimitsParams) {
+// The "list"/"detail" segments keep the two queries in separate cache entries.
+// Without them an id-less detail query and the unfiltered list hash alike, and
+// a mutation's refetch resolves the shared entry with whichever queryFn was
+// applied last — overwriting the list array with the detail query's null.
+export const limitKeys = {
+  all: ["limits"] as const,
+  lists: () => [...limitKeys.all, "list"] as const,
+  details: () => [...limitKeys.all, "detail"] as const,
+  detail: (id: string | undefined) => [...limitKeys.details(), id] as const,
+};
+
+export function useLimits() {
   return useQuery({
-    queryKey: ["limits", params],
+    queryKey: limitKeys.lists(),
     queryFn: async () => {
-      const { data, error } = await getLimits({
-        query: params
-          ? {
-              ...(params.entityType && { entityType: params.entityType }),
-              ...(params.entityId && { entityId: params.entityId }),
-              ...(params.limitType && { limitType: params.limitType }),
-            }
-          : undefined,
-      });
+      const { data, error } = await getLimits();
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
@@ -37,7 +38,7 @@ export function useLimits(params?: LimitsParams) {
 
 export function useLimit(id: string | undefined) {
   return useQuery({
-    queryKey: ["limits", id],
+    queryKey: limitKeys.detail(id),
     queryFn: async () => {
       if (!id) return null;
       const { data, error } = await getLimit({ path: { id } });
@@ -61,7 +62,7 @@ export function useCreateLimit() {
     },
     onSuccess: async (result) => {
       if (!result) return;
-      await queryClient.invalidateQueries({ queryKey: ["limits"] });
+      await queryClient.invalidateQueries({ queryKey: limitKeys.all });
       toast.success("Limit created successfully");
     },
   });
@@ -80,9 +81,9 @@ export function useUpdateLimit() {
     },
     onSuccess: async (result, variables) => {
       if (!result) return;
-      await queryClient.invalidateQueries({ queryKey: ["limits"] });
+      await queryClient.invalidateQueries({ queryKey: limitKeys.all });
       await queryClient.invalidateQueries({
-        queryKey: ["limits", variables.id],
+        queryKey: limitKeys.detail(variables.id),
       });
       toast.success("Limit updated successfully");
     },
@@ -102,8 +103,8 @@ export function useDeleteLimit() {
     },
     onSuccess: async (result, variables) => {
       if (!result) return;
-      await queryClient.invalidateQueries({ queryKey: ["limits"] });
-      queryClient.removeQueries({ queryKey: ["limits", variables.id] });
+      await queryClient.invalidateQueries({ queryKey: limitKeys.all });
+      queryClient.removeQueries({ queryKey: limitKeys.detail(variables.id) });
       toast.success("Limit deleted successfully");
     },
   });

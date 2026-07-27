@@ -19,6 +19,7 @@ import {
   ConversationAttachmentModel,
   EnvironmentModel,
   FileNameExistsError,
+  OrganizationModel,
   SkillSandboxConversationGoneError,
   SkillSandboxModel,
 } from "@/models";
@@ -1390,11 +1391,18 @@ interface UserContext {
 }
 
 /**
- * Resolve the Dagger runner host for the calling agent's Environment, so its
- * sandbox runs on that environment's per-env engine (with the environment's
- * egress NetworkPolicy). Returns undefined when the agent has no environment,
- * the environment is missing, or k8s isn't configured — the run then uses the
- * process-default engine.
+ * Resolve the Dagger runtime target for the calling agent.
+ *
+ * An agent bound to an Environment always routes to that environment's own
+ * engine, carrying its egress policy. An operator-supplied runner host does NOT
+ * override that: running such an agent on the shared engine would give its code
+ * that engine's egress and silently defeat the environment's network isolation,
+ * so this fails closed instead.
+ *
+ * An unbound agent routes to its organization's default engine, unless a runner
+ * host is configured — then it returns undefined, meaning "use the process-default
+ * engine", and no org-default engine is provisioned. Also returns undefined when
+ * the caller or org can't be resolved.
  */
 async function resolveEnvironmentTarget(
   context: ArchestraContext,
@@ -1404,9 +1412,18 @@ async function resolveEnvironmentTarget(
   if (!agentId || !organizationId) return undefined;
 
   const agent = await AgentModel.findById(agentId);
-  // Unbound agent → no environment isolation requested; the default engine is
-  // the correct runtime.
-  if (!agent?.environmentId) return undefined;
+  if (!agent?.environmentId) {
+    // Unbound agent → the organization's default engine. But when an operator
+    // configured an explicit runner host (a BYO engine), defer to it: returning
+    // undefined routes the run to that process-default engine unchanged.
+    if (config.daggerRuntime.runnerHost) return undefined;
+    const organization =
+      await OrganizationModel.getDefaultEngineTarget(organizationId);
+    if (!organization) return undefined;
+    return daggerEnvironmentRuntimeManager.organizationDefaultTarget(
+      organization,
+    );
+  }
 
   // The agent IS bound to an environment, so its sandbox MUST run on that
   // environment's isolated engine (carrying the environment's egress policy).
@@ -1418,7 +1435,13 @@ async function resolveEnvironmentTarget(
     organizationId,
   );
   if (!environment) {
-    throw new Error(
+    // SkillSandboxError reaches the caller verbatim; a plain Error is flattened
+    // to "an internal error", stranding whoever has to fix the deployment.
+    logger.error(
+      { agentId, environmentId: agent.environmentId, organizationId },
+      "[Sandbox] bound agent's environment was not found",
+    );
+    throw new SkillSandboxError(
       `Agent is bound to environment ${agent.environmentId}, which was not found — refusing to run on the shared runtime.`,
     );
   }
@@ -1427,7 +1450,11 @@ async function resolveEnvironmentTarget(
       environment,
     );
   if (!target) {
-    throw new Error(
+    logger.error(
+      { agentId, environmentId: environment.id, organizationId },
+      "[Sandbox] could not resolve the isolated runtime for a bound agent",
+    );
+    throw new SkillSandboxError(
       `Could not resolve the isolated runtime for environment "${environment.name}" — refusing to run on the shared runtime. Is the orchestrator (Kubernetes) configured?`,
     );
   }

@@ -1,0 +1,1 @@
+ALTER TABLE "interactions" ADD COLUMN "connector_id" uuid;

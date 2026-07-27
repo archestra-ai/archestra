@@ -2689,7 +2689,7 @@ describe("mcp server inspect route", () => {
     expect(response.json()).not.toHaveProperty("enterpriseManagedConfig");
   });
 
-  test("returns 500 when protected remote MCP server installation still lacks usable auth after automatic fallback", async ({
+  test("returns 502 when protected remote MCP server installation still lacks usable auth after automatic fallback", async ({
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
@@ -2714,7 +2714,7 @@ describe("mcp server inspect route", () => {
       },
     });
 
-    expect(response.statusCode).toBe(500);
+    expect(response.statusCode).toBe(502);
     expect(response.json()).toMatchObject({
       error: {
         message: expect.stringContaining(
@@ -2958,7 +2958,7 @@ describe("mcp server inspect route", () => {
       },
     });
 
-    expect(response.statusCode).toBe(500);
+    expect(response.statusCode).toBe(502);
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
   });
 
@@ -3011,7 +3011,7 @@ describe("mcp server inspect route", () => {
       },
     });
 
-    expect(response.statusCode).toBe(500);
+    expect(response.statusCode).toBe(502);
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
   });
 

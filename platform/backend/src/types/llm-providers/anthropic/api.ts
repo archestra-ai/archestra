@@ -42,11 +42,23 @@ const OutputConfigSchema = z.object({
     .optional(),
 });
 
-// Mirrors @anthropic-ai/sdk BetaThinkingConfigParam.
+// Mirrors @anthropic-ai/sdk BetaThinkingConfigParam. `display` controls
+// whether thinking text appears in the response ("summarized") or only the
+// signature comes back ("omitted", the newest models' default); without it in
+// the schema, Fastify's Zod validation would silently strip the field before
+// the body is forwarded upstream.
+const ThinkingDisplaySchema = z
+  .enum(["summarized", "omitted"])
+  .nullable()
+  .optional();
 const ThinkingConfigSchema = z.union([
-  z.object({ type: z.literal("enabled"), budget_tokens: z.number() }),
+  z.object({
+    type: z.literal("enabled"),
+    budget_tokens: z.number(),
+    display: ThinkingDisplaySchema,
+  }),
   z.object({ type: z.literal("disabled") }),
-  z.object({ type: z.literal("adaptive") }),
+  z.object({ type: z.literal("adaptive"), display: ThinkingDisplaySchema }),
 ]);
 
 export const MessagesRequestSchema = z.object({

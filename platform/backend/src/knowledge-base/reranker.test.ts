@@ -1,6 +1,8 @@
 import { createOpenAI } from "@ai-sdk/openai";
+import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import db, { schema } from "@/database";
 import type { VectorSearchResult } from "@/models/kb-chunk";
 import { useMswServer } from "@/test/msw";
 import rerank from "./reranker";
@@ -66,6 +68,18 @@ function serveScores(content: string | { fail: true }) {
       return chatCompletion(content);
     }),
   );
+}
+
+/** Reranker interactions are recorded fire-and-forget, so poll for them. */
+async function waitForRerankerInteractions() {
+  const read = () =>
+    db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.source, "knowledge:reranker"));
+
+  await vi.waitFor(async () => expect(await read()).toHaveLength(1));
+  return read();
 }
 
 function setupRerankerConfig() {
@@ -178,5 +192,36 @@ describe("rerank", () => {
 
     expect(result.map((r) => r.id)).toEqual(["a", "b"]);
     expect(chatCompletionCalls).toBe(0);
+  });
+
+  it("records the connector the query was scoped to on the interaction", async () => {
+    setupRerankerConfig();
+    const connectorId = "3f1c9d2e-8b7a-4c6d-9e5f-1a2b3c4d5e6f";
+    serveScores(JSON.stringify({ scores: [{ index: 0, score: 9 }] }));
+
+    await rerank({
+      queryText: "test query",
+      chunks: [makeChunk("a", "relevant")],
+      organizationId: "test-org-id",
+      connectorId,
+    });
+
+    const [row] = await waitForRerankerInteractions();
+    expect(row.connectorId).toBe(connectorId);
+  });
+
+  it("leaves the connector unset when the query spans several", async () => {
+    setupRerankerConfig();
+    serveScores(JSON.stringify({ scores: [{ index: 0, score: 9 }] }));
+
+    await rerank({
+      queryText: "test query",
+      chunks: [makeChunk("a", "relevant")],
+      organizationId: "test-org-id",
+      connectorId: null,
+    });
+
+    const [row] = await waitForRerankerInteractions();
+    expect(row.connectorId).toBeNull();
   });
 });

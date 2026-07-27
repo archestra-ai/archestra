@@ -52,8 +52,33 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-}" = "true" ]; then
+  # Without an explicit runner host, the backend provisions per-organization
+  # Dagger engines in-cluster, so it needs the orchestrator wired to the local
+  # cluster and engine resources small enough to fit a local VM (the shipped
+  # defaults reserve room for concurrent sandbox load and a large build cache).
+  # An explicit ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST points the backend at
+  # a pre-existing engine instead and skips all of this.
   if [ -z "${ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST:-}" ]; then
-    export ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST="tcp://127.0.0.1:1234"
+    # This backend runs on the developer's machine, not in a pod, so it reaches
+    # the cluster through a kubeconfig file. ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG
+    # _FROM_CURRENT_CLUSTER would call loadFromCluster(), which only resolves an
+    # API server address from the in-pod service-account environment.
+    if [ -z "${ARCHESTRA_ORCHESTRATOR_KUBECONFIG:-}" ] && \
+       [ "${ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER:-}" != "true" ]; then
+      export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
+    fi
+    : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST:=500m}"
+    # Request covers the sandbox ceiling below plus the daemon's own footprint,
+    # the same relationship the shipped defaults keep.
+    : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST:=2Gi}"
+    : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT:=2Gi}"
+    : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE:=10Gi}"
+    : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX:=1Gi}"
+    export ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST \
+      ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST \
+      ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT \
+      ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE \
+      ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX
   fi
 
   # the Dagger SDK shells out to the `dagger` CLI to open engine sessions
@@ -82,12 +107,6 @@ if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-}" = "true" ]; then
   if [ -z "${ARCHESTRA_DAGGER_RUNTIME_CLI_BIN:-}" ] && [ -z "${ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN:-}" ]; then
     export ARCHESTRA_DAGGER_RUNTIME_CLI_BIN="$DAGGER_BIN"
     export ARCHESTRA_CODE_RUNTIME_DAGGER_CLI_BIN="$DAGGER_BIN"
-  fi
-
-  if [ "$ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST" = "tcp://127.0.0.1:1234" ]; then
-    while ! nc -z 127.0.0.1 1234 >/dev/null 2>&1; do
-      sleep 1
-    done
   fi
 fi
 

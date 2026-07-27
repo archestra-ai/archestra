@@ -72,7 +72,11 @@ class EmbeddingService {
           chunkToEmbeddingInput(ctx.model, c.content, c.metadataSuffixSemantic),
         );
 
-        const response = await this.callEmbeddingApiWithRetry(ctx, inputs);
+        const response = await this.callEmbeddingApiWithRetry({
+          ctx,
+          inputs,
+          connectorId: document.connectorId,
+        });
 
         if (response.data.length !== batch.length) {
           throw new Error(
@@ -137,6 +141,7 @@ class EmbeddingService {
       chunkId: string;
       content: string;
       metadataSuffix: string | null;
+      connectorId: string;
     }> = [];
 
     for (const documentId of documentIds) {
@@ -182,6 +187,7 @@ class EmbeddingService {
           chunkId: chunk.id,
           content: chunk.content,
           metadataSuffix: chunk.metadataSuffixSemantic,
+          connectorId: document.connectorId,
         });
       }
     }
@@ -237,7 +243,11 @@ class EmbeddingService {
         const inputs = batch.map((c) =>
           chunkToEmbeddingInput(ctx.model, c.content, c.metadataSuffix),
         );
-        const response = await this.callEmbeddingApiWithRetry(ctx, inputs);
+        const response = await this.callEmbeddingApiWithRetry({
+          ctx,
+          inputs,
+          connectorId: singleConnectorId(batch),
+        });
         if (response.data.length !== batch.length) {
           throw new Error(
             `Embedding API returned ${response.data.length} results for ${batch.length} inputs`,
@@ -321,10 +331,12 @@ class EmbeddingService {
     };
   }
 
-  private async callEmbeddingApiWithRetry(
-    ctx: EmbeddingConfig,
-    inputs: EmbeddingInput[],
-  ): Promise<EmbeddingApiResponse> {
+  private async callEmbeddingApiWithRetry(params: {
+    ctx: EmbeddingConfig;
+    inputs: EmbeddingInput[];
+    connectorId: string | null;
+  }): Promise<EmbeddingApiResponse> {
+    const { ctx, inputs, connectorId } = params;
     for (let attempt = 1; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
       try {
         return await withKbObservability({
@@ -332,6 +344,7 @@ class EmbeddingService {
           provider: ctx.provider,
           model: ctx.model,
           source: "knowledge:embedding",
+          connectorId,
           type: getEmbeddingDiscriminator(ctx.provider),
           callback: () =>
             callEmbedding({
@@ -398,6 +411,18 @@ function embeddingFailureMessage(
     toKnowledgeBaseUserMessage(normalized) ??
     (error instanceof Error ? error.message : String(error))
   );
+}
+
+/**
+ * The connector every chunk in the batch belongs to, or null when they span
+ * several — a batch is grouped by size, not by connector, so the recovery sweep
+ * can mix them.
+ */
+function singleConnectorId(
+  batch: Array<{ connectorId: string }>,
+): string | null {
+  const first = batch[0]?.connectorId ?? null;
+  return batch.every((c) => c.connectorId === first) ? first : null;
 }
 
 /**

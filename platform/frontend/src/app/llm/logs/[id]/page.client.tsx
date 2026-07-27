@@ -196,6 +196,13 @@ function LogDetail({
                 {interaction.provider} ({interaction.modelName})
               </Badge>
             </MetadataItem>
+            {dynamicInteraction.connectorId && (
+              <MetadataItem label="KB Connector">
+                <Badge variant="secondary" className="text-xs">
+                  {dynamicInteraction.connectorName ?? "Deleted connector"}
+                </Badge>
+              </MetadataItem>
+            )}
             <MetadataItem label="Timestamp">
               <div className="font-mono text-xs">
                 {formatDate({ date: interaction.createdAt })}

@@ -8,7 +8,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
-import { InteractionModel } from "@/models";
+import { InteractionModel, KnowledgeBaseConnectorModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -344,7 +344,16 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Interaction not found");
       }
 
-      return reply.send(interaction);
+      // Resolved after the access check, and scoped to the caller's
+      // organization, so a foreign connector's name is never disclosed.
+      const connectorName = interaction.connectorId
+        ? await KnowledgeBaseConnectorModel.findNameInOrganization({
+            id: interaction.connectorId,
+            organizationId,
+          })
+        : null;
+
+      return reply.send({ ...interaction, connectorName });
     },
   );
 };

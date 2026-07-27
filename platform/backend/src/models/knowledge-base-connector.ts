@@ -283,6 +283,30 @@ class KnowledgeBaseConnectorModel {
     return result ?? null;
   }
 
+  /**
+   * Name of a connector within one organization, or null when it does not exist
+   * there (deleted, or owned by another organization).
+   */
+  static async findNameInOrganization(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<string | null> {
+    const [result] = await db
+      .select({ name: schema.knowledgeBaseConnectorsTable.name })
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.id, params.id),
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            params.organizationId,
+          ),
+        ),
+      );
+
+    return result?.name ?? null;
+  }
+
   static async findByIds(ids: string[]): Promise<KnowledgeBaseConnector[]> {
     if (ids.length === 0) return [];
 

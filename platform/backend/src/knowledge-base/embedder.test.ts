@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { beforeEach, vi } from "vitest";
 import { useMswServer } from "@/test/msw";
@@ -69,6 +70,7 @@ vi.mock("./kb-llm-client", () => ({
   getDefaultOrgEmbeddingConfig: mockGetDefaultOrgEmbeddingConfig,
 }));
 
+import db, { schema } from "@/database";
 import { KbChunkModel, KbDocumentModel } from "@/models";
 import { describe, expect, test } from "@/test";
 
@@ -77,6 +79,20 @@ import { embeddingService } from "./embedder";
 
 function makeFakeEmbedding(seed: number): number[] {
   return Array.from({ length: 1536 }, (_, i) => (seed + i) * 0.001);
+}
+
+/** Embedding interactions are recorded fire-and-forget, so poll for them. */
+async function waitForKbInteractions(expectedCount: number) {
+  const read = () =>
+    db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.source, "knowledge:embedding"));
+
+  await vi.waitFor(async () =>
+    expect(await read()).toHaveLength(expectedCount),
+  );
+  return read();
 }
 
 function makeEmbeddingContext() {
@@ -475,5 +491,87 @@ describe("EmbeddingService", () => {
     const updated2 = await KbDocumentModel.findById(doc2.id);
     expect(updated2?.embeddingStatus).toBe("completed");
     expect(updated2?.chunkCount).toBe(0);
+  });
+
+  test("attributes the embedding interaction to the document's connector", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    mockGetDefaultOrgEmbeddingConfig.mockResolvedValue({
+      organizationId: org.id,
+      config: makeEmbeddingContext(),
+    });
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Attributed Doc",
+      content: "Content",
+      contentHash: "hash-attributed",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      { documentId: doc.id, content: "Chunk", chunkIndex: 0 },
+    ]);
+    responseQueue.push({ kind: "ok", embeddings: [makeFakeEmbedding(1)] });
+
+    await embeddingService.processDocuments([doc.id]);
+
+    const [interaction] = await waitForKbInteractions(1);
+    expect(interaction.connectorId).toBe(connector.id);
+  });
+
+  test("leaves the connector unattributed when one batch spans several connectors", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connectorA = await makeKnowledgeBaseConnector(kb.id, org.id);
+    const connectorB = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    mockGetDefaultOrgEmbeddingConfig.mockResolvedValue({
+      organizationId: org.id,
+      config: makeEmbeddingContext(),
+    });
+
+    const docA = await KbDocumentModel.create({
+      connectorId: connectorA.id,
+      organizationId: org.id,
+      title: "Doc A",
+      content: "Content A",
+      contentHash: "hash-mixed-a",
+      embeddingStatus: "pending",
+    });
+    const docB = await KbDocumentModel.create({
+      connectorId: connectorB.id,
+      organizationId: org.id,
+      title: "Doc B",
+      content: "Content B",
+      contentHash: "hash-mixed-b",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      { documentId: docA.id, content: "Chunk A", chunkIndex: 0 },
+      { documentId: docB.id, content: "Chunk B", chunkIndex: 0 },
+    ]);
+    responseQueue.push({
+      kind: "ok",
+      embeddings: [makeFakeEmbedding(1), makeFakeEmbedding(2)],
+    });
+
+    // The stalled-embedding recovery sweep batches documents across connectors,
+    // so a single API call — one interaction row — has no one connector to name.
+    await embeddingService.processDocuments([docA.id, docB.id]);
+
+    expect(embeddingRequests).toHaveLength(1);
+    const [interaction] = await waitForKbInteractions(1);
+    expect(interaction.connectorId).toBeNull();
   });
 });

@@ -128996,6 +128996,12 @@
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
+                              "connectorId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "sessionId": {
                                 "nullable": true,
                                 "type": "string"
@@ -129467,6 +129473,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -129488,6 +129498,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -129554,6 +129565,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -130451,6 +130468,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -130472,6 +130493,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -130538,6 +130560,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -131145,6 +131173,10 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -131156,6 +131188,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -131222,6 +131255,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -131829,6 +131868,10 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -131840,6 +131883,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -131906,6 +131950,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -132513,6 +132563,10 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -132524,6 +132578,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -132590,6 +132645,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -133066,6 +133127,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -133087,6 +133152,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -133153,6 +133219,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -133629,6 +133701,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -133650,6 +133726,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -133716,6 +133793,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -136143,6 +136226,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -136164,6 +136251,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -136230,6 +136318,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -139400,6 +139494,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -139421,6 +139519,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -139487,6 +139586,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -139963,6 +140068,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -139984,6 +140093,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -140050,6 +140160,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -140526,6 +140642,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -140547,6 +140667,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -140613,6 +140734,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -141089,6 +141216,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -141110,6 +141241,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -141176,6 +141308,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -141652,6 +141790,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -141673,6 +141815,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -141739,6 +141882,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -142215,6 +142364,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -142236,6 +142389,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -142302,6 +142456,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -142778,6 +142938,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -142799,6 +142963,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -142865,6 +143030,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -143340,6 +143511,10 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -143351,6 +143526,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -143417,6 +143593,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -143892,6 +144074,10 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -143903,6 +144089,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -143969,6 +144156,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -144444,6 +144637,10 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
                               }
                             },
                             "required": [
@@ -144455,6 +144652,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -144521,6 +144719,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -144997,6 +145201,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -145018,6 +145226,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -145084,6 +145293,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -145560,6 +145775,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -145581,6 +145800,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -145647,6 +145867,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -146123,6 +146349,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -146144,6 +146374,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -146210,6 +146441,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -148874,6 +149111,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -148895,6 +149136,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -148961,6 +149203,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -151620,6 +151868,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -151641,6 +151893,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -151707,6 +151960,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -154371,6 +154630,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -154392,6 +154655,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -154458,6 +154722,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -154934,6 +155204,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -154955,6 +155229,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -155021,6 +155296,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -155735,6 +156016,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -155756,6 +156041,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -155822,6 +156108,12 @@
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "environmentId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "connectorId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
@@ -156719,6 +157011,10 @@
                                   "additionalProperties": false
                                 }
                               },
+                              "connectorName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "requestType": {
                                 "type": "string",
                                 "enum": [
@@ -156740,6 +157036,7 @@
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
+                              "connectorId",
                               "sessionId",
                               "sessionSource",
                               "billingMode",
@@ -158333,6 +158630,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "connectorId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "sessionId": {
                           "nullable": true,
                           "type": "string"
@@ -158804,6 +159107,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -158825,6 +159132,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -158891,6 +159199,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -159788,6 +160102,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -159809,6 +160127,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -159875,6 +160194,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -160482,6 +160807,10 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -160493,6 +160822,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -160559,6 +160889,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -161166,6 +161502,10 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -161177,6 +161517,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -161243,6 +161584,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -161850,6 +162197,10 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -161861,6 +162212,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -161927,6 +162279,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -162403,6 +162761,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -162424,6 +162786,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -162490,6 +162853,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -162966,6 +163335,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -162987,6 +163360,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -163053,6 +163427,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -165480,6 +165860,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -165501,6 +165885,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -165567,6 +165952,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -168737,6 +169128,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -168758,6 +169153,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -168824,6 +169220,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -169300,6 +169702,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -169321,6 +169727,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -169387,6 +169794,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -169863,6 +170276,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -169884,6 +170301,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -169950,6 +170368,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -170426,6 +170850,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -170447,6 +170875,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -170513,6 +170942,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -170989,6 +171424,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -171010,6 +171449,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -171076,6 +171516,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -171552,6 +171998,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -171573,6 +172023,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -171639,6 +172090,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -172115,6 +172572,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -172136,6 +172597,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -172202,6 +172664,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -172677,6 +173145,10 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -172688,6 +173160,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -172754,6 +173227,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -173229,6 +173708,10 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -173240,6 +173723,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -173306,6 +173790,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -173781,6 +174271,10 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -173792,6 +174286,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -173858,6 +174353,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -174334,6 +174835,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -174355,6 +174860,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -174421,6 +174927,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -174897,6 +175409,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -174918,6 +175434,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -174984,6 +175501,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -175460,6 +175983,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -175481,6 +176008,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -175547,6 +176075,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -178211,6 +178745,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -178232,6 +178770,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -178298,6 +178837,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -180957,6 +181502,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -180978,6 +181527,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -181044,6 +181594,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -183708,6 +184264,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -183729,6 +184289,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -183795,6 +184356,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -184271,6 +184838,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -184292,6 +184863,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -184358,6 +184930,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -185072,6 +185650,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -185093,6 +185675,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",
@@ -185159,6 +185742,12 @@
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "environmentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectorId": {
                           "nullable": true,
                           "type": "string",
                           "format": "uuid",
@@ -186056,6 +186645,10 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectorName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "requestType": {
                           "type": "string",
                           "enum": [
@@ -186077,6 +186670,7 @@
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
+                        "connectorId",
                         "sessionId",
                         "sessionSource",
                         "billingMode",

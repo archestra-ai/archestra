@@ -87,6 +87,21 @@ const interactionsTable = pgTable(
       { onDelete: "set null" },
     ),
     /**
+     * Knowledge-base connector this call was made for. Set only on `knowledge:*`
+     * interactions, and only when one connector owns the call: an embedding
+     * batch spanning several connectors (the stalled-embedding recovery sweep)
+     * or a query fanning out across them stays NULL rather than naming one
+     * arbitrarily.
+     *
+     * Deliberately not a foreign key, unlike the sibling id columns here. ON
+     * DELETE SET NULL needs an index on this column or every connector delete
+     * seq-scans `interactions`, and an index on this table cannot be built in a
+     * transactional migration (see the archestra-dev-interactions-migrations
+     * skill). The id of a deleted connector is kept and resolves to no name on
+     * read.
+     */
+    connectorId: uuid("connector_id"),
+    /**
      * Session ID to group related LLM requests together.
      * Can be extracted from:
      * - X-Archestra-Session-Id header (explicit)

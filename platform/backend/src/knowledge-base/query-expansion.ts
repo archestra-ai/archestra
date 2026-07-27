@@ -17,8 +17,10 @@ interface ExpandedQuery {
 async function expandQuery(params: {
   queryText: string;
   organizationId: string;
+  /** The one connector this query is scoped to, or null when it spans several. */
+  connectorId?: string | null;
 }): Promise<ExpandedQuery[]> {
-  const { queryText, organizationId } = params;
+  const { queryText, organizationId, connectorId = null } = params;
 
   let rerankerConfig: Awaited<ReturnType<typeof resolveRerankerConfig>>;
   try {
@@ -46,8 +48,8 @@ async function expandQuery(params: {
   }
 
   const [semanticResult, keywordResult] = await Promise.allSettled([
-    semanticRephrase({ queryText, rerankerConfig }),
-    keywordExpansion({ queryText, rerankerConfig }),
+    semanticRephrase({ queryText, rerankerConfig, connectorId }),
+    keywordExpansion({ queryText, rerankerConfig, connectorId }),
   ]);
 
   const queries: ExpandedQuery[] = [
@@ -146,8 +148,9 @@ function deduplicateQueries(queries: ExpandedQuery[]): ExpandedQuery[] {
 async function semanticRephrase(params: {
   queryText: string;
   rerankerConfig: RerankerConfig;
+  connectorId: string | null;
 }): Promise<string | null> {
-  const { queryText, rerankerConfig } = params;
+  const { queryText, rerankerConfig, connectorId } = params;
   const currentDate = new Date().toISOString().split("T")[0];
 
   const result = await withKbObservability({
@@ -157,6 +160,7 @@ async function semanticRephrase(params: {
     >[0]["provider"],
     model: rerankerConfig.modelName,
     source: "knowledge:query-expansion",
+    connectorId,
     type: getProviderChatInteractionType(
       rerankerConfig.provider as Parameters<
         typeof getProviderChatInteractionType
@@ -185,8 +189,9 @@ async function semanticRephrase(params: {
 async function keywordExpansion(params: {
   queryText: string;
   rerankerConfig: RerankerConfig;
+  connectorId: string | null;
 }): Promise<string[]> {
-  const { queryText, rerankerConfig } = params;
+  const { queryText, rerankerConfig, connectorId } = params;
   const currentDate = new Date().toISOString().split("T")[0];
 
   const result = await withKbObservability({
@@ -196,6 +201,7 @@ async function keywordExpansion(params: {
     >[0]["provider"],
     model: rerankerConfig.modelName,
     source: "knowledge:query-expansion",
+    connectorId,
     type: getProviderChatInteractionType(
       rerankerConfig.provider as Parameters<
         typeof getProviderChatInteractionType

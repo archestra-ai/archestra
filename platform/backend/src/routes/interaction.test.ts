@@ -9,6 +9,7 @@ import {
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
+import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -607,5 +608,133 @@ describe("interaction routes", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toHaveLength(2);
     expect(response.json().pagination.total).toBe(4);
+  });
+
+  test("hides an agent-less interaction from a non-agent-admin", async () => {
+    const interaction = await InteractionModel.create({
+      profileId: null,
+      source: "knowledge:embedding",
+      request: { model: "text-embedding-3-small", input: ["hello"] },
+      response: {
+        object: "list",
+        data: [],
+        model: "text-embedding-3-small",
+      } as unknown as InteractionResponse,
+      type: "openai:embeddings",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("names the knowledge base connector a KB interaction belongs to", async ({
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+    makeMember,
+  }) => {
+    // KB interactions carry no agent, so only an agent admin may read them.
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
+    const kb = await makeKnowledgeBase(organizationId);
+    const connector = await makeKnowledgeBaseConnector(kb.id, organizationId, {
+      name: "Docs Web Crawler",
+    });
+    const interaction = await InteractionModel.create({
+      profileId: null,
+      connectorId: connector.id,
+      source: "knowledge:embedding",
+      request: { model: "text-embedding-3-small", input: ["hello"] },
+      response: {
+        object: "list",
+        data: [],
+        model: "text-embedding-3-small",
+      } as unknown as InteractionResponse,
+      type: "openai:embeddings",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      connectorId: connector.id,
+      connectorName: "Docs Web Crawler",
+    });
+  });
+
+  test("does not leak the name of a connector from another organization", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+    makeMember,
+  }) => {
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
+    const otherOrg = await makeOrganization();
+    const otherKb = await makeKnowledgeBase(otherOrg.id);
+    const foreignConnector = await makeKnowledgeBaseConnector(
+      otherKb.id,
+      otherOrg.id,
+      { name: "Secret Connector" },
+    );
+    const interaction = await InteractionModel.create({
+      profileId: null,
+      connectorId: foreignConnector.id,
+      source: "knowledge:embedding",
+      request: { model: "text-embedding-3-small", input: ["hello"] },
+      response: {
+        object: "list",
+        data: [],
+        model: "text-embedding-3-small",
+      } as unknown as InteractionResponse,
+      type: "openai:embeddings",
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().connectorName).toBeNull();
+  });
+
+  test("reports a null connector name when the connector has been deleted", async ({
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+    makeMember,
+  }) => {
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
+    const kb = await makeKnowledgeBase(organizationId);
+    const connector = await makeKnowledgeBaseConnector(kb.id, organizationId);
+    const interaction = await InteractionModel.create({
+      profileId: null,
+      connectorId: connector.id,
+      source: "knowledge:embedding",
+      request: { model: "text-embedding-3-small", input: ["hello"] },
+      response: {
+        object: "list",
+        data: [],
+        model: "text-embedding-3-small",
+      } as unknown as InteractionResponse,
+      type: "openai:embeddings",
+    });
+    await KnowledgeBaseConnectorModel.delete(connector.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    // The id survives the connector so the log still records what produced it.
+    expect(response.json()).toMatchObject({
+      connectorId: connector.id,
+      connectorName: null,
+    });
   });
 });

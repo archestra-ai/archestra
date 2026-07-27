@@ -67,7 +67,7 @@ describe("ProviderKeyMappingsField", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("adds or replaces a provider mapping as soon as a key is selected", async () => {
+  it("does not offer another key for a configured provider", async () => {
     const user = userEvent.setup();
     renderField({ openai: "openai-production" });
 
@@ -76,19 +76,17 @@ describe("ProviderKeyMappingsField", () => {
     await user.click(
       screen.getByRole("button", { name: /select a provider key/i }),
     );
-    await user.click(screen.getByRole("option", { name: /openai staging/i }));
-
-    expect(screen.getByText("OpenAI staging")).toBeInTheDocument();
-    expect(screen.queryByText("OpenAI production")).not.toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("button", { name: /select a provider key/i }),
-    );
+    expect(
+      screen.queryByRole("option", { name: /openai staging/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /openai production/i }),
+    ).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("option", { name: /anthropic production/i }),
     );
 
-    expect(screen.getByText("OpenAI staging")).toBeInTheDocument();
+    expect(screen.getByText("OpenAI production")).toBeInTheDocument();
     expect(screen.getByText("Anthropic production")).toBeInTheDocument();
   });
 

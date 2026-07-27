@@ -42,11 +42,17 @@ export function ProviderKeyMappingsField({
         getProviderName(a.provider).localeCompare(getProviderName(b.provider)),
       );
   }, [providerApiKeyIds, providerApiKeys]);
+  const availableProviderApiKeys = useMemo(
+    () =>
+      providerApiKeys.filter((apiKey) => !providerApiKeyIds[apiKey.provider]),
+    [providerApiKeyIds, providerApiKeys],
+  );
+
   const handleSelectProviderKey = (providerApiKeyId: string) => {
     const selectedKey = providerApiKeys.find(
       (apiKey) => apiKey.id === providerApiKeyId,
     );
-    if (!selectedKey) {
+    if (!selectedKey || providerApiKeyIds[selectedKey.provider]) {
       return;
     }
 
@@ -68,9 +74,9 @@ export function ProviderKeyMappingsField({
       <div className="space-y-2">
         <Label>Add provider key</Label>
         <LlmProviderApiKeyDropdown
-          availableKeys={providerApiKeys}
+          availableKeys={availableProviderApiKeys}
           selectedApiKeyId={null}
-          disabled={providerApiKeys.length === 0}
+          disabled={availableProviderApiKeys.length === 0}
           open={apiKeySelectorOpen}
           onOpenChange={setApiKeySelectorOpen}
           onSelectKey={handleSelectProviderKey}

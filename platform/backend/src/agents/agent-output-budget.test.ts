@@ -128,6 +128,57 @@ describe("resolveAgentMaxOutputTokens", () => {
     });
   });
 
+  describe("rate-metered providers (reservation billed against a token bucket)", () => {
+    test("clamps groq to the rate-metered ceiling", () => {
+      // The reproduced failure: gpt-oss-120b advertises 65536 output tokens, so
+      // the turn reserved the full operator ceiling (32768) and Groq rejected a
+      // one-word message with a 413 — the reservation alone was 4x the tier's
+      // 8000 tokens-per-minute allowance.
+      expect(
+        resolveAgentMaxOutputTokens({
+          outputLength: 65536,
+          contextLength: 131072,
+          ceiling,
+          rateMeteredCeiling: 4096,
+          provider: "groq",
+        }),
+      ).toBe(4096);
+    });
+
+    test("leaves other providers untouched by the rate-metered ceiling", () => {
+      expect(
+        resolveAgentMaxOutputTokens({
+          outputLength: 65536,
+          contextLength: 131072,
+          ceiling,
+          rateMeteredCeiling: 4096,
+          provider: "openai",
+        }),
+      ).toBe(ceiling);
+    });
+
+    test("a model's smaller real ceiling still wins over the rate-metered one", () => {
+      expect(
+        resolveAgentMaxOutputTokens({
+          outputLength: 1024,
+          ceiling,
+          rateMeteredCeiling: 4096,
+          provider: "groq",
+        }),
+      ).toBe(1024);
+    });
+
+    test("omitting the rate-metered ceiling leaves groq uncapped", () => {
+      expect(
+        resolveAgentMaxOutputTokens({
+          outputLength: 65536,
+          ceiling,
+          provider: "groq",
+        }),
+      ).toBe(ceiling);
+    });
+  });
+
   test("caps shared-window models at half the context so the prompt has room", () => {
     // gpt-4: output 8192 == context 8192 — requesting the full output ceiling
     // would consume the entire window and 400 on every request.

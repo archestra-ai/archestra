@@ -1,5 +1,6 @@
 import {
   AnthropicErrorTypes,
+  ApiErrorTypeSchema,
   ArchestraInternalErrorCode,
   BedrockErrorTypes,
   ChatErrorCode,
@@ -110,6 +111,64 @@ describe("mapProviderError - context window exceeded", () => {
     );
 
     expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+    expect(result.isRetryable).toBe(false);
+  });
+});
+
+describe("mapProviderError - request exceeds the provider's token bucket", () => {
+  /**
+   * The Archestra envelope the chat route receives for a 413 the Groq adapter
+   * classified as a token-bucket rejection: the prompt plus the reserved output
+   * budget exceeds the whole per-minute allowance. `type` here is Archestra's
+   * own 413 label (see ApiError), not Groq's — Groq's body is already collapsed
+   * into `message` plus the normalized `internal_code` by this point.
+   */
+  function createGroqTokenBucketError(internalCode?: string) {
+    return {
+      name: "AI_APICallError",
+      statusCode: 413,
+      responseBody: JSON.stringify({
+        error: {
+          type: ApiErrorTypeSchema.enum.api_payload_too_large_error,
+          message:
+            "Request too large for model `openai/gpt-oss-120b` in organization `org_test` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Requested 34621, please reduce your message size and try again.",
+          internal_code: internalCode,
+        },
+      }),
+      isRetryable: false,
+    };
+  }
+
+  it("maps the normalized internal code to a non-retryable RequestExceedsRateLimit card", () => {
+    const result = mapProviderError(
+      createGroqTokenBucketError(
+        ArchestraInternalErrorCode.RequestExceedsRateLimit,
+      ),
+      "groq",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.RequestExceedsRateLimit);
+    expect(result.isRetryable).toBe(false);
+  });
+
+  it("never tells the user to start a new chat", () => {
+    // The whole defect: a one-word message was reported as an over-long
+    // conversation, so every remedy the card suggested was unreachable.
+    const result = mapProviderError(
+      createGroqTokenBucketError(
+        ArchestraInternalErrorCode.RequestExceedsRateLimit,
+      ),
+      "groq",
+    );
+
+    expect(result.message).not.toContain("new chat");
+    expect(result.message).toContain("per minute");
+  });
+
+  it("falls back to RequestTooLarge when the adapter did not classify it", () => {
+    const result = mapProviderError(createGroqTokenBucketError(), "groq");
+
+    expect(result.code).toBe(ChatErrorCode.RequestTooLarge);
     expect(result.isRetryable).toBe(false);
   });
 });
@@ -464,7 +523,9 @@ describe("mapProviderError - Anthropic", () => {
   });
 
   describe("413 - request_too_large", () => {
-    it("should map to ContextTooLong", () => {
+    it("should map to RequestTooLarge, not ContextTooLong", () => {
+      // Anthropic's 413 is a byte-size cap on the request body (attachments are
+      // the usual cause), so "start a new chat" was the wrong advice.
       const error = createAnthropicError(
         413,
         AnthropicErrorTypes.REQUEST_TOO_LARGE,
@@ -472,7 +533,7 @@ describe("mapProviderError - Anthropic", () => {
       );
       const result = mapProviderError(error, "anthropic");
 
-      expect(result.code).toBe(ChatErrorCode.ContextTooLong);
+      expect(result.code).toBe(ChatErrorCode.RequestTooLarge);
       expect(result.isRetryable).toBe(false);
     });
   });

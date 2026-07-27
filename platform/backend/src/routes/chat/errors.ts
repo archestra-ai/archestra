@@ -351,7 +351,8 @@ function extractArchestraInternalCode(
       code === ArchestraInternalErrorCode.ProviderInsufficientBalance ||
       code === ArchestraInternalErrorCode.UpstreamEmptyResponse ||
       code === ArchestraInternalErrorCode.UpstreamTimeout ||
-      code === ArchestraInternalErrorCode.ProviderOverloaded
+      code === ArchestraInternalErrorCode.ProviderOverloaded ||
+      code === ArchestraInternalErrorCode.RequestExceedsRateLimit
     ) {
       return code;
     }
@@ -944,7 +945,9 @@ function mapAnthropicErrorToCode(
       case AnthropicErrorTypes.NOT_FOUND:
         return ChatErrorCode.NotFound;
       case AnthropicErrorTypes.REQUEST_TOO_LARGE:
-        return ChatErrorCode.ContextTooLong;
+        // Anthropic's 413 is a byte-size cap on the request body, not a context
+        // overflow — attachments are the usual cause.
+        return ChatErrorCode.RequestTooLarge;
       case AnthropicErrorTypes.API_ERROR:
       case AnthropicErrorTypes.OVERLOADED:
         return ChatErrorCode.ServerError;
@@ -1142,7 +1145,11 @@ function mapStatusCodeToErrorCode(
     case 404:
       return ChatErrorCode.NotFound;
     case 413:
-      return ChatErrorCode.ContextTooLong;
+      // A 413 is about the size of *this request*, not the length of the
+      // conversation: providers return it for oversized payloads and for
+      // token-bucket rejections alike. Advising "start a new chat" is wrong for
+      // both — the request has to get smaller, not the history.
+      return ChatErrorCode.RequestTooLarge;
     case 422:
       return ChatErrorCode.InvalidRequest;
     case 429:
@@ -1822,6 +1829,15 @@ export function mapProviderError(
     // ("the provider is experiencing issues"). Reclassify to the retryable
     // EmptyResponse code so the card names what actually happened.
     errorCode = ChatErrorCode.EmptyResponse;
+  } else if (
+    normalizedCode === ArchestraInternalErrorCode.RequestExceedsRateLimit
+  ) {
+    // A token-bucket rejection arrives as a 413 the status mapper would call
+    // RequestTooLarge ("compress or split large attachments"), which points at
+    // the wrong thing entirely — the payload is usually tiny and the reserved
+    // output budget is what blew the per-minute allowance. Reclassify so the
+    // card names the real cause and stops advising a new chat.
+    errorCode = ChatErrorCode.RequestExceedsRateLimit;
   } else if (normalizedCode === ArchestraInternalErrorCode.UpstreamTimeout) {
     // Mid-stream HTTP status is already committed as 200, so the normalized
     // code preserves the upstream 504 semantics and retryability.

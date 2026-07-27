@@ -30,6 +30,7 @@ import config, {
   parseAuditLogRetentionDays,
   parseBodyLimit,
   parseChatMaxOutputTokens,
+  parseChatRateMeteredMaxOutputTokens,
   parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
@@ -913,6 +914,30 @@ describe("parseChatMaxOutputTokens", () => {
   test("should return default and warn for zero and out-of-range", () => {
     expect(parseChatMaxOutputTokens("0")).toBe(32768);
     expect(parseChatMaxOutputTokens("1000001")).toBe(32768);
+  });
+});
+
+describe("parseChatRateMeteredMaxOutputTokens", () => {
+  test("should return default 4096 when no value provided", () => {
+    expect(parseChatRateMeteredMaxOutputTokens(undefined)).toBe(4096);
+  });
+
+  test("should parse and trim a valid value", () => {
+    expect(parseChatRateMeteredMaxOutputTokens("  16000  ")).toBe(16000);
+  });
+
+  test("should return default and warn naming its own env var", () => {
+    expect(parseChatRateMeteredMaxOutputTokens("abc")).toBe(4096);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS value "abc", using default 4096',
+    );
+  });
+
+  test("should reject fractional, out-of-range and trailing-garbage values", () => {
+    expect(parseChatRateMeteredMaxOutputTokens("1.5")).toBe(4096);
+    expect(parseChatRateMeteredMaxOutputTokens("4096abc")).toBe(4096);
+    expect(parseChatRateMeteredMaxOutputTokens("0")).toBe(4096);
+    expect(parseChatRateMeteredMaxOutputTokens("1000001")).toBe(4096);
   });
 });
 

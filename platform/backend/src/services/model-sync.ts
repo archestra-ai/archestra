@@ -262,7 +262,20 @@ export function buildModelsToUpsert(params: {
   const { provider, models, modelsDevData } = params;
   const capabilitiesMap = buildCapabilitiesMap(modelsDevData, provider);
 
-  return models.map((model) => {
+  // A provider catalog can list the same model id more than once — Azure AI
+  // Foundry returns an entry per model/SKU, so `claude-opus-5` and friends
+  // arrive twice. Two rows sharing (provider, model_id) in one INSERT make
+  // Postgres reject the whole statement ("ON CONFLICT DO UPDATE command
+  // cannot affect row a second time"), and since bulkUpsert runs every batch
+  // in one transaction that rolls the entire sync back to zero models.
+  const uniqueModels = new Map<string, (typeof models)[number]>();
+  for (const model of models) {
+    if (!uniqueModels.has(model.id)) {
+      uniqueModels.set(model.id, model);
+    }
+  }
+
+  return [...uniqueModels.values()].map((model) => {
     // Bedrock/Azure model ids don't match models.dev keys, so derive pricing
     // from the underlying vendor entry (which also carries cache prices).
     const crossProviderPrices =

@@ -8,7 +8,42 @@ import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { CommonMessage, Tool } from "@/types";
-import { evaluateIfContextIsTrusted } from "./trusted-data";
+import {
+  evaluateIfContextIsTrusted,
+  sensitiveContextOriginFromBoundary,
+} from "./trusted-data";
+
+describe("sensitiveContextOriginFromBoundary", () => {
+  test("maps a tool-result boundary to a tool_result origin", () => {
+    expect(
+      sensitiveContextOriginFromBoundary({
+        kind: "tool_result",
+        reason: "tool_result_marked_untrusted",
+        toolCallId: "call-1",
+        toolName: "Bash",
+      }),
+    ).toEqual({ kind: "tool_result", toolName: "Bash" });
+  });
+
+  test("maps preexisting boundaries to their origin", () => {
+    expect(
+      sensitiveContextOriginFromBoundary({
+        kind: "preexisting_untrusted",
+        reason: "agent_configured_untrusted",
+      }),
+    ).toEqual({ kind: "agent_configured" });
+    expect(
+      sensitiveContextOriginFromBoundary({
+        kind: "preexisting_untrusted",
+        reason: "inherited_from_parent",
+      }),
+    ).toEqual({ kind: "inherited_from_parent" });
+  });
+
+  test("returns undefined when no boundary was tracked", () => {
+    expect(sensitiveContextOriginFromBoundary(undefined)).toBeUndefined();
+  });
+});
 
 describe("trusted-data evaluation (provider-agnostic)", () => {
   let agentId: string;

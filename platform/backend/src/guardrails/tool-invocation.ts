@@ -4,6 +4,7 @@ import {
   isAgentTool,
   isSkillTool,
   type PolicyDeniedMcpToolError,
+  type SensitiveContextOrigin,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_INVOCATION_DISABLED_FOR_CONVERSATION_REASON,
   type ToolInvocationEnforcementSurface,
@@ -66,6 +67,11 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
   toolInput: Record<string, unknown>;
   organizationId?: string;
   contextIsTrusted: boolean;
+  /**
+   * What flipped the caller's session into the sensitive state, when known.
+   * Names the origin in sensitive-context block reasons.
+   */
+  sensitiveContextOrigin?: SensitiveContextOrigin;
   externalAgentId?: string;
   enforceApprovalRequired?: boolean;
   /**
@@ -101,6 +107,7 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
   const policyContext = {
     teamIds,
     externalAgentId: params.externalAgentId,
+    sensitiveContextOrigin: params.sensitiveContextOrigin,
   };
 
   // Resolve the row that will execute (dynamic id if supplied, else the assigned

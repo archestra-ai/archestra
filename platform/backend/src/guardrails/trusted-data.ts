@@ -2,6 +2,7 @@ import {
   buildTrustedDataBlockedContentNotice,
   extractMcpToolError,
   isSeededAppRenderToolResult,
+  type SensitiveContextOrigin,
 } from "@archestra/shared";
 import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -294,6 +295,26 @@ export async function evaluateIfContextIsTrusted(
     dualLlmAnalyses,
     unsafeContextBoundary,
   };
+}
+
+/**
+ * Map the tracked unsafe-context boundary to the origin descriptor embedded in
+ * sensitive-context policy block reasons, so the refusal names what flipped
+ * the session (a specific tool's result, agent config, or delegation).
+ */
+export function sensitiveContextOriginFromBoundary(
+  boundary: UnsafeContextBoundary | undefined,
+): SensitiveContextOrigin | undefined {
+  if (!boundary) {
+    return undefined;
+  }
+  if (boundary.kind === "tool_result") {
+    return { kind: "tool_result", toolName: boundary.toolName };
+  }
+  if (boundary.reason === UNSAFE_CONTEXT_BOUNDARY_REASON.inheritedFromParent) {
+    return { kind: "inherited_from_parent" };
+  }
+  return { kind: "agent_configured" };
 }
 
 /**

@@ -13,7 +13,10 @@ import type {
 } from "openai/resources/responses/responses";
 import config from "@/config";
 import { metrics } from "@/observability";
-import { decodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import {
+  decodeOpenAiCodexCredential,
+  isOpenAiCodexCredential,
+} from "@/services/openai-codex-credentials";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -75,6 +78,13 @@ export const openAiResponsesAdapterFactory: LLMProvider<
 
   extractApiKey(headers: OpenAiResponsesHeaders): string | undefined {
     return headers.authorization;
+  },
+
+  isSubscriptionCredential(apiKey: string | undefined): boolean {
+    // ChatGPT-subscription (Codex) credentials are encoded with a marker
+    // prefix; they are covered by a flat-rate plan and must not burn metered
+    // cost limits (same as Anthropic sk-ant-oat… OAuth tokens).
+    return isOpenAiCodexCredential(apiKey);
   },
 
   getBaseUrl(): string | undefined {

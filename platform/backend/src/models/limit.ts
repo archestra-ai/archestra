@@ -1475,6 +1475,9 @@ async function getDefaultUserLimitUsage(params: {
 }) {
   const conditions: SQL[] = [
     eq(schema.interactionsTable.userId, params.userId),
+    // Subscription traffic is covered by a plan ($0 billed spend) and must not
+    // burn default user limits — same rule as updateUsageAfterInteraction.
+    eq(schema.interactionsTable.billingMode, "metered"),
     buildUsagePeriodStartCondition(params.cleanupInterval),
   ];
 

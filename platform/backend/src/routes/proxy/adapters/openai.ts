@@ -1479,6 +1479,13 @@ export const openaiAdapterFactory: LLMProvider<
     return headers.authorization;
   },
 
+  isSubscriptionCredential(apiKey: string | undefined): boolean {
+    // ChatGPT-subscription (Codex) credentials are encoded with a marker
+    // prefix; they are covered by a flat-rate plan and must not burn metered
+    // cost limits (same as Anthropic sk-ant-oat… OAuth tokens).
+    return isOpenAiCodexCredential(apiKey);
+  },
+
   getBaseUrl(): string | undefined {
     return config.llm.openai.baseUrl;
   },

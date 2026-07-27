@@ -33,6 +33,7 @@ import { ApiError } from "@/types";
 import { isPrivateOrLoopbackHostname } from "@/utils/network";
 import AccountModel from "./account";
 import MemberModel from "./member";
+import OrganizationModel from "./organization";
 
 interface RoleMappingContext {
   token?: Record<string, unknown>;
@@ -221,6 +222,10 @@ class IdentityProviderModel {
       );
     }
 
+    // Captured outside the try so the terminal fallback below can still resolve
+    // the organization's default role after an evaluation error.
+    let idpOrganizationId: string | null = null;
+
     try {
       // Fetch the identity provider configuration to get role mapping rules
       logger.debug(
@@ -230,6 +235,7 @@ class IdentityProviderModel {
       const idpProvider = await IdentityProviderModel.findByProviderId(
         provider.providerId,
       );
+      idpOrganizationId = idpProvider?.organizationId ?? null;
 
       logger.debug(
         {
@@ -344,7 +350,9 @@ class IdentityProviderModel {
               providerId: provider.providerId,
             },
           },
-          MEMBER_ROLE_NAME,
+          await IdentityProviderModel.resolveDefaultRole(
+            idpProvider.organizationId,
+          ),
         );
 
         logger.debug(
@@ -459,14 +467,16 @@ class IdentityProviderModel {
     }
 
     // Fallback to default role when no role mapping is configured
+    const fallbackRole =
+      await IdentityProviderModel.resolveDefaultRole(idpOrganizationId);
     logger.debug(
       {
         providerId: provider?.providerId,
-        fallbackRole: MEMBER_ROLE_NAME,
+        fallbackRole,
       },
       "[resolveSsoRole] Using fallback role because no mapping was configured or evaluation failed",
     );
-    return MEMBER_ROLE_NAME;
+    return fallbackRole;
   }
 
   /**
@@ -946,6 +956,38 @@ class IdentityProviderModel {
       domainVerified: row.domainVerified ?? null,
       ssoLoginEnabled: row.ssoLoginEnabled,
     };
+  }
+
+  /**
+   * Terminal fallback role for a first-time SSO login: the organization's
+   * configured default role for new users, which itself falls back to
+   * "member". This keeps SSO in step with the other provisioning paths —
+   * invitation acceptance and ChatOps auto-provisioning both already honour
+   * the org setting.
+   *
+   * Only reached when the IdP has no role mapping at all, or its rules
+   * produced no match and it defines no `defaultRole` of its own; an explicit
+   * per-IdP default still wins over the org-wide one.
+   *
+   * Never throws: a failure to read the setting degrades to "member" rather
+   * than blocking the login.
+   */
+  private static async resolveDefaultRole(
+    organizationId: string | null,
+  ): Promise<string> {
+    if (!organizationId) {
+      return MEMBER_ROLE_NAME;
+    }
+
+    try {
+      return await OrganizationModel.getDefaultMemberRole(organizationId);
+    } catch (error) {
+      logger.error(
+        { err: error, organizationId },
+        "[resolveSsoRole] Failed to read the organization default role, falling back to the member role",
+      );
+      return MEMBER_ROLE_NAME;
+    }
   }
 }
 

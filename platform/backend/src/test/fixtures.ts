@@ -192,6 +192,7 @@ async function makeOrganization(
       | "defaultDiscoveredToolInvocationPolicy"
       | "defaultDiscoveredToolResultPolicy"
       | "defaultEnvironmentNamespace"
+      | "defaultMemberRole"
       | "defaultNetworkPolicy"
     >
   > = {},

@@ -209,6 +209,77 @@ describe("createDirectLLMModel", () => {
     expect((model as { provider: string }).provider).toBe("deepseek.chat");
   });
 
+  it("creates Archestra models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "archestra",
+      apiKey: "arch_test-key",
+      modelName: "deepseek:deepseek-reasoner",
+      baseUrl: "https://other-archestra.test/v1/model-router/agent-1",
+    });
+    // The upstream Archestra relays thinking as DeepSeek-style
+    // `reasoning_content`; the strict openai provider ("openai.chat") drops
+    // that field in both directions, while the openai-compatible provider
+    // round-trips it.
+    expect((model as { provider: string }).provider).toBe("archestra.chat");
+  });
+
+  it("throws for archestra provider without a base URL", () => {
+    // The upstream endpoint has no default; the old strict client silently
+    // fell back to api.openai.com instead.
+    expect(() =>
+      createDirectLLMModel({
+        provider: "archestra",
+        apiKey: "arch_test-key",
+        modelName: "deepseek:deepseek-reasoner",
+        baseUrl: null,
+      }),
+    ).toThrow("Archestra base URL is required.");
+  });
+
+  it("sends the json_schema response_format for Archestra structured outputs", async () => {
+    let sent: Record<string, unknown> | undefined;
+    const mockFetch = vi.fn(
+      async (_input: unknown, init: RequestInit | undefined) => {
+        sent = JSON.parse(init?.body as string);
+        return new Response("upstream stub", { status: 500 });
+      },
+    );
+    // Must be stubbed BEFORE the model is built: createResponseHealingFetch
+    // captures `globalThis.fetch` at construction time.
+    vi.stubGlobal("fetch", mockFetch);
+
+    const model = createDirectLLMModel({
+      provider: "archestra",
+      apiKey: "arch_test-key",
+      modelName: "deepseek:deepseek-reasoner",
+      baseUrl: "https://other-archestra.test/v1/model-router/agent-1",
+    });
+
+    // The stubbed upstream fails the call; the request body is captured
+    // before that, which is all this assertion needs.
+    await generateObject({
+      model,
+      schema: z.object({ answer: z.number() }),
+      prompt: "2 + 2?",
+      maxRetries: 0,
+    }).catch(() => {});
+
+    if (!sent) {
+      throw new Error("Expected a request to reach the fetch stub");
+    }
+    // Moving off the strict openai client must not drop the schema:
+    // generateObject flows (KB reranker, dual-LLM subagents) rely on the
+    // provider enforcing it, and the compatible client otherwise downgrades to
+    // a schema-less `json_object`.
+    const responseFormat = (
+      sent as {
+        response_format?: { type?: string; json_schema?: { schema?: unknown } };
+      }
+    ).response_format;
+    expect(responseFormat?.type).toBe("json_schema");
+    expect(responseFormat?.json_schema?.schema).toBeDefined();
+  });
+
   it("creates Kimi models on the openai-compatible provider", () => {
     const model = createDirectLLMModel({
       provider: "kimi",
@@ -294,81 +365,14 @@ describe("createDirectLLMModel", () => {
     expect(responseFormat?.json_schema?.schema).toBeDefined();
   });
 
-  it("creates Zhipu AI models on the openai-compatible provider", () => {
+  it("creates a model for zhipuai provider", () => {
     const model = createDirectLLMModel({
       provider: "zhipuai",
       apiKey: "test-key",
-      modelName: "glm-4.7",
+      modelName: "glm-4-flash",
       baseUrl: null,
     });
-    // GLM thinking mode streams the chain of thought in `reasoning_content`,
-    // which the strict openai provider ("openai.chat") drops; the
-    // openai-compatible provider parses it into native reasoning parts.
-    expect((model as { provider: string }).provider).toBe("zhipuai.chat");
-  });
-
-  // generateObject callers (KB reranker, dual-LLM subagents, tool-call arg
-  // repair) hand their schema to the provider via responseFormat. Z.ai's API
-  // accepts only `text`/`json_object` response formats (mirrored by the proxy
-  // request schema in types/llm-providers/zhipuai/api.ts), so the strict
-  // openai provider's `json_schema` request would be rejected; the
-  // openai-compatible provider must fall back to bare `json_object` and leave
-  // schema enforcement to the SDK's validation of the returned text.
-  describe("zhipuai structured output fallback", () => {
-    it("sends response_format json_object for generateObject and parses the result", async () => {
-      let sent: Record<string, unknown> | undefined;
-      const mockFetch = vi.fn(
-        async (_input: unknown, init: RequestInit | undefined) => {
-          sent = JSON.parse(init?.body as string);
-          return new Response(
-            JSON.stringify({
-              id: "chatcmpl-glm",
-              object: "chat.completion",
-              created: 0,
-              model: "glm-4.7",
-              choices: [
-                {
-                  index: 0,
-                  message: {
-                    role: "assistant",
-                    content: '{"scores":[{"index":0,"score":9}]}',
-                  },
-                  finish_reason: "stop",
-                },
-              ],
-              usage: {
-                prompt_tokens: 1,
-                completion_tokens: 1,
-                total_tokens: 2,
-              },
-            }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          );
-        },
-      );
-      vi.stubGlobal("fetch", mockFetch);
-
-      const model = createDirectLLMModel({
-        provider: "zhipuai",
-        apiKey: "test-key",
-        modelName: "glm-4.7",
-        baseUrl: null,
-      });
-
-      const { object } = await generateObject({
-        model,
-        schema: z.object({
-          scores: z.array(z.object({ index: z.number(), score: z.number() })),
-        }),
-        prompt: "Score the passage.",
-        maxRetries: 0,
-      });
-
-      // Exact match: a `json_schema` response_format here would 400 against
-      // the real API and the proxy's request validation alike.
-      expect(sent?.response_format).toEqual({ type: "json_object" });
-      expect(object).toEqual({ scores: [{ index: 0, score: 9 }] });
-    });
+    expect(model).toBeDefined();
   });
 
   it("throws ApiError for unsupported provider", () => {

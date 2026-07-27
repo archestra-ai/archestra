@@ -25,6 +25,12 @@
  * api.deepseek.com — does NOT waive it for provider-issued tool_call ids. That
  * server-side waiver is precisely what hides this bug in manual testing, so the
  * mock must never replicate it or the regression becomes invisible again.
+ *
+ * The suite runs once per provider case: native DeepSeek, and the archestra
+ * provider — another Archestra instance's model router relaying the same
+ * OpenAI wire (with provider-qualified model ids like
+ * `deepseek:deepseek-v4-flash`) — which switched to the openai-compatible
+ * client for the same reason.
  */
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { jsonSchema, tool } from "ai";
@@ -176,7 +182,28 @@ function everyToolCallTurnHasReasoning(messages: unknown[]): boolean {
   });
 }
 
-describe("POST /api/chat DeepSeek reasoning_content round-trip (#4951)", () => {
+const PROVIDER_CASES = [
+  {
+    caseName: "DeepSeek",
+    provider: "deepseek" as const,
+    externalId: "deepseek/deepseek-v4-flash",
+    modelId: "deepseek-v4-flash",
+  },
+  {
+    caseName: "Archestra (upstream DeepSeek)",
+    provider: "archestra" as const,
+    externalId: "archestra/deepseek:deepseek-v4-flash",
+    modelId: "deepseek:deepseek-v4-flash",
+  },
+];
+
+describe.each(
+  PROVIDER_CASES,
+)("POST /api/chat $caseName reasoning_content round-trip (#4951)", ({
+  provider,
+  externalId,
+  modelId,
+}) => {
   const server = useMswServer();
 
   let app: FastifyInstanceWithZod;
@@ -202,9 +229,9 @@ describe("POST /api/chat DeepSeek reasoning_content round-trip (#4951)", () => {
       });
 
       const model = await ModelModel.create({
-        externalId: "deepseek/deepseek-v4-flash",
-        provider: "deepseek",
-        modelId: "deepseek-v4-flash",
+        externalId,
+        provider,
+        modelId,
         supportsToolCalling: true,
         contextLength: 128000,
         outputLength: 8192,
@@ -223,15 +250,15 @@ describe("POST /api/chat DeepSeek reasoning_content round-trip (#4951)", () => {
       // pointed straight at the mock upstream (the in-process proxy hop is
       // covered by the provider matrix).
       const llmModel = createOpenAICompatible({
-        name: "deepseek",
+        name: provider,
         apiKey: "test-key",
         baseURL: UPSTREAM_BASE_URL,
         includeUsage: true,
-      }).chatModel("deepseek-v4-flash");
+      }).chatModel(modelId);
 
       mockCreateLLMModelForAgent.mockResolvedValue({
         model: llmModel,
-        provider: "deepseek",
+        provider,
         apiKeySource: "org",
         anthropicNativeEndpoint: false,
       });

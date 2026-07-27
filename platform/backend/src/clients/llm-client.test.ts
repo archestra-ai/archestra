@@ -394,6 +394,46 @@ describe("createDirectLLMModel", () => {
     expect(responseFormat?.json_schema?.schema).toBeDefined();
   });
 
+  it("sends the json_schema response_format for Azure open-model structured outputs", async () => {
+    let sent: Record<string, unknown> | undefined;
+    const mockFetch = vi.fn(
+      async (_input: unknown, init: RequestInit | undefined) => {
+        sent = JSON.parse(init?.body as string);
+        return new Response("upstream stub", { status: 500 });
+      },
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const model = createDirectLLMModel({
+      provider: "azure",
+      apiKey: "test-key",
+      modelName: "DeepSeek-R1",
+      baseUrl: "https://my-resource.services.ai.azure.com/openai/v1",
+    });
+
+    await generateObject({
+      model,
+      schema: z.object({ answer: z.number() }),
+      prompt: "2 + 2?",
+      maxRetries: 0,
+    }).catch(() => {});
+
+    if (!sent) {
+      throw new Error("Expected a request to reach the fetch stub");
+    }
+    // Azure open models moved from the strict openai client, which always sent
+    // json_schema, to the compatible one, which downgrades to a schema-less
+    // `json_object` unless asked — silently breaking every generateObject flow
+    // (KB reranker, dual-LLM subagents) pointed at an Azure deployment.
+    const responseFormat = (
+      sent as {
+        response_format?: { type?: string; json_schema?: { schema?: unknown } };
+      }
+    ).response_format;
+    expect(responseFormat?.type).toBe("json_schema");
+    expect(responseFormat?.json_schema?.schema).toBeDefined();
+  });
+
   it("creates a model for zhipuai provider", () => {
     const model = createDirectLLMModel({
       provider: "zhipuai",

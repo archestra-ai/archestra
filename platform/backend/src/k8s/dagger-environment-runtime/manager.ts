@@ -63,9 +63,12 @@ interface OrganizationDefaultEngineTarget {
 const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.5";
 const ENGINE_CONTAINER = "dagger-engine";
 // Engine resources (cpu/memory requests, memory limit, buildkit cache PVC size)
-// come from config so small/local clusters can override the production defaults.
-// No CPU limit (build throughput); the memory limit caps a runaway build so it
-// can't OOM the node.
+// come from config so small/local clusters can override the defaults. No CPU
+// limit (build throughput). The memory limit caps the buildkit daemon; the
+// sandboxes it runs are capped separately by `engineStartupScript` below,
+// because buildkit puts them in a cgroup beside this pod rather than under it.
+// Their usage therefore does not appear in `kubectl top pod`, so the memory
+// request has to reserve node capacity for both.
 // Mirrors the chart engine config: disables insecure root capabilities and
 // bounds the buildkit GC so the cache PVC can't fill unreclaimed. Read by the
 // engine from /etc/dagger/engine.json.
@@ -455,6 +458,39 @@ class DaggerEnvironmentRuntimeManager {
       // rarely changes; bumping ENGINE_IMAGE needs a manual StatefulSet delete).
       // The per-reconcile mutation a target actually drives — its egress policy
       // — is applied below via the NetworkPolicy, not the engine spec.
+      await this.warnIfSandboxMemoryUncapped(appsApi, engineId, namespace);
+    }
+  }
+
+  /**
+   * An engine created before the sandbox memory cap keeps its original command
+   * for as long as it lives, so it goes on running sandboxes unbounded. Nothing
+   * repairs that on its own — say so, since the alternative is a silent gap in
+   * a control the deployment believes it has.
+   */
+  private async warnIfSandboxMemoryUncapped(
+    appsApi: k8s.AppsV1Api,
+    engineId: string,
+    namespace: string,
+  ): Promise<void> {
+    const name = daggerEngineDeploymentName(engineId);
+    try {
+      const existing = await appsApi.readNamespacedStatefulSet({
+        name,
+        namespace,
+      });
+      const command =
+        existing.spec?.template.spec?.containers[0]?.command?.join("\n") ?? "";
+      if (command.includes(sandboxCgroupName(engineId))) return;
+      logger.warn(
+        { engineId, namespace, statefulSet: name },
+        "[DaggerEnvRuntime] engine predates the sandbox memory cap and runs sandboxes unbounded; delete the StatefulSet to recreate it",
+      );
+    } catch (error) {
+      logger.debug(
+        { err: error, engineId, namespace },
+        "[DaggerEnvRuntime] could not check whether the engine caps sandbox memory",
+      );
     }
   }
 
@@ -507,6 +543,24 @@ class DaggerEnvironmentRuntimeManager {
               {
                 name: ENGINE_CONTAINER,
                 image: ENGINE_IMAGE,
+                command: [
+                  "/bin/sh",
+                  "-c",
+                  engineStartupScript(engineId, engine.sandboxMemoryMaxBytes),
+                ],
+                lifecycle: {
+                  // The sandbox cgroup is created in the host's tree, so it
+                  // outlives the pod that made it and nothing else reaps it.
+                  preStop: {
+                    exec: {
+                      command: [
+                        "/bin/sh",
+                        "-c",
+                        `rmdir ${sandboxCgroupPath(engineId)} 2>/dev/null || true`,
+                      ],
+                    },
+                  },
+                },
                 securityContext: { privileged: true },
                 resources: {
                   requests: {
@@ -676,6 +730,72 @@ class DaggerEnvironmentRuntimeManager {
 
 function engineConfigMapName(engineId: string): string {
   return `${daggerEngineDeploymentName(engineId)}-config`;
+}
+
+/**
+ * Bounds an engine's sandbox containers, then hands off to the image's own
+ * entrypoint.
+ *
+ * Nothing otherwise limits what the sandboxes hold: buildkit runs them in a
+ * cgroup beside the engine pod rather than under it, so no Kubernetes limit
+ * reaches them, and the per-run cap is an RLIMIT_AS, which the kernel applies
+ * per process — one run that spawns several holds a multiple of it. Capping
+ * that cgroup makes a runaway run die on its own while the daemon and every
+ * other run keep going. The pod's own limit is deliberately not used for this:
+ * the kernel would OOM-kill the engine container instead, taking every
+ * in-flight run with it.
+ *
+ * The cgroup is named per engine because a privileged pod sees the host's
+ * cgroup tree, so engines sharing a node would otherwise share one budget and
+ * one environment's sandboxes could starve another's. `defaultCgroupParent` is
+ * what points buildkit at it, and lives in the legacy `engine.toml` because
+ * `engine.json` has no worker settings; the two are read together, with
+ * `engine.json` winning per option, so the hardening it carries still applies.
+ *
+ * The cap is applied before the engine starts, and retried in the background
+ * where the memory controller is not delegated yet. That retry is detached so a
+ * cluster which never delegates it (cgroup v1) leaves the engine serving
+ * unbounded sandboxes rather than crash-looping with no repair, since engine
+ * StatefulSets are created once and never reconciled.
+ */
+function engineStartupScript(
+  engineId: string,
+  sandboxMemoryMaxBytes: number,
+): string {
+  const cgroup = sandboxCgroupName(engineId);
+  const path = sandboxCgroupPath(engineId);
+  return [
+    "set -eu",
+    `printf '[worker.oci]\\n  defaultCgroupParent = "/${cgroup}"\\n' > /etc/dagger/engine.toml`,
+    "cap() {",
+    `  mkdir -p ${path} 2>/dev/null &&`,
+    `  echo ${sandboxMemoryMaxBytes} > ${path}/memory.max 2>/dev/null &&`,
+    // Swap is not bounded by memory.max, and this cgroup is not under kubepods
+    // so the kubelet's swap policy never reaches it. Absent on kernels built
+    // without swap accounting, hence best-effort.
+    `  { echo 0 > ${path}/memory.swap.max 2>/dev/null || true; }`,
+    "}",
+    "if ! cap; then",
+    "  (",
+    "    i=0",
+    "    while [ $i -lt 60 ]; do",
+    "      if cap; then exit 0; fi",
+    "      i=$((i + 1))",
+    "      sleep 1",
+    "    done",
+    "    echo 'archestra: sandbox memory is NOT capped (needs cgroup v2)' >&2",
+    "  ) &",
+    "fi",
+    "exec /usr/local/bin/dagger-entrypoint.sh",
+  ].join("\n");
+}
+
+function sandboxCgroupName(engineId: string): string {
+  return `archestra-sandbox-${engineId}`;
+}
+
+function sandboxCgroupPath(engineId: string): string {
+  return `/sys/fs/cgroup/${sandboxCgroupName(engineId)}`;
 }
 
 // Fixed namespace for deriving an organization's default-engine id. Arbitrary

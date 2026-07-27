@@ -24,6 +24,7 @@ import config, {
   getOtlpAuthHeaders,
   getTrustedOrigins,
   isCodeRuntimeEnabled,
+  k8sMemoryQuantityToBytes,
   parseActiveChatRunPollIntervalMs,
   parseAnthropicWifConfig,
   parseAuditLogRetentionDays,
@@ -48,6 +49,7 @@ import config, {
   parseProcessType,
   parseRefreshTokenReuseGraceSeconds,
   parseSampleRate,
+  parseSandboxMemoryMaxBytes,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
   resolveRenderBaseUrl,
@@ -1974,6 +1976,76 @@ describe("isCodeRuntimeEnabled", () => {
 
   test("nothing configured stays off", () => {
     expect(isCodeRuntimeEnabled(base)).toBe(false);
+  });
+});
+
+describe("k8sMemoryQuantityToBytes", () => {
+  test("converts binary and decimal suffixes", () => {
+    expect(k8sMemoryQuantityToBytes("4Gi")).toBe(4 * 1024 ** 3);
+    expect(k8sMemoryQuantityToBytes("512Mi")).toBe(512 * 1024 ** 2);
+    expect(k8sMemoryQuantityToBytes("1536Mi")).toBe(1536 * 1024 ** 2);
+    // Decimal suffixes are a different size from their binary namesakes, so
+    // treating `G` as `Gi` would compare the ceiling against the wrong number.
+    expect(k8sMemoryQuantityToBytes("1G")).toBe(1000 ** 3);
+    expect(k8sMemoryQuantityToBytes("1048576")).toBe(1048576);
+  });
+
+  test("returns undefined for anything that is not a quantity", () => {
+    expect(k8sMemoryQuantityToBytes("4GB")).toBeUndefined();
+    expect(k8sMemoryQuantityToBytes("lots")).toBeUndefined();
+    expect(k8sMemoryQuantityToBytes("")).toBeUndefined();
+  });
+});
+
+describe("parseSandboxMemoryMaxBytes", () => {
+  test("defaults to 5Gi and resolves a quantity to bytes", () => {
+    expect(parseSandboxMemoryMaxBytes(undefined, "6Gi")).toBe(5 * 1024 ** 3);
+    expect(parseSandboxMemoryMaxBytes("1Gi", "6Gi")).toBe(1024 ** 3);
+    expect(parseSandboxMemoryMaxBytes("512Mi", "6Gi")).toBe(512 * 1024 ** 2);
+  });
+
+  // The value lands in a cgroup's memory.max. Read as a bare number, "5Gi"
+  // would become a 5-byte ceiling and kill every run that allocated anything,
+  // so an unparseable value has to fall back rather than be honoured.
+  test("falls back and reports a value that is not a quantity", () => {
+    const logged = vi.mocked(logger.error);
+    logged.mockClear();
+    expect(parseSandboxMemoryMaxBytes("5 gigabytes", "6Gi")).toBe(
+      5 * 1024 ** 3,
+    );
+    expect(logged).toHaveBeenCalledTimes(1);
+
+    logged.mockClear();
+    expect(parseSandboxMemoryMaxBytes("0", "6Gi")).toBe(5 * 1024 ** 3);
+    expect(logged).toHaveBeenCalledTimes(1);
+  });
+
+  // The ceiling bounds a cgroup the scheduler cannot see, so the request is the
+  // only thing reserving node capacity for it. At or above the request the
+  // engine can hold more than it reserved, and the shortfall is charged to
+  // whatever else the node runs — the value still applies, but it is flagged.
+  test("flags a ceiling that is not below the engine's memory request", () => {
+    const logged = vi.mocked(logger.error);
+    logged.mockClear();
+    expect(parseSandboxMemoryMaxBytes("4Gi", "4Gi")).toBe(4 * 1024 ** 3);
+    expect(logged).toHaveBeenCalledTimes(1);
+
+    logged.mockClear();
+    parseSandboxMemoryMaxBytes("1Gi", "512Mi");
+    expect(logged).toHaveBeenCalledTimes(1);
+
+    logged.mockClear();
+    parseSandboxMemoryMaxBytes("1Gi", "4Gi");
+    expect(logged).not.toHaveBeenCalled();
+  });
+
+  test("does not flag when the request is not a parseable quantity", () => {
+    const logged = vi.mocked(logger.error);
+    logged.mockClear();
+    expect(parseSandboxMemoryMaxBytes("4Gi", "not-a-quantity")).toBe(
+      4 * 1024 ** 3,
+    );
+    expect(logged).not.toHaveBeenCalled();
   });
 });
 

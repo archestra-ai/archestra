@@ -226,18 +226,20 @@ describe("buildEngineStatefulSet", () => {
   it("sources engine resources from config so small clusters can override them", () => {
     const engine = config.daggerRuntime.engine;
     const original = { ...engine };
+    // Every value differs from the shipped default, so hardcoding a default in
+    // buildEngineStatefulSet fails here instead of passing by coincidence.
     Object.assign(engine, {
       cpuRequest: "500m",
-      memoryRequest: "2Gi",
-      memoryLimit: "4Gi",
+      memoryRequest: "512Mi",
+      memoryLimit: "1Gi",
       cacheStorage: "10Gi",
     });
     try {
       const sts = build();
       const container = sts.spec?.template.spec?.containers[0];
       expect(container?.resources?.requests?.cpu).toBe("500m");
-      expect(container?.resources?.requests?.memory).toBe("2Gi");
-      expect(container?.resources?.limits?.memory).toBe("4Gi");
+      expect(container?.resources?.requests?.memory).toBe("512Mi");
+      expect(container?.resources?.limits?.memory).toBe("1Gi");
       expect(
         sts.spec?.volumeClaimTemplates?.[0].spec?.resources?.requests?.storage,
       ).toBe("10Gi");
@@ -294,8 +296,8 @@ describe("buildEngineStatefulSet", () => {
     const container = podSpec?.containers[0];
     // Resources mirror the dagger-runtime chart engine.
     expect(container?.resources?.requests?.cpu).toBe("2");
-    expect(container?.resources?.requests?.memory).toBe("8Gi");
-    expect(container?.resources?.limits?.memory).toBe("16Gi");
+    expect(container?.resources?.requests?.memory).toBe("6Gi");
+    expect(container?.resources?.limits?.memory).toBe("6Gi");
 
     // engine.json is mounted from the per-env ConfigMap (disables insecure root
     // capabilities + bounds the buildkit GC).
@@ -307,6 +309,55 @@ describe("buildEngineStatefulSet", () => {
     expect(
       podSpec?.volumes?.find((v) => v.name === "config")?.configMap?.name,
     ).toBe("dagger-engine-abcdef00-1111-2222-3333-444455556666-config");
+  });
+
+  it("caps sandbox memory in a per-engine cgroup and keeps the image entrypoint", () => {
+    const engine = config.daggerRuntime.engine;
+    const original = { ...engine };
+    Object.assign(engine, { sandboxMemoryMaxBytes: 1234567 });
+    try {
+      const script = build().spec?.template.spec?.containers[0].command?.[2];
+      const cgroup = "archestra-sandbox-abcdef00-1111-2222-3333-444455556666";
+      // The configured ceiling reaches the cgroup verbatim; a stale or rounded
+      // value would silently leave sandboxes bounded at the wrong number.
+      expect(script).toContain(
+        `echo 1234567 > /sys/fs/cgroup/${cgroup}/memory.max`,
+      );
+      // Named per engine, not shared: a privileged pod sees the host's cgroup
+      // tree, so engines on one node would otherwise share a single budget.
+      expect(script).toContain(`defaultCgroupParent = "/${cgroup}"`);
+      // Buildkit only puts sandboxes there if pointed at it, and only reads
+      // that from the legacy config file.
+      expect(script).toContain("> /etc/dagger/engine.toml");
+      // The image entrypoint has to be what ends up running: it delegates the
+      // cgroup controllers this cap depends on and raises the open-file limit.
+      expect(script).toContain("exec /usr/local/bin/dagger-entrypoint.sh");
+      // A cluster that never delegates the memory controller must end up with
+      // an unbounded engine rather than a crash-looping one, since engine
+      // StatefulSets are created once and never reconciled afterwards.
+      expect(script).toContain("archestra: sandbox memory is NOT capped");
+      // ...and the retry has to be backgrounded to stay non-fatal: run inline,
+      // it holds every engine on such a cluster for 60 sleeps before the
+      // entrypoint starts.
+      expect(script).toContain(") &");
+      // memory.max does not bound swap, and this cgroup is not under kubepods,
+      // so the kubelet's swap policy never reaches it — a runaway run would
+      // swap past the ceiling instead of being killed.
+      expect(script).toContain(
+        `echo 0 > /sys/fs/cgroup/${cgroup}/memory.swap.max`,
+      );
+    } finally {
+      Object.assign(engine, original);
+    }
+  });
+
+  it("reaps the sandbox cgroup it created in the host tree", () => {
+    const container = build().spec?.template.spec?.containers[0];
+    // Created outside the pod's own tree, so it survives the pod unless the
+    // pod removes it on the way out.
+    expect(container?.lifecycle?.preStop?.exec?.command?.join(" ")).toContain(
+      "rmdir /sys/fs/cgroup/archestra-sandbox-abcdef00-1111-2222-3333-444455556666",
+    );
   });
 });
 

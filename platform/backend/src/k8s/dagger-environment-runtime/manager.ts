@@ -527,7 +527,7 @@ class DaggerEnvironmentRuntimeManager {
                       command: [
                         "/bin/sh",
                         "-c",
-                        `rmdir /sys/fs/cgroup/${sandboxCgroupName(engineId)} 2>/dev/null || true`,
+                        `rmdir ${sandboxCgroupPath(engineId)} 2>/dev/null || true`,
                       ],
                     },
                   },
@@ -723,18 +723,18 @@ function engineConfigMapName(engineId: string): string {
  * `engine.json` has no worker settings; the two are read together, with
  * `engine.json` winning per option, so the hardening it carries still applies.
  *
- * Applying the cap has to wait for the image entrypoint to delegate the memory
- * controller, hence the retry; it runs in the background so a cluster that
- * never delegates it (cgroup v1) leaves the engine serving unbounded sandboxes
- * rather than crash-looping with no repair, since engine StatefulSets are
- * created once and never reconciled.
+ * The cap is applied before the engine starts, and retried in the background
+ * where the memory controller is not delegated yet. That retry is detached so a
+ * cluster which never delegates it (cgroup v1) leaves the engine serving
+ * unbounded sandboxes rather than crash-looping with no repair, since engine
+ * StatefulSets are created once and never reconciled.
  */
 function engineStartupScript(
   engineId: string,
   sandboxMemoryMaxBytes: number,
 ): string {
   const cgroup = sandboxCgroupName(engineId);
-  const path = `/sys/fs/cgroup/${cgroup}`;
+  const path = sandboxCgroupPath(engineId);
   return [
     "set -eu",
     `printf '[worker.oci]\\n  defaultCgroupParent = "/${cgroup}"\\n' > /etc/dagger/engine.toml`,
@@ -763,6 +763,10 @@ function engineStartupScript(
 
 function sandboxCgroupName(engineId: string): string {
   return `archestra-sandbox-${engineId}`;
+}
+
+function sandboxCgroupPath(engineId: string): string {
+  return `/sys/fs/cgroup/${sandboxCgroupName(engineId)}`;
 }
 
 // Fixed namespace for deriving an organization's default-engine id. Arbitrary

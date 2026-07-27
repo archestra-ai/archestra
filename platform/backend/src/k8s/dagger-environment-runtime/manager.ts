@@ -258,6 +258,21 @@ class DaggerEnvironmentRuntimeManager {
     await this.teardownEngine(deriveOrgEngineId(organization.id), from);
   }
 
+  /**
+   * Delete an environment's engine when the environment is removed. A deleted
+   * environment otherwise leaves its privileged StatefulSet and retained cache
+   * PVC running with nothing routing to them. Mirrors reconcileEnvironment's
+   * guard — a per-environment engine exists even behind a BYO runner host, so
+   * this does not early-return on one. Best-effort and idempotent.
+   */
+  async teardownEnvironmentEngine(environment: Environment): Promise<void> {
+    if (!this.isEnabled()) return;
+    await this.teardownEngine(
+      environment.id,
+      this.engineNamespace(environment.namespace),
+    );
+  }
+
   // Remove one engine's StatefulSet, its cache PVC (the volumeClaimTemplate is
   // Retain, so deleting the StatefulSet alone would strand it — safe to drop
   // here since the build cache is rebuildable and the engine has left this
@@ -271,8 +286,11 @@ class DaggerEnvironmentRuntimeManager {
     const clients = createK8sClients(kubeConfig, namespace);
     const name = daggerEngineDeploymentName(engineId);
 
-    await this.deleteIfPresent("StatefulSet", namespace, name, () =>
-      clients.appsApi.deleteNamespacedStatefulSet({ name, namespace }),
+    const workloadRemoved = await this.deleteIfPresent(
+      "StatefulSet",
+      namespace,
+      name,
+      () => clients.appsApi.deleteNamespacedStatefulSet({ name, namespace }),
     );
     await this.deleteIfPresent(
       "PersistentVolumeClaim",
@@ -294,30 +312,41 @@ class DaggerEnvironmentRuntimeManager {
           namespace,
         }),
     );
-    // Empty desired set → every managed policy kind is pruned.
-    await this.pruneStalePolicies(
-      clients,
-      namespace,
-      constructManagedNetworkPolicyName(name),
-      new Set(),
-    );
+    // Only drop the egress policies once the engine pod is gone. If the
+    // StatefulSet delete failed, the privileged pod is still running — pruning
+    // its NetworkPolicy would leave it egressing unrestricted. Leave the policy
+    // in place; the next teardown retries the workload.
+    if (workloadRemoved) {
+      // Empty desired set → every managed policy kind is pruned.
+      await this.pruneStalePolicies(
+        clients,
+        namespace,
+        constructManagedNetworkPolicyName(name),
+        new Set(),
+      );
+    }
   }
 
+  // Returns true when the object is gone (deleted now, or already absent),
+  // false when the delete failed and it may still exist.
   private async deleteIfPresent(
     kind: string,
     namespace: string,
     name: string,
     del: () => Promise<unknown>,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       await del();
+      return true;
     } catch (error) {
-      if (!isK8sNotFoundError(error)) {
-        logger.warn(
-          { err: error, namespace, name, kind },
-          "[DaggerEnvRuntime] failed to delete engine resource on teardown",
-        );
+      if (isK8sNotFoundError(error)) {
+        return true;
       }
+      logger.warn(
+        { err: error, namespace, name, kind },
+        "[DaggerEnvRuntime] failed to delete engine resource on teardown",
+      );
+      return false;
     }
   }
 

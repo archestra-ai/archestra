@@ -775,4 +775,81 @@ describe("reconcileOrganizationDefault", () => {
       (config.daggerRuntime as { runnerHost?: string }).runnerHost = original;
     }
   });
+
+  it("teardownEnvironmentEngine deletes the environment's engine in its namespace", async () => {
+    await daggerEnvironmentRuntimeManager.teardownEnvironmentEngine(
+      makeEnv({
+        id: "abcdef00-1111-2222-3333-444455556666",
+        namespace: "env-ns",
+      }),
+    );
+
+    expect(mockCreateK8sClients).toHaveBeenCalledWith(
+      expect.anything(),
+      "env-ns",
+    );
+    expect(clients.appsApi.deleteNamespacedStatefulSet).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: "env-ns" }),
+    );
+    const pvcCall =
+      clients.coreApi.deleteNamespacedPersistentVolumeClaim.mock.calls[0][0];
+    expect(pvcCall.namespace).toBe("env-ns");
+    expect(pvcCall.name).toMatch(/^varlib-.*-0$/);
+    expect(clients.coreApi.deleteNamespacedConfigMap).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: "env-ns" }),
+    );
+    expect(
+      clients.networkingApi.deleteNamespacedNetworkPolicy,
+    ).toHaveBeenCalledWith(expect.objectContaining({ namespace: "env-ns" }));
+  });
+
+  // Unlike the org-default engine, a per-environment engine is provisioned even
+  // behind a BYO runner host — so its teardown must run too, not short-circuit.
+  it("teardownEnvironmentEngine tears down even behind a BYO runner host", async () => {
+    const original = config.daggerRuntime.runnerHost;
+    (config.daggerRuntime as { runnerHost?: string }).runnerHost =
+      "tcp://byo:1234";
+    try {
+      await daggerEnvironmentRuntimeManager.teardownEnvironmentEngine(
+        makeEnv({ namespace: "env-ns" }),
+      );
+      expect(clients.appsApi.deleteNamespacedStatefulSet).toHaveBeenCalled();
+    } finally {
+      (config.daggerRuntime as { runnerHost?: string }).runnerHost = original;
+    }
+  });
+
+  it("teardownEnvironmentEngine no-ops when the runtime is disabled", async () => {
+    const originalEnabled = config.skillsSandbox.enabled;
+    (config.skillsSandbox as { enabled: boolean }).enabled = false;
+    try {
+      await daggerEnvironmentRuntimeManager.teardownEnvironmentEngine(
+        makeEnv({ namespace: "env-ns" }),
+      );
+      expect(
+        clients.appsApi.deleteNamespacedStatefulSet,
+      ).not.toHaveBeenCalled();
+    } finally {
+      (config.skillsSandbox as { enabled: boolean }).enabled = originalEnabled;
+    }
+  });
+
+  // If the engine pod can't be removed, its egress policy must stay — pruning it
+  // would leave a running privileged pod egressing unrestricted.
+  it("keeps the egress policy when the StatefulSet delete fails", async () => {
+    clients.appsApi.deleteNamespacedStatefulSet.mockRejectedValueOnce(
+      new Error("apiserver unavailable"),
+    );
+
+    await daggerEnvironmentRuntimeManager.teardownEnvironmentEngine(
+      makeEnv({ namespace: "env-ns" }),
+    );
+
+    expect(
+      clients.networkingApi.deleteNamespacedNetworkPolicy,
+    ).not.toHaveBeenCalled();
+    expect(
+      clients.customObjectsApi.deleteNamespacedCustomObject,
+    ).not.toHaveBeenCalled();
+  });
 });

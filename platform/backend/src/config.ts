@@ -387,6 +387,16 @@ const MAX_DATABASE_POOL_MAX = 500;
 const DEFAULT_CHAT_MAX_OUTPUT_TOKENS = 32_768;
 const MAX_CHAT_MAX_OUTPUT_TOKENS = 1_000_000;
 
+// Output-token budget for providers that charge a request's `max_tokens`
+// reservation against a per-minute token bucket (see the provider set in
+// agents/agent-output-budget.ts). Sized to leave prompt room inside the small
+// buckets those providers' entry tiers hand out — at 32_768 a single one-word
+// message is rejected before generating a token, and no amount of shortening
+// the conversation helps. Operators on higher tiers should raise it: the cost
+// of this cap is truncated long generations, the cost of not having it is that
+// every request fails.
+const DEFAULT_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS = 4_096;
+
 // Per-connection statement timeout (ms). Defense-in-depth: kills runaway
 // queries instead of letting them hang a connection indefinitely. 0 disables.
 const DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS = 30000;
@@ -558,10 +568,32 @@ export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
 /** @public — exported for testability */
 export const parseChatMaxOutputTokens = (
   envValue?: string | undefined,
-): number => {
+): number =>
+  parseOutputTokenCeiling({
+    envValue,
+    envName: "ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS",
+    fallback: DEFAULT_CHAT_MAX_OUTPUT_TOKENS,
+  });
+
+/** @public — exported for testability */
+export const parseChatRateMeteredMaxOutputTokens = (
+  envValue?: string | undefined,
+): number =>
+  parseOutputTokenCeiling({
+    envValue,
+    envName: "ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS",
+    fallback: DEFAULT_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS,
+  });
+
+const parseOutputTokenCeiling = (params: {
+  envValue: string | undefined;
+  envName: string;
+  fallback: number;
+}): number => {
+  const { envValue, envName, fallback } = params;
   const value = envValue?.trim();
   if (!value) {
-    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
+    return fallback;
   }
 
   // Number() (not parseInt) so trailing garbage ("32768abc") and fractions
@@ -573,9 +605,9 @@ export const parseChatMaxOutputTokens = (
     parsed > MAX_CHAT_MAX_OUTPUT_TOKENS
   ) {
     logger.warn(
-      `Invalid ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS value "${value}", using default ${DEFAULT_CHAT_MAX_OUTPUT_TOKENS}`,
+      `Invalid ${envName} value "${value}", using default ${fallback}`,
     );
-    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
+    return fallback;
   }
 
   return parsed;
@@ -1890,6 +1922,9 @@ const config = {
       process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
     maxOutputTokensCeiling: parseChatMaxOutputTokens(
       process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
+    ),
+    rateMeteredMaxOutputTokensCeiling: parseChatRateMeteredMaxOutputTokens(
+      process.env.ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS,
     ),
   },
   enterpriseFeatures: {

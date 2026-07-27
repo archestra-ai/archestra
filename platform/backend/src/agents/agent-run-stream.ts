@@ -21,6 +21,10 @@ import {
   trimMessagesToTokenLimit,
 } from "@/routes/chat/context-trimming";
 import { EmptyModelResponseError } from "@/routes/chat/errors";
+import {
+  parseTokenBucketError,
+  refitOutputBudgetToTokenBucket,
+} from "@/routes/chat/token-bucket-refit";
 
 // Maximum agent steps (tool round-trips) per run, shared by every surface. The
 // primitive does not inject this — callers pass `stopWhen: stepCountIs(MAX_AGENT_STEPS)`
@@ -114,6 +118,11 @@ export async function runAgentStream(params: {
   // whole request; retrying once without the option recovers the turn (minus
   // the thinking block). The strip is deterministic, so a second cannot help.
   const MAX_REASONING_SUMMARY_STRIP_ATTEMPTS = 1;
+  // One refit is enough: the budget is recomputed from the allowance the
+  // provider itself reported, so a second rejection means something other than
+  // the reservation is over the limit.
+  const MAX_TOKEN_BUCKET_REFIT_ATTEMPTS = 1;
+  let tokenBucketRefitAttempts = 0;
   let emptyResponseAttempts = 0;
   let contextTrimAttempts = 0;
   let abortiveToolCallAttempts = 0;
@@ -195,6 +204,42 @@ export async function runAgentStream(params: {
         result = runAttempt();
         continue;
       }
+      // The provider charges our output reservation against a per-minute token
+      // bucket and this request did not fit. Refit the budget from the
+      // allowance it reported and retry — trimming messages cannot help here,
+      // since the reservation is counted whether or not the conversation is
+      // empty.
+      const tokenBucket = parseTokenBucketError(probe.error);
+      if (
+        tokenBucket !== null &&
+        tokenBucketRefitAttempts < MAX_TOKEN_BUCKET_REFIT_ATTEMPTS &&
+        typeof currentConfig.maxOutputTokens === "number"
+      ) {
+        const refittedMaxOutputTokens = refitOutputBudgetToTokenBucket({
+          bucket: tokenBucket,
+          currentMaxOutputTokens: currentConfig.maxOutputTokens,
+        });
+        if (refittedMaxOutputTokens !== null) {
+          tokenBucketRefitAttempts++;
+          logger.info(
+            {
+              ...logContext,
+              limitTokens: tokenBucket.limitTokens,
+              requestedTokens: tokenBucket.requestedTokens,
+              previousMaxOutputTokens: currentConfig.maxOutputTokens,
+              refittedMaxOutputTokens,
+            },
+            "[TokenBucket] retrying with an output budget refitted to the provider's reported limit",
+          );
+          currentConfig = {
+            ...currentConfig,
+            maxOutputTokens: refittedMaxOutputTokens,
+          };
+          result = runAttempt();
+          continue;
+        }
+      }
+
       if (
         reasoningSummaryStripAttempts < MAX_REASONING_SUMMARY_STRIP_ATTEMPTS &&
         configRequestsOpenAiReasoningSummary(currentConfig) &&

@@ -45,6 +45,15 @@ export const ArchestraInternalErrorCode = {
    * The upstream provider declared a transient overload (HTTP 503/529).
    */
   ProviderOverloaded: "provider_overloaded",
+  /**
+   * The provider rejected the request because its token count — the prompt plus
+   * the reserved output budget — exceeds the credential's *entire* per-minute
+   * token allowance (e.g. Groq's 413 `api_payload_too_large_error` naming a
+   * tokens-per-minute limit). Distinct from an ordinary rate limit: the request
+   * is bigger than the whole bucket, so waiting for the window to refill never
+   * admits it and the same request fails identically in a brand-new chat.
+   */
+  RequestExceedsRateLimit: "request_exceeds_rate_limit",
 } as const;
 
 export type ArchestraInternalErrorCode =
@@ -267,6 +276,32 @@ export const MinimaxErrorTypes = {
   CONTEXT_LENGTH_EXCEEDED: "context_length_exceeded",
 } as const;
 
+/**
+ * Groq API error codes (from the response body `error.code` field).
+ * Groq is OpenAI-compatible, so most codes match {@link OpenAIErrorTypes};
+ * these are the ones it adds.
+ * @see https://console.groq.com/docs/errors
+ */
+export const GroqErrorCodes = {
+  /**
+   * Token-bucket rejection, carried with `error.type: "tokens"`. Groq charges a
+   * request's prompt *plus* its `max_tokens` reservation against the bucket, so
+   * a large reservation alone can exhaust the allowance on a short
+   * conversation.
+   *
+   * The HTTP status is what separates the two cases, since both bodies are
+   * identical otherwise:
+   * - **429** — the bucket is momentarily empty. Transient and retryable.
+   * - **413** — this single request is bigger than the whole bucket ("Request
+   *   too large … Limit 6000, Requested 6719"). Waiting never admits it.
+   */
+  RATE_LIMIT_EXCEEDED: "rate_limit_exceeded",
+} as const;
+
+/** HTTP status Groq pairs with {@link GroqErrorCodes.RATE_LIMIT_EXCEEDED} when a
+ * single request exceeds the entire token bucket. */
+export const GROQ_REQUEST_EXCEEDS_BUCKET_STATUS = 413;
+
 // =============================================================================
 // Normalized Chat Error Codes
 // =============================================================================
@@ -303,6 +338,14 @@ export enum ChatErrorCode {
   ContextTooLong = "context_too_long",
   /** Request payload (e.g. a large inline attachment) exceeds the provider's size limit */
   RequestTooLarge = "request_too_large",
+  /**
+   * A single request's token count exceeds the provider plan's per-minute token
+   * allowance, so the provider rejects it before generating anything. NOT
+   * retryable: the bucket never refills to more than its own size, and starting
+   * a new chat does not help — the reserved output budget is charged against
+   * the same allowance regardless of how short the conversation is.
+   */
+  RequestExceedsRateLimit = "request_exceeds_rate_limit",
   /** Content blocked by safety filters */
   ContentFiltered = "content_filtered",
   /** Provider server error - retryable */
@@ -372,6 +415,11 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "Your conversation is too long. Please start a new chat or remove some messages.",
   [ChatErrorCode.RequestTooLarge]:
     "This request is too large for the selected model. Compress or split large attachments — or remove some — and try again.",
+  // Deliberately does NOT suggest starting a new chat: the reserved output
+  // budget is charged against the per-minute allowance on its own, so an empty
+  // conversation hits the same wall.
+  [ChatErrorCode.RequestExceedsRateLimit]:
+    "This request needs more tokens per minute than your provider plan allows, so waiting won't help. Lower the output-token limit, shorten the conversation, or upgrade your provider tier.",
   [ChatErrorCode.ContentFiltered]:
     "Your message was blocked by content filters. Please rephrase your request.",
   [ChatErrorCode.ServerError]: "The AI provider is experiencing issues.",

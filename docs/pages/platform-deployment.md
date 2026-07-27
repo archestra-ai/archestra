@@ -1203,6 +1203,12 @@ Enable polling compatibility only when your database endpoint cannot keep sessio
   - Each turn already requests the model's real output ceiling instead of the provider/SDK default that truncated large tool-call payloads and final submission turns. This variable caps that request for cost control: the turn uses `min(this value, the model's real output ceiling)`, and unsynced models fall back to `8192`.
   - Lower it to constrain spend; raise it for models whose useful outputs exceed 32768 tokens.
 
+- **`ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS`** - Output-token cap applied only to providers that charge a request's `max_tokens` reservation against a per-minute token bucket (currently Groq).
+  - Default: `4096`
+  - These providers bill the prompt plus the reserved output budget up front, so requesting a model's real output ceiling can exceed the entire per-minute allowance on an entry tier. The request is then rejected with a 413 before generating a token, and because the reservation is constant, shortening the conversation or starting a new chat does not help.
+  - The turn uses `min(ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS, this value, the model's real output ceiling)` for affected providers; every other provider is unchanged.
+  - Raise it on higher provider tiers, whose larger buckets leave room for longer generations. The cost of this cap is truncated long outputs; the cost of removing it on a small tier is that every request fails.
+
 ### MCP Apps Sandbox
 
 MCP Apps run inside sandboxed iframes with cross-origin isolation, CSP enforcement, and a double-iframe architecture. The sandbox proxy is served from the main backend under `/_sandbox/` — no separate port or service is needed.

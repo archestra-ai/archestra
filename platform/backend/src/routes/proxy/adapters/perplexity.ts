@@ -13,7 +13,10 @@
  *
  * @see https://docs.perplexity.ai/api-reference/chat-completions-post
  */
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import {
+  ArchestraInternalErrorCode,
+  isPerplexityReasoningModel,
+} from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -144,10 +147,23 @@ class PerplexityRequestAdapter
   // ---------------------------------------------------------------------------
 
   toProviderRequest(): PerplexityRequest {
-    return {
-      ...this.request,
-      model: this.getModel(),
-    };
+    const model = this.getModel();
+    const request: PerplexityRequest = { ...this.request, model };
+
+    // Perplexity emits no reasoning under the default `full` stream mode: the
+    // chain of thought used to arrive inline as <think> text in `content`, but
+    // that stopped in early 2026 and `concise` is now the only way to get it.
+    // Opt in for reasoning models only, and never override an explicit choice
+    // by the caller, so plain Sonar models keep the default wire format.
+    if (
+      request.stream === true &&
+      request.stream_mode === undefined &&
+      isPerplexityReasoningModel(model)
+    ) {
+      request.stream_mode = "concise";
+    }
+
+    return request;
   }
 
   // ---------------------------------------------------------------------------
@@ -261,6 +277,12 @@ class PerplexityStreamAdapter
 {
   readonly provider = "perplexity" as const;
   readonly state: StreamAccumulatorState;
+  /** Whether a <think> block has been opened downstream but not yet closed. */
+  private reasoningOpen = false;
+  /** Set once a concise-mode chunk is seen; it changes how the stream ends. */
+  private conciseStream = false;
+  /** Thought texts already emitted — the done chunk repeats accumulated steps. */
+  private readonly seenThoughts = new Set<string>();
 
   constructor() {
     this.state = {
@@ -298,13 +320,38 @@ class PerplexityStreamAdapter
       };
     }
 
+    // Concise stream mode carries the chain of thought in its own chunk types,
+    // which no OpenAI-compatible client understands. Re-emit their text as
+    // <think> content on ordinary completion chunks so downstream parsers
+    // (chat's reasoning middleware, the frontend fallback) surface it as
+    // reasoning instead of dropping it.
+    const chunkObject = (chunk as { object?: string }).object;
+    if (
+      chunkObject === REASONING_CHUNK ||
+      chunkObject === REASONING_DONE_CHUNK
+    ) {
+      // Concise mode ends on its own terminal chunk, never on the
+      // usage-without-choices heuristic below: the reasoning stage can report
+      // partial usage long before the answer has been streamed.
+      this.conciseStream = true;
+      const thoughts = this.takeNewThoughts(chunk);
+      const closing =
+        chunkObject === REASONING_DONE_CHUNK ? this.closeReasoning() : "";
+      const text = `${thoughts}${closing}`;
+      return {
+        sseData: text ? this.formatTextDeltaSSE(text) : null,
+        isToolCallChunk,
+        isFinal: false,
+      };
+    }
+
     const choice = chunk.choices[0];
     if (!choice) {
       // Empty choices with usage means this is the final chunk
       return {
         sseData: null,
         isToolCallChunk: false,
-        isFinal: this.state.usage !== null,
+        isFinal: !this.conciseStream && this.state.usage !== null,
       };
     }
 
@@ -313,12 +360,22 @@ class PerplexityStreamAdapter
     // Handle text content
     if (delta.content) {
       this.state.text += delta.content;
-      sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+      // Answer text after an unterminated reasoning block: close it first, or
+      // the whole answer would be swallowed into the reasoning part.
+      const closing = this.closeReasoning();
+      sseData = `${closing ? this.formatTextDeltaSSE(closing) : ""}data: ${JSON.stringify(chunk)}\n\n`;
     }
 
     // Handle finish reason
     if (choice.finish_reason) {
       this.state.stopReason = choice.finish_reason;
+    }
+
+    // Concise mode ends with its own terminal chunk rather than a
+    // finish_reason on a content chunk.
+    if (chunkObject === COMPLETION_DONE_CHUNK) {
+      this.state.stopReason ??= "stop";
+      isFinal = true;
     }
 
     // Only mark as final when we have BOTH finish_reason AND usage data
@@ -427,6 +484,51 @@ class PerplexityStreamAdapter
           (this.state.usage?.outputTokens ?? 0),
       },
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private Helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Returns the thoughts in `chunk` that have not been emitted yet, wrapped so
+   * they continue an open <think> block or start a new one. The reasoning-done
+   * chunk repeats every accumulated step, so thoughts are deduped by text.
+   */
+  private takeNewThoughts(chunk: PerplexityStreamChunk): string {
+    const steps =
+      (
+        chunk.choices?.[0]?.delta as
+          | { reasoning_steps?: { thought?: unknown }[] }
+          | undefined
+      )?.reasoning_steps ?? [];
+
+    const fresh: string[] = [];
+    for (const step of steps) {
+      const thought =
+        typeof step?.thought === "string" ? step.thought.trim() : "";
+      if (!thought || this.seenThoughts.has(thought)) {
+        continue;
+      }
+      this.seenThoughts.add(thought);
+      fresh.push(thought);
+    }
+    if (fresh.length === 0) {
+      return "";
+    }
+
+    const opening = this.reasoningOpen ? "\n" : "<think>";
+    this.reasoningOpen = true;
+    return `${opening}${fresh.join("\n")}`;
+  }
+
+  /** Closing tag for an open <think> block, or "" when none is open. */
+  private closeReasoning(): string {
+    if (!this.reasoningOpen) {
+      return "";
+    }
+    this.reasoningOpen = false;
+    return "</think>\n\n";
   }
 }
 
@@ -552,3 +654,14 @@ export const perplexityAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+// =============================================================================
+// INTERNAL CONSTANTS
+// =============================================================================
+
+/** Concise-mode chunk carrying incremental reasoning steps. */
+const REASONING_CHUNK = "chat.reasoning";
+/** Concise-mode chunk closing the reasoning stage (repeats accumulated steps). */
+const REASONING_DONE_CHUNK = "chat.reasoning.done";
+/** Concise-mode terminal chunk carrying final usage and the aggregated message. */
+const COMPLETION_DONE_CHUNK = "chat.completion.done";

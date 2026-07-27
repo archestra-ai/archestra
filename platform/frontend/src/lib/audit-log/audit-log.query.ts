@@ -40,6 +40,7 @@ export function useAuditLogs({
   outcome,
   actorType,
   resourceType,
+  resourceId,
   search,
 }: {
   limit?: number;
@@ -52,6 +53,7 @@ export function useAuditLogs({
   outcome?: AuditOutcome;
   actorType?: AuditActorType;
   resourceType?: string;
+  resourceId?: string;
   search?: string;
 } = {}) {
   return useQuery({
@@ -68,6 +70,7 @@ export function useAuditLogs({
         outcome,
         actorType,
         resourceType,
+        resourceId,
         search,
       },
     ],
@@ -84,6 +87,7 @@ export function useAuditLogs({
           ...(outcome ? { outcome } : {}),
           ...(actorType ? { actorType } : {}),
           ...(resourceType ? { resourceType } : {}),
+          ...(resourceId ? { resourceId } : {}),
           ...(search ? { search } : {}),
         },
       });

@@ -127,10 +127,6 @@
   },
   "readme": "# MongoDB MCP Server\n\nThe official MongoDB MCP server provides tools for interacting with MongoDB databases and Atlas deployments through AI assistants.\n\n## Features\n\n- **CRUD Operations**: Find, insert, update, and delete documents\n- **Aggregation**: Execute aggregation pipelines for data analysis\n- **Collection Management**: Create, drop, and rename collections\n- **Index Management**: Create, drop, and list indexes\n- **Schema Inference**: Analyze collection schemas\n- **Atlas Integration**: Manage Atlas clusters, users, and access lists\n\n## Environment Variables\n\n- `MDB_MCP_CONNECTION_STRING`: MongoDB connection string for database access\n- `MDB_MCP_READ_ONLY`: Enable read-only mode (optional)\n- `MDB_MCP_API_CLIENT_ID`: Atlas API client ID (optional)\n- `MDB_MCP_API_CLIENT_SECRET`: Atlas API client secret (optional)\n",
   "category": "Data",
-  "quality_score": 85,
-  "last_scraped_at": "2026-01-13T00:00:00.000Z",
-  "evaluation_model": "manual",
-  "raw_dependencies": "",
   "github_info": {
     "owner": "mongodb-js",
     "repo": "mongodb-mcp-server",
@@ -145,28 +141,6 @@
     "latest_commit_hash": null
   },
   "programming_language": "TypeScript",
-  "framework": null,
-  "protocol_features": {
-    "implementing_tools": true,
-    "implementing_prompts": false,
-    "implementing_resources": true,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": true,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [
-    {
-      "name": "mongodb",
-      "importance": 10
-    },
-    {
-      "name": "@modelcontextprotocol/sdk",
-      "importance": 9
-    }
-  ],
   "archestra_config": {
     "client_config_permutations": null,
     "oauth": {

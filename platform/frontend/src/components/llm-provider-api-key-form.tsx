@@ -30,6 +30,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { useTeams } from "@/lib/teams/team.query";
+import { cn } from "@/lib/utils";
 import { LlmProviderSelectItems } from "./llm-provider-select-items";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -116,6 +117,42 @@ export function deserializeExtraHeaders(
 
 export type LlmProviderApiKeyResponse =
   archestraApiTypes.GetLlmProviderApiKeysResponses["200"][number];
+
+function isOllamaProvider(provider: string): boolean {
+  return provider === "ollama" || provider === "ollama-native";
+}
+
+/**
+ * Ollama ships as two providers because the transports differ on the wire, but
+ * they are one product behind one base URL. The picker shows a single "Ollama"
+ * entry plus a separate transport control, so one of the pair stands in for both
+ * in the provider list.
+ *
+ * `ollama-native` is the better general default — it carries the per-model
+ * parameters `/v1` silently discards — but it cannot do embeddings, so for an
+ * embedding key the OpenAI-compatible transport is the only valid one and must
+ * be the entry shown. Collapsing to native unconditionally made Ollama
+ * unselectable in the embedding dialog.
+ */
+function ollamaTransportForContext(
+  forEmbedding: boolean,
+): CreateLlmProviderApiKeyBody["provider"] {
+  return forEmbedding ? "ollama" : "ollama-native";
+}
+
+/** Both Ollama transports, in the order the transport control lists them. */
+const OLLAMA_TRANSPORTS = [
+  "ollama-native",
+  "ollama",
+] as const satisfies readonly CreateLlmProviderApiKeyBody["provider"][];
+
+const OLLAMA_TRANSPORT_OPTIONS = [
+  { value: "ollama-native", label: "Native" },
+  { value: "ollama", label: "OpenAI-compatible" },
+] as const satisfies readonly {
+  value: CreateLlmProviderApiKeyBody["provider"];
+  label: string;
+}[];
 
 const PROVIDER_CONFIG: Record<
   CreateLlmProviderApiKeyBody["provider"],
@@ -221,13 +258,24 @@ const PROVIDER_CONFIG: Record<
     consoleName: "vLLM Docs",
   },
   ollama: {
-    name: "Ollama",
+    name: "Ollama (OpenAI-compatible)",
     icon: "/icons/ollama.png",
     placeholder: "optional-api-key",
     enabled: true,
     consoleUrl: "https://ollama.ai/",
     consoleName: "Ollama",
     description: "For self-hosted Ollama, an API key is not required.",
+  },
+  "ollama-native": {
+    name: "Ollama (Native)",
+    icon: "/icons/ollama.png",
+    placeholder: "optional-api-key",
+    enabled: true,
+    consoleUrl: "https://ollama.ai/",
+    consoleName: "Ollama",
+    description:
+      "Native /api/chat transport — lets you set num_ctx, num_predict, top_k, thinking effort, and other Ollama parameters. An API key is not required for self-hosted Ollama.",
+    supportsEmbeddings: false,
   },
   zhipuai: {
     name: "Zhipu AI",
@@ -442,6 +490,39 @@ export function LlmProviderApiKeyForm({
       ),
     [allowedProviders, allowPersonalSubscriptions],
   );
+  // The endpoint to suggest when the app runs in Docker. Derived from the
+  // provider's own default so it matches the transport in play — vLLM has no
+  // default endpoint at all, so it gets the advice without a concrete example.
+  const dockerBaseUrlExample = DEFAULT_PROVIDER_BASE_URLS[provider]?.replace(
+    "localhost",
+    "host.docker.internal",
+  );
+  // The transports a caller-supplied `allowedProviders` leaves open. The pair is
+  // one product with one credential, so a caller naming either one gets the
+  // single collapsed "Ollama" entry — but it must resolve to a transport that
+  // caller actually allows, or the entry renders permanently disabled.
+  const allowedOllamaTransports = useMemo(
+    (): CreateLlmProviderApiKeyBody["provider"][] =>
+      OLLAMA_TRANSPORTS.filter((key) => allowedProviderSet.has(key)),
+    [allowedProviderSet],
+  );
+  // Which of the two Ollama transports represents "Ollama" in the provider list:
+  // the context's preferred transport when it is open, otherwise whichever one
+  // the caller left.
+  const ollamaListedTransport = useMemo(() => {
+    const preferred = ollamaTransportForContext(forEmbedding);
+    return allowedOllamaTransports.includes(preferred)
+      ? preferred
+      : (allowedOllamaTransports[0] ?? preferred);
+  }, [allowedOllamaTransports, forEmbedding]);
+  // Embeddings only work on the `/v1` transport, and a caller that allows just
+  // one transport has already made the choice — in both cases there is nothing
+  // to pick, and offering the control would let the form produce a key the
+  // caller's own setup instructions do not describe.
+  const showOllamaTransport =
+    isOllamaProvider(provider) &&
+    !forEmbedding &&
+    allowedOllamaTransports.length > 1;
   const showProviderField = !(progressive && allowedProviderSet.size === 1);
   const showConfiguredStyling = isEditMode && !hasApiKeyChanged;
 
@@ -614,7 +695,17 @@ export function LlmProviderApiKeyForm({
   const prevProviderRef = useRef(provider);
   useEffect(() => {
     if (isEditMode || prevProviderRef.current === provider) return;
+    const previousProvider = prevProviderRef.current;
     prevProviderRef.current = provider;
+    // Switching between the two Ollama transports is not a change of provider
+    // in any way that invalidates a credential: it is the same server reached
+    // over a different endpoint, so the key and headers still apply. Only the
+    // base URL is transport-specific (`/v1` or not), and clearing it falls back
+    // to a placeholder showing the right default for the chosen transport.
+    if (isOllamaProvider(previousProvider) && isOllamaProvider(provider)) {
+      form.setValue("baseUrl", null);
+      return;
+    }
     form.setValue("apiKey", null);
     form.setValue("baseUrl", null);
     form.setValue("inferenceBaseUrl", null);
@@ -677,7 +768,11 @@ export function LlmProviderApiKeyForm({
               <div className="space-y-2">
                 <Label htmlFor="llm-provider-api-key-provider">Provider</Label>
                 <Select
-                  value={provider}
+                  value={
+                    isOllamaProvider(provider)
+                      ? ollamaListedTransport
+                      : provider
+                  }
                   onValueChange={(value) =>
                     form.setValue(
                       "provider",
@@ -695,12 +790,26 @@ export function LlmProviderApiKeyForm({
                   <SelectContent>
                     <LlmProviderSelectItems
                       options={Object.entries(PROVIDER_CONFIG)
+                        // Personal subscription-only providers do not belong in
+                        // the API-key flow. The two Ollama transports are one
+                        // product and collapse to a single provider entry.
                         .filter(
                           ([key]) =>
-                            allowPersonalSubscriptions ||
-                            !providerRequiresPerUserCredential(
-                              key as CreateLlmProviderApiKeyBody["provider"],
-                            ),
+                            (allowPersonalSubscriptions ||
+                              !providerRequiresPerUserCredential(
+                                key as CreateLlmProviderApiKeyBody["provider"],
+                              )) &&
+                            (!isOllamaProvider(key) ||
+                              key === ollamaListedTransport),
+                        )
+                        .map(
+                          ([key, config]) =>
+                            [
+                              key,
+                              key === ollamaListedTransport
+                                ? { ...config, name: "Ollama" }
+                                : config,
+                            ] as const,
                         )
                         .sort(([, a], [, b]) => a.name.localeCompare(b.name))
                         .map(([key, config]) => {
@@ -756,6 +865,68 @@ export function LlmProviderApiKeyForm({
                 />
               </div>
             )}
+          </div>
+        )}
+
+        {/*
+          Sits outside the `byosEnabled` branch below on purpose: the transport
+          is part of the provider, not a way of supplying credentials, so it
+          must stay visible when keys come from the vault.
+        */}
+        {showOllamaTransport && (
+          <div className="space-y-2">
+            {/*
+              A radiogroup rather than Tabs: this picks a value, it does not
+              switch between panels. Radix Tabs sets `aria-controls` on every
+              trigger unconditionally, so with no TabsContent both triggers
+              pointed at an element id that is never rendered.
+            */}
+            <span
+              id="llm-provider-api-key-ollama-transport"
+              className="text-sm font-medium leading-none"
+            >
+              Transport
+            </span>
+            <fieldset
+              className="grid w-full grid-cols-2 gap-1 rounded-lg bg-muted p-1"
+              aria-labelledby="llm-provider-api-key-ollama-transport"
+              disabled={isEditMode || isPending || disableProvider}
+            >
+              {/*
+                The transport is baked into the stored provider, so an
+                existing key cannot switch without being recreated.
+              */}
+              {OLLAMA_TRANSPORT_OPTIONS.map((option) => {
+                const selected = provider === option.value;
+                return (
+                  <label
+                    key={option.value}
+                    className={cn(
+                      "cursor-pointer rounded-md px-3 py-1.5 text-center text-sm font-medium transition-colors",
+                      "has-disabled:cursor-not-allowed has-disabled:opacity-50",
+                      selected
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="llm-provider-api-key-ollama-transport-option"
+                      value={option.value}
+                      checked={selected}
+                      onChange={() => form.setValue("provider", option.value)}
+                      className="sr-only"
+                    />
+                    {option.label}
+                  </label>
+                );
+              })}
+            </fieldset>
+            <p className="text-xs text-muted-foreground">
+              {provider === "ollama-native"
+                ? "Ollama's own /api/chat. Supports per-model parameters such as num_ctx and thinking."
+                : "Ollama's OpenAI-compatible /v1 endpoint. Supports embeddings; per-model parameters are ignored."}
+            </p>
           </div>
         )}
 
@@ -1177,8 +1348,14 @@ export function LlmProviderApiKeyForm({
               <p className="text-xs text-muted-foreground">
                 If this app runs in Docker, <code>localhost</code> points at the
                 container, not your host machine. Use{" "}
-                <code>host.docker.internal</code> instead (e.g.{" "}
-                <code>http://host.docker.internal:11434/v1</code>).
+                <code>host.docker.internal</code> instead
+                {dockerBaseUrlExample && (
+                  <>
+                    {" "}
+                    (e.g. <code>{dockerBaseUrlExample}</code>)
+                  </>
+                )}
+                .
               </p>
             )}
             <Input

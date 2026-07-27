@@ -437,14 +437,102 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     );
   });
 
-  test("only claude-code gets the startup guard", () => {
-    for (const clientId of ["codex", "copilot-cli", "cursor"] as const) {
-      expect(renderSetupScript(fullContext(clientId))).not.toContain(
-        "claude-startup-guard",
+  test("codex and copilot each install their own startup guard wrapping their own binary", () => {
+    const codex = renderSetupScript(fullContext("codex"));
+    expect(codex).toContain('cat > "$HOME/.archestra/codex-startup-guard.sh"');
+    expect(codex).toContain("# >>> archestra codex guard >>>");
+    expect(codex).toContain('command codex "$@"');
+    expect(codex).toContain("ARCHESTRA_CODEX_GUARD");
+    // never the wrong client's guard
+    expect(codex).not.toContain("claude-startup-guard");
+
+    const copilot = renderSetupScript(fullContext("copilot-cli"));
+    expect(copilot).toContain(
+      'cat > "$HOME/.archestra/copilot-startup-guard.sh"',
+    );
+    expect(copilot).toContain("# >>> archestra copilot guard >>>");
+    expect(copilot).toContain('command copilot "$@"');
+    expect(copilot).toContain("ARCHESTRA_COPILOT_GUARD");
+    expect(copilot).not.toContain("claude-startup-guard");
+  });
+
+  test("re-connect unshadows the wrapper (non-destructively) before the CLI runs, then reinstalls at the end", () => {
+    for (const { clientId, binary, unshadowMarker } of [
+      {
+        clientId: "claude-code" as const,
+        binary: "claude",
+        unshadowMarker: "unset -f claude",
+      },
+      {
+        clientId: "codex" as const,
+        binary: "codex",
+        unshadowMarker: "unset -f codex",
+      },
+      {
+        clientId: "copilot-cli" as const,
+        binary: "copilot",
+        unshadowMarker: "unset -f copilot",
+      },
+    ]) {
+      const script = renderSetupScript(fullContext(clientId));
+      const unshadowAt = script.indexOf(unshadowMarker);
+      const firstCliAt = script.indexOf(`cli ${binary} `);
+      // the guard install writes the fresh guard file at the end
+      const installAt = script.indexOf(
+        `cat > "$HOME/.archestra/${binary === "copilot" ? "copilot" : binary === "codex" ? "codex" : "claude"}-startup-guard.sh"`,
       );
-      expect(renderSetupScript(fullContext(clientId, "windows"))).not.toContain(
-        "claude-startup-guard",
+      expect(unshadowAt).toBeGreaterThan(-1);
+      // unshadow runs before the first client-CLI command (no old guard splash)…
+      expect(unshadowAt).toBeLessThan(firstCliAt);
+      // …and before the fresh guard is (re)installed at the end (delivers updates)
+      expect(unshadowAt).toBeLessThan(installAt);
+      // …but it is the ONLY guard-directed action before the CLI runs: it must not
+      // delete the installed guard, so a connect step failing under `set -e`
+      // between here and the install can never strand the user with no guard.
+      const preConnect = script.slice(0, firstCliAt);
+      expect(preConnect).not.toContain(
+        `rm -f "$HOME/.archestra/${binary}-startup-guard.sh"`,
       );
+      expect(preConnect).not.toContain(`> "$profile.archestra-tmp"`);
+    }
+  });
+
+  test("cursor (a GUI IDE) never gets a startup guard", () => {
+    expect(renderSetupScript(fullContext("cursor"))).not.toContain(
+      "startup-guard",
+    );
+    expect(renderSetupScript(fullContext("cursor", "windows"))).not.toContain(
+      "startup-guard",
+    );
+  });
+
+  test("codex and copilot get a PowerShell startup guard too (Windows parity)", () => {
+    for (const { clientId, binary, disableEnvVar } of [
+      {
+        clientId: "codex" as const,
+        binary: "codex",
+        disableEnvVar: "ARCHESTRA_CODEX_GUARD",
+      },
+      {
+        clientId: "copilot-cli" as const,
+        binary: "copilot",
+        disableEnvVar: "ARCHESTRA_COPILOT_GUARD",
+      },
+    ]) {
+      const script = renderSetupScript(fullContext(clientId, "windows"));
+      // the guard .ps1 is written and the client's own wrapper hooked
+      expect(script).toContain(`${binary}-startup-guard.ps1`);
+      expect(script).toContain(`function ${binary} {`);
+      expect(script).toContain(`if ($env:${disableEnvVar} -eq '0') { exit 0 }`);
+      // unshadow runs before the CLI, install (with in-session arming) after
+      const unshadowAt = script.indexOf(
+        `Remove-Item Function:${binary} -ErrorAction SilentlyContinue`,
+      );
+      const firstCliAt = script.indexOf(`${binary} mcp `);
+      const installAt = script.indexOf("Invoke-Expression $archGuardBlock");
+      expect(unshadowAt).toBeGreaterThan(-1);
+      expect(unshadowAt).toBeLessThan(firstCliAt);
+      expect(unshadowAt).toBeLessThan(installAt);
     }
   });
 
@@ -466,6 +554,27 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain(`Skills marketplace (${SKILLS.marketplaceName})`);
     expect(script).toContain("$RetryTotalSeconds = 15");
     expect(script).toContain("ARCHESTRA_CLAUDE_GUARD");
+  });
+
+  test("claude-code (windows): re-connect unshadows the wrapper non-destructively before running claude", () => {
+    const script = renderSetupScript(fullContext("claude-code", "windows"));
+    // irm|iex runs in the current session; unhook the profile's claude function
+    // before the first `claude mcp` command so an old guard can't splash
+    const unshadowAt = script.indexOf(
+      "Remove-Item Function:claude -ErrorAction SilentlyContinue",
+    );
+    const firstClaudeAt = script.indexOf("claude mcp remove");
+    // an install-only marker (the unshadow block never writes the guard body)
+    const installAt = script.indexOf("New-Object System.Text.UTF8Encoding");
+    expect(unshadowAt).toBeGreaterThan(-1);
+    expect(unshadowAt).toBeLessThan(firstClaudeAt);
+    expect(unshadowAt).toBeLessThan(installAt);
+    // the pre-connect step must not delete the installed guard: under
+    // $ErrorActionPreference='Stop' a failing connect step would otherwise
+    // abort before the reinstall and leave the user with no startup screen.
+    const preConnect = script.slice(0, firstClaudeAt);
+    expect(preConnect).not.toContain("Remove-Item -Force");
+    expect(preConnect).not.toContain("claude-startup-guard.ps1");
   });
 
   test("claude-code bedrock: merges the bearer token into settings.json env", async () => {

@@ -377,6 +377,19 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    */
   readonly recordRequestDurationInHandler?: boolean;
 
+  /**
+   * Render a mid-stream error into this provider's own stream framing.
+   *
+   * Once headers are committed the HTTP status can no longer change, so the
+   * failure has to travel inside the stream — which means it has to be shaped
+   * like the stream. Leave unset for the SSE majority and the shared default
+   * (`event: error\ndata: …`) applies. Implement it for providers on a
+   * different transport: an SSE frame injected into an NDJSON stream is a parse
+   * error at the client, which reports the framing problem instead of the real
+   * upstream cause.
+   */
+  readonly formatStreamErrorFrame?: (event: unknown) => string;
+
   // ---------------------------------------------------------------------------
   // Adapter Creation
   // ---------------------------------------------------------------------------

@@ -24,7 +24,6 @@
   "user_config": {},
   "readme": null,
   "category": "MCP Apps Demo",
-  "quality_score": null,
   "archestra_config": {
     "client_config_permutations": {
       "mcp-server-threejs": {
@@ -58,30 +57,5 @@
     "ci_cd": false,
     "latest_commit_hash": null
   },
-  "programming_language": "TypeScript",
-  "framework": null,
-  "last_scraped_at": null,
-  "evaluation_model": null,
-  "protocol_features": {
-    "implementing_tools": true,
-    "implementing_prompts": false,
-    "implementing_resources": true,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": true,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [
-    {
-      "name": "@modelcontextprotocol/sdk",
-      "importance": 10
-    },
-    {
-      "name": "@anthropic-ai/sdk",
-      "importance": 8
-    }
-  ],
-  "raw_dependencies": null
+  "programming_language": "TypeScript"
 }

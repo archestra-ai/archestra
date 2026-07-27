@@ -27,6 +27,7 @@ import type {
   Microsoft365Copilot,
   Minimax,
   Mistral,
+  OllamaNative,
   OpenAi,
   Openrouter,
   Perplexity,
@@ -48,6 +49,7 @@ type ProviderMessages = {
   openai: OpenAi.Types.ChatCompletionsRequest["messages"];
   vllm: Vllm.Types.ChatCompletionsRequest["messages"];
   ollama: Vllm.Types.ChatCompletionsRequest["messages"];
+  "ollama-native": OllamaNative.Types.Messages;
   xai: Xai.Types.ChatCompletionsRequest["messages"];
   zhipuai: Zhipuai.Types.ChatCompletionsRequest["messages"];
   deepseek: DeepSeek.Types.ChatCompletionsRequest["messages"];

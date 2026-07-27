@@ -7,7 +7,7 @@ import type { SandboxFileOrigin, SandboxId } from "@/types";
  */
 export const SKILL_SANDBOX_LIMITS = {
   maxSandboxQueueLength: 10,
-  maxCommandBytes: 16 * 1024,
+  maxCommandBytes: 256 * 1024,
 } as const;
 
 /**

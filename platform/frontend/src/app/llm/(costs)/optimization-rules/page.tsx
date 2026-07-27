@@ -41,6 +41,7 @@ import {
   useUpdateOptimizationRule,
 } from "@/lib/optimization-rule.query";
 import { useOrganization } from "@/lib/organization.query";
+import { providerLogoUrl } from "@/lib/provider-logos";
 import { useTeams } from "@/lib/teams/team.query";
 
 const DEFAULT_RULE = {
@@ -63,34 +64,6 @@ function toDraft(rule: OptimizationRule): RuleDraft {
     targetModel: rule.targetModel,
     enabled: rule.enabled,
   };
-}
-
-function getProviderLogoName(provider: keyof typeof providerDisplayNames) {
-  const logoNames = {
-    openai: "openai",
-    anthropic: "anthropic",
-    gemini: "google",
-    bedrock: "amazon-bedrock",
-    cerebras: "cerebras",
-    cohere: "cohere",
-    mistral: "mistral",
-    perplexity: "perplexity",
-    groq: "groq",
-    xai: "xai",
-    openrouter: "openrouter",
-    vllm: "vllm",
-    ollama: "ollama-cloud",
-    zhipuai: "zhipuai",
-    deepseek: "deepseek",
-    minimax: "minimax",
-    kimi: "moonshotai",
-    azure: "azure",
-    "github-copilot": "github-copilot",
-    "microsoft-365-copilot": "microsoft-365-copilot",
-    archestra: "archestra",
-  } as const;
-
-  return logoNames[provider];
 }
 
 export default function OptimizationRulesPage() {
@@ -207,7 +180,7 @@ export default function OptimizationRulesPage() {
         header: "Provider",
         cell: ({ row }) => (
           <LlmProviderOptionLabel
-            icon={`https://models.dev/logos/${getProviderLogoName(row.original.provider)}.svg`}
+            icon={providerLogoUrl(row.original.provider)}
             name={providerDisplayNames[row.original.provider]}
           />
         ),

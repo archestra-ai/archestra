@@ -169,7 +169,13 @@ export function useUpdateModel() {
       }
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // `mutationFn` returns null rather than throwing on error (callers await
+      // `mutateAsync` and branch on the result), so TanStack Query still treats
+      // a failed PATCH as a success. Without this guard the user sees "Model
+      // updated" beside the error toast and the caches are invalidated as if
+      // the write landed — the save looks applied until the dialog is reopened.
+      if (!data) return;
       toast.success("Model updated");
       queryClient.invalidateQueries({ queryKey: ["models-with-api-keys"] });
       queryClient.invalidateQueries({ queryKey: ["llm-models"] });

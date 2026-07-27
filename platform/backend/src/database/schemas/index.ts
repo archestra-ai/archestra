@@ -126,6 +126,7 @@ export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as membersTable } from "./member";
 export { default as messagesTable } from "./message";
 export { default as modelsTable } from "./model";
+export { default as modelTeamsTable } from "./model-team";
 export { default as oauthAccessTokensTable } from "./oauth-access-token";
 export { default as oauthClientsTable } from "./oauth-client";
 export { default as oauthClientTeamsTable } from "./oauth-client-team";

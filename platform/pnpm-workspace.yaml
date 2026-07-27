@@ -11,10 +11,12 @@ packages:
 
 catalog:
   ai: ^6.0.193
-  better-auth: 1.6.13
-  "@better-auth/core": 1.6.13
-  "@better-auth/oauth-provider": 1.6.13
-  "@better-auth/sso": 1.6.13
+  # GHSA-qq9h-g4jm-xgf3 (HIGH, improper authentication) affects >=1.1.3 and is
+  # fixed in 1.6.22. The @better-auth/* packages release in lockstep with it.
+  better-auth: 1.6.22
+  "@better-auth/core": 1.6.22
+  "@better-auth/oauth-provider": 1.6.22
+  "@better-auth/sso": 1.6.22
   # TypeScript 7 ships a `tsc` binary but no programmatic API until 7.1. knip,
   # @hey-api/openapi-ts and next import the compiler as a library, so `typescript`
   # stays on the 6.x API via a shim whose binary is renamed `tsc6` — two packages
@@ -98,11 +100,22 @@ overrides:
   picomatch@>=4: '>=4.0.4'
   picomatch@<4: '>=2.3.2'
   fastify: '>=5.8.5'
-  postcss: '>=8.5.10'
+  # CVE-2026-47219 (HIGH, prototype pollution) fixed in 9.7.0. Pinned exact (not
+  # a `>=` floor) because find-my-way is temporarily excluded from
+  # minimumReleaseAge below, so a floor could otherwise pull an unvetted release.
+  find-my-way: 9.7.0
+  # CVE-2026-45623 (HIGH, sensitive information exposure) fixed in 8.5.12, and
+  # GHSA-r28c-9q8g-f849 (HIGH, path traversal) fixed in 8.5.18. The image
+  # carried two postcss copies (8.5.11 and 8.5.17) under the old >=8.5.10
+  # floor, so the floor has to clear the higher of the two fixes.
+  postcss: '>=8.5.18'
   uuid@^11: '>=11.1.1'
   ip-address: '>=10.1.1'
-  # CVE-2026-13149 (HIGH, uncontrolled resource consumption) fixed in 5.0.7.
-  brace-expansion: '>=5.0.7'
+  # CVE-2026-13149 (HIGH, uncontrolled resource consumption) fixed in 5.0.7, then
+  # CVE-2026-14257 (HIGH, same class) fixed in 5.0.8. Pinned exact (not a `>=`
+  # floor) because brace-expansion is temporarily excluded from
+  # minimumReleaseAge below, so a floor could otherwise pull an unvetted release.
+  brace-expansion: 5.0.8
   smol-toml: '>=1.6.1'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
@@ -121,11 +134,19 @@ packageExtensions:
     dependencies:
       zod: ^4.3.4
 
-# The package root eagerly re-exports its optional worker implementation. That
-# pulls @eshaz/web-worker's Node shim into Next's Client Component SSR graph and
-# Turbopack cannot resolve the shim's intentionally dynamic import. We use only
-# the main-thread decoder, so keep that worker branch out of the package entry.
 patchedDependencies:
+  # Native Ollama /api/chat sends `"content": ""` on every thinking-phase chunk,
+  # and the package opened the text part on `content != null` and processed text
+  # before thinking — so the UI text part was created before the reasoning part
+  # and chat rendered the answer above the thinking block. The patch processes
+  # thinking first, opens text only on non-empty content, and orders reasoning
+  # before text in non-streaming results too. Upstream master (v4, needs ai@^7)
+  # has the same bug; drop the patch when moving to ai v7 after verifying a fix.
+  ollama-ai-provider-v2@3.6.0: patches/ollama-ai-provider-v2@3.6.0.patch
+  # The package root eagerly re-exports its optional worker implementation. That
+  # pulls @eshaz/web-worker's Node shim into Next's Client Component SSR graph and
+  # Turbopack cannot resolve the shim's intentionally dynamic import. We use only
+  # the main-thread decoder, so keep that worker branch out of the package entry.
   opus-decoder@0.7.11: patches/opus-decoder@0.7.11.patch
 
 # Enforce Node.js version requirements from package.json engines field.
@@ -159,6 +180,14 @@ minimumReleaseAgeExclude:
   # and clears the 7-day window on 2026-06-22. Remove on/after that date — the
   # lockfile stays pinned at 7.28.0 regardless.
   - undici
+  # TEMPORARY: find-my-way 9.7.0 (fix CVE-2026-47219, HIGH) was published
+  # 2026-07-21 and clears the 7-day window on 2026-07-28. Remove on/after that
+  # date — the lockfile stays pinned at 9.7.0 regardless.
+  - find-my-way
+  # TEMPORARY: brace-expansion 5.0.8 (fix CVE-2026-14257, HIGH) was published
+  # 2026-07-23 and clears the 7-day window on 2026-07-30. Remove on/after that
+  # date — the lockfile stays pinned at 5.0.8 regardless.
+  - brace-expansion
   # TEMPORARY: fast-uri 3.1.4 (fix CVE-2026-16221 / CVE-2026-13676, HIGH) was
   # published 2026-07-19 and clears the 7-day window on 2026-07-26. Remove
   # on/after that date — the lockfile stays pinned at 3.1.4 regardless.

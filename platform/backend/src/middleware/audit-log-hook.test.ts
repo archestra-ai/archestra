@@ -10,6 +10,8 @@ import { vi } from "vitest";
  * - occurred_at stamped in preHandler, before handler executes.
  * - before captured in preHandler (null for non-success after), after null for
  *   non-success or DELETE; fetched for success POST/PUT/PATCH.
+ * - resource_name denormalized from the after ?? before snapshot (`name`,
+ *   falling back to `email`), trimmed; frozen at write time.
  * - Denylist, method filter, and unauthenticated requests produce no rows.
  * - fetchById / create failures log and never break the response.
  */
@@ -54,6 +56,13 @@ vi.mock("./audit-log-registry", async () => {
     "/api/no-fetch-things/:id": {
       resourceType: "noFetchThing",
       actionByMethod: { PATCH: "agent.updated", DELETE: "agent.deleted" },
+    },
+    // Snapshot with no `name` field — resource_name falls back to `email`.
+    "/api/invite-things/:id": {
+      resourceType: "invitation",
+      actionByMethod: { DELETE: "invitation.deleted" },
+      fetchById: async (id: string) =>
+        id === KNOWN_RESOURCE_ID ? { id, email: "invitee@example.com" } : null,
     },
     // Named param — verifies that nested routes don't fall back to params.id.
     "/api/agents/:agentId": {
@@ -233,6 +242,9 @@ describe("registerAuditLogHook", () => {
     app.post("/api/no-fetch-things", async () => ({ id: KNOWN_RESOURCE_ID }));
     app.patch("/api/no-fetch-things/:id", async () => ({}));
     app.delete("/api/no-fetch-things/:id", async () => ({}));
+
+    // Snapshot carries email but no name.
+    app.delete("/api/invite-things/:id", async () => ({}));
 
     // Denylisted: health/ready probes
     app.post("/api/health", async () => ({ ok: true }));
@@ -513,6 +525,105 @@ describe("registerAuditLogHook", () => {
         name: "Some Agent",
         delegationTargets: [],
       });
+    });
+  });
+
+  describe("resource_name capture", () => {
+    test("POST success stores the resource name from the after snapshot", async () => {
+      await app.inject({ method: "POST", url: "/api/things" });
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].resourceName).toBe("Existing Thing");
+    });
+
+    test("DELETE stores the name from the before snapshot (after is null)", async () => {
+      await app.inject({
+        method: "DELETE",
+        url: `/api/things/${KNOWN_RESOURCE_ID}`,
+      });
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].after).toBeNull();
+      expect(rows[0].resourceName).toBe("Existing Thing");
+    });
+
+    test("rename stores the post-state name", async () => {
+      const registry = (await import(
+        "./audit-log-registry"
+      )) as typeof import("./audit-log-registry");
+      const routeCfg = registry.AUDITABLE_ROUTES["/api/things/:id"];
+      const origFetch = routeCfg.fetchById;
+      let call = 0;
+      routeCfg.fetchById = async (id: string) => {
+        call += 1;
+        return { id, name: call === 1 ? "Old Name" : "New Name" };
+      };
+      try {
+        await app.inject({
+          method: "PATCH",
+          url: `/api/things/${KNOWN_RESOURCE_ID}`,
+          payload: { name: "New Name" },
+        });
+        await settle();
+
+        const rows = await getRows();
+        expect(rows).toHaveLength(1);
+        expect(rows[0].resourceName).toBe("New Name");
+      } finally {
+        routeCfg.fetchById = origFetch;
+      }
+    });
+
+    test("snapshot without a name falls back to email", async () => {
+      await app.inject({
+        method: "DELETE",
+        url: `/api/invite-things/${KNOWN_RESOURCE_ID}`,
+      });
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].action).toBe("invitation.deleted");
+      expect(rows[0].resourceName).toBe("invitee@example.com");
+    });
+
+    test("route without fetchById leaves resource_name null", async () => {
+      await app.inject({ method: "POST", url: "/api/no-fetch-things" });
+      await settle();
+
+      const rows = await getRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].resourceName).toBeNull();
+    });
+
+    test("surrounding whitespace is trimmed before the name is stored", async () => {
+      const registry = (await import(
+        "./audit-log-registry"
+      )) as typeof import("./audit-log-registry");
+      const routeCfg = registry.AUDITABLE_ROUTES["/api/things/:id"];
+      const origFetch = routeCfg.fetchById;
+      routeCfg.fetchById = async (id: string) => ({
+        id,
+        name: "  Padded Name  ",
+      });
+      try {
+        await app.inject({
+          method: "PATCH",
+          url: `/api/things/${KNOWN_RESOURCE_ID}`,
+          payload: {},
+        });
+        await settle();
+
+        const rows = await getRows();
+        expect(rows).toHaveLength(1);
+        expect(rows[0].resourceName).toBe("Padded Name");
+      } finally {
+        routeCfg.fetchById = origFetch;
+      }
     });
   });
 

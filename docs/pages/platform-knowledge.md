@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and retrieval architecture
-lastUpdated: 2026-07-21
+lastUpdated: 2026-07-23
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,7 +27,7 @@ Pick the API key and embedding model. The embedding model vectorizes ingested do
 - **Key** — only keys whose synced models have configured embedding dimensions appear in this list. If yours is missing, go to **LLM Providers > Models**, sync the provider, and set the dimensions for the embedding model. Supported dimensions: 384, 768, 1024, 1536, 3072.
 - **Model** — any embedding-capable model exposed by the selected key.
 
-To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync.
+To change the embedding model, click **Drop** to clear the existing index — every document will need to be re-embedded on the next connector sync. The lock also applies in **LLM Providers > Models**: the configured model's embedding dimensions cannot be edited until the configuration is dropped.
 
 ### Reranking Configuration
 

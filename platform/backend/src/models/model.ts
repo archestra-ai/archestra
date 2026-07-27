@@ -12,15 +12,18 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
   CreateModel,
   Model,
   ModelCapabilities,
+  ModelDefaultParameters,
   PatchModelBody,
   PriceSource,
 } from "@/types";
+import ModelTeamModel from "./model-team";
 
 /**
  * Effective pricing result with source tracking. All prices are per-million
@@ -133,6 +136,32 @@ function combineCacheSource(
  */
 function formatCachePrice(perMillion: number): string {
   return Number.parseFloat(perMillion.toFixed(8)).toString();
+}
+
+/**
+ * Read the Modelfile `num_ctx` out of the provider-reported defaults.
+ *
+ * `defaultParameters` is parsed from Ollama's free-form `parameters` text block,
+ * so the value arrives as a string as often as a number, and an unrecognised
+ * block can put anything here. Coerce narrowly and let the caller's
+ * `sanitizeOutputLimit` reject whatever is left — this feeds the context ring
+ * and the compaction threshold, so a bad parse must fall back rather than
+ * propagate.
+ */
+function readOllamaDefaultNumCtx(
+  defaultParameters: ModelDefaultParameters | null | undefined,
+): number | null {
+  // A Modelfile may set the same PARAMETER twice, which the fetcher collects
+  // into an array. Ollama itself is last-wins, so take the final entry rather
+  // than rejecting the whole value and falling back to the architectural
+  // window — that fallback is the very overstatement this resolution exists
+  // to prevent.
+  const collected = defaultParameters?.num_ctx;
+  const raw = Array.isArray(collected) ? collected.at(-1) : collected;
+  if (typeof raw === "number") return raw;
+  if (typeof raw !== "string") return null;
+  const parsed = Number(raw.trim());
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 class ModelModel {
@@ -579,6 +608,9 @@ class ModelModel {
     if (data.embeddingDimensions !== undefined) {
       set.embeddingDimensions = data.embeddingDimensions;
     }
+    if (data.configuredParameters !== undefined) {
+      set.configuredParameters = data.configuredParameters;
+    }
 
     const [result] = await db
       .update(schema.modelsTable)
@@ -811,6 +843,56 @@ class ModelModel {
    * Get model capabilities for API response.
    * Uses getEffectivePricing for pricing resolution.
    */
+  /**
+   * The context window to DISPLAY and gate on, resolved in three tiers:
+   *
+   * 1. A native-Ollama model with a configured `num_ctx` enforces exactly that
+   *    window, because Archestra sends it on every turn.
+   * 2. Otherwise, a Modelfile `num_ctx` reported by `/api/show` — Ollama applies
+   *    it whether or not we send anything, and it is what actually truncates.
+   * 3. Otherwise the architectural `context_length`.
+   *
+   * `context_length` alone overstates the window whenever Ollama is capped,
+   * producing the "ring shows 262K while Ollama truncates at 8K" symptom: no
+   * compaction fires, the model loses its system prompt, and nothing errors.
+   * Tier 2 costs nothing — `parseOllamaParameters` already stores the value and
+   * it was simply never read.
+   *
+   * Clamped to the architectural window, and tier 1 is gated on `ollama-native`
+   * since `/v1` cannot carry `num_ctx`. Both are defence in depth for the update
+   * route, which already rejects those cases: this drives the context ring, the
+   * A2A step-context guard and the output-token budget, so an inflated value
+   * pushes auto-compaction past the point where the conversation still fits.
+   *
+   * A server-level `OLLAMA_CONTEXT_LENGTH` cap remains invisible here — it is
+   * absent from `/api/show` and readable only from `/api/ps` while the model is
+   * loaded. Setting `num_ctx` explicitly is the escape hatch for that case.
+   */
+  static resolveEffectiveContextLength(model: Model): number | null {
+    const architectural = model.contextLength;
+    const isOllama =
+      model.provider === "ollama" || model.provider === "ollama-native";
+
+    const configured =
+      model.provider === "ollama-native"
+        ? sanitizeOutputLimit(model.configuredParameters?.num_ctx)
+        : null;
+    // Only Ollama's fetcher writes `defaultParameters` today, but gate it
+    // anyway: `num_ctx` means "the window Ollama enforces" and would be
+    // meaningless — and silently shrink the window — coming from anywhere else.
+    const modelfile = isOllama
+      ? sanitizeOutputLimit(readOllamaDefaultNumCtx(model.defaultParameters))
+      : null;
+
+    const resolved = configured ?? modelfile;
+    if (resolved === null) {
+      return architectural;
+    }
+    return architectural === null
+      ? resolved
+      : Math.min(resolved, architectural);
+  }
+
   static toCapabilities(model: Model | null): ModelCapabilities {
     if (!model) {
       return {
@@ -831,7 +913,7 @@ class ModelModel {
     const pricing = ModelModel.getEffectivePricing(model);
 
     return {
-      contextLength: model.contextLength,
+      contextLength: ModelModel.resolveEffectiveContextLength(model),
       inputModalities: model.inputModalities,
       outputModalities: model.outputModalities,
       supportsToolCalling: model.supportsToolCalling,
@@ -892,16 +974,28 @@ class ModelModel {
     if (!row) return null;
 
     const caps = ModelModel.toCapabilities(row);
+    const teamsByModelId = await ModelTeamModel.getTeamDetailsForModels([
+      row.id,
+    ]);
     return {
       id: row.id,
       modelId: row.modelId,
       provider: row.provider,
       description: row.description ?? null,
       ignored: row.ignored,
+      restrictedToTeams: (teamsByModelId.get(row.id) ?? []).map(
+        (team) => team.name,
+      ),
       embeddingDimensions: row.embeddingDimensions,
       inputModalities: row.inputModalities ?? null,
       outputModalities: row.outputModalities ?? null,
       discoveredViaLlmProxy: row.discoveredViaLlmProxy,
+      // The generation parameters Archestra SENDS on every turn. Without them
+      // a parameters-only save produces an empty before/after diff — the only
+      // other field it moves is `updatedAt`, which the audit hook strips — so
+      // "who set num_predict: 1 on a globally shared model row, and when" would
+      // be unanswerable. `contextLength` below only reflects `num_ctx`.
+      configuredParameters: row.configuredParameters ?? null,
       contextLength: caps.contextLength,
       pricePerMillionInput: caps.pricePerMillionInput,
       pricePerMillionOutput: caps.pricePerMillionOutput,

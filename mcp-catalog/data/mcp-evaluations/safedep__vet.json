@@ -1,0 +1,39 @@
+{
+  "name": "safedep__vet",
+  "display_name": "vet",
+  "description": "Protect against malicious open source packages 🤖",
+  "author": {
+    "name": "safedep"
+  },
+  "server": {
+    "command": "npx",
+    "args": ["-y", "@mcp/package-auditor"],
+    "env": {},
+    "type": "local"
+  },
+  "readme": null,
+  "category": "Security",
+  "programming_language": "Go",
+  "github_info": {
+    "owner": "safedep",
+    "repo": "vet",
+    "url": "https://github.com/safedep/vet",
+    "name": "safedep__vet",
+    "path": null,
+    "stars": 691,
+    "contributors": 22,
+    "issues": 189,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "e4e9dc2590ef3b9b25ce775d57541c6d3d72ba75"
+  },
+  "user_config": {},
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  }
+}

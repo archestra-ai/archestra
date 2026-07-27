@@ -1,3 +1,4 @@
+import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import FileModel from "@/models/file";
@@ -42,14 +43,27 @@ class ConversationFilesService {
           organizationId: params.organizationId,
         }),
       ]);
-    const { files: projectFiles, projectName } = projectScope;
+    const { files: projectFiles, projectId, projectName } = projectScope;
 
     // A file created in this chat is already in `generated`; keep it out of
     // `projectFiles` so a project chat doesn't list it twice.
     const generatedIds = new Set(artifacts.map((a) => a.id));
 
+    // The project's instructions file is surfaced by the Files panel as its own
+    // pinned entry, never as an ordinary row. The row can carry this chat's
+    // conversation id — the agent saved it here via the sandbox file tools, or
+    // it moved in with the chat that seeded the project — which would otherwise
+    // list it in `generated` next to the pinned entry (the panel only filters
+    // `projectFiles` by name).
+    const ordinaryArtifacts = artifacts.filter(
+      (a) =>
+        projectId === null ||
+        a.projectId !== projectId ||
+        a.filename !== PROJECT_INSTRUCTIONS_FILENAME,
+    );
+
     return {
-      generated: artifacts.map((a) => ({
+      generated: ordinaryArtifacts.map((a) => ({
         id: a.id,
         name: a.filename,
         mimeType: a.mimeType,
@@ -124,7 +138,11 @@ class ConversationFilesService {
     conversationId: string;
     organizationId: string;
     requestingUserId: string;
-  }): Promise<{ files: ProjectFile[]; projectName: string | null }> {
+  }): Promise<{
+    files: ProjectFile[];
+    projectId: string | null;
+    projectName: string | null;
+  }> {
     let scope: ProjectFileScope | null = null;
     try {
       scope = await resolveProjectFileScope({
@@ -139,14 +157,18 @@ class ConversationFilesService {
     }
 
     if (!scope) {
-      return { files: [], projectName: null };
+      return { files: [], projectId: null, projectName: null };
     }
 
     const files = await FileModel.listByProject({
       organizationId: params.organizationId,
       projectId: scope.projectId,
     });
-    return { files, projectName: scope.projectName };
+    return {
+      files,
+      projectId: scope.projectId,
+      projectName: scope.projectName,
+    };
   }
 }
 

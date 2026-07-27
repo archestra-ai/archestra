@@ -101,6 +101,7 @@ import {
   Minimax,
   Mistral,
   Ollama,
+  OllamaNative,
   OpenAi,
   Openrouter,
   Perplexity,
@@ -219,6 +220,12 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(Ollama.API.ChatCompletionResponseSchema, {
     id: "OllamaChatCompletionResponse",
   });
+  z.globalRegistry.add(OllamaNative.API.ChatRequestSchema, {
+    id: "OllamaNativeChatRequest",
+  });
+  z.globalRegistry.add(OllamaNative.API.ChatResponseSchema, {
+    id: "OllamaNativeChatResponse",
+  });
   z.globalRegistry.add(Zhipuai.API.ChatCompletionRequestSchema, {
     id: "ZhipuaiChatCompletionRequest",
   });
@@ -330,6 +337,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.modelRouterProxyRoutes);
   fastify.register(routes.mistralProxyRoutes);
   fastify.register(routes.ollamaProxyRoutes);
+  fastify.register(routes.ollamaNativeProxyRoutes);
   fastify.register(routes.openrouterProxyRoutes);
   fastify.register(routes.perplexityProxyRoutes);
   fastify.register(routes.vllmProxyRoutes);
@@ -1273,8 +1281,8 @@ const startWebServer = async () => {
       );
     });
 
-    // Eagerly provision a per-environment Dagger engine + egress policy for every
-    // environment, so environment-bound agents don't route to a non-existent pod.
+    // Eagerly provision a Dagger engine + egress policy for every environment and
+    // every organization's default, so no agent routes to a non-existent pod.
     void daggerEnvironmentRuntimeManager.reconcileAll();
 
     // Initialize incoming email provider (if configured)
@@ -1642,7 +1650,8 @@ const startWorker = async () => {
       );
     });
 
-    // Eagerly provision per-environment Dagger engines + egress policies.
+    // Eagerly provision per-environment and per-organization Dagger engines +
+    // egress policies.
     void daggerEnvironmentRuntimeManager.reconcileAll();
 
     // Worker server for Kubernetes probes, Prometheus scraping,

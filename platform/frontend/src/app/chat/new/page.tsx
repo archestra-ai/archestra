@@ -11,7 +11,24 @@ import { useEffect } from "react";
  *   /chat/new?agent_id=<prompt_uuid>&user_prompt=<message>&skill_id=<skill_uuid>
  *
  * Note: agent_id maps to agentId, skill_id maps to skillId URL parameters
+ *
+ * Hackathon review deep link (the Slack "Replay" button): the same URL also
+ * carries `review=<submissionId>&reviewSrc=<rawUrl>&pr=&repo=&app=&by=&name=&cat=`,
+ * which compose with agent_id/user_prompt so the review opens INSIDE a chat with
+ * the Hackathon agent — the replay docks in the right panel. These are forwarded
+ * verbatim to `/chat`, which seeds the per-conversation review context.
  */
+const REVIEW_PARAM_KEYS = [
+  "review",
+  "reviewSrc",
+  "pr",
+  "repo",
+  "app",
+  "by",
+  "name",
+  "cat",
+] as const;
+
 export default function ChatNewPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -25,6 +42,10 @@ export default function ChatNewPage() {
     if (agentId) params.set("agentId", agentId);
     if (userPrompt) params.set("user_prompt", userPrompt);
     if (skillId) params.set("skillId", skillId);
+    for (const key of REVIEW_PARAM_KEYS) {
+      const value = searchParams.get(key);
+      if (value) params.set(key, value);
+    }
 
     const queryString = params.toString();
     router.replace(queryString ? `/chat?${queryString}` : "/chat");

@@ -781,6 +781,37 @@ export async function handleLLMProxy<
         })
       : [];
 
+    // Enforce per-team model restrictions before any upstream call. Checked on
+    // the model actually being invoked (post cost-optimization rewrite).
+    const modelTeamAccess = await utils.checkModelTeamAccess({
+      provider: providerName,
+      modelId: actualModel,
+      organizationId: resolvedAgent.organizationId,
+      userId,
+      userTeamIds: userTeams.map((team) => team.id),
+    });
+    if (!modelTeamAccess.allowed) {
+      logger.info(
+        {
+          resolvedAgentId,
+          userId,
+          actualModel,
+          reason: "model_team_restricted",
+        },
+        `${providerName} request blocked: model is restricted to teams the caller is not part of`,
+      );
+      // Standard error envelope with a machine-readable `internal_code`
+      // (mirrors the provider_auth_required block above) so SDK clients
+      // surface a clear, non-retryable failure.
+      return reply.status(403).send({
+        error: {
+          message: modelTeamAccess.message,
+          type: "api_authorization_error",
+          internal_code: "model_restricted_to_teams",
+        },
+      });
+    }
+
     // Evaluate trusted data policies
     logger.debug(
       {
@@ -1101,6 +1132,7 @@ export async function handleLLMProxy<
       provider.extractErrorMessage,
       requestAdapter.isStreaming(),
       provider.extractInternalCode.bind(provider),
+      provider.formatStreamErrorFrame,
     );
   }
 }
@@ -1243,28 +1275,38 @@ async function handleStreaming<
             ensureStreamHeaders();
             reply.raw.write(result.sseData);
           } else if (result.isToolCallChunk) {
-            // Determine if the current tool call should be streamed.
+            // Determine whether the accumulated tool calls can be streamed.
             // Tools with no blocking policy stream immediately for low latency;
             // tools with blocking policies buffer until evaluation completes.
+            //
+            // Every known tool call is checked, not just the most recent one: a
+            // single chunk can carry several calls (Ollama's native wire
+            // delivers parallel calls in one `tool_calls` array rather than as
+            // per-index deltas), and streaming on the last one alone would
+            // write a blocked call's arguments to the client before
+            // `evaluatePolicies` ever ran. Repeat lookups are served by
+            // `toolPolicyCache`, so re-checking earlier calls is free.
             let shouldStream = false;
-            if (!shouldStream && !bufferAllToolCalls) {
-              const currentToolCall =
-                streamAdapter.state.toolCalls[
-                  streamAdapter.state.toolCalls.length - 1
-                ];
-              if (currentToolCall?.name) {
-                const cacheKey = `${agent.id}:${currentToolCall.name}:${contextIsTrusted}`;
+            if (!bufferAllToolCalls) {
+              let anyBlocking = false;
+              let sawNamedToolCall = false;
+              for (const toolCall of streamAdapter.state.toolCalls) {
+                if (!toolCall?.name) {
+                  continue;
+                }
+                sawNamedToolCall = true;
+                const cacheKey = `${agent.id}:${toolCall.name}:${contextIsTrusted}`;
                 let hasBlocking = toolPolicyCache.get(cacheKey);
                 if (hasBlocking === undefined) {
                   try {
                     hasBlocking =
                       await ToolInvocationPolicyModel.hasBlockingPolicy(
-                        currentToolCall.name,
+                        toolCall.name,
                         contextIsTrusted,
                       );
                   } catch (err) {
                     logger.warn(
-                      { err, toolName: currentToolCall.name },
+                      { err, toolName: toolCall.name },
                       "hasBlockingPolicy lookup failed, defaulting to buffer",
                     );
                     hasBlocking = true;
@@ -1272,10 +1314,13 @@ async function handleStreaming<
                   toolPolicyCache.set(cacheKey, hasBlocking);
                 }
                 if (hasBlocking) {
-                  bufferAllToolCalls = true;
+                  anyBlocking = true;
                 }
-                shouldStream = !hasBlocking;
               }
+              if (anyBlocking) {
+                bufferAllToolCalls = true;
+              }
+              shouldStream = sawNamedToolCall && !anyBlocking;
             }
 
             if (shouldStream) {
@@ -1453,17 +1498,19 @@ async function handleStreaming<
         actualModel,
         source,
       });
-    } else if (
-      toolCalls.length > 0 &&
-      streamedEventIndices.size < streamAdapter.getRawToolCallEvents().length
-    ) {
+    } else if (toolCalls.length > 0) {
       // Some tool call chunks were buffered during streaming (per-tool
-      // blocking policies). Policy allowed them, so flush un-streamed events now.
+      // blocking policies). Policy allowed them, so flush un-streamed events
+      // now. Read the events once: getRawToolCallEvents must not be called in
+      // a condition and again for the flush, or a snapshot-per-call adapter
+      // would still work but a draining one would silently discard events.
       const allEvents = streamAdapter.getRawToolCallEvents();
-      ensureStreamHeaders();
-      for (let i = 0; i < allEvents.length; i++) {
-        if (!streamedEventIndices.has(i)) {
-          reply.raw.write(allEvents[i]);
+      if (streamedEventIndices.size < allEvents.length) {
+        ensureStreamHeaders();
+        for (let i = 0; i < allEvents.length; i++) {
+          if (!streamedEventIndices.has(i)) {
+            reply.raw.write(allEvents[i]);
+          }
         }
       }
     }
@@ -1538,6 +1585,7 @@ async function handleStreaming<
       provider.extractErrorMessage,
       true,
       provider.extractInternalCode.bind(provider),
+      provider.formatStreamErrorFrame,
     );
   } finally {
     // Always record interaction (whether stream completed or was aborted)

@@ -95,7 +95,6 @@
   "user_config": {},
   "readme": null,
   "category": "MCP Apps Demo",
-  "quality_score": null,
   "instructions": "The official MCP reference and test server. It is not a productivity tool — it exists to exercise every MCP protocol feature: tools, resources (static, dynamic, and session-scoped), prompts, sampling, elicitation, roots, logging, progress notifications, and long-running tasks, including MCP Apps UI extensions where present. Runs locally via `npx` and needs no credentials or configuration.",
   "archestra_config": {
     "client_config_permutations": {
@@ -124,26 +123,5 @@
     "ci_cd": false,
     "latest_commit_hash": null
   },
-  "programming_language": "TypeScript",
-  "framework": null,
-  "last_scraped_at": null,
-  "evaluation_model": null,
-  "protocol_features": {
-    "implementing_tools": true,
-    "implementing_prompts": true,
-    "implementing_resources": true,
-    "implementing_sampling": true,
-    "implementing_roots": true,
-    "implementing_logging": true,
-    "implementing_stdio": true,
-    "implementing_streamable_http": true,
-    "implementing_oauth2": false
-  },
-  "dependencies": [
-    {
-      "name": "@modelcontextprotocol/sdk",
-      "importance": 10
-    }
-  ],
-  "raw_dependencies": null
+  "programming_language": "TypeScript"
 }

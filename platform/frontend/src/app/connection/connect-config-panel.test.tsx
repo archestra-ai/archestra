@@ -53,19 +53,34 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
   CreateLlmProviderApiKeyDialog: () => null,
 }));
 
+// The gateway summary pulls its own unmocked queries; the visibility tests only
+// care that the gateway review row (and thus step 5) is present, not its body.
+vi.mock("./gateway-servers-summary", () => ({
+  GatewayServersSummary: () => null,
+}));
+
 const proxy = {
   id: "proxy-1",
   name: "Prod Proxy",
   agentType: "llm_proxy" as const,
 };
 
-function renderPanel() {
+const gateway = {
+  id: "gateway-1",
+  name: "Prod Gateway",
+  agentType: "mcp_gateway" as const,
+};
+
+const IMPORT_STEP_TITLE = "Import the profile into Claude Desktop";
+const OAUTH_STEP_TITLE = "Finish the OAuth flow";
+
+function renderPanel({ withGateway = false }: { withGateway?: boolean } = {}) {
   return render(
     <ConnectConfigPanel
-      mcpGateways={null}
-      mcpGatewayId={null}
+      mcpGateways={withGateway ? [gateway] : null}
+      mcpGatewayId={withGateway ? gateway.id : null}
       onMcpGatewaySelect={() => {}}
-      gatewaySlug={null}
+      gatewaySlug={withGateway ? gateway.id : null}
       llmProxies={[proxy]}
       llmProxyId={proxy.id}
       onLlmProxySelect={() => {}}
@@ -198,5 +213,63 @@ describe("ConnectConfigPanel — shared skills marketplace", () => {
         expectedName: "archestra-acme-skills",
       },
     ]);
+  });
+});
+
+describe("ConnectConfigPanel — import & OAuth step visibility", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubKeyProvisioning();
+  });
+
+  it("shows the import and OAuth steps once a profile can be downloaded", async () => {
+    grantAllPermissions();
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [{ provider: "anthropic" }],
+    } as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+
+    renderPanel({ withGateway: true });
+
+    // The download button only renders once key provisioning resolves; both
+    // follow-up steps are present alongside it.
+    await screen.findByTestId("connect-download-config");
+    expect(screen.getByText(IMPORT_STEP_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(OAUTH_STEP_TITLE)).toBeInTheDocument();
+  });
+
+  it("hides the import and OAuth steps when no Anthropic key is configured", () => {
+    grantAllPermissions();
+    // A key exists, but not for Anthropic — the profile still can't be minted.
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [{ provider: "openai" }],
+    } as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+
+    renderPanel({ withGateway: true });
+
+    // Step 3 still renders and explains the blocker...
+    expect(screen.getByText(/authorize inference/)).toBeInTheDocument();
+    // ...but the steps that depend on a downloaded profile are gone.
+    expect(screen.queryByText(IMPORT_STEP_TITLE)).toBeNull();
+    expect(screen.queryByText(OAUTH_STEP_TITLE)).toBeNull();
+  });
+
+  it("hides the import and OAuth steps when the user can't create virtual keys", () => {
+    // Everything permitted except minting virtual keys — the profile can never
+    // be produced, so the follow-up steps are noise.
+    vi.mocked(useHasPermissions).mockImplementation((perms) => {
+      const isVirtualKeyCreate =
+        JSON.stringify(perms) === JSON.stringify({ llmVirtualKey: ["create"] });
+      return { data: !isVirtualKeyCreate } as ReturnType<
+        typeof useHasPermissions
+      >;
+    });
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [{ provider: "anthropic" }],
+    } as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+
+    renderPanel({ withGateway: true });
+
+    expect(screen.queryByText(IMPORT_STEP_TITLE)).toBeNull();
+    expect(screen.queryByText(OAUTH_STEP_TITLE)).toBeNull();
   });
 });

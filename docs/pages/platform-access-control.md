@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-07-22
+lastUpdated: 2026-07-23
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -195,7 +195,7 @@ The following table lists all available permissions that can be assigned to cust
 | `llmLimit:update` | Modify existing usage limits |
 | `llmLimit:delete` | Remove usage limits |
 | `llmModel:read` | View synced LLM models and capabilities |
-| `llmModel:update` | Modify LLM model pricing and modality settings |
+| `llmModel:update` | Modify LLM model pricing, modality and generation-parameter settings |
 | `llmOauthClient:read` | View LLM OAuth client registrations |
 | `llmOauthClient:create` | Create LLM OAuth client registrations |
 | `llmOauthClient:update` | Modify LLM OAuth client registrations |
@@ -355,6 +355,12 @@ Examples:
 - Organization-wide records require the resource-specific admin permission such as `llmProviderApiKey:admin` or `llmVirtualKey:admin`
 
 These resources do **not** use `:team-admin`.
+
+### Team-Restricted Models
+
+You can limit an LLM model to specific teams. Open the model on the Models page and pick teams under "Limit to teams" — dev teams get frontier models while test teams use cheaper ones, for example.
+
+A model with no teams selected stays available to everyone. A restricted model is hidden from model pickers and `/models` listings for users outside its teams, and the LLM Proxy rejects their requests to it with `403`. Users with `llmModel:update`, including organization admins, keep full access.
 
 ### Chat Access And Optional UI Controls
 

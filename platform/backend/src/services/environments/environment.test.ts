@@ -1,4 +1,5 @@
-import { describe, expect } from "vitest";
+import { describe, expect, vi } from "vitest";
+import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import { InternalMcpCatalogModel, OrganizationModel } from "@/models";
 import {
   assertCanAssignEnvironment,
@@ -123,6 +124,35 @@ describe("EnvironmentService", () => {
     ).resolves.toBeUndefined();
     const listed = await listEnvironments(org.id);
     expect(listed.environments.some((e) => e.id === env.id)).toBe(false);
+  });
+
+  test("deleteEnvironment tears down the environment's engine on success, not on a rejected delete", async ({
+    makeOrganization,
+  }) => {
+    const teardown = vi
+      .spyOn(daggerEnvironmentRuntimeManager, "teardownEnvironmentEngine")
+      .mockResolvedValue();
+    try {
+      const org = await makeOrganization();
+      const env = await createEnvironment({
+        organizationId: org.id,
+        data: { name: "Sandbox" },
+      });
+
+      await deleteEnvironment({ id: env.id, organizationId: org.id });
+      expect(teardown).toHaveBeenCalledWith(
+        expect.objectContaining({ id: env.id }),
+      );
+
+      // A rejected delete must not tear down anything.
+      teardown.mockClear();
+      await expect(
+        deleteEnvironment({ id: MISSING_ID, organizationId: org.id }),
+      ).rejects.toThrow();
+      expect(teardown).not.toHaveBeenCalled();
+    } finally {
+      teardown.mockRestore();
+    }
   });
 
   test("createEnvironment persists restricted=true and lists it back", async ({

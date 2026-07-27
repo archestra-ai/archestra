@@ -722,10 +722,15 @@ function ChatSessionHook({
           queryKey: ["conversation", conversationId],
         });
       }, 500);
-      console.error("[ChatSession] Error occurred:", {
+      // Log the error itself, not just fields read off it: a stream failure can
+      // arrive as a bare object with no name/message, and the destructured form
+      // then serializes to "{}" — which is what this printed while a real
+      // failure was in flight, leaving nothing to diagnose.
+      console.error("[ChatSession] Error occurred:", chatError, {
         conversationId,
         errorName: chatError.name,
         errorMessage: chatError.message,
+        errorCause: chatError.cause,
         retryCount: retryCountRef.current,
       });
 

@@ -1,10 +1,36 @@
 import { describe, expect, test } from "vitest";
 import {
+  anthropicThinksByDefault,
   getProvidersWithOptionalApiKey,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   requiresOpenAiResponsesApi,
 } from "./model-constants";
+
+describe("anthropicThinksByDefault", () => {
+  test("matches models whose thinking is always on, including dated snapshots", () => {
+    expect(anthropicThinksByDefault("claude-opus-5")).toBe(true);
+    expect(anthropicThinksByDefault("claude-opus-5-20260724")).toBe(true);
+    expect(anthropicThinksByDefault("claude-sonnet-5")).toBe(true);
+    expect(anthropicThinksByDefault("claude-sonnet-5-20250929")).toBe(true);
+    expect(anthropicThinksByDefault("claude-fable-5")).toBe(true);
+    expect(anthropicThinksByDefault("claude-mythos-5")).toBe(true);
+    expect(anthropicThinksByDefault("claude-mythos-preview")).toBe(true);
+  });
+
+  test("excludes models where thinking is off until requested", () => {
+    // Opus 4.8/4.7 hide thinking text too (`display` defaults to "omitted"),
+    // but thinking itself is off by default there — requesting it would add
+    // cost, so they are deliberately not matched.
+    expect(anthropicThinksByDefault("claude-opus-4-8")).toBe(false);
+    expect(anthropicThinksByDefault("claude-opus-4-7")).toBe(false);
+    // Nearest substring neighbor of the "opus-5" marker — must not match.
+    expect(anthropicThinksByDefault("claude-opus-4-5-20251101")).toBe(false);
+    expect(anthropicThinksByDefault("claude-sonnet-4-6")).toBe(false);
+    expect(anthropicThinksByDefault("claude-sonnet-4-5")).toBe(false);
+    expect(anthropicThinksByDefault("claude-3-5-haiku-20241022")).toBe(false);
+  });
+});
 
 describe("requiresOpenAiResponsesApi", () => {
   test("matches pro reasoning models, including dated snapshots", () => {
@@ -33,6 +59,7 @@ describe("requiresOpenAiResponsesApi", () => {
 describe("provider API key optional helpers", () => {
   test("treats self-hosted providers as optional", () => {
     expect(isProviderApiKeyOptional({ provider: "ollama" })).toBe(true);
+    expect(isProviderApiKeyOptional({ provider: "ollama-native" })).toBe(true);
     expect(isProviderApiKeyOptional({ provider: "vllm" })).toBe(true);
   });
 
@@ -63,19 +90,28 @@ describe("provider API key optional helpers", () => {
   });
 
   test("lists providers with optional API keys", () => {
-    expect(getProvidersWithOptionalApiKey()).toEqual(["ollama", "vllm"]);
+    expect(getProvidersWithOptionalApiKey()).toEqual([
+      "ollama",
+      "ollama-native",
+      "vllm",
+    ]);
     expect(
       getProvidersWithOptionalApiKey({ azureEntraIdEnabled: true }),
-    ).toEqual(["ollama", "vllm", "azure"]);
+    ).toEqual(["ollama", "ollama-native", "vllm", "azure"]);
     expect(
       getProvidersWithOptionalApiKey({ anthropicWifEnabled: true }),
-    ).toEqual(["ollama", "vllm", "anthropic"]);
+    ).toEqual(["ollama", "ollama-native", "vllm", "anthropic"]);
   });
 });
 
 describe("isSelfHostedProvider", () => {
   test("matches only the self-hosted providers", () => {
     expect(isSelfHostedProvider("ollama")).toBe(true);
+    // Both Ollama transports are the same self-hosted server, so the
+    // Docker-localhost hint has to apply to each. Coverage is transitive
+    // through the shared set today; assert it directly so a future split
+    // cannot silently drop one.
+    expect(isSelfHostedProvider("ollama-native")).toBe(true);
     expect(isSelfHostedProvider("vllm")).toBe(true);
   });
 

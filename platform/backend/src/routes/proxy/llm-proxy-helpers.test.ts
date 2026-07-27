@@ -527,10 +527,19 @@ describe("handleError", () => {
   function makeReply(headersSent: boolean) {
     const writes: string[] = [];
     const headers: Record<string, string> = {};
-    const reply = {
+    const sent: { statusCode?: number; body?: unknown } = {};
+    const replyShape = {
       header: (name: string, value: string) => {
         headers[name] = value;
-        return reply;
+        return replyShape;
+      },
+      status: (statusCode: number) => {
+        sent.statusCode = statusCode;
+        return replyShape;
+      },
+      send: (body: unknown) => {
+        sent.body = body;
+        return replyShape;
       },
       raw: {
         headersSent,
@@ -540,8 +549,9 @@ describe("handleError", () => {
         },
         end: () => {},
       },
-    } as unknown as FastifyReply;
-    return { reply, writes, headers };
+    };
+    const reply = replyShape as unknown as FastifyReply;
+    return { reply, writes, headers, sent };
   }
 
   const extractMessage = (error: unknown) =>
@@ -688,14 +698,17 @@ describe("handleError", () => {
     throw new Error("handleError did not throw");
   }
 
-  test("classifies a streamed Anthropic overload as 529 with the normalized code", () => {
-    const { reply } = makeReply(false);
-    const thrown = throwErrorFor(makeStreamedOverloadError(), reply);
+  test("relays a streamed Anthropic overload as 529 with the provider body verbatim", () => {
+    const { reply, sent } = makeReply(false);
+    const error = makeStreamedOverloadError();
 
-    expect(thrown.statusCode).toBe(529);
-    expect(thrown.internalCode).toBe(
-      ArchestraInternalErrorCode.ProviderOverloaded,
-    );
+    handleError(error, reply, extractMessage, true, () => undefined);
+
+    expect(sent.statusCode).toBe(529);
+    expect(sent.body).toEqual({
+      type: "error",
+      error: { type: "overloaded_error", message: "Overloaded" },
+    });
   });
 
   test("classifies generic overload wording without a status as 503", () => {
@@ -746,12 +759,14 @@ describe("handleError", () => {
   });
 
   test("forwards the upstream Retry-After header before headers commit", () => {
-    const { reply, headers } = makeReply(false);
+    const { reply, headers, sent } = makeReply(false);
     const error = makeStreamedOverloadError(
       new Headers({ "retry-after": "30" }),
     );
 
-    expect(throwErrorFor(error, reply).statusCode).toBe(529);
+    handleError(error, reply, extractMessage, true, () => undefined);
+
+    expect(sent.statusCode).toBe(529);
     expect(headers["retry-after"]).toBe("30");
   });
 
@@ -781,6 +796,161 @@ describe("handleError", () => {
     const payload = JSON.parse(writes[0].replace(/^event: error\ndata: /, ""));
     expect(payload.error.internal_code).toBe(
       ArchestraInternalErrorCode.ProviderOverloaded,
+    );
+  });
+
+  // A provider rate limit must reach native clients uncorrupted: the provider
+  // error body is relayed verbatim (not rewrapped into the Archestra envelope,
+  // which rewrote `rate_limit_error` to `unknown_api_error`) and the
+  // provider's ratelimit headers are forwarded so clients can tell an
+  // account/usage limit apart from server-side throttling.
+  function makeAnthropicRateLimitError(headers?: unknown) {
+    const body = {
+      type: "error",
+      error: {
+        type: "rate_limit_error",
+        message: "This request would exceed your account's rate limit.",
+      },
+    };
+    return Object.assign(new Error(JSON.stringify(body)), {
+      status: 429,
+      error: body,
+      headers,
+    });
+  }
+
+  test("relays an Anthropic 429 body verbatim with its original error type", () => {
+    const { reply, sent } = makeReply(false);
+
+    handleError(
+      makeAnthropicRateLimitError(),
+      reply,
+      extractMessage,
+      false,
+      () => undefined,
+    );
+
+    expect(sent.statusCode).toBe(429);
+    expect(sent.body).toEqual({
+      type: "error",
+      error: {
+        type: "rate_limit_error",
+        message: "This request would exceed your account's rate limit.",
+      },
+    });
+  });
+
+  test("rewraps an OpenAI-style 429 error member into the provider's original body shape", () => {
+    const { reply, sent } = makeReply(false);
+    const error = Object.assign(new Error("Rate limit reached"), {
+      status: 429,
+      // OpenAI-compatible SDKs store the body's `error` member directly.
+      error: {
+        message: "Rate limit reached for requests",
+        type: "requests",
+        code: "rate_limit_exceeded",
+      },
+    });
+
+    handleError(error, reply, extractMessage, false, () => undefined);
+
+    expect(sent.statusCode).toBe(429);
+    expect(sent.body).toEqual({
+      error: {
+        message: "Rate limit reached for requests",
+        type: "requests",
+        code: "rate_limit_exceeded",
+      },
+    });
+  });
+
+  test("forwards the provider's ratelimit headers on a rate-limited response", () => {
+    const { reply, headers } = makeReply(false);
+    const error = makeAnthropicRateLimitError(
+      new Headers({
+        "anthropic-ratelimit-unified-status": "rejected",
+        "anthropic-ratelimit-unified-reset": "1753257600",
+        "x-ratelimit-remaining-tokens": "0",
+        "retry-after": "60",
+        // Unrelated headers must not leak through.
+        "x-request-id": "req_123",
+      }),
+    );
+
+    handleError(error, reply, extractMessage, false, () => undefined);
+
+    expect(headers["anthropic-ratelimit-unified-status"]).toBe("rejected");
+    expect(headers["anthropic-ratelimit-unified-reset"]).toBe("1753257600");
+    expect(headers["x-ratelimit-remaining-tokens"]).toBe("0");
+    expect(headers["retry-after"]).toBe("60");
+    expect(headers["x-request-id"]).toBeUndefined();
+  });
+
+  test("drops a ratelimit header value with non-printable characters", () => {
+    const { reply, headers } = makeReply(false);
+    const error = makeAnthropicRateLimitError({
+      "anthropic-ratelimit-unified-status": "reject\u0000ed",
+    });
+
+    handleError(error, reply, extractMessage, false, () => undefined);
+
+    expect(headers["anthropic-ratelimit-unified-status"]).toBeUndefined();
+  });
+
+  test("keeps the provider's error type in the mid-stream SSE event for a rate limit", () => {
+    const { reply, writes } = makeReply(true);
+
+    handleError(
+      makeAnthropicRateLimitError(),
+      reply,
+      extractMessage,
+      true,
+      () => undefined,
+    );
+
+    expect(writes).toHaveLength(1);
+    const payload = JSON.parse(writes[0].replace(/^event: error\ndata: /, ""));
+    expect(payload.error.type).toBe("rate_limit_error");
+  });
+
+  test("falls back to the Archestra envelope for a 429 without a provider body", () => {
+    const { reply } = makeReply(false);
+    const error = Object.assign(new Error("rate limited"), { status: 429 });
+
+    const thrown = throwErrorFor(error, reply);
+    expect(thrown.statusCode).toBe(429);
+  });
+
+  test("keeps the Archestra envelope for an internal ApiError 429 (usage-limit block)", () => {
+    const { reply } = makeReply(false);
+    const error = new ApiError(429, "Usage limit exceeded");
+
+    const thrown = throwErrorFor(error, reply);
+    expect(thrown.statusCode).toBe(429);
+    expect(thrown.message).toBe("Usage limit exceeded");
+  });
+
+  test("lets an adapter's intentional reclassification win over body passthrough", () => {
+    const { reply } = makeReply(false);
+    const error = makeAnthropicRateLimitError();
+
+    const thrown = (() => {
+      try {
+        handleError(
+          error,
+          reply,
+          extractMessage,
+          false,
+          () => ArchestraInternalErrorCode.ProviderInsufficientBalance,
+        );
+      } catch (caught) {
+        return caught as ApiError;
+      }
+      throw new Error("handleError did not throw");
+    })();
+
+    expect(thrown.internalCode).toBe(
+      ArchestraInternalErrorCode.ProviderInsufficientBalance,
     );
   });
 });

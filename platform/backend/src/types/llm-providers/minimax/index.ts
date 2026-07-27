@@ -42,6 +42,9 @@ namespace Minimax {
         choices: Array<{
           delta: {
             reasoning_details?: Array<{ text?: string }>;
+            // DeepSeek-style alias the proxy adds to forwarded chunks so
+            // OpenAI-compatible clients can parse the thinking text.
+            reasoning_content?: string | null;
           };
         }>;
       };

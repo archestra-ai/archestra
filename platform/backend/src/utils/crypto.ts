@@ -16,17 +16,26 @@ const VERSION_PREFIX = "v1";
 
 let cachedKey: Buffer | null = null;
 
+/**
+ * Derive the AES-256 key from a raw secret via HKDF. Exposed so the
+ * re-encryption migration can hold the previous and current keys at once.
+ * @public — used by standalone-scripts/reencrypt-secrets.ts
+ */
+export function deriveKeyFromSecret(secret: string): Buffer {
+  return Buffer.from(hkdfSync("sha256", secret, SALT, INFO, KEY_LENGTH));
+}
+
 function getEncryptionKey(): Buffer {
   if (cachedKey) return cachedKey;
 
-  const authSecret = config.auth.secret;
-  if (!authSecret) {
-    throw new Error("ARCHESTRA_AUTH_SECRET is required for secret encryption");
+  const encryptionSecret = config.secretsManager.encryptionSecret;
+  if (!encryptionSecret) {
+    throw new Error(
+      "ARCHESTRA_SECRETS_ENCRYPTION_SECRET (or legacy ARCHESTRA_AUTH_SECRET) is required for secret encryption",
+    );
   }
 
-  cachedKey = Buffer.from(
-    hkdfSync("sha256", authSecret, SALT, INFO, KEY_LENGTH),
-  );
+  cachedKey = deriveKeyFromSecret(encryptionSecret);
   return cachedKey;
 }
 
@@ -38,7 +47,12 @@ function fromBase64Url(str: string): Buffer {
   return Buffer.from(str, "base64url");
 }
 
-function encryptSecretValueWithKey(
+/**
+ * Encrypt a value under an explicit key. Exposed for the re-encryption
+ * migration; normal call sites use {@link encryptSecretValue}.
+ * @public — used by standalone-scripts/reencrypt-secrets.ts
+ */
+export function encryptSecretValueWithKey(
   plaintext: Record<string, unknown>,
   key: Buffer,
 ): { __encrypted: string } {
@@ -59,7 +73,12 @@ function encryptSecretValueWithKey(
   };
 }
 
-function decryptSecretValueWithKey(
+/**
+ * Decrypt a value under an explicit key. Exposed for the re-encryption
+ * migration; normal call sites use {@link decryptSecretValue}.
+ * @public — used by standalone-scripts/reencrypt-secrets.ts
+ */
+export function decryptSecretValueWithKey(
   encrypted: { __encrypted: string },
   key: Buffer,
 ): Record<string, unknown> {
@@ -86,9 +105,9 @@ function decryptSecretValueWithKey(
     // data" here; name the overwhelmingly likely operational cause instead.
     throw new Error(
       "Failed to decrypt stored secret: it was encrypted with a different key " +
-        "than the one derived from the current ARCHESTRA_AUTH_SECRET " +
-        "(the auth secret was rotated, or the database came from an " +
-        "environment with a different auth secret)",
+        "than the one derived from the current ARCHESTRA_SECRETS_ENCRYPTION_SECRET " +
+        "(the encryption secret was rotated without running the re-encryption " +
+        "migration, or the database came from an environment with a different secret)",
       { cause: error },
     );
   }

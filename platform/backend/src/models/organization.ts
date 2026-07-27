@@ -2,6 +2,7 @@ import {
   DEFAULT_THEME_ID,
   MEMBER_ROLE_NAME,
   type OrganizationCustomFont,
+  type SupportedProvider,
 } from "@archestra/shared";
 import { and, eq, isNull } from "drizzle-orm";
 import { CacheKey, cacheManager } from "@/cache-manager";
@@ -9,6 +10,7 @@ import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
   AppearanceSettings,
+  NetworkPolicy,
   Organization,
   OrganizationAnalyticsState,
 } from "@/types";
@@ -248,6 +250,92 @@ class OrganizationModel {
       .select({ id: schema.organizationsTable.id })
       .from(schema.organizationsTable);
     return rows.map((row) => row.id);
+  }
+
+  /**
+   * Whether any organization's locked knowledge embedding config points at this
+   * provider + model pair. The provider comes from the org's embedding API key,
+   * which is how the knowledge base resolves the model row at embed time.
+   */
+  static async isKnowledgeEmbeddingModel(params: {
+    provider: SupportedProvider;
+    modelId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable)
+      .innerJoin(
+        schema.llmProviderApiKeysTable,
+        eq(
+          schema.organizationsTable.embeddingChatApiKeyId,
+          schema.llmProviderApiKeysTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.organizationsTable.embeddingModel, params.modelId),
+          eq(schema.llmProviderApiKeysTable.provider, params.provider),
+        ),
+      )
+      .limit(1);
+    return !!row;
+  }
+
+  /**
+   * The fields the code-managed default Dagger engine needs, for every
+   * organization. Projected rather than selecting whole rows: startup reconciles
+   * every organization, and a row carries base64 logos and favicons the engine
+   * has no use for. The engine's egress policy is read separately, per engine.
+   */
+  static async listDefaultEngineTargets(): Promise<
+    { id: string; defaultEnvironmentNamespace: string | null }[]
+  > {
+    return db
+      .select({
+        id: schema.organizationsTable.id,
+        defaultEnvironmentNamespace:
+          schema.organizationsTable.defaultEnvironmentNamespace,
+      })
+      .from(schema.organizationsTable);
+  }
+
+  /**
+   * The same fields for one organization. Every sandbox run by an agent with no
+   * environment resolves its engine through this, so it reads two columns rather
+   * than a whole row.
+   */
+  static async getDefaultEngineTarget(id: string): Promise<{
+    id: string;
+    defaultEnvironmentNamespace: string | null;
+  } | null> {
+    const [row] = await db
+      .select({
+        id: schema.organizationsTable.id,
+        defaultEnvironmentNamespace:
+          schema.organizationsTable.defaultEnvironmentNamespace,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * The organization's default egress policy for sandbox engines. Engine
+   * reconciliation reads only this column, so it avoids the row's base64 logo
+   * fields.
+   */
+  static async getDefaultNetworkPolicy(
+    id: string,
+  ): Promise<NetworkPolicy | null> {
+    const [row] = await db
+      .select({
+        defaultNetworkPolicy: schema.organizationsTable.defaultNetworkPolicy,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+    return row?.defaultNetworkPolicy ?? null;
   }
 
   /**

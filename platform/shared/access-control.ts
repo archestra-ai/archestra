@@ -69,6 +69,12 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmProviderApiKey: ["read", "create", "update", "delete", "admin"],
   llmVirtualKey: ["read", "create", "update", "delete", "admin"],
   llmOauthClient: ["read", "create", "update", "delete", "team-admin", "admin"],
+  // "update" covers the whole model row, generation parameters included. An
+  // extra "admin" action once gated `configuredParameters` on the grounds that
+  // model rows are global, but pricing and `ignored` are equally global and
+  // equally editor-writable — so it drew a line the rest of the row does not,
+  // while permanently locking out custom roles, whose permission snapshots are
+  // frozen at creation and never gained the new action.
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   optimizationRule: ["read", "create", "update", "delete"],
@@ -497,7 +503,8 @@ export const permissionDescriptions: Record<string, string> = {
   "llmOauthClient:admin":
     "Manage all LLM OAuth client registrations, bypassing team restrictions",
   "llmModel:read": "View synced LLM models and capabilities",
-  "llmModel:update": "Modify LLM model pricing and modality settings",
+  "llmModel:update":
+    "Modify LLM model pricing, modality and generation-parameter settings",
   "llmLimit:read": "View token usage limits",
   "llmLimit:create": "Create new usage limits",
   "llmLimit:update": "Modify existing usage limits",
@@ -1697,6 +1704,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAppRecordingRenderStatus]: { chat: ["update"] },
   [RouteId.DownloadAppRecordingVideo]: { chat: ["update"] },
   [RouteId.CancelAppRecordingRender]: { chat: ["update"] },
+  // Reviewing a hackathon submission: any authenticated org member may open the
+  // read-only review player. The bundle it serves is public GitHub data fetched
+  // server-side, so no per-resource permission is required beyond being signed in.
+  [RouteId.ReviewAppRecording]: {},
   // Same chat-scoped permission as the recording routes above: sharing starts
   // from the player inside a chat session; the handler re-checks the feature
   // gates.

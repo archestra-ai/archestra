@@ -48,7 +48,6 @@ vi.mock("@/components/chat/model-selector", () => ({
     renderCounts.modelSelector++;
     return <div data-testid="model-selector" />;
   },
-  providerToLogoProvider: {},
 }));
 
 vi.mock("@/components/chat/llm-provider-api-key-selector", () => ({

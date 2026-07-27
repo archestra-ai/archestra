@@ -209,6 +209,16 @@ An explicit archestra.env value overrides the injection.
 - name: ARCHESTRA_CODE_RUNTIME_ENABLED
   value: {{ .Values.archestra.codeRuntime.enabled | quote }}
 {{- end }}
+{{/* Back-compat: the removed chart-deployed engine's bring-your-own pointer
+     lived at archestra.codeRuntime.dagger.runnerHost. Carry a leftover value
+     into the env var so an upgrade keeps routing to that engine instead of
+     silently dropping it and provisioning engines in-cluster. An explicit
+     archestra.env entry wins. */}}
+{{- $leftoverRunnerHost := dig "dagger" "runnerHost" "" .Values.archestra.codeRuntime }}
+{{- if and $leftoverRunnerHost (not (hasKey .Values.archestra.env "ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST")) }}
+- name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+  value: {{ $leftoverRunnerHost | quote }}
+{{- end }}
 {{- if .Values.archestra.diagnostics.enabled }}
 - name: ARCHESTRA_NODE_DIAGNOSTIC_DIR
   value: "/var/diagnostics"

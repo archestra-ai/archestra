@@ -544,6 +544,37 @@ tests:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
             value: tcp://dagger-runtime.custom.svc.cluster.local:1234
 
+  # Back-compat shim: a bring-your-own pointer left at the removed
+  # codeRuntime.dagger.runnerHost key still reaches the backend, so an upgrade
+  # keeps routing to that engine instead of silently provisioning in-cluster.
+  - it: should carry a leftover codeRuntime.dagger.runnerHost into the env var
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.dagger.runnerHost: tcp://legacy-engine:1234
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: tcp://legacy-engine:1234
+
+  - it: should let an explicit archestra.env runner host win over the leftover key
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.dagger.runnerHost: tcp://legacy-engine:1234
+      archestra.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST: tcp://explicit:1234
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: tcp://explicit:1234
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: tcp://legacy-engine:1234
+
   - it: should include ARCHESTRA_DATABASE_URL alongside custom env vars
     documentIndex: 1
     set:

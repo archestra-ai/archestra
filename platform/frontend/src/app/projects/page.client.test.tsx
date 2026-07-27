@@ -38,8 +38,16 @@ vi.mock("@/components/search-input", () => ({
   SearchInput: () => <input aria-label="Search projects" />,
 }));
 
-vi.mock("@/components/project-scope-filter", () => ({
-  ProjectScopeFilter: () => <div>scope filter</div>,
+vi.mock("@/components/resource-scope-filter", () => ({
+  ResourceScopeFilter: () => <div>scope filter</div>,
+  useScopeFilterParams: () => ({
+    scope: undefined,
+    teamIds: undefined,
+    authorIds: undefined,
+    excludeAuthorIds: undefined,
+    excludeOtherPersonal: true,
+    hasActiveScopeFilters: false,
+  }),
 }));
 
 vi.mock("next/link", () => ({

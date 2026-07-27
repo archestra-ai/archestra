@@ -8,7 +8,7 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
-import { Copy, Pencil, RefreshCw, Trash2 } from "lucide-react";
+import { Copy, Info, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -35,6 +35,7 @@ import {
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
 import { SECRET_PLACEHOLDER_TOKEN } from "@/components/secret-copy-button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VirtualKeyManagement } from "@/components/virtual-key-management";
@@ -103,6 +104,7 @@ export function LlmProxyConnectInstructionsDialog({
             <div className="text-xs text-muted-foreground">Endpoint</div>
           }
         />
+        {selected === "model-router" && <ModelRouterAlert />}
         <LlmProxyAuthSurface
           proxy={proxy}
           baseUrl={baseUrl}
@@ -211,11 +213,6 @@ function LlmProxyAuthSurface({
 
       {tab === "virtual-keys" && (
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Create a virtual key, then choose the stored provider API key it can
-            use for each provider. Model Router reads the provider from the
-            requested model and uses that mapping.
-          </p>
           <AuthFacts
             rows={[
               ["For", "teammates and services without their own provider keys"],
@@ -351,6 +348,26 @@ function LlmProxyAuthSurface({
         onOpenChange={setOauthCreateOpen}
       />
     </div>
+  );
+}
+
+function ModelRouterAlert() {
+  return (
+    <Alert variant="info">
+      <Info />
+      <AlertTitle>How Model Router uses provider keys</AlertTitle>
+      <AlertDescription>
+        <p>
+          Model Router reads the provider from the requested model. Each virtual
+          key maps that provider to an API key saved under Model Providers.
+        </p>
+        <ol className="list-decimal space-y-1 pl-4">
+          <li>Create a virtual key.</li>
+          <li>Choose one stored provider API key for each provider it uses.</li>
+          <li>Send the virtual key as your API key.</li>
+        </ol>
+      </AlertDescription>
+    </Alert>
   );
 }
 

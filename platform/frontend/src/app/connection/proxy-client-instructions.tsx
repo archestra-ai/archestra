@@ -928,7 +928,7 @@ function StepList({
  * Inline reveal for the manual attribution step: auto-provisions the caller's
  * personal passthrough virtual key (scoped to this proxy) and shows the header
  * name + copyable value to paste into the client's custom-headers field. Gated
- * on llmVirtualKey:create; otherwise points to the Virtual API Keys page.
+ * on llmVirtualKey:create; otherwise points to the LLM Proxies page.
  */
 type PassthroughKeyState =
   | { status: "loading" }
@@ -981,14 +981,14 @@ function PassthroughKeyField({
   if (canCreate === false) {
     return (
       <p className="text-[12.5px] leading-snug text-muted-foreground">
-        Create a passthrough virtual key on the{" "}
+        Open an LLM Proxy&apos;s Connect dialog from the{" "}
         <Link
-          href="/credentials/virtual-keys"
+          href="/llm/proxies"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
-          Virtual API Keys
+          LLM Proxies
         </Link>{" "}
-        page, then add a header named{" "}
+        page and create a passthrough key. Then add a header named{" "}
         <code className="rounded bg-muted px-1 py-0.5 text-[11px]">
           {VIRTUAL_KEY_HEADER}
         </code>{" "}
@@ -1008,12 +1008,12 @@ function PassthroughKeyField({
         >
           Retry
         </button>{" "}
-        or create one on the{" "}
+        or open an LLM Proxy&apos;s Connect dialog from the{" "}
         <Link
-          href="/credentials/virtual-keys"
+          href="/llm/proxies"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
-          Virtual API Keys
+          LLM Proxies
         </Link>{" "}
         page.
       </p>
@@ -1078,8 +1078,8 @@ function PassthroughKeyField({
         </>
       )}
       <p className="text-[11px] text-muted-foreground">
-        Revoke any time by deleting the &quot;{key.name}&quot; key on the
-        Virtual API Keys page.
+        Revoke any time from the LLM Proxy&apos;s Connect dialog by deleting the
+        &quot;{key.name}&quot; key.
       </p>
     </div>
   );

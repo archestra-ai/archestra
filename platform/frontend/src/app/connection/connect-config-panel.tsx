@@ -594,12 +594,13 @@ function ConfigDownloadStep({
     return (
       <p className="text-sm text-muted-foreground">
         You don't have permission to create virtual keys. Ask an admin to
-        generate a configuration profile, or create the keys on the{" "}
+        generate a configuration profile, or open a proxy&apos;s Connect dialog
+        from the{" "}
         <Link
-          href="/credentials/virtual-keys"
+          href="/llm/proxies"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
-          Virtual API Keys
+          LLM Proxies
         </Link>{" "}
         page.
       </p>

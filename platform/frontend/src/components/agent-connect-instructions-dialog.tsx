@@ -8,7 +8,7 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
-import { Copy, Eye, EyeOff, RefreshCw, Trash2 } from "lucide-react";
+import { Copy, Info, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -21,23 +21,26 @@ import { GenericAuthRow } from "@/app/connection/mcp-client-instructions";
 import { GenericEndpointCard } from "@/app/connection/proxy-client-instructions";
 import { TerminalBlock } from "@/app/connection/terminal-block";
 import { useUpdateUrlParams } from "@/app/connection/use-update-url-params";
-import { CreateOAuthClientDialog } from "@/app/credentials/_parts/create-oauth-client-dialog";
-import {
-  type CreatedCredentials,
-  OAuthClientCreatedDialog,
-} from "@/app/credentials/_parts/oauth-client-created-dialog";
 import { ConnectDialog } from "@/components/connect-dialog";
+import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
 import {
   CreateVirtualKeyDialogWithData,
   type VirtualKeyType,
 } from "@/components/create-virtual-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { formatProviderKeySummary } from "@/components/provider-key-mappings-field";
+import { EditOAuthClientDialog as LlmEditOAuthClientDialog } from "@/components/llm-oauth-client-dialogs";
+import { McpOauthManagement } from "@/components/mcp-oauth-management";
+import {
+  type CreatedCredentials,
+  OAuthClientCreatedDialog,
+} from "@/components/oauth-client-created-dialog";
 import { SECRET_PLACEHOLDER_TOKEN } from "@/components/secret-copy-button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { VirtualKeyManagement } from "@/components/virtual-key-management";
 import { useProfile, useProfiles } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import config from "@/lib/config/config";
@@ -46,15 +49,11 @@ import {
   useDeleteLlmOauthClient,
   useLlmOauthClients,
   useRotateLlmOauthClientSecret,
+  useUpdateLlmOauthClient,
 } from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useCreateMcpOauthClient } from "@/lib/mcp-oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
-import {
-  useAllVirtualApiKeys,
-  useDeleteVirtualApiKey,
-  useFetchVirtualApiKeyValue,
-} from "@/lib/virtual-api-keys.query";
 
 /**
  * "Plug" row-action dialogs for the LLM Proxies and MCP Gateways tables.
@@ -105,9 +104,9 @@ export function LlmProxyConnectInstructionsDialog({
             <div className="text-xs text-muted-foreground">Endpoint</div>
           }
         />
+        {selected === "model-router" && <ModelRouterAlert />}
         <LlmProxyAuthSurface
           proxy={proxy}
-          baseUrl={baseUrl}
           onClose={() => onOpenChange(false)}
         />
         <ConnectionGuideFooter
@@ -163,11 +162,9 @@ type ProxyAuthTab = "virtual-keys" | "passthrough" | "oauth" | "idp";
 
 function LlmProxyAuthSurface({
   proxy,
-  baseUrl,
   onClose,
 }: {
   proxy: ConnectTarget;
-  baseUrl: string;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<ProxyAuthTab>("virtual-keys");
@@ -194,9 +191,6 @@ function LlmProxyAuthSurface({
     llmOauthClient: ["create"],
   });
 
-  // The OAuth token endpoint lives at the backend root, not under /v1.
-  const tokenEndpoint = `${baseUrl.replace(/\/v1\/?$/, "")}/api/auth/oauth2/token`;
-
   return (
     <div className="space-y-3 rounded-lg border bg-card p-4">
       <div className="text-xs font-medium text-muted-foreground">
@@ -213,128 +207,81 @@ function LlmProxyAuthSurface({
 
       {tab === "virtual-keys" && (
         <div className="space-y-3">
-          <AuthFacts
-            rows={[
-              ["For", "teammates and services without their own provider keys"],
-              [
-                "Downstream",
-                "resolves to stored provider keys (Model Providers)",
-              ],
-              ["Routes", "Model Router + all provider routes"],
-              ["Send", "as the API key (Authorization header)"],
-            ]}
-          />
-          <VirtualKeyTable keyType="standard" />
-          <AuthActionsRow
-            summary={null}
-            action={
-              canCreateKey ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCreateKeyType("standard")}
-                >
-                  + Create virtual key
-                </Button>
-              ) : null
-            }
-          />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <p className="max-w-3xl text-xs text-muted-foreground">
+              Use a virtual key in your app instead of a provider API key.
+              Assign one API key per provider, and the matching key is used for
+              each request. Send the virtual key in the Authorization header.
+            </p>
+            {canCreateKey ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => setCreateKeyType("standard")}
+              >
+                Create virtual key
+              </Button>
+            ) : null}
+          </div>
+          <VirtualKeyManagement keyType="standard" />
         </div>
       )}
 
       {tab === "passthrough" && (
         <div className="space-y-3">
-          <AuthFacts
-            rows={[
-              ["For", "users with their own provider key or subscription"],
-              [
-                "Downstream",
-                "the key goes straight to the provider; guardrails, logs, and costs still apply",
-              ],
-              [
-                "Routes",
-                "provider routes; Model Router if the model prefix matches",
-              ],
-            ]}
-          />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <p className="max-w-3xl text-xs text-muted-foreground">
+              Send your own provider API key or subscription token directly. An
+              optional passthrough key links requests to a user but does not
+              grant access.
+            </p>
+            {canCreateKey ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => setCreateKeyType("passthrough")}
+              >
+                Create passthrough key
+              </Button>
+            ) : null}
+          </div>
           <TerminalBlock
             rows={[
               {
-                comment: "your provider key goes straight upstream",
-                code: "Authorization: Bearer <your-provider-key>",
-              },
-              {
-                comment: "optional — attribute requests to your Archestra user",
-                code: "X-Archestra-Virtual-Key: arch_<your-passthrough-key>",
+                comment: "optional — link the request to a user",
+                code: "X-Archestra-Virtual-Key: arch_<passthrough-key>",
               },
             ]}
           />
-          <VirtualKeyTable keyType="passthrough" />
-          <AuthActionsRow
-            summary="Passthrough keys are attribution-only — they grant nothing."
-            action={
-              canCreateKey ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCreateKeyType("passthrough")}
-                >
-                  + Create passthrough key
-                </Button>
-              ) : null
-            }
-          />
+          <VirtualKeyManagement keyType="passthrough" />
         </div>
       )}
 
       {tab === "oauth" && (
         <div className="space-y-3">
-          <AuthFacts
-            rows={[
-              ["For", "machine-to-machine apps"],
-              [
-                "Downstream",
-                "resolves to stored provider keys, like a virtual key",
-              ],
-              ["Routes", "Model Router + provider routes"],
-            ]}
-          />
-          <TerminalBlock
-            rows={[
-              {
-                comment: "get an access token",
-                code: `POST ${tokenEndpoint}\n  grant_type=client_credentials\n  client_id=<client-id>  client_secret=<client-secret>`,
-              },
-            ]}
-          />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <p className="max-w-3xl text-xs text-muted-foreground">
+              Use OAuth clients for apps that connect to this proxy. App tokens
+              use the provider keys assigned to the client. User tokens use the
+              signed-in user&apos;s keys. Secrets are shown only when created or
+              rotated.
+            </p>
+            {canCreateOauth ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => setOauthCreateOpen(true)}
+              >
+                Create OAuth client
+              </Button>
+            ) : null}
+          </div>
           <OauthClientTable
             proxyId={proxy.id}
             clients={canReadOauth ? oauthClients : undefined}
-          />
-          <AuthActionsRow
-            summary={
-              <>
-                Secrets are shown once at creation — rotate in{" "}
-                <Link
-                  href="/credentials/oauth-clients"
-                  className="text-primary hover:underline"
-                >
-                  Client Credentials
-                </Link>{" "}
-                to reissue.
-              </>
-            }
-            action={
-              canCreateOauth ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setOauthCreateOpen(true)}
-                >
-                  + Create OAuth client
-                </Button>
-              ) : null
-            }
           />
         </div>
       )}
@@ -348,7 +295,7 @@ function LlmProxyAuthSurface({
         onOpenChange={(open) => {
           if (!open) setCreateKeyType(null);
         }}
-        initialKeyType={createKeyType ?? "standard"}
+        keyType={createKeyType ?? "standard"}
       />
       <OauthClientCreateFlow
         proxyId={proxy.id}
@@ -356,6 +303,20 @@ function LlmProxyAuthSurface({
         onOpenChange={setOauthCreateOpen}
       />
     </div>
+  );
+}
+
+function ModelRouterAlert() {
+  return (
+    <Alert variant="info">
+      <Info />
+      <AlertTitle>How Model Router works</AlertTitle>
+      <AlertDescription>
+        Use one OpenAI-compatible endpoint for models from different providers.
+        The provider at the start of the model name tells Model Router where to
+        send the request.
+      </AlertDescription>
+    </Alert>
   );
 }
 
@@ -394,6 +355,7 @@ function OauthClientCreateFlow({
         open={open}
         onOpenChange={onOpenChange}
         defaultClientType="llm"
+        fixedClientType="llm"
         defaultAllowedProxyIds={[proxyId]}
         gateways={gateways}
         llmProxies={llmProxies}
@@ -452,23 +414,38 @@ function McpGatewayAuthSurface({
       </div>
       <Tabs value={tab} onValueChange={(v) => setTab(v as GatewayAuthTab)}>
         <TabsList>
-          <TabsTrigger value="oauth">OAuth 2.1</TabsTrigger>
+          <TabsTrigger value="oauth">OAuth</TabsTrigger>
           <TabsTrigger value="token">Platform token</TabsTrigger>
           <TabsTrigger value="idp">Identity provider</TabsTrigger>
         </TabsList>
       </Tabs>
 
       {tab === "oauth" && (
-        <AuthFacts
-          rows={[
-            ["For", "interactive MCP clients (Claude, Cursor, VS Code, …)"],
-            [
-              "How",
-              "the client registers and signs in on first connect — nothing to copy",
-            ],
-            ["Access", "tools filtered by the signed-in user's permissions"],
-          ]}
-        />
+        <div className="space-y-3">
+          <AuthFacts
+            rows={[
+              ["For", "interactive MCP clients such as Claude and Cursor"],
+              [
+                "How",
+                "the client registers and signs in on first connect — nothing to copy",
+              ],
+              ["Access", "tools filtered by the signed-in user's permissions"],
+            ]}
+          />
+          <div className="space-y-3 border-t pt-3">
+            <div className="space-y-1">
+              <p className="text-xs font-medium">Registered OAuth clients</p>
+              <p className="text-xs text-muted-foreground">
+                Use these for applications calling as themselves or on behalf of
+                signed-in users.
+              </p>
+            </div>
+            <McpOauthManagement
+              resourceId={gateway.id}
+              resourceKind="gateway"
+            />
+          </div>
+        </div>
       )}
 
       {tab === "token" && (
@@ -523,238 +500,47 @@ function IdentityProviderStatus({
   const orgHasIdps = (identityProviders?.length ?? 0) > 0;
 
   return (
-    <div className="space-y-3">
-      <AuthFacts
-        rows={[
-          ["For", "clients that already hold JWTs from your IdP"],
-          ["How", "JWT validated via JWKS; request attributed to its subject"],
-          ["Downstream", "org provider keys"],
-        ]}
-      />
-      <AuthActionsRow
-        summary={
-          idpId ? (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="space-y-1.5">
+        <p className="max-w-3xl text-xs text-muted-foreground">
+          Use a JWT from your identity provider. Requests are linked to the user
+          in the token and use that user&apos;s access.
+        </p>
+        <p className="text-xs">
+          {idpId ? (
             <span className="text-green-600 dark:text-green-500">
               ● {idpName ?? "Identity provider"} — configured
             </span>
           ) : (
             <>○ Not configured</>
-          )
-        }
-        action={
-          !canUpdate ? null : orgHasIdps ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                onClose();
-                updateUrlParams({ edit: target.id });
-              }}
-            >
-              Edit {target.agentType === "mcp_gateway" ? "gateway" : "proxy"}
-            </Button>
-          ) : (
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/settings/identity-providers">
-                Set up identity providers
-              </Link>
-            </Button>
-          )
-        }
-      />
+          )}
+        </p>
+      </div>
+      {!canUpdate ? null : orgHasIdps ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={() => {
+            onClose();
+            updateUrlParams({ edit: target.id });
+          }}
+        >
+          Edit {target.agentType === "mcp_gateway" ? "gateway" : "proxy"}
+        </Button>
+      ) : (
+        <Button variant="outline" size="sm" className="shrink-0" asChild>
+          <Link href="/settings/identity-providers">
+            Set up identity providers
+          </Link>
+        </Button>
+      )}
     </div>
   );
 }
 
-const KEY_TABLE_LIMIT = 8;
-
-type VirtualKeyRow =
-  archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
 type LlmOauthClientRow =
   archestraApiTypes.GetLlmOauthClientsResponses["200"][number];
-
-/**
- * Compact key table for the auth tabs. Keys the viewer authored reveal and
- * copy their real value (author-only backend route); others stay masked.
- */
-function VirtualKeyTable({ keyType }: { keyType: "standard" | "passthrough" }) {
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
-  const { data: canRead } = useHasPermissions({ llmVirtualKey: ["read"] });
-  const { data: canDelete } = useHasPermissions({ llmVirtualKey: ["delete"] });
-  const { data, isPending } = useAllVirtualApiKeys({
-    keyType,
-    limit: KEY_TABLE_LIMIT,
-    toastOnError: false,
-    enabled: canRead === true,
-  });
-  const deleteMutation = useDeleteVirtualApiKey();
-  const [deletingKey, setDeletingKey] = useState<VirtualKeyRow | null>(null);
-
-  if (canRead === false) return null;
-  const keys = data?.data ?? [];
-  const total = data?.pagination.total ?? 0;
-  if (!isPending && keys.length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        No {keyType === "passthrough" ? "passthrough " : ""}keys yet.
-      </p>
-    );
-  }
-
-  return (
-    <div className="overflow-hidden rounded-md border">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b bg-muted/40 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-            <th className="px-3 py-1.5 font-medium">Name</th>
-            <th className="px-3 py-1.5 font-medium">Key</th>
-            {keyType === "standard" && (
-              <th className="px-3 py-1.5 font-medium">Providers</th>
-            )}
-            <th className="px-3 py-1.5 font-medium">Owner</th>
-            {canDelete && <th className="w-8 px-2 py-1.5" />}
-          </tr>
-        </thead>
-        <tbody>
-          {keys.map((key: VirtualKeyRow) => (
-            <tr key={key.id} className="border-b last:border-0">
-              <td className="max-w-[150px] truncate px-3 py-1.5 font-medium">
-                {key.name}
-              </td>
-              <td className="px-3 py-1.5">
-                <VirtualKeyValueCell
-                  id={key.id}
-                  tokenStart={key.tokenStart}
-                  canReveal={key.authorId === currentUserId}
-                />
-              </td>
-              {keyType === "standard" && (
-                <td className="max-w-[140px] truncate px-3 py-1.5 text-muted-foreground">
-                  {formatProviderKeySummary(key.providerApiKeys)}
-                </td>
-              )}
-              <td className="px-3 py-1.5 text-muted-foreground">
-                {key.authorId === currentUserId
-                  ? "Me"
-                  : (key.authorName ?? "—")}
-              </td>
-              {canDelete && (
-                <td className="px-2 py-1.5">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Delete ${key.name}`}
-                    onClick={() => setDeletingKey(key)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                  </Button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {total > keys.length && (
-        <div className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
-          {total - keys.length} more —{" "}
-          <Link
-            href="/credentials/virtual-keys"
-            className="text-primary hover:underline"
-          >
-            Client Credentials
-          </Link>
-        </div>
-      )}
-
-      <DeleteConfirmDialog
-        open={!!deletingKey}
-        onOpenChange={(open) => {
-          if (!open) setDeletingKey(null);
-        }}
-        title="Delete Virtual Key"
-        description={`Are you sure you want to delete "${deletingKey?.name}"? This action cannot be undone.`}
-        confirmLabel="Delete"
-        isPending={deleteMutation.isPending}
-        onConfirm={() => {
-          if (!deletingKey) return;
-          deleteMutation.mutate(
-            { id: deletingKey.id },
-            {
-              onSuccess: () => setDeletingKey(null),
-            },
-          );
-        }}
-      />
-    </div>
-  );
-}
-
-function VirtualKeyValueCell({
-  id,
-  tokenStart,
-  canReveal,
-}: {
-  id: string;
-  tokenStart: string;
-  canReveal: boolean;
-}) {
-  const fetchValue = useFetchVirtualApiKeyValue();
-  const [value, setValue] = useState<string | null>(null);
-  const [visible, setVisible] = useState(false);
-
-  const resolveValue = async () => {
-    if (value) return value;
-    const fetched = await fetchValue.mutateAsync(id);
-    if (fetched) setValue(fetched);
-    return fetched;
-  };
-
-  return (
-    <div className="flex items-center gap-1 font-mono">
-      <code className={visible && value ? "break-all" : "whitespace-nowrap"}>
-        {visible && value ? value : `${tokenStart}…`}
-      </code>
-      {canReveal && (
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={visible ? "Hide key" : "Reveal key"}
-            disabled={fetchValue.isPending}
-            onClick={async () => {
-              if (!visible && !(await resolveValue())) return;
-              setVisible(!visible);
-            }}
-          >
-            {visible ? (
-              <EyeOff className="h-3.5 w-3.5" />
-            ) : (
-              <Eye className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Copy key"
-            disabled={fetchValue.isPending}
-            onClick={async () => {
-              const resolved = await resolveValue();
-              if (!resolved) return;
-              await copyToClipboard(resolved);
-              toast.success("Key copied");
-            }}
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-        </>
-      )}
-    </div>
-  );
-}
 
 /** OAuth clients that can authenticate to this proxy. Secrets are not stored
  *  retrievably, so only the client ID is copyable. */
@@ -773,6 +559,14 @@ function OauthClientTable({
   });
   const deleteMutation = useDeleteLlmOauthClient();
   const rotateMutation = useRotateLlmOauthClientSecret();
+  const updateMutation = useUpdateLlmOauthClient();
+  const { data: llmProxies = [] } = useProfiles({
+    filters: { agentTypes: ["llm_proxy"] },
+  });
+  const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
+  const [editingClient, setEditingClient] = useState<LlmOauthClientRow | null>(
+    null,
+  );
   const [deletingClient, setDeletingClient] =
     useState<LlmOauthClientRow | null>(null);
   const [rotatingClient, setRotatingClient] =
@@ -802,7 +596,7 @@ function OauthClientTable({
             <th className="px-3 py-1.5 font-medium">Name</th>
             <th className="px-3 py-1.5 font-medium">Client ID</th>
             <th className="px-3 py-1.5 font-medium">Providers</th>
-            {canDelete && <th className="w-8 px-2 py-1.5" />}
+            {(canUpdate || canDelete) && <th className="w-8 px-2 py-1.5" />}
           </tr>
         </thead>
         <tbody>
@@ -842,29 +636,42 @@ function OauthClientTable({
                       .join(", ")
                   : "—"}
               </td>
-              {canDelete && (
+              {(canUpdate || canDelete) && (
                 <td className="px-2 py-1.5">
                   <div className="flex items-center">
                     {canUpdate && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Edit ${client.name}`}
+                          onClick={() => setEditingClient(client)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Rotate secret for ${client.name}`}
+                          onClick={() => setRotatingClient(client)}
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
+                    {canDelete && (
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={`Rotate secret for ${client.name}`}
-                        onClick={() => setRotatingClient(client)}
+                        aria-label={`Delete ${client.name}`}
+                        onClick={() => setDeletingClient(client)}
                       >
-                        <RefreshCw className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
                     )}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Delete ${client.name}`}
-                      onClick={() => setDeletingClient(client)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                    </Button>
                   </div>
                 </td>
               )}
@@ -872,6 +679,20 @@ function OauthClientTable({
           ))}
         </tbody>
       </table>
+
+      <LlmEditOAuthClientDialog
+        oauthClient={editingClient}
+        onOpenChange={(open) => {
+          if (!open) setEditingClient(null);
+        }}
+        llmProxies={llmProxies}
+        providerApiKeys={providerApiKeys}
+        onSubmit={async (id, body) => {
+          if (await updateMutation.mutateAsync({ id, body }))
+            setEditingClient(null);
+        }}
+        isSubmitting={updateMutation.isPending}
+      />
 
       <DeleteConfirmDialog
         open={!!rotatingClient}
@@ -943,28 +764,12 @@ function AuthFacts({ rows }: { rows: Array<[string, string]> }) {
   );
 }
 
-function AuthActionsRow({
-  summary,
-  action,
-}: {
-  summary: React.ReactNode;
-  action: React.ReactNode;
-}) {
-  if (!summary && !action) return null;
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-      <span>{summary}</span>
-      {action}
-    </div>
-  );
-}
-
 function ConnectionGuideFooter({ href }: { href: string }) {
   return (
     <p className="text-xs text-muted-foreground">
-      Setting up a specific client?{" "}
+      Need setup steps for your app?{" "}
       <Link href={href} className="text-primary hover:underline">
-        Connect page
+        Open the Connect page.
       </Link>
     </p>
   );

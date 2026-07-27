@@ -64,6 +64,38 @@ describe("deep-link defaults", () => {
     expect(screen.getByText("Marketing Agent")).toBeInTheDocument();
   });
 
+  it("locks a resource-scoped dialog to MCP clients", async () => {
+    const user = userEvent.setup();
+    const { onSubmit } = renderDialog({
+      defaultClientType: "llm",
+      fixedClientType: "mcp",
+      defaultAllowedGatewayIds: ["gw-1"],
+    });
+
+    expect(
+      screen.queryByText("What will this client access?"),
+    ).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "gateway");
+    await user.click(
+      screen.getByRole("button", { name: "Create OAuth Client" }),
+    );
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "mcp" }),
+      ),
+    );
+  });
+
+  it("locks a resource-scoped dialog to LLM clients", () => {
+    renderDialog({ fixedClientType: "llm", defaultClientType: "mcp" });
+
+    expect(
+      screen.queryByRole("radio", { name: /Agents & MCP gateways/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Allowed LLM proxies")).toBeInTheDocument();
+  });
+
   it("submits the pre-selected agent without touching the selector", async () => {
     const user = userEvent.setup();
     const { onSubmit } = renderDialog({

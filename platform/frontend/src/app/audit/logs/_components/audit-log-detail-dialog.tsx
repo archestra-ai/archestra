@@ -7,7 +7,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
-import type { AuditLog } from "@/lib/audit-log/audit-log.query";
+import type { AuditEventName, AuditLog } from "@/lib/audit-log/audit-log.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils";
 import {
   ACTION_BADGE_VARIANT,
@@ -82,7 +82,9 @@ function AuditLogDetailBody({ event }: { event: AuditLog }) {
 
         <DetailRow label="Action">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={ACTION_BADGE_VARIANT[event.action]}>
+            <Badge
+              variant={ACTION_BADGE_VARIANT[event.action as AuditEventName]}
+            >
               {formatAction(event.action)}
             </Badge>
             <Badge variant={OUTCOME_BADGE_VARIANT[event.outcome]}>

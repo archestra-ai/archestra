@@ -544,20 +544,6 @@ tests:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
             value: tcp://dagger-runtime.custom.svc.cluster.local:1234
 
-  - it: should fail loudly when the removed codeRuntime.dagger values are still set
-    set:
-      archestra.codeRuntime.dagger.runnerHost: tcp://old:1234
-    asserts:
-      - failedTemplate:
-          errorMessage: "Configuration error: archestra.codeRuntime.dagger.* was removed. The chart no longer deploys a Dagger Engine — the backend provisions one per organization through the Kubernetes API. To run your own engine instead, set archestra.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST and grant the platform ServiceAccount `get` on `pods` and `create` on `pods/exec` in that engine's namespace. To disable the code sandbox, set archestra.codeRuntime.enabled=false."
-
-  - it: should fail loudly when the removed dagger subchart values are still set
-    set:
-      dagger.engine.kind: StatefulSet
-    asserts:
-      - failedTemplate:
-          errorMessage: "Configuration error: the bundled `dagger` subchart values were removed along with the chart-deployed Dagger Engine. Remove the top-level `dagger:` block. Engine sizing is now set through archestra.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_*."
-
   - it: should include ARCHESTRA_DATABASE_URL alongside custom env vars
     documentIndex: 1
     set:

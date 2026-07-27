@@ -20,6 +20,28 @@ export function buildAzureDeploymentsUrl(params: {
   }
 }
 
+/**
+ * Classic data-plane deployments URL for a Foundry v1 base URL.
+ *
+ * `/openai/v1/models` answers with the region's model CATALOG — every model the
+ * resource *could* run — while Azure requires the request's `model` to be a
+ * DEPLOYMENT name the user chose. Those namespaces don't overlap, so a v1
+ * endpoint still has to ask the classic route what is actually deployed.
+ */
+export function buildAzureV1DeploymentsUrl(baseUrl: string): string | null {
+  try {
+    const url = new URL(baseUrl);
+    if (!isAzureOpenAiV1Url(url)) {
+      return null;
+    }
+
+    const pathname = url.pathname.replace(/\/+$/, "").replace(/\/v1$/, "");
+    return `${url.origin}${pathname}/deployments?api-version=${AZURE_DEPLOYMENTS_API_VERSION}`;
+  } catch {
+    return null;
+  }
+}
+
 export function buildAzureOpenAiV1ModelsUrl(baseUrl: string): string | null {
   try {
     const url = new URL(baseUrl);
@@ -220,6 +242,14 @@ function getRequestUrl(input: URL | RequestInfo): string {
 function isAzureOpenAiV1Url(url: URL): boolean {
   return /\/openai\/v1\/?$/.test(url.pathname);
 }
+
+/**
+ * Deployment listing lives on the classic data plane, which newer api-versions
+ * dropped — 2024-02-01 answers 404 Resource not found. It is therefore pinned
+ * here instead of following `config.llm.azure.apiVersion`, which governs
+ * inference and is the user's to choose.
+ */
+const AZURE_DEPLOYMENTS_API_VERSION = "2023-03-15-preview";
 
 function getAzureDeploymentsPathname(url: URL): string | null {
   const pathname = url.pathname.replace(/\/+$/, "");

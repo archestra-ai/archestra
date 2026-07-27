@@ -5,6 +5,7 @@ import {
   buildAzureModelsUrl,
   buildAzureOpenAiV1ModelsUrl,
   buildAzureResponsesBaseUrl,
+  buildAzureV1DeploymentsUrl,
   createAzureFetchWithApiVersion,
   extractAzureDeploymentName,
   isAzureAiFoundryBaseUrl,
@@ -107,6 +108,40 @@ describe("buildAzureOpenAiV1ModelsUrl", () => {
 
   it("returns null for invalid URLs", () => {
     expect(buildAzureOpenAiV1ModelsUrl("not-a-valid-url")).toBeNull();
+  });
+});
+
+describe("buildAzureV1DeploymentsUrl", () => {
+  it("derives the classic deployments URL from a v1 base URL", () => {
+    // /openai/v1/models returns the regional catalog, so the deployments a
+    // resource actually serves have to come from the classic data plane —
+    // and only on an api-version that still exposes it (2024-02-01 404s).
+    expect(
+      buildAzureV1DeploymentsUrl(
+        "https://my-resource.openai.azure.com/openai/v1",
+      ),
+    ).toBe(
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2023-03-15-preview",
+    );
+  });
+
+  it("tolerates a trailing slash", () => {
+    expect(
+      buildAzureV1DeploymentsUrl(
+        "https://my-resource.services.ai.azure.com/openai/v1/",
+      ),
+    ).toBe(
+      "https://my-resource.services.ai.azure.com/openai/deployments?api-version=2023-03-15-preview",
+    );
+  });
+
+  it("returns null for non-v1 base URLs", () => {
+    expect(
+      buildAzureV1DeploymentsUrl(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+      ),
+    ).toBeNull();
+    expect(buildAzureV1DeploymentsUrl("not-a-valid-url")).toBeNull();
   });
 });
 

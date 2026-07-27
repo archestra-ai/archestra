@@ -686,6 +686,26 @@ describe("ModelSyncService", () => {
     ).toEqual(["nomic-ai/nomic-embed-text", "openai/text-embedding-3-small"]);
   });
 
+  test("collapses duplicate model ids so one batch never carries the same (provider, model_id) twice", () => {
+    // Azure AI Foundry lists an entry per model/SKU, so the same id repeats.
+    // Postgres rejects a whole INSERT whose rows share the ON CONFLICT target,
+    // which previously rolled the entire model sync back to zero.
+    const built = buildModelsToUpsert({
+      provider: "azure",
+      models: [
+        { id: "claude-opus-5" },
+        { id: "DeepSeek-R1" },
+        { id: "claude-opus-5" },
+      ],
+      modelsDevData: {},
+    });
+
+    expect(built.map((model) => model.modelId)).toEqual([
+      "claude-opus-5",
+      "DeepSeek-R1",
+    ]);
+  });
+
   test("uses an authoritative fetched embedding dimension over the name heuristic", () => {
     const [model] = buildModelsToUpsert({
       provider: "ollama",

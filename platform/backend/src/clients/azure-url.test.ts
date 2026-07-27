@@ -5,10 +5,13 @@ import {
   buildAzureModelsUrl,
   buildAzureOpenAiV1ModelsUrl,
   buildAzureResponsesBaseUrl,
+  buildAzureV1DeploymentsUrl,
   createAzureFetchWithApiVersion,
   extractAzureDeploymentName,
   isAzureAiFoundryBaseUrl,
+  isAzureOpenAiFirstPartyModelName,
   isAzureOpenAiV1BaseUrl,
+  isAzureThinkingModelName,
   normalizeAzureApiKey,
 } from "./azure-url";
 
@@ -106,6 +109,40 @@ describe("buildAzureOpenAiV1ModelsUrl", () => {
 
   it("returns null for invalid URLs", () => {
     expect(buildAzureOpenAiV1ModelsUrl("not-a-valid-url")).toBeNull();
+  });
+});
+
+describe("buildAzureV1DeploymentsUrl", () => {
+  it("derives the classic deployments URL from a v1 base URL", () => {
+    // /openai/v1/models returns the regional catalog, so the deployments a
+    // resource actually serves have to come from the classic data plane —
+    // and only on an api-version that still exposes it (2024-02-01 404s).
+    expect(
+      buildAzureV1DeploymentsUrl(
+        "https://my-resource.openai.azure.com/openai/v1",
+      ),
+    ).toBe(
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2023-03-15-preview",
+    );
+  });
+
+  it("tolerates a trailing slash", () => {
+    expect(
+      buildAzureV1DeploymentsUrl(
+        "https://my-resource.services.ai.azure.com/openai/v1/",
+      ),
+    ).toBe(
+      "https://my-resource.services.ai.azure.com/openai/deployments?api-version=2023-03-15-preview",
+    );
+  });
+
+  it("returns null for non-v1 base URLs", () => {
+    expect(
+      buildAzureV1DeploymentsUrl(
+        "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
+      ),
+    ).toBeNull();
+    expect(buildAzureV1DeploymentsUrl("not-a-valid-url")).toBeNull();
   });
 });
 
@@ -363,5 +400,60 @@ describe("extractAzureDeploymentName", () => {
     expect(
       extractAzureDeploymentName("https://my-resource.openai.azure.com/openai"),
     ).toBeNull();
+  });
+});
+
+describe("isAzureThinkingModelName", () => {
+  it.each([
+    "DeepSeek-R1",
+    "DeepSeek-V4-Pro",
+    "deepseek-v3.2",
+    "MAI-DS-R1",
+  ])("returns true for the verified thinking family %s", (name) => {
+    expect(isAzureThinkingModelName(name)).toBe(true);
+  });
+
+  it.each([
+    "gpt-4o",
+    "claude-opus-5",
+    "Phi-4-reasoning",
+    "Llama-3.3-70B",
+  ])("returns false for %s, which is not known to accept reasoning_effort", (name) => {
+    expect(isAzureThinkingModelName(name)).toBe(false);
+  });
+});
+
+describe("isAzureOpenAiFirstPartyModelName", () => {
+  it.each([
+    "gpt-5.5",
+    "gpt-5.5-pro",
+    "gpt-5-chat",
+    "gpt-4o",
+    "gpt-4.1-mini",
+    "gpt-35-turbo",
+    "o1-preview",
+    "o3-mini",
+    "o4-mini",
+    "chatgpt-4o-latest",
+    "codex-mini",
+    "GPT-4o",
+  ])("returns true for OpenAI first-party deployment name %s", (name) => {
+    expect(isAzureOpenAiFirstPartyModelName(name)).toBe(true);
+  });
+
+  it.each([
+    "DeepSeek-R1",
+    "DeepSeek-R1-0528",
+    "grok-4",
+    "Phi-4-reasoning",
+    "Llama-3.3-70B-Instruct",
+    "mistral-large",
+  ])("returns false for Foundry open-model deployment name %s", (name) => {
+    expect(isAzureOpenAiFirstPartyModelName(name)).toBe(false);
+  });
+
+  it("returns false for gpt-oss despite the gpt- prefix", () => {
+    expect(isAzureOpenAiFirstPartyModelName("gpt-oss-120b")).toBe(false);
+    expect(isAzureOpenAiFirstPartyModelName("GPT-OSS-20b")).toBe(false);
   });
 });

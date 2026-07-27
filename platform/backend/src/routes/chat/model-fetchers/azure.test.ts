@@ -411,6 +411,13 @@ describe("fetchAzureModels", () => {
         ok: true,
         json: async () => ({ value: [] }),
       })
+      // Classic deployment listing is absent on this resource, so the catalog
+      // is all that is left.
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: async () => "Resource not found",
+      })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -438,12 +445,52 @@ describe("fetchAzureModels", () => {
       },
     ]);
     expect(mockFetch).toHaveBeenNthCalledWith(
-      4,
+      5,
       "https://my-resource.services.ai.azure.com/openai/v1/models",
       { headers: { Authorization: "Bearer entra-token" } },
     );
 
     mockIsAzureOpenAiEntraIdEnabled.mockReturnValue(false);
+    vi.unstubAllGlobals();
+  });
+
+  test("prefers real deployments over the regional catalog on a v1 base URL", async () => {
+    // /openai/v1/models lists everything the region can run; Azure only accepts
+    // a deployment name as `model`, so a catalog id would 404 at chat time.
+    const mockFetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: "DeepSeek-V4-Pro",
+            model: "DeepSeek-V4-Pro",
+            object: "deployment",
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const result = await fetchAzureModels(
+      "azure-key",
+      "https://my-resource.openai.azure.com/openai/v1",
+    );
+
+    expect(result).toEqual([
+      {
+        id: "DeepSeek-V4-Pro",
+        displayName: "DeepSeek-V4-Pro",
+        provider: "azure",
+        underlyingModelName: "DeepSeek-V4-Pro",
+      },
+    ]);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      "https://my-resource.openai.azure.com/openai/deployments?api-version=2023-03-15-preview",
+      expect.anything(),
+    );
+
     vi.unstubAllGlobals();
   });
 

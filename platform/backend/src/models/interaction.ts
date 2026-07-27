@@ -802,6 +802,15 @@ class InteractionModel {
     interaction: InsertInteraction & { id: string },
   ): Promise<void> {
     try {
+      // Subscription-billed interactions (e.g. Claude Pro/Max OAuth credentials)
+      // cost the organization $0, so they must not burn down token-cost limits.
+      if (interaction.billingMode === "subscription") {
+        logger.debug(
+          `Interaction ${interaction.id} is subscription-billed - skipping limit update`,
+        );
+        return;
+      }
+
       // Calculate token usage for this interaction
       const inputTokens = interaction.inputTokens || 0;
       const outputTokens = interaction.outputTokens || 0;

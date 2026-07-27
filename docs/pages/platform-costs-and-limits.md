@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-07-22
+lastUpdated: 2026-07-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -39,7 +39,7 @@ Archestra detects the billing mode from the credential itself. Anthropic subscri
 
 Detection applies to new interactions. Traffic recorded before detection existed stays metered.
 
-Cost-based usage limits are the one exception: they still count the list-price estimate, including subscription usage. A subscription-heavy setup can therefore reach a dollar limit on usage that was never billed. Use token-based limits for those setups.
+Usage limits follow the same rule: subscription traffic does not count toward them. A limit only tracks usage that is billed.
 
 ## Usage Limits
 

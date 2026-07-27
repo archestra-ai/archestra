@@ -1582,11 +1582,23 @@ class McpClient {
     | { error: CommonToolResult }
   > {
     const fallbackName = tool.catalogName || "unknown";
+    // Never log tokenAuth/tool wholesale: tokenAuth can carry a raw bearer
+    // JWT and passthrough header values; log identifying fields only.
     logger.info(
       {
         toolName: toolCall.name,
-        tool: tool,
-        tokenAuth: tokenAuth,
+        toolCatalogId: tool.catalogId,
+        toolMcpServerId: tool.mcpServerId,
+        credentialResolutionMode: tool.credentialResolutionMode,
+        tokenAuth: tokenAuth && {
+          tokenId: tokenAuth.tokenId,
+          teamId: tokenAuth.teamId,
+          userId: tokenAuth.userId,
+          isOrganizationToken: tokenAuth.isOrganizationToken,
+          isUserToken: tokenAuth.isUserToken,
+          isExternalIdp: tokenAuth.isExternalIdp,
+          isSessionAuth: tokenAuth.isSessionAuth,
+        },
       },
       "Determining target MCP server ID for catalog item",
     );
@@ -1628,7 +1640,8 @@ class McpClient {
       logger.info(
         {
           toolName: toolCall.name,
-          catalogItem: catalogItem,
+          catalogItemId: catalogItem.id,
+          catalogItemName: catalogItem.name,
           targetMcpServerId: tool.mcpServerId,
         },
         "Determined target MCP server ID for catalog item",
@@ -2996,7 +3009,9 @@ class McpClient {
       };
 
       if (toolResult.isError) {
-        logData.error = toolResult.error;
+        // Tool errors routinely echo request/response payloads — cap them
+        // the same way as the success-path content preview.
+        logData.error = toolResult.error?.slice(0, 100);
       } else {
         logData.resultContent = previewToolResultContent(
           toolResult.content,

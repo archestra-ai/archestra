@@ -114,12 +114,18 @@ export class DualLlmSubagent {
 
       const { question, options } = parseQuestionResponse(response);
       if (!question || options.length === 0) {
+        // response is verbatim LLM output derived from user content — size
+        // only at warn, payload at debug.
         logger.warn(
           {
             toolCallId: this.toolCallId,
-            response,
+            responseLength: response.length,
           },
           "[dualLlmSubagent] main agent returned invalid question format",
+        );
+        logger.debug(
+          { toolCallId: this.toolCallId, response },
+          "[dualLlmSubagent] invalid question response payload",
         );
         break;
       }

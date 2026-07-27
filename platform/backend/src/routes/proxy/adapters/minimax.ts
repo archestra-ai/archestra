@@ -158,10 +158,12 @@ class MinimaxClient {
               const chunk = JSON.parse(data) as MinimaxStreamChunk;
               yield chunk;
             } catch (error) {
+              // data is raw completion content — log only its size at warn.
               logger.warn(
-                { data, error },
+                { dataLength: data.length, error },
                 "[MinimaxAdapter] Failed to parse SSE chunk",
               );
+              logger.debug({ data }, "[MinimaxAdapter] Unparseable SSE chunk");
             }
           }
         }
@@ -177,8 +179,12 @@ class MinimaxClient {
             yield chunk;
           } catch (error) {
             logger.warn(
-              { data: trimmed, error },
+              { dataLength: trimmed.length, error },
               "[MinimaxAdapter] Failed to parse final SSE chunk",
+            );
+            logger.debug(
+              { data: trimmed },
+              "[MinimaxAdapter] Unparseable final SSE chunk",
             );
           }
         }

@@ -57,7 +57,8 @@ async function expandQuery(params: {
   ];
 
   if (semanticResult.status === "fulfilled" && semanticResult.value) {
-    logger.info(
+    // Query text is user content — payloads only at debug.
+    logger.debug(
       { type: "semantic", queryText: semanticResult.value },
       "[QueryExpansion] Generated semantic rephrase",
     );
@@ -75,7 +76,7 @@ async function expandQuery(params: {
 
   if (keywordResult.status === "fulfilled" && keywordResult.value.length > 0) {
     for (const kw of keywordResult.value) {
-      logger.info(
+      logger.debug(
         { type: "keyword", queryText: kw },
         "[QueryExpansion] Generated keyword query",
       );
@@ -96,15 +97,21 @@ async function expandQuery(params: {
 
   logger.info(
     {
-      originalQuery: queryText,
       expandedCount: deduped.length,
+      queryTypes: deduped.map((q) => q.type),
+    },
+    "[QueryExpansion] Expanded queries",
+  );
+  logger.debug(
+    {
+      originalQuery: queryText,
       queries: deduped.map((q) => ({
         text: q.queryText,
         weight: q.weight,
         type: q.type,
       })),
     },
-    "[QueryExpansion] Expanded queries",
+    "[QueryExpansion] Expanded query texts",
   );
 
   return deduped;

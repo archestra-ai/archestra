@@ -934,7 +934,12 @@ function createCohereClient(
             try {
               yield JSON.parse(data);
             } catch {
-              logger.warn({ data }, "Failed to parse Cohere's stream data");
+              // data is raw completion content — log only its size at warn.
+              logger.warn(
+                { dataLength: data.length },
+                "Failed to parse Cohere's stream data",
+              );
+              logger.debug({ data }, "Unparseable Cohere stream data");
             }
           }
         }

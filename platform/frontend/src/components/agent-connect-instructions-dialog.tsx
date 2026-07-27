@@ -316,9 +316,9 @@ function ModelRouterAlert() {
       <Info />
       <AlertTitle>How Model Router works</AlertTitle>
       <AlertDescription>
-        Use one endpoint for models from different providers. The provider at
-        the start of the model name tells Model Router where to send the
-        request.
+        Use one OpenAI-compatible endpoint for models from different providers.
+        The provider at the start of the model name tells Model Router where to
+        send the request.
       </AlertDescription>
     </Alert>
   );

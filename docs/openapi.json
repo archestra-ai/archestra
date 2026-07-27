@@ -215906,6 +215906,33 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "modelUsage": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "model": {
+                            "type": "string"
+                          },
+                          "tokensIn": {
+                            "type": "number"
+                          },
+                          "tokensOut": {
+                            "type": "number"
+                          },
+                          "cost": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "model",
+                          "tokensIn",
+                          "tokensOut",
+                          "cost"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [

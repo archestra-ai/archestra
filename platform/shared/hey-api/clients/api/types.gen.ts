@@ -55281,6 +55281,12 @@ export type GetLimitResponses = {
         lastCleanup: string | null;
         createdAt: string;
         updatedAt: string;
+        modelUsage?: Array<{
+            model: string;
+            tokensIn: number;
+            tokensOut: number;
+            cost: number;
+        }>;
     };
 };
 

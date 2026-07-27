@@ -113,17 +113,28 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
-        response: constructResponseSchema(SelectLimitSchema),
+        response: constructResponseSchema(LimitWithUsageSchema),
       },
     },
     async ({ params: { id }, organizationId }, reply) => {
+      // Same cleanup the list read performs, so an elapsed reset window is
+      // applied before the usage counters are reported either way.
+      await LimitModel.cleanupLimitsIfNeeded({
+        allForOrganizationId: organizationId,
+      });
+
       const limit = await LimitModel.findByIdInOrganization(id, organizationId);
 
       if (!limit) {
         throw new ApiError(404, "Limit not found");
       }
 
-      return reply.send(limit);
+      if (limit.limitType !== "token_cost") {
+        return reply.send(limit);
+      }
+
+      const modelUsage = await LimitModel.getModelUsageBreakdown(limit.id);
+      return reply.send({ ...limit, modelUsage });
     },
   );
 

@@ -493,6 +493,34 @@ describe("EmbeddingService", () => {
     expect(updated2?.chunkCount).toBe(0);
   });
 
+  test("attributes a single-document embed to that document's connector", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+
+    const doc = await KbDocumentModel.create({
+      connectorId: connector.id,
+      organizationId: org.id,
+      title: "Single Doc",
+      content: "Content",
+      contentHash: "hash-single-attributed",
+      embeddingStatus: "pending",
+    });
+    await KbChunkModel.insertMany([
+      { documentId: doc.id, content: "Chunk", chunkIndex: 0 },
+    ]);
+    responseQueue.push({ kind: "ok", embeddings: [makeFakeEmbedding(1)] });
+
+    await embeddingService.processDocument(doc.id, makeEmbeddingContext());
+
+    const [interaction] = await waitForKbInteractions(1);
+    expect(interaction.connectorId).toBe(connector.id);
+  });
+
   test("attributes the embedding interaction to the document's connector", async ({
     makeOrganization,
     makeKnowledgeBase,

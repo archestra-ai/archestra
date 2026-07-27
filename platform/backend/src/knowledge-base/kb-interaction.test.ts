@@ -184,6 +184,33 @@ describe("withKbObservability", () => {
       inputTokens: 5,
       outputTokens: 0,
     });
+    // Callers that pass no connector record none, rather than an undefined that
+    // would fail the insert.
+    expect(row.connectorId).toBeNull();
+  });
+
+  it("records the connector when the caller names one", async () => {
+    const connectorId = "b91f0c47-2d35-4e88-a6f1-3c7e5b2d9014";
+
+    await withKbObservability({
+      ...baseParams,
+      connectorId,
+      callback: async () => "result",
+      buildInteraction: () => ({
+        request: {},
+        response: {},
+        model: "text-embedding-3-small",
+        inputTokens: 5,
+        outputTokens: 0,
+      }),
+    });
+
+    await vi.waitFor(async () => {
+      expect(await kbInteractions("knowledge:embedding")).toHaveLength(1);
+    });
+
+    const [row] = await kbInteractions("knowledge:embedding");
+    expect(row.connectorId).toBe(connectorId);
   });
 
   it("sets span attributes for source and token usage", async () => {

@@ -1,4 +1,4 @@
-import { ModelModel } from "@/models";
+import { ModelModel, OptimizationRuleModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { TiktokenTokenizer } from "@/tokenizers";
 import type { CommonMcpToolDefinition } from "@/types";
@@ -434,5 +434,66 @@ describe("estimateToolTokens", () => {
 
     const tokens = estimateToolTokens(tools, tokenizer);
     expect(tokens).toBeGreaterThan(0);
+  });
+});
+
+describe("getOptimizedModel organization scoping", () => {
+  test("uses the agent's organization, not another org's rules", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const orgA = await makeOrganization();
+    const orgB = await makeOrganization();
+    const agentA = await makeAgent({ organizationId: orgA.id });
+
+    // Org B gets a catch-all rewrite; org A has none. Teamless agent A must
+    // not pick up org B via getFirstOrganizationId().
+    await OptimizationRuleModel.create({
+      entityType: "organization",
+      entityId: orgB.id,
+      conditions: [{ maxLength: 1_000_000 }],
+      provider: "openai",
+      targetModel: "gpt-4o-mini",
+      enabled: true,
+    });
+
+    const { getOptimizedModel } = await import("./cost-optimization");
+    const result = await getOptimizedModel(
+      { ...agentA, labels: [] },
+      [{ role: "user", content: "hi" }],
+      "openai",
+      false,
+      [],
+    );
+
+    expect(result).toBeNull();
+  });
+
+  test("applies rules from the agent's own organization", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+
+    await OptimizationRuleModel.create({
+      entityType: "organization",
+      entityId: org.id,
+      conditions: [{ maxLength: 1_000_000 }],
+      provider: "openai",
+      targetModel: "gpt-4o-mini",
+      enabled: true,
+    });
+
+    const { getOptimizedModel } = await import("./cost-optimization");
+    const result = await getOptimizedModel(
+      { ...agent, labels: [] },
+      [{ role: "user", content: "hi" }],
+      "openai",
+      false,
+      [],
+    );
+
+    expect(result).toBe("gpt-4o-mini");
   });
 });

@@ -258,6 +258,21 @@ class DaggerEnvironmentRuntimeManager {
     await this.teardownEngine(deriveOrgEngineId(organization.id), from);
   }
 
+  /**
+   * Delete an environment's engine when the environment is removed. A deleted
+   * environment otherwise leaves its privileged StatefulSet and retained cache
+   * PVC running with nothing routing to them. Mirrors reconcileEnvironment's
+   * guard — a per-environment engine exists even behind a BYO runner host, so
+   * this does not early-return on one. Best-effort and idempotent.
+   */
+  async teardownEnvironmentEngine(environment: Environment): Promise<void> {
+    if (!this.isEnabled()) return;
+    await this.teardownEngine(
+      environment.id,
+      this.engineNamespace(environment.namespace),
+    );
+  }
+
   // Remove one engine's StatefulSet, its cache PVC (the volumeClaimTemplate is
   // Retain, so deleting the StatefulSet alone would strand it — safe to drop
   // here since the build cache is rebuildable and the engine has left this

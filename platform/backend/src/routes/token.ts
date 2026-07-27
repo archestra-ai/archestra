@@ -39,7 +39,7 @@ async function checkTokenAccess(
     }
   } else if (token.teamId) {
     const { success: canManageAllTeams } = await hasPermission(
-      { team: ["create"] },
+      { team: ["update"] },
       headers,
     );
 
@@ -56,7 +56,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * Get tokens visible to the user based on their permissions:
    * - ac:update: can see org-wide token
-   * - team:create: can see all team tokens
+   * - team:update: can see all team tokens
    * - team membership (any role): can see their teams' tokens — listing
    *   only exposes metadata (name, tokenStart); the value endpoint below
    *   stays gated behind team admin / org-level team management
@@ -98,7 +98,7 @@ const tokenRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers,
       );
       const { success: canManageAllTeams } = await hasPermission(
-        { team: ["create"] },
+        { team: ["update"] },
         headers,
       );
       const { success: hasMcpGatewayTeamAdmin } = await hasPermission(

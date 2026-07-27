@@ -453,16 +453,20 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentId: restBody.environmentId ?? null,
         organizationId: request.organizationId,
       });
-      // Clone source must resolve within the caller's org — `create` copies
-      // the source's tools + guardrail policies, so an unscoped `clonedFrom`
-      // would let a caller pull another org's catalog config into their own.
+      // Clone source must resolve under the CALLER's own access. `create` copies
+      // the source's tools, guardrail policies, and secret bags (OAuth client
+      // secret, local-config env, presets) onto the new item — which the caller
+      // owns and can therefore read back expanded. Resolving the source with a
+      // hardcoded admin flag would skip the personal/team scope checks and let
+      // any member clone someone else's item to harvest those values, so pass
+      // the caller's real privilege instead.
       if (restBody.clonedFrom) {
         const cloneSource = await InternalMcpCatalogModel.findById(
           restBody.clonedFrom,
           {
             expandSecrets: false,
             userId: request.user.id,
-            isAdmin: true,
+            isAdmin: checker.isAdmin,
             organizationId: request.organizationId,
           },
         );

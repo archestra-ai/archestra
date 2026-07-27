@@ -9,12 +9,18 @@ export type ModelTeamAccessResult =
 /**
  * Enforce per-team model restrictions at proxy request time.
  *
- * A model with `model_team` rows is only invocable by an identified user who
+ * A model with `model_team` rows is only invocable by an authenticated user who
  * is a member of one of those teams, or who manages the model catalog
  * (`llmModel:update` — org admins included). Requests without a resolvable
- * user identity (e.g. an org-scoped virtual key with no user attribution) are
- * denied for restricted models: "limited to these teams" requires knowing the
- * caller is in one of them.
+ * authenticated identity (e.g. an org-scoped virtual key with no user
+ * attribution) are denied for restricted models: "limited to these teams"
+ * requires knowing the caller is in one of them.
+ *
+ * Both `authenticatedUserId` and `userTeamIds` MUST derive from a credential
+ * the caller proved they hold. Identity hints a caller can set for themselves —
+ * the X-Archestra-User-Id header above all — are not admissible here: they
+ * would let anyone name a member of an allowed team (or a catalog admin) and
+ * inherit their access.
  *
  * Unrestricted models (the default — no `model_team` rows) are always allowed,
  * so this check costs a single indexed lookup on the hot path.
@@ -23,10 +29,16 @@ export async function checkModelTeamAccess(params: {
   provider: SupportedProvider;
   modelId: string;
   organizationId: string;
-  userId: string | undefined;
+  authenticatedUserId: string | undefined;
   userTeamIds: string[];
 }): Promise<ModelTeamAccessResult> {
-  const { provider, modelId, organizationId, userId, userTeamIds } = params;
+  const {
+    provider,
+    modelId,
+    organizationId,
+    authenticatedUserId,
+    userTeamIds,
+  } = params;
 
   const model = await ModelModel.findByProviderAndModelId(provider, modelId);
   if (!model) {
@@ -40,14 +52,14 @@ export async function checkModelTeamAccess(params: {
     return { allowed: true };
   }
 
-  if (userId) {
+  if (authenticatedUserId) {
     const restrictedTeams = new Set(restrictedToTeamIds);
     if (userTeamIds.some((teamId) => restrictedTeams.has(teamId))) {
       return { allowed: true };
     }
 
     const isModelCatalogAdmin = await userHasPermission(
-      userId,
+      authenticatedUserId,
       organizationId,
       "llmModel",
       "update",

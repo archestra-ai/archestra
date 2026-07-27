@@ -549,6 +549,22 @@ export async function reloadToolsForServer(server: McpServer): Promise<{
 export async function reinstallMultitenantCatalog(
   catalogItem: InternalMcpCatalog,
 ): Promise<void> {
+  // Re-enforce the trusted-image-registry gate before recreating the shared
+  // pod. The shared deployment is built from the catalog's CURRENT image, so
+  // every path that recreates it — the catalog reinstall endpoint, the
+  // refresh-image endpoint, the background recreate after an edit — must clear
+  // the gate, exactly as the per-install path does in `autoReinstallServer`.
+  // Runs before any install is flipped to `pending` so a blocked recreate
+  // leaves install status untouched. Only non-privileged authors' custom images
+  // are gated; for everything else the policy is a no-op. `organizationId` is
+  // absent only on system/legacy rows — skip rather than fail those loudly.
+  if (catalogItem.organizationId) {
+    await assertInstallAllowedOrBlock({
+      catalogItem,
+      organizationId: catalogItem.organizationId,
+    });
+  }
+
   const installs = await McpServerModel.findByCatalogId(catalogItem.id);
 
   // Flip every install pending up-front so each tenant's UI shows

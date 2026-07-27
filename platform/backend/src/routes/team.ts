@@ -62,7 +62,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { limit, offset, name, mine } = request.query;
       const labels = parseLabelsParam(request.query.labels);
       const { success: canManageAllTeams } = await hasPermission(
-        { team: ["create"] },
+        { team: ["update"] },
         request.headers,
       );
 
@@ -147,7 +147,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { success: isOrgTeamManager } = await hasPermission(
-        { team: ["create"] },
+        { team: ["update"] },
         headers,
       );
       const canRead = await canReadTeam({
@@ -265,7 +265,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { success: isOrgTeamManager } = await hasPermission(
-        { team: ["create"] },
+        { team: ["update"] },
         headers,
       );
       const canRead = await canReadTeam({
@@ -508,7 +508,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { success: canManageAllTeams } = await hasPermission(
-        { team: ["create"] },
+        { team: ["update"] },
         headers,
       );
       if (!canManageAllTeams) {
@@ -663,8 +663,15 @@ async function assertCanManageTeam(params: {
 }) {
   // Resolve the org-level "team manager" flag from the request session/API key
   // (honoring API-key scoping), then defer the shared rule to the service.
+  //
+  // This is deliberately NOT team:create. Creating a team says nothing about
+  // the teams the caller does not belong to, so reading it as blanket
+  // administration let a role holding only team:read + team:create manage
+  // membership on — and reach the tokens of — every other team. Callers who
+  // legitimately administer their own team still pass via the team-admin
+  // branch inside canManageTeamMembers.
   const { success: isOrgTeamManager } = await hasPermission(
-    { team: ["create"] },
+    { team: ["update"] },
     params.headers,
   );
 

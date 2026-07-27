@@ -430,8 +430,19 @@ function reasoningCompatibleCreateModel(params: {
   missingBaseUrlMessage: string;
   /** Substitute the placeholder key when none is set (vllm, ollama). */
   keyless?: boolean;
+  /**
+   * Send `response_format: json_schema` for structured outputs. Off by default:
+   * the compatible provider falls back to a schema-less `json_object`, and only
+   * upstreams known to honor a schema should be told otherwise.
+   */
+  supportsStructuredOutputs?: boolean;
 }): ProviderModelConfig["createModel"] {
-  const { name, missingBaseUrlMessage, keyless = false } = params;
+  const {
+    name,
+    missingBaseUrlMessage,
+    keyless = false,
+    supportsStructuredOutputs = false,
+  } = params;
   return ({ apiKey, modelName, baseURL, headers, fetch }) => {
     if (!baseURL) {
       throw new ApiError(400, missingBaseUrlMessage);
@@ -446,6 +457,7 @@ function reasoningCompatibleCreateModel(params: {
       // provider only sends it when asked. Keep it on so the final usage chunk
       // still arrives and cost/usage metrics are unaffected.
       includeUsage: true,
+      supportsStructuredOutputs,
     }).chatModel(modelName);
   };
 }
@@ -644,31 +656,20 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   // Another Archestra instance's OpenAI-compatible LLM proxy. Base URL is always
   // supplied per key (no global default), so direct calls rely on that override.
   archestra: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) => {
-      if (!baseURL) {
-        // Without a base URL the OpenAI-compatible client would have no
-        // upstream at all; failing closed beats the old silent fallback to
-        // api.openai.com with an Archestra virtual key.
-        throw new ApiError(400, "Archestra base URL is required.");
-      }
-      // The upstream Archestra streams thinking as DeepSeek-style
-      // `reasoning_content` deltas and, when it fronts DeepSeek, requires them
-      // passed back on tool-call turns. The strict @ai-sdk/openai chat
-      // converter drops reasoning parts from outgoing messages and its parser
-      // drops `reasoning_content` from responses; @ai-sdk/openai-compatible
-      // round-trips both.
-      return createOpenAICompatible({
-        name: "archestra",
-        apiKey,
-        baseURL,
-        headers,
-        fetch,
-        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
-        // provider only sends it when asked. Keep it on so the final usage chunk
-        // still arrives and cost/usage metrics are unaffected.
-        includeUsage: true,
-      }).chatModel(modelName);
-    },
+    // The upstream Archestra streams thinking as DeepSeek-style
+    // `reasoning_content` deltas and, when it fronts DeepSeek, requires them
+    // passed back on tool-call turns. Failing closed on a missing base URL
+    // beats the old silent fallback to api.openai.com with a virtual key.
+    createModel: reasoningCompatibleCreateModel({
+      name: "archestra",
+      missingBaseUrlMessage: "Archestra base URL is required.",
+      // The upstream is another Archestra model router, which forwards
+      // `response_format: json_schema` the same way the strict openai client
+      // sent it before. Without this the compatible client downgrades
+      // generateObject flows (KB reranker, dual-LLM subagents) to a schema-less
+      // `json_object`, and nothing else carries the schema to the model.
+      supportsStructuredOutputs: true,
+    }),
     defaultBaseUrl: config.llm.archestra.baseUrl,
     apiKeyRequiredMessage:
       "Archestra API key is required. Please configure an Archestra API key.",

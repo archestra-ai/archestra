@@ -236,6 +236,50 @@ describe("createDirectLLMModel", () => {
     ).toThrow("Archestra base URL is required.");
   });
 
+  it("sends the json_schema response_format for Archestra structured outputs", async () => {
+    let sent: Record<string, unknown> | undefined;
+    const mockFetch = vi.fn(
+      async (_input: unknown, init: RequestInit | undefined) => {
+        sent = JSON.parse(init?.body as string);
+        return new Response("upstream stub", { status: 500 });
+      },
+    );
+    // Must be stubbed BEFORE the model is built: createResponseHealingFetch
+    // captures `globalThis.fetch` at construction time.
+    vi.stubGlobal("fetch", mockFetch);
+
+    const model = createDirectLLMModel({
+      provider: "archestra",
+      apiKey: "arch_test-key",
+      modelName: "deepseek:deepseek-reasoner",
+      baseUrl: "https://other-archestra.test/v1/model-router/agent-1",
+    });
+
+    // The stubbed upstream fails the call; the request body is captured
+    // before that, which is all this assertion needs.
+    await generateObject({
+      model,
+      schema: z.object({ answer: z.number() }),
+      prompt: "2 + 2?",
+      maxRetries: 0,
+    }).catch(() => {});
+
+    if (!sent) {
+      throw new Error("Expected a request to reach the fetch stub");
+    }
+    // Moving off the strict openai client must not drop the schema:
+    // generateObject flows (KB reranker, dual-LLM subagents) rely on the
+    // provider enforcing it, and the compatible client otherwise downgrades to
+    // a schema-less `json_object`.
+    const responseFormat = (
+      sent as {
+        response_format?: { type?: string; json_schema?: { schema?: unknown } };
+      }
+    ).response_format;
+    expect(responseFormat?.type).toBe("json_schema");
+    expect(responseFormat?.json_schema?.schema).toBeDefined();
+  });
+
   it("creates Kimi models on the openai-compatible provider", () => {
     const model = createDirectLLMModel({
       provider: "kimi",

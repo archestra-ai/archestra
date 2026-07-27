@@ -5,6 +5,7 @@ import {
   ARCHESTRA_TOOL_SHORT_NAMES,
   type ArchestraToolShortName,
   BUILT_IN_AGENT_IDS,
+  clientFilterToAgentIds,
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   getArchestraToolGroupId,
@@ -24,6 +25,7 @@ import {
   count,
   desc,
   eq,
+  exists,
   getTableColumns,
   ilike,
   inArray,
@@ -3362,6 +3364,38 @@ class ToolModel {
           eq(schema.toolsTable.catalogId, filters.origin),
         );
       }
+    }
+
+    // Filter by who observed the tool in LLM proxy traffic, and through which
+    // client app. Both narrow via the tool_observations attribution rows, so
+    // they only ever match tools seen in proxy requests.
+    if (filters?.observedByUserId || filters?.observedByClient) {
+      const observationConditions: SQL[] = [
+        eq(schema.toolObservationsTable.toolId, schema.toolsTable.id),
+      ];
+      if (filters.observedByUserId) {
+        observationConditions.push(
+          eq(schema.toolObservationsTable.userId, filters.observedByUserId),
+        );
+      }
+      if (filters.observedByClient) {
+        observationConditions.push(
+          inArray(
+            schema.toolObservationsTable.externalAgentId,
+            // Spread: clientFilterToAgentIds returns a readonly array and
+            // inArray wants a mutable one.
+            [...clientFilterToAgentIds(filters.observedByClient)],
+          ),
+        );
+      }
+      toolWhereConditions.push(
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(schema.toolObservationsTable)
+            .where(and(...observationConditions)),
+        ),
+      );
     }
 
     // Exclude Archestra built-in tools

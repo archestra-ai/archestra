@@ -442,6 +442,7 @@ async function dispatchTool({
     toolInput,
     organizationId: context.organizationId,
     contextIsTrusted: context.contextIsTrusted ?? true,
+    sensitiveContextOrigin: context.sensitiveContextOrigin,
     enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
     enabledToolNames: availableTool
       ? new Set([...assignedToolNames, resolvedName])

@@ -174,6 +174,7 @@ export { default as teamTokensTable } from "./team-token";
 export { default as teamVaultFoldersTable } from "./team-vault-folder";
 export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";
+export { default as toolObservationsTable } from "./tool-observation";
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";

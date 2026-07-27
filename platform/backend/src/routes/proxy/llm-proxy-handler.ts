@@ -701,6 +701,7 @@ export async function handleLLMProxy<
                 resultAction: organization.defaultDiscoveredToolResultPolicy,
               }
             : undefined,
+          { userId, externalAgentId },
         );
       }
     }
@@ -1459,6 +1460,10 @@ async function handleStreaming<
         {
           teamIds: teamIds ?? [],
           externalAgentId,
+          sensitiveContextOrigin:
+            utils.trustedData.sensitiveContextOriginFromBoundary(
+              unsafeContextBoundary,
+            ),
         },
         contextIsTrusted,
         enabledToolNames,
@@ -1897,6 +1902,10 @@ async function handleNonStreaming<
       {
         teamIds: teamIds ?? [],
         externalAgentId,
+        sensitiveContextOrigin:
+          utils.trustedData.sensitiveContextOriginFromBoundary(
+            unsafeContextBoundary,
+          ),
       },
       contextIsTrusted,
       enabledToolNames,

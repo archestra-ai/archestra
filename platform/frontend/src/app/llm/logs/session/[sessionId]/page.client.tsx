@@ -4,7 +4,7 @@ import {
   clientForExternalAgentIds,
   DynamicInteraction,
 } from "@archestra/shared";
-import { ArrowLeft, Bot, Layers, Loader2, User } from "lucide-react";
+import { ArrowLeft, Bot, Download, Layers, Loader2, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use } from "react";
@@ -29,6 +29,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
+  useExportSessionInteractions,
   useInteractionSessions,
   useInteractions,
 } from "@/lib/interactions/interaction.query";
@@ -144,6 +145,8 @@ export default function SessionDetailPage({
 
   const sessionTitle = getSessionTitle();
 
+  const exportSession = useExportSessionInteractions();
+
   // Find the last main request (requestType === "main" or first in delegation
   // chain) from the most recent interactions. This drives the inline
   // "Latest Conversation" block.
@@ -177,12 +180,25 @@ export default function SessionDetailPage({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between gap-4">
         <Button variant="ghost" size="sm" asChild>
           <Link href="/llm/logs">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Sessions
           </Link>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => exportSession.mutate({ sessionId })}
+          disabled={exportSession.isPending || totalRequests === 0}
+        >
+          {exportSession.isPending ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4 mr-2" />
+          )}
+          Export JSON
         </Button>
       </div>
 

@@ -6,9 +6,10 @@ import {
   type ClientFilter,
   type InteractionSource,
 } from "@archestra/shared";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { throwOnApiError } from "@/lib/utils";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils";
 
 const {
   getInteraction,
@@ -249,4 +250,80 @@ export function useInteractionSessions({
         ? initialData
         : undefined,
   });
+}
+
+/**
+ * Fetch every interaction in a session (paging through the API) and download
+ * them as a single JSON file. A mutation rather than a query: it is an
+ * on-demand action that wants a pending state for its button and a fresh
+ * fetch per click, not a cached result.
+ */
+export function useExportSessionInteractions() {
+  return useMutation({
+    mutationFn: async ({ sessionId }: { sessionId: string }) => {
+      const interactions: archestraApiTypes.GetInteractionsResponses["200"]["data"] =
+        [];
+      let offset = 0;
+      for (;;) {
+        const response = await getInteractions({
+          query: {
+            sessionId,
+            limit: EXPORT_PAGE_SIZE,
+            offset,
+            sortBy: "createdAt",
+            sortDirection: "asc",
+          },
+        });
+        if (response.error) {
+          handleApiError(response.error);
+          throw toApiError(response.error);
+        }
+        interactions.push(...(response.data?.data ?? []));
+        if (!response.data?.pagination.hasNext) {
+          break;
+        }
+        offset += EXPORT_PAGE_SIZE;
+      }
+      downloadSessionInteractionsFile(sessionId, interactions);
+      return interactions.length;
+    },
+    onSuccess: (count) => {
+      toast.success(
+        `Exported ${count} request${count === 1 ? "" : "s"} from this session`,
+      );
+    },
+  });
+}
+
+// === Internal helpers ===
+
+// The API caps page size at 100, so the export pages at that cap.
+const EXPORT_PAGE_SIZE = 100;
+
+function downloadSessionInteractionsFile(
+  sessionId: string,
+  interactions: archestraApiTypes.GetInteractionsResponses["200"]["data"],
+) {
+  const payload = {
+    sessionId,
+    exportedAt: new Date().toISOString(),
+    interactionCount: interactions.length,
+    interactions,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  // Revoked on a delay: the browser reads the blob asynchronously after the
+  // click, so revoking immediately can truncate a large export.
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `llm-session-${sessionId}.json`;
+  anchor.style.display = "none";
+  document.body.append(anchor);
+  anchor.click();
+  setTimeout(() => {
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }, 10_000);
 }

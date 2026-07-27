@@ -37,6 +37,7 @@ import type {
   RepeatSeverity,
   ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
+import { sensitiveContextOriginFromBoundary } from "@/guardrails/trusted-data";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
 import logger from "@/logging";
@@ -223,6 +224,9 @@ export function buildMcpGatewayTool(params: {
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
                 contextIsTrusted: toolExecutionContext.contextIsTrusted,
+                sensitiveContextOrigin: sensitiveContextOriginFromBoundary(
+                  toolExecutionContext.unsafeContextBoundary,
+                ),
                 // `run_tool` can dispatch a delegation tool, so this context
                 // needs the caller's ancestors for the executor's cycle check.
                 delegationChain: ctx.delegationChain,
@@ -392,6 +396,9 @@ export function buildAgentDelegationTool(params: {
           const response = await executeArchestraTool(agentTool.name, args, {
             ...archestraContext,
             contextIsTrusted: toolExecutionContext.contextIsTrusted,
+            sensitiveContextOrigin: sensitiveContextOriginFromBoundary(
+              toolExecutionContext.unsafeContextBoundary,
+            ),
             // Surface the child's tool calls on the caller's conversation,
             // attributed to this delegation call (options.toolCallId).
             subagentToolStream: ctx.subagentToolStream,

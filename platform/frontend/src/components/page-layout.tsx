@@ -79,8 +79,10 @@ export function PageLayout({
     <div className="flex h-full w-full flex-col">
       <div className="border-b border-border bg-card/30">
         <div className={cn("mx-auto", maxWidth, "px-6 pt-6 md:px-6")}>
-          <div className="mb-6 flex items-center justify-between gap-6">
-            <div className="min-w-0 flex-1">
+          {/* Below sm the action buttons drop under the title/description
+              instead of squeezing them into a sliver beside the buttons. */}
+          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+            <div className="min-w-0 sm:flex-1">
               <h1 className="mb-2 text-2xl font-semibold tracking-tight">
                 {title}
               </h1>

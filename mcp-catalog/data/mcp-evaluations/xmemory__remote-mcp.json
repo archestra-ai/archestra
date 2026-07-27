@@ -17,17 +17,9 @@
     "name": "xmemory MCP",
     "server_url": "https://mcp.xmemory.ai",
     "client_id": "",
-    "redirect_uris": [
-      "http://localhost:8080/oauth/callback"
-    ],
-    "scopes": [
-      "read",
-      "write"
-    ],
-    "default_scopes": [
-      "read",
-      "write"
-    ],
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["read", "write"],
+    "default_scopes": ["read", "write"],
     "supports_resource_metadata": true,
     "description": "xmemory MCP server (OAuth 2.1 + PKCE, dynamic client registration)"
   },
@@ -94,10 +86,5 @@
   },
   "github_info": null,
   "programming_language": null,
-  "framework": null,
-  "readme": null,
-  "quality_score": 80,
-  "last_scraped_at": null,
-  "evaluation_model": null,
-  "raw_dependencies": null
+  "readme": null
 }

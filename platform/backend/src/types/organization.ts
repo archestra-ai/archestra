@@ -12,6 +12,7 @@ import { schema } from "@/database";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
 import { ToolInvocation, TrustedData } from "./autonomy-policies";
 import {
+  KubernetesNamespaceSchema,
   NetworkPolicyInputSchema,
   NetworkPolicySchema,
   TrustedImageRegistriesSchema,
@@ -495,7 +496,9 @@ export const UpdateConnectionSettingsSchema = z.object({
 export const UpdateDefaultEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50).nullable().optional(),
   description: z.string().trim().max(500).nullable().optional(),
-  namespace: z.string().trim().max(253).nullable().optional(),
+  // Becomes the code-managed engine's namespace and part of its kube-pod://
+  // target, which the NAPI boundary validates as an RFC1123 label.
+  namespace: KubernetesNamespaceSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),
   validationRegex: ValidationRegexSchema.nullable().optional(),

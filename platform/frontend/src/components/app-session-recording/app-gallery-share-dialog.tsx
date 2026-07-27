@@ -47,6 +47,7 @@ import {
   buildGallerySubmissionFiles,
   buildGallerySubmissionPr,
   DuplicateSubmissionError,
+  ensureSubmittableEnhancement,
   fetchGithubIdentity,
   fetchSubmittedPrState,
   forgetGallerySubmission,
@@ -177,17 +178,14 @@ export function AppGalleryShareButton(props: {
         const trimmed = pruneTrailingTrimEvents(validation.bundle);
         slug = gallerySubmissionSlug(trimmed);
 
-        // The gallery needs a description and a build prompt to show anything
-        // useful — checked here, at the click, rather than bouncing at the
-        // repository's own validation after a sign-in and a fork.
-        const enhancement = trimmed.enhancement;
-        if (!enhancement?.description.trim() || !enhancement?.prompt.trim()) {
-          failedTitle = "Recording incomplete";
-          fail(
-            "This recording has no description or build prompt yet — add them from the player before sharing.",
-          );
-          return;
-        }
+        // Never block a working recording on a missing AI draft. Guarantee a
+        // submittable enhancement instead: the builder's own description and
+        // build prompt when present, else an app-name description and the
+        // opening chat message as the prompt. The recorder's on-open notice
+        // nudges the builder to fill both in for a better gallery card, but an
+        // ignored nudge degrades to these fallbacks here rather than dead-ends
+        // — and the gallery repo's own validation sees non-empty fields too.
+        const enhancement = ensureSubmittableEnhancement(trimmed);
 
         // GitHub's file-size ceiling is checked right here, at the click —
         // nobody should authorize GitHub only to then learn the recording
@@ -340,13 +338,13 @@ export function AppGalleryShareButton(props: {
     // already knows (GitHub identity, the confirmed category, the final-cut
     // duration) onto the downloaded bundle too. A category chosen on an
     // earlier, later-failed run carries over; one never reached keeps
-    // whatever enhancement.category the recording already had.
+    // whatever enhancement.category the recording already had. The enhancement
+    // is guaranteed submittable (same fallbacks as the automatic path), so a
+    // hand-uploaded bundle is never missing its description or build prompt.
+    const submittable = ensureSubmittableEnhancement(healed);
     const withStamps: AppRecordingBundle = {
       ...healed,
-      enhancement:
-        healed.enhancement && category
-          ? { ...healed.enhancement, category }
-          : healed.enhancement,
+      enhancement: category ? { ...submittable, category } : submittable,
       meta: {
         ...healed.meta,
         ...(identity ? { github: identity } : {}),

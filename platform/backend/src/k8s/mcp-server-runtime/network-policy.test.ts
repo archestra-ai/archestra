@@ -659,6 +659,39 @@ describe("MCP egress floor and default-deny baseline builders", () => {
     expect(noResolver.spec?.egress?.[0]).toEqual(SELECTOR_DNS_RULE);
   });
 
+  test("additionalDeniedCidrs extend the public IPv4 except-list, IPv6 untouched", () => {
+    const floor = buildUnrestrictedFloorPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+      additionalDeniedCidrs: ["100.68.0.0/16", "34.118.224.0/20"],
+    });
+    const v4 = floor.spec?.egress?.find(
+      (r) => r.to?.[0]?.ipBlock?.cidr === "0.0.0.0/0",
+    );
+    const except = v4?.to?.[0]?.ipBlock?.except ?? [];
+    // Built-in reserved ranges still present, operator ranges appended.
+    expect(except).toContain("169.254.0.0/16");
+    expect(except).toContain("100.68.0.0/16");
+    expect(except).toContain("34.118.224.0/20");
+    // The operator list is IPv4-only: the ::/0 rule keeps its own reserved set.
+    const v6 = floor.spec?.egress?.find(
+      (r) => r.to?.[0]?.ipBlock?.cidr === "::/0",
+    );
+    expect(v6?.to?.[0]?.ipBlock?.except).not.toContain("100.68.0.0/16");
+
+    // Omitting the param leaves the except-list at the built-in ranges only.
+    const bare = buildUnrestrictedFloorPolicy({
+      name: "mcp-egress-test",
+      podSelectorLabels,
+      labels: MANAGED_LABELS,
+    });
+    const bareExcept =
+      bare.spec?.egress?.find((r) => r.to?.[0]?.ipBlock?.cidr === "0.0.0.0/0")
+        ?.to?.[0]?.ipBlock?.except ?? [];
+    expect(bareExcept).not.toContain("100.68.0.0/16");
+  });
+
   test("AWS ANP floor falls back to any-IP :53 when the resolver is unknown", () => {
     const anp = buildUnrestrictedFloorAwsApplicationNetworkPolicy({
       name: "mcp-egress-test",

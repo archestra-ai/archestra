@@ -20,10 +20,7 @@ import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
-import {
-  ModelSelector,
-  providerToLogoProvider,
-} from "@/components/chat/model-selector";
+import { ModelSelector } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +36,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
+import { providerToLogoProvider } from "@/lib/provider-logos";
 
 export interface ChatPromptInputToolsProps {
   selectedModel: string;

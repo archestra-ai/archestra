@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.17"
+    "version": "1.3.18"
   },
   "components": {
     "schemas": {
@@ -8122,6 +8122,13 @@
           "stream": {
             "nullable": true,
             "type": "boolean"
+          },
+          "stream_mode": {
+            "type": "string",
+            "enum": [
+              "full",
+              "concise"
+            ]
           }
         },
         "required": [
@@ -13573,6 +13580,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -16415,258 +16426,6 @@
                 {
                   "type": "object",
                   "properties": {
-                    "content": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "type": {
-                                "type": "string",
-                                "enum": [
-                                  "text"
-                                ]
-                              },
-                              "text": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "type",
-                              "text"
-                            ],
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
-                          }
-                        }
-                      ]
-                    },
-                    "role": {
-                      "type": "string",
-                      "enum": [
-                        "developer"
-                      ]
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "content",
-                    "role"
-                  ],
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L936"
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "content": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "type": {
-                                "type": "string",
-                                "enum": [
-                                  "text"
-                                ]
-                              },
-                              "text": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "type",
-                              "text"
-                            ],
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
-                          }
-                        }
-                      ]
-                    },
-                    "role": {
-                      "type": "string",
-                      "enum": [
-                        "system"
-                      ]
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "content",
-                    "role"
-                  ],
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1318"
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "content": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "array",
-                          "items": {
-                            "anyOf": [
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "text"
-                                    ]
-                                  },
-                                  "text": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "text"
-                                ],
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "image_url"
-                                    ]
-                                  },
-                                  "image_url": {
-                                    "type": "object",
-                                    "properties": {
-                                      "url": {
-                                        "type": "string"
-                                      },
-                                      "detail": {
-                                        "type": "string",
-                                        "enum": [
-                                          "auto",
-                                          "low",
-                                          "high"
-                                        ]
-                                      }
-                                    },
-                                    "required": [
-                                      "url"
-                                    ],
-                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "image_url"
-                                ],
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755"
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "input_audio"
-                                    ]
-                                  },
-                                  "input_audio": {
-                                    "type": "object",
-                                    "properties": {
-                                      "data": {
-                                        "type": "string"
-                                      },
-                                      "format": {
-                                        "type": "string",
-                                        "enum": [
-                                          "wav",
-                                          "mp3"
-                                        ]
-                                      }
-                                    },
-                                    "required": [
-                                      "data",
-                                      "format"
-                                    ],
-                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "input_audio"
-                                ],
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L782"
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "file"
-                                    ]
-                                  },
-                                  "file": {
-                                    "type": "object",
-                                    "properties": {
-                                      "file_data": {
-                                        "type": "string"
-                                      },
-                                      "file_id": {
-                                        "type": "string"
-                                      },
-                                      "filename": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "file"
-                                ],
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L722"
-                              }
-                            ],
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L711"
-                          }
-                        }
-                      ]
-                    },
-                    "role": {
-                      "type": "string",
-                      "enum": [
-                        "user"
-                      ]
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "content",
-                    "role"
-                  ],
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1434"
-                },
-                {
-                  "type": "object",
-                  "properties": {
                     "role": {
                       "type": "string",
                       "enum": [
@@ -16844,32 +16603,39 @@
                         ],
                         "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
                       }
+                    },
+                    "reasoning_details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ]
+                      }
                     }
                   },
                   "required": [
                     "role"
-                  ],
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L374"
+                  ]
                 },
                 {
-                  "type": "object",
-                  "properties": {
-                    "role": {
-                      "type": "string",
-                      "enum": [
-                        "tool"
-                      ]
-                    },
-                    "content": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "array",
-                          "items": {
-                            "anyOf": [
-                              {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -16887,85 +16653,534 @@
                                   "text"
                                 ],
                                 "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
-                              },
-                              {
+                              }
+                            }
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "developer"
+                          ]
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "role"
+                      ],
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L936"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
                                 "type": "object",
                                 "properties": {
                                   "type": {
                                     "type": "string",
                                     "enum": [
-                                      "image_url"
+                                      "text"
                                     ]
                                   },
-                                  "image_url": {
-                                    "type": "object",
-                                    "properties": {
-                                      "url": {
-                                        "type": "string"
-                                      },
-                                      "detail": {
-                                        "type": "string",
-                                        "enum": [
-                                          "auto",
-                                          "low",
-                                          "high"
-                                        ]
-                                      }
-                                    },
-                                    "required": [
-                                      "url"
-                                    ],
-                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765"
+                                  "text": {
+                                    "type": "string"
                                   }
                                 },
                                 "required": [
                                   "type",
-                                  "image_url"
+                                  "text"
                                 ],
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755"
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
                               }
-                            ]
+                            }
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "system"
+                          ]
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "role"
+                      ],
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1318"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "text"
+                                        ]
+                                      },
+                                      "text": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "text"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "image_url"
+                                        ]
+                                      },
+                                      "image_url": {
+                                        "type": "object",
+                                        "properties": {
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "detail": {
+                                            "type": "string",
+                                            "enum": [
+                                              "auto",
+                                              "low",
+                                              "high"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "url"
+                                        ],
+                                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "image_url"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "input_audio"
+                                        ]
+                                      },
+                                      "input_audio": {
+                                        "type": "object",
+                                        "properties": {
+                                          "data": {
+                                            "type": "string"
+                                          },
+                                          "format": {
+                                            "type": "string",
+                                            "enum": [
+                                              "wav",
+                                              "mp3"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "data",
+                                          "format"
+                                        ],
+                                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "input_audio"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L782"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "file"
+                                        ]
+                                      },
+                                      "file": {
+                                        "type": "object",
+                                        "properties": {
+                                          "file_data": {
+                                            "type": "string"
+                                          },
+                                          "file_id": {
+                                            "type": "string"
+                                          },
+                                          "filename": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "file"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L722"
+                                  }
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L711"
+                              }
+                            }
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user"
+                          ]
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "role"
+                      ],
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1434"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "assistant"
+                          ]
+                        },
+                        "audio": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ]
+                        },
+                        "content": {
+                          "nullable": true,
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                              }
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "refusal"
+                                    ]
+                                  },
+                                  "refusal": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "refusal"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L805"
+                              }
+                            }
+                          ]
+                        },
+                        "function_call": {
+                          "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "arguments": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "arguments",
+                            "name"
+                          ]
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "reasoning_content": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "refusal": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "tool_calls": {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "function"
+                                    ]
+                                  },
+                                  "function": {
+                                    "type": "object",
+                                    "properties": {
+                                      "arguments": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "arguments",
+                                      "name"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "type",
+                                  "function"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1144"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "custom"
+                                    ]
+                                  },
+                                  "custom": {
+                                    "type": "object",
+                                    "properties": {
+                                      "input": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "input",
+                                      "name"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "type",
+                                  "custom"
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1107"
+                              }
+                            ],
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
                           }
                         }
-                      ]
+                      },
+                      "required": [
+                        "role"
+                      ],
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L374"
                     },
-                    "tool_call_id": {
-                      "type": "string"
+                    {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "tool"
+                          ]
+                        },
+                        "content": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "text"
+                                        ]
+                                      },
+                                      "text": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "text"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "image_url"
+                                        ]
+                                      },
+                                      "image_url": {
+                                        "type": "object",
+                                        "properties": {
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "detail": {
+                                            "type": "string",
+                                            "enum": [
+                                              "auto",
+                                              "low",
+                                              "high"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "url"
+                                        ],
+                                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "image_url"
+                                    ],
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755"
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        "tool_call_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "content",
+                        "tool_call_id"
+                      ],
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1413"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "function"
+                          ]
+                        },
+                        "content": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "content",
+                        "name"
+                      ],
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L968"
                     }
-                  },
-                  "required": [
-                    "role",
-                    "content",
-                    "tool_call_id"
                   ],
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1413"
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "role": {
-                      "type": "string",
-                      "enum": [
-                        "function"
-                      ]
-                    },
-                    "content": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "role",
-                    "content",
-                    "name"
-                  ],
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L968"
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186"
                 }
-              ],
-              "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186"
+              ]
             }
           },
           "tools": {
@@ -17374,6 +17589,9 @@
           "user": {
             "type": "string"
           },
+          "reasoning_split": {
+            "type": "boolean"
+          },
           "extra_body": {
             "type": "object",
             "properties": {
@@ -17440,6 +17658,10 @@
                           "text"
                         ]
                       }
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "tool_calls": {
                       "type": "array",
@@ -27316,6 +27538,13 @@
           "stream": {
             "nullable": true,
             "type": "boolean"
+          },
+          "stream_mode": {
+            "type": "string",
+            "enum": [
+              "full",
+              "concise"
+            ]
           }
         },
         "required": [
@@ -32987,6 +33216,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -35955,270 +36188,6 @@
                 {
                   "type": "object",
                   "properties": {
-                    "content": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "type": {
-                                "type": "string",
-                                "enum": [
-                                  "text"
-                                ]
-                              },
-                              "text": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "type",
-                              "text"
-                            ],
-                            "additionalProperties": false,
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
-                          }
-                        }
-                      ]
-                    },
-                    "role": {
-                      "type": "string",
-                      "enum": [
-                        "developer"
-                      ]
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "content",
-                    "role"
-                  ],
-                  "additionalProperties": false,
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L936"
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "content": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "type": {
-                                "type": "string",
-                                "enum": [
-                                  "text"
-                                ]
-                              },
-                              "text": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "type",
-                              "text"
-                            ],
-                            "additionalProperties": false,
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
-                          }
-                        }
-                      ]
-                    },
-                    "role": {
-                      "type": "string",
-                      "enum": [
-                        "system"
-                      ]
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "content",
-                    "role"
-                  ],
-                  "additionalProperties": false,
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1318"
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "content": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "array",
-                          "items": {
-                            "anyOf": [
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "text"
-                                    ]
-                                  },
-                                  "text": {
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "text"
-                                ],
-                                "additionalProperties": false,
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "image_url"
-                                    ]
-                                  },
-                                  "image_url": {
-                                    "type": "object",
-                                    "properties": {
-                                      "url": {
-                                        "type": "string"
-                                      },
-                                      "detail": {
-                                        "type": "string",
-                                        "enum": [
-                                          "auto",
-                                          "low",
-                                          "high"
-                                        ]
-                                      }
-                                    },
-                                    "required": [
-                                      "url"
-                                    ],
-                                    "additionalProperties": false,
-                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "image_url"
-                                ],
-                                "additionalProperties": false,
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755"
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "input_audio"
-                                    ]
-                                  },
-                                  "input_audio": {
-                                    "type": "object",
-                                    "properties": {
-                                      "data": {
-                                        "type": "string"
-                                      },
-                                      "format": {
-                                        "type": "string",
-                                        "enum": [
-                                          "wav",
-                                          "mp3"
-                                        ]
-                                      }
-                                    },
-                                    "required": [
-                                      "data",
-                                      "format"
-                                    ],
-                                    "additionalProperties": false,
-                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "input_audio"
-                                ],
-                                "additionalProperties": false,
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L782"
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "type": {
-                                    "type": "string",
-                                    "enum": [
-                                      "file"
-                                    ]
-                                  },
-                                  "file": {
-                                    "type": "object",
-                                    "properties": {
-                                      "file_data": {
-                                        "type": "string"
-                                      },
-                                      "file_id": {
-                                        "type": "string"
-                                      },
-                                      "filename": {
-                                        "type": "string"
-                                      }
-                                    },
-                                    "additionalProperties": false,
-                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732"
-                                  }
-                                },
-                                "required": [
-                                  "type",
-                                  "file"
-                                ],
-                                "additionalProperties": false,
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L722"
-                              }
-                            ],
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L711"
-                          }
-                        }
-                      ]
-                    },
-                    "role": {
-                      "type": "string",
-                      "enum": [
-                        "user"
-                      ]
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "content",
-                    "role"
-                  ],
-                  "additionalProperties": false,
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1434"
-                },
-                {
-                  "type": "object",
-                  "properties": {
                     "role": {
                       "type": "string",
                       "enum": [
@@ -36404,33 +36373,41 @@
                         ],
                         "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
                       }
+                    },
+                    "reasoning_details": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "text"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
                     "role"
                   ],
-                  "additionalProperties": false,
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L374"
+                  "additionalProperties": false
                 },
                 {
-                  "type": "object",
-                  "properties": {
-                    "role": {
-                      "type": "string",
-                      "enum": [
-                        "tool"
-                      ]
-                    },
-                    "content": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "array",
-                          "items": {
-                            "anyOf": [
-                              {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
                                 "type": "object",
                                 "properties": {
                                   "type": {
@@ -36449,89 +36426,559 @@
                                 ],
                                 "additionalProperties": false,
                                 "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
-                              },
-                              {
+                              }
+                            }
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "developer"
+                          ]
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "role"
+                      ],
+                      "additionalProperties": false,
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L936"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
                                 "type": "object",
                                 "properties": {
                                   "type": {
                                     "type": "string",
                                     "enum": [
-                                      "image_url"
+                                      "text"
                                     ]
                                   },
-                                  "image_url": {
-                                    "type": "object",
-                                    "properties": {
-                                      "url": {
-                                        "type": "string"
-                                      },
-                                      "detail": {
-                                        "type": "string",
-                                        "enum": [
-                                          "auto",
-                                          "low",
-                                          "high"
-                                        ]
-                                      }
-                                    },
-                                    "required": [
-                                      "url"
-                                    ],
-                                    "additionalProperties": false,
-                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765"
+                                  "text": {
+                                    "type": "string"
                                   }
                                 },
                                 "required": [
                                   "type",
-                                  "image_url"
+                                  "text"
                                 ],
                                 "additionalProperties": false,
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755"
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
                               }
-                            ]
+                            }
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "system"
+                          ]
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "role"
+                      ],
+                      "additionalProperties": false,
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1318"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "text"
+                                        ]
+                                      },
+                                      "text": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "text"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "image_url"
+                                        ]
+                                      },
+                                      "image_url": {
+                                        "type": "object",
+                                        "properties": {
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "detail": {
+                                            "type": "string",
+                                            "enum": [
+                                              "auto",
+                                              "low",
+                                              "high"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "url"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "image_url"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "input_audio"
+                                        ]
+                                      },
+                                      "input_audio": {
+                                        "type": "object",
+                                        "properties": {
+                                          "data": {
+                                            "type": "string"
+                                          },
+                                          "format": {
+                                            "type": "string",
+                                            "enum": [
+                                              "wav",
+                                              "mp3"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "data",
+                                          "format"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L792"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "input_audio"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L782"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "file"
+                                        ]
+                                      },
+                                      "file": {
+                                        "type": "object",
+                                        "properties": {
+                                          "file_data": {
+                                            "type": "string"
+                                          },
+                                          "file_id": {
+                                            "type": "string"
+                                          },
+                                          "filename": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "additionalProperties": false,
+                                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L732"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "file"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L722"
+                                  }
+                                ],
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L711"
+                              }
+                            }
+                          ]
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user"
+                          ]
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "content",
+                        "role"
+                      ],
+                      "additionalProperties": false,
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1434"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "assistant"
+                          ]
+                        },
+                        "audio": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "content": {
+                          "nullable": true,
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "text"
+                                    ]
+                                  },
+                                  "text": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                              }
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "refusal"
+                                    ]
+                                  },
+                                  "refusal": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "refusal"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L805"
+                              }
+                            }
+                          ]
+                        },
+                        "function_call": {
+                          "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431",
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "arguments": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "arguments",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "reasoning_content": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "refusal": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "tool_calls": {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "function"
+                                    ]
+                                  },
+                                  "function": {
+                                    "type": "object",
+                                    "properties": {
+                                      "arguments": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "arguments",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "type",
+                                  "function"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1144"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "custom"
+                                    ]
+                                  },
+                                  "custom": {
+                                    "type": "object",
+                                    "properties": {
+                                      "input": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "input",
+                                      "name"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "type",
+                                  "custom"
+                                ],
+                                "additionalProperties": false,
+                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1107"
+                              }
+                            ],
+                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
                           }
                         }
-                      ]
+                      },
+                      "required": [
+                        "role"
+                      ],
+                      "additionalProperties": false,
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L374"
                     },
-                    "tool_call_id": {
-                      "type": "string"
+                    {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "tool"
+                          ]
+                        },
+                        "content": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "text"
+                                        ]
+                                      },
+                                      "text": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "text"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "image_url"
+                                        ]
+                                      },
+                                      "image_url": {
+                                        "type": "object",
+                                        "properties": {
+                                          "url": {
+                                            "type": "string"
+                                          },
+                                          "detail": {
+                                            "type": "string",
+                                            "enum": [
+                                              "auto",
+                                              "low",
+                                              "high"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "url"
+                                        ],
+                                        "additionalProperties": false,
+                                        "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L765"
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "image_url"
+                                    ],
+                                    "additionalProperties": false,
+                                    "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L755"
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        "tool_call_id": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "content",
+                        "tool_call_id"
+                      ],
+                      "additionalProperties": false,
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1413"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "function"
+                          ]
+                        },
+                        "content": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "content",
+                        "name"
+                      ],
+                      "additionalProperties": false,
+                      "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L968"
                     }
-                  },
-                  "required": [
-                    "role",
-                    "content",
-                    "tool_call_id"
                   ],
-                  "additionalProperties": false,
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1413"
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "role": {
-                      "type": "string",
-                      "enum": [
-                        "function"
-                      ]
-                    },
-                    "content": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "role",
-                    "content",
-                    "name"
-                  ],
-                  "additionalProperties": false,
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L968"
+                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186"
                 }
-              ],
-              "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186"
+              ]
             }
           },
           "tools": {
@@ -36959,6 +37406,9 @@
           "user": {
             "type": "string"
           },
+          "reasoning_split": {
+            "type": "boolean"
+          },
           "extra_body": {
             "type": "object",
             "properties": {
@@ -37028,6 +37478,10 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "reasoning_content": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "tool_calls": {
                       "type": "array",
@@ -60049,6 +60503,270 @@
           "permissions": [
             "chat:update"
           ]
+        }
+      }
+    },
+    "/api/app-recording/review": {
+      "get": {
+        "operationId": "reviewAppRecording",
+        "tags": [
+          "App Recordings"
+        ],
+        "description": "Fetch a hackathon submission's recording bundle from GitHub (raw.githubusercontent.com only), validate it against the recording contract, and return it for the on-platform, read-only review player. The fetch runs server-side so the frontend's CSP never has to reach GitHub; the bundle is public data and nothing is stored.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "src",
+            "required": true,
+            "description": "Absolute https://raw.githubusercontent.com/... URL of the submission's recording.json."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -139972,7 +140690,7 @@
                               "request": {
                                 "anyOf": [
                                   {
-                                    "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                                    "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                                   },
                                   {
                                     "type": "object",
@@ -139984,7 +140702,7 @@
                                 "nullable": true,
                                 "anyOf": [
                                   {
-                                    "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                                    "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                                   },
                                   {
                                     "type": "object",
@@ -169309,7 +170027,7 @@
                         "request": {
                           "anyOf": [
                             {
-                              "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                              "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                             },
                             {
                               "type": "object",
@@ -169321,7 +170039,7 @@
                           "nullable": true,
                           "anyOf": [
                             {
-                              "$ref": "#/components/schemas/XaiChatCompletionRequest"
+                              "$ref": "#/components/schemas/PerplexityChatCompletionRequest"
                             },
                             {
                               "type": "object",
@@ -216547,6 +217265,25 @@
                           "additionalProperties": false
                         }
                       },
+                      "teams": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "pricePerMillionInput": {
                         "nullable": true,
                         "type": "string"
@@ -216622,6 +217359,7 @@
                       "updatedAt",
                       "isBest",
                       "apiKeys",
+                      "teams",
                       "pricePerMillionInput",
                       "pricePerMillionOutput",
                       "isCustomPrice",
@@ -216997,6 +217735,12 @@
                           "high"
                         ]
                       }
+                    }
+                  },
+                  "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
                     }
                   }
                 }
@@ -264381,7 +265125,9 @@
                   "namespace": {
                     "nullable": true,
                     "type": "string",
-                    "maxLength": 253
+                    "minLength": 1,
+                    "maxLength": 63,
+                    "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
                   },
                   "networkPolicy": {
                     "nullable": true,
@@ -270575,7 +271321,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
               }
             }
           }
@@ -270854,7 +271600,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/XaiChatCompletionRequestInput"
+                "$ref": "#/components/schemas/PerplexityChatCompletionRequestInput"
               }
             }
           }

@@ -136,10 +136,6 @@
   },
   "readme": "# Temporal MCP Server\n\nA Model Context Protocol (MCP) server that provides tools for interacting with Temporal workflow orchestration. It enables AI assistants and other MCP clients to manage Temporal workflows, schedules, and workflow executions.\n\n## Features\n\n- Workflow execution management and monitoring\n- Workflow control operations (query, signal, cancel, terminate)\n- Batch operations on multiple workflows\n- Schedule management with cron expression support\n- Event history retrieval and workflow state inspection\n\n## Environment Variables\n\n- `TEMPORAL_HOST`: Temporal server address (default: localhost:7233)\n- `TEMPORAL_NAMESPACE`: Temporal namespace (default: default)\n- `TEMPORAL_TLS_ENABLED`: Enable TLS for secure connections\n",
   "category": "Cloud",
-  "quality_score": 65,
-  "last_scraped_at": "2025-01-13T00:00:00.000Z",
-  "evaluation_model": "manual",
-  "raw_dependencies": "",
   "github_info": {
     "owner": "GethosTheWalrus",
     "repo": "temporal-mcp",
@@ -154,28 +150,6 @@
     "latest_commit_hash": null
   },
   "programming_language": "Python",
-  "framework": null,
-  "protocol_features": {
-    "implementing_tools": true,
-    "implementing_prompts": false,
-    "implementing_resources": false,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": true,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [
-    {
-      "name": "temporalio",
-      "importance": 10
-    },
-    {
-      "name": "mcp",
-      "importance": 9
-    }
-  ],
   "archestra_config": {
     "client_config_permutations": null,
     "oauth": {

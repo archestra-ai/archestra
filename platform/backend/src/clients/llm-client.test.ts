@@ -8,8 +8,9 @@ import {
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
 } from "@archestra/shared";
-import { generateText, streamText } from "ai";
+import { generateObject, generateText, streamText } from "ai";
 import { vi } from "vitest";
+import { z } from "zod";
 import { ConversationModel, LlmProviderApiKeyModel } from "@/models";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { describe, expect, it, test } from "@/test";
@@ -158,14 +159,31 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("creates a model for vllm provider without API key", () => {
+  it("creates keyless vLLM models on the openai-compatible provider", () => {
     const model = createDirectLLMModel({
       provider: "vllm",
       apiKey: undefined,
-      modelName: "default",
-      baseUrl: null,
+      modelName: "deepseek-ai/DeepSeek-R1",
+      baseUrl: "http://localhost:8000/v1",
     });
-    expect(model).toBeDefined();
+    // vLLM serves DeepSeek-style reasoning models that stream
+    // `reasoning_content` and expect it passed back on tool-call turns; the
+    // strict openai provider ("openai.chat") drops it in both directions,
+    // while the openai-compatible provider round-trips it.
+    expect((model as { provider: string }).provider).toBe("vllm.chat");
+  });
+
+  it("rejects vllm models without a base URL", () => {
+    // vLLM has no default base URL; without the guard a missing URL would
+    // silently route the request to api.openai.com.
+    expect(() =>
+      createDirectLLMModel({
+        provider: "vllm",
+        apiKey: undefined,
+        modelName: "default",
+        baseUrl: null,
+      }),
+    ).toThrow("vLLM base URL is required.");
   });
 
   it("creates a model for ollama provider without API key", () => {
@@ -216,6 +234,91 @@ describe("createDirectLLMModel", () => {
         baseUrl: null,
       }),
     ).toThrow("Archestra base URL is required.");
+  });
+
+  it("creates Kimi models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "kimi",
+      apiKey: "test-key",
+      modelName: "kimi-k3",
+      baseUrl: null,
+    });
+    // Kimi thinking models stream reasoning in `reasoning_content` and expect
+    // it passed back on tool-call turns; the strict openai provider
+    // ("openai.chat") drops it in both directions, while the openai-compatible
+    // provider round-trips it.
+    expect((model as { provider: string }).provider).toBe("kimi.chat");
+  });
+
+  it("creates MiniMax models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "minimax",
+      apiKey: "test-key",
+      modelName: "MiniMax-M2.5",
+      baseUrl: null,
+    });
+    // The proxy's minimax adapter surfaces thinking as DeepSeek-style
+    // `reasoning_content`; the strict openai provider ("openai.chat") drops
+    // that field in both directions, while the openai-compatible provider
+    // round-trips it.
+    expect((model as { provider: string }).provider).toBe("minimax.chat");
+  });
+
+  it("creates OpenRouter models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "openrouter",
+      apiKey: "test-key",
+      modelName: "deepseek/deepseek-r1",
+      baseUrl: null,
+    });
+    // OpenRouter streams thinking as a `reasoning` delta field; the strict
+    // openai provider ("openai.chat") drops it, while the openai-compatible
+    // provider surfaces it as reasoning parts.
+    expect((model as { provider: string }).provider).toBe("openrouter.chat");
+  });
+
+  it("sends the json_schema response_format for OpenRouter structured outputs", async () => {
+    let sent: Record<string, unknown> | undefined;
+    const mockFetch = vi.fn(
+      async (_input: unknown, init: RequestInit | undefined) => {
+        sent = JSON.parse(init?.body as string);
+        return new Response("upstream stub", { status: 500 });
+      },
+    );
+    // Must be stubbed BEFORE the model is built: createResponseHealingFetch
+    // captures `globalThis.fetch` at construction time.
+    vi.stubGlobal("fetch", mockFetch);
+
+    const model = createDirectLLMModel({
+      provider: "openrouter",
+      apiKey: "test-key",
+      modelName: "deepseek/deepseek-r1",
+      baseUrl: null,
+    });
+
+    // The stubbed upstream fails the call; the request body is captured
+    // before that, which is all this assertion needs.
+    await generateObject({
+      model,
+      schema: z.object({ answer: z.number() }),
+      prompt: "2 + 2?",
+      maxRetries: 0,
+    }).catch(() => {});
+
+    if (!sent) {
+      throw new Error("Expected a request to reach the fetch stub");
+    }
+    // generateObject flows (KB reranker, dual-LLM subagents) rely on the
+    // provider enforcing the schema: without supportsStructuredOutputs the
+    // compatible client downgrades to a schema-less `json_object` response
+    // format, and nothing else carries the schema to the model.
+    const responseFormat = (
+      sent as {
+        response_format?: { type?: string; json_schema?: { schema?: unknown } };
+      }
+    ).response_format;
+    expect(responseFormat?.type).toBe("json_schema");
+    expect(responseFormat?.json_schema?.schema).toBeDefined();
   });
 
   it("creates a model for zhipuai provider", () => {
@@ -485,6 +588,7 @@ describe("createDirectLLMModel", () => {
 
     it("requests summarized thinking for models that think by default", async () => {
       for (const model of [
+        "claude-opus-5",
         "claude-sonnet-5",
         "claude-sonnet-5-20250929",
         "claude-fable-5",

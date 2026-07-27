@@ -781,6 +781,37 @@ export async function handleLLMProxy<
         })
       : [];
 
+    // Enforce per-team model restrictions before any upstream call. Checked on
+    // the model actually being invoked (post cost-optimization rewrite).
+    const modelTeamAccess = await utils.checkModelTeamAccess({
+      provider: providerName,
+      modelId: actualModel,
+      organizationId: resolvedAgent.organizationId,
+      userId,
+      userTeamIds: userTeams.map((team) => team.id),
+    });
+    if (!modelTeamAccess.allowed) {
+      logger.info(
+        {
+          resolvedAgentId,
+          userId,
+          actualModel,
+          reason: "model_team_restricted",
+        },
+        `${providerName} request blocked: model is restricted to teams the caller is not part of`,
+      );
+      // Standard error envelope with a machine-readable `internal_code`
+      // (mirrors the provider_auth_required block above) so SDK clients
+      // surface a clear, non-retryable failure.
+      return reply.status(403).send({
+        error: {
+          message: modelTeamAccess.message,
+          type: "api_authorization_error",
+          internal_code: "model_restricted_to_teams",
+        },
+      });
+    }
+
     // Evaluate trusted data policies
     logger.debug(
       {

@@ -124,29 +124,31 @@ tests:
             mountPath: /var/diagnostics
             readOnly: false
 
-  - it: worker receives code runtime environment variables by default
+  - it: worker receives code runtime enabled env var but no runner host by default
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_CODE_RUNTIME_ENABLED
             value: "true"
-      - contains:
+      - notContains:
           path: spec.template.spec.containers[0].env
+          any: true
           content:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
-            value: kube-pod://dagger-runtime-engine-0?namespace=NAMESPACE&container=dagger-engine
 
-  - it: worker does not receive code runtime environment variables when disabled
+  - it: worker receives the code runtime kill switch when disabled
     set:
       archestra.codeRuntime.enabled: false
     asserts:
-      - notContains:
+      - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_CODE_RUNTIME_ENABLED
+            value: "false"
       - notContains:
           path: spec.template.spec.containers[0].env
+          any: true
           content:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
 

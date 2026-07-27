@@ -23,7 +23,6 @@ describe("McpRegistryServerDetailPage", () => {
         category: "Databases",
         programming_language: "TypeScript",
         license: "Apache-2.0",
-        quality_score: 87.4,
         keywords: ["mongodb", "atlas"],
         server: {
           type: "local",
@@ -61,7 +60,6 @@ describe("McpRegistryServerDetailPage", () => {
     expect(
       screen.getByText("mongodb-js__mongodb-mcp-server"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Quality 87")).toBeInTheDocument();
     // Tools section
     expect(screen.getByText("find")).toBeInTheDocument();
     expect(screen.getByText("Query documents")).toBeInTheDocument();

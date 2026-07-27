@@ -750,4 +750,106 @@ describe("OrganizationModel", () => {
       expect(results.filter(Boolean)).toHaveLength(1);
     });
   });
+
+  describe("slim engine projections", () => {
+    test("getDefaultNetworkPolicy returns the stored policy", async ({
+      makeOrganization,
+    }) => {
+      const policy = {
+        egressMode: "restricted" as const,
+        domainPreset: "none" as const,
+        allowedDomains: ["registry.npmjs.org"],
+        allowedCidrs: [],
+      };
+      const org = await makeOrganization({ defaultNetworkPolicy: policy });
+
+      expect(await OrganizationModel.getDefaultNetworkPolicy(org.id)).toEqual(
+        policy,
+      );
+    });
+
+    test("getDefaultNetworkPolicy returns null when unset", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization({ defaultNetworkPolicy: null });
+
+      expect(
+        await OrganizationModel.getDefaultNetworkPolicy(org.id),
+      ).toBeNull();
+    });
+
+    test("getDefaultNetworkPolicy returns null for an unknown organization", async () => {
+      expect(
+        await OrganizationModel.getDefaultNetworkPolicy("does-not-exist"),
+      ).toBeNull();
+    });
+
+    test("getDefaultEngineTarget returns the namespace and id", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization({
+        defaultEnvironmentNamespace: "engines-ns",
+      });
+
+      expect(await OrganizationModel.getDefaultEngineTarget(org.id)).toEqual({
+        id: org.id,
+        defaultEnvironmentNamespace: "engines-ns",
+      });
+    });
+
+    test("getDefaultEngineTarget returns null for an unknown organization", async () => {
+      expect(
+        await OrganizationModel.getDefaultEngineTarget("does-not-exist"),
+      ).toBeNull();
+    });
+
+    test("listDefaultEngineTargets projects every organization to id + namespace", async ({
+      makeOrganization,
+    }) => {
+      const a = await makeOrganization({
+        defaultEnvironmentNamespace: "ns-a",
+      });
+      const b = await makeOrganization({ defaultEnvironmentNamespace: null });
+
+      const targets = await OrganizationModel.listDefaultEngineTargets();
+      const byId = new Map(targets.map((t) => [t.id, t]));
+
+      // toEqual pins the exact key set: a `select()` would carry ~50 more
+      // columns, including the base64 logo fields this projection exists to skip.
+      expect(byId.get(a.id)).toEqual({
+        id: a.id,
+        defaultEnvironmentNamespace: "ns-a",
+      });
+      expect(byId.get(b.id)).toEqual({
+        id: b.id,
+        defaultEnvironmentNamespace: null,
+      });
+    });
+
+    // The projections must not drift from the row they replace: an engine whose
+    // egress policy silently resolved to null would run unrestricted.
+    test("projections agree with the full row", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization({
+        defaultNetworkPolicy: {
+          egressMode: "off",
+          domainPreset: "none",
+          allowedDomains: [],
+          allowedCidrs: [],
+        },
+        defaultEnvironmentNamespace: "engines-ns",
+      });
+
+      const full = await OrganizationModel.getById(org.id);
+
+      expect(await OrganizationModel.getDefaultNetworkPolicy(org.id)).toEqual(
+        full?.defaultNetworkPolicy,
+      );
+      expect(
+        (await OrganizationModel.getDefaultEngineTarget(org.id))
+          ?.defaultEnvironmentNamespace,
+      ).toEqual(full?.defaultEnvironmentNamespace);
+    });
+  });
 });

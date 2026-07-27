@@ -26,18 +26,10 @@
     }
   ],
   "prompts": [],
-  "keywords": [
-    "productivity",
-    "data analytics",
-    "education",
-    "wolfram",
-    "wolfram alpha",
-    "computation"
-  ],
+  "keywords": ["productivity", "data analytics", "education", "wolfram", "wolfram alpha", "computation"],
   "user_config": {},
   "readme": null,
   "category": "Data",
-  "quality_score": null,
   "archestra_config": {
     "client_config_permutations": null,
     "oauth": {
@@ -46,10 +38,6 @@
     },
     "works_in_archestra": true
   },
-  "framework": null,
-  "last_scraped_at": null,
-  "evaluation_model": null,
-  "raw_dependencies": null,
   "server": {
     "type": "remote",
     "url": "https://agenttools.wolfram.com/mcp",

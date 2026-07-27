@@ -133,7 +133,7 @@ The Helm chart provides extensive configuration options through values. For the 
 - `archestra.extraVolumes` - Additional volumes for mounting extra files into the platform and worker pods
 - `archestra.extraVolumeMounts` - Additional volume mounts for the platform and worker containers (for example, a Vertex AI service account key file)
 
-**Auth secret configuration**: `ARCHESTRA_AUTH_SECRET` is optional. If you do not configure it, the Helm chart creates a `<release>-auth` Secret and auto-generates a 64-character `auth-secret` value on first install.
+**Auth secret configuration**: the auth secrets are optional. If you do not configure them, the Helm chart creates a `<release>-auth` Secret and auto-generates 64-character `session-secret` and `secrets-encryption-secret` values on first install.
 
 If you manage secrets outside Helm, point the chart at an existing Kubernetes Secret:
 
@@ -166,7 +166,8 @@ archestra:
 openssl rand -base64 32
 
 # Then add to your helm command:
---set archestra.env.ARCHESTRA_AUTH_SECRET=<your-generated-secret>
+--set archestra.env.ARCHESTRA_AUTH_SESSION_SECRET=<generated-secret> \
+--set archestra.env.ARCHESTRA_SECRETS_ENCRYPTION_SECRET=<generated-secret>
 ```
 
 #### Init Container Configuration
@@ -742,26 +743,33 @@ The following environment variables can be used to configure Archestra Platform.
 
 ### Code Sandbox
 
-By default the Helm chart runs a managed Dagger Engine. `archestra.codeRuntime.enabled` and `archestra.codeRuntime.dagger.managed.enabled` are both on, so the chart deploys the engine as a StatefulSet (`dagger-runtime-engine`) in the release namespace. That pod runs privileged, adds all Linux capabilities, runs as root, and needs a 50Gi `ReadWriteOnce` PVC for its cache. It schedules only on nodes whose pod-security policy allows those settings and where the PVC can bind.
+Archestra creates one Dagger engine per organization, and one per environment, as a StatefulSet in the namespace that owns it. Each engine pod runs privileged, adds all Linux capabilities, runs as root, and binds a `ReadWriteOnce` PVC for its build cache. An engine schedules only on nodes whose pod-security policy admits those settings and where the PVC can bind. Size the pod with the `ARCHESTRA_DAGGER_RUNTIME_ENGINE_*` variables below.
 
-The bundled engine is a convenience, not a requirement. The sandbox reaches its engine over `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, a `tcp://` or `kube-pod://` address. Run the engine however you like — the companion `platform/helm/dagger-runtime` chart, a Docker container, a standalone binary, or a separate cluster — as long as it is a reachable Dagger Engine. See Dagger's [custom runner](https://docs.dagger.io/reference/configuration/custom-runner) and [deployment](https://docs.dagger.io/reference/#deployment) references for the runner host schemes and engine requirements.
+To run your own engine instead of the ones Archestra creates, set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST` to a `tcp://` or `kube-pod://` address. See Dagger's [custom runner](https://docs.dagger.io/reference/configuration/custom-runner) and [deployment](https://docs.dagger.io/reference/#deployment) references for the runner host schemes and engine requirements.
 
-If your nodes can't host the managed pod, you have two options:
+If your nodes cannot host a privileged pod, either point `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST` at an engine you run elsewhere, or turn the sandbox off with `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker or `archestra.codeRuntime.enabled=false` in Helm values.
 
-- Run the engine elsewhere. Set `archestra.codeRuntime.dagger.managed.enabled=false` and point `archestra.codeRuntime.dagger.runnerHost` (or `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`) at it.
-- Turn the sandbox off. Set both `archestra.codeRuntime.enabled=false` and `archestra.codeRuntime.dagger.managed.enabled=false` in Helm. The second key is what stops the engine pod. For the Docker quickstart, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false`.
+Upgrading from a chart that ran the bundled engine leaves its cache volume behind. The old `dagger-runtime-engine` StatefulSet is gone, but Kubernetes keeps its `data-dagger-runtime-engine-0` PVC and the disk it holds. Delete it once after the upgrade: `kubectl delete pvc data-dagger-runtime-engine-0 -n <release-namespace>`.
 
-- **`ARCHESTRA_CODE_RUNTIME_ENABLED`** - Deployment toggle for the code runtime — the per-conversation [code sandbox](./platform-code-sandbox) where agents run shell commands and Python, execute skill scripts, and run agent hooks. In the quickstart Docker image it deploys the bundled Dagger engine and wires its runner host. The backend enables the sandbox whenever a Dagger runner host (below) is reachable, so a deployment that points at an external engine stays on regardless of this flag. Set `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker (or `archestra.codeRuntime.enabled=false` in Helm) to skip deploying the engine.
+- **`ARCHESTRA_CODE_RUNTIME_ENABLED`** - Enables the code runtime — the per-conversation [code sandbox](./platform-code-sandbox) where agents run shell commands and Python, execute skill scripts, and run agent hooks. Set `false` to turn the sandbox off; that wins even when a runner host is set. Set `true` with the orchestrator configured (`ARCHESTRA_ORCHESTRATOR_KUBECONFIG` or `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`) and Archestra creates one Dagger engine per organization. Kubernetes is required for that: the engines are Kubernetes workloads. When off, `run_command` and the other sandbox tools are unavailable and skills cannot execute. The quickstart Docker image and the Helm chart enable it by default; opt out with `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker or `archestra.codeRuntime.enabled=false` in Helm values.
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`** - Address of the Dagger engine that materializes sandboxes, for example `tcp://dagger-engine:8080` or a `kube-pod://` URL. A reachable host is what enables the backend sandbox; unset it to turn the sandbox off.
+- **`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`** - Address of an existing Dagger engine, for example `tcp://dagger-engine:8080` or a `kube-pod://` URL. Set it to run your own engine: Archestra sends agents without an environment to that address and creates no default engine. An agent bound to an environment still runs on that environment's own engine, which Archestra creates and which needs Kubernetes. A `kube-pod://` host is reached by running a command inside its pod, so it needs Kubernetes as well; only a `tcp://` host runs without it. Setting this also enables the code runtime on its own. A value that is not a `tcp://` or `kube-pod://` URL is rejected and turns the code runtime off rather than falling back to an Archestra-managed engine, so a typo cannot silently provision engines you did not ask for. Leave it unset to let Archestra manage every engine.
   - Default: unset
   - Values: a `tcp://` or `kube-pod://` URL
 
 - **`ARCHESTRA_DAGGER_RUNTIME_IMAGE`** - Base image for Dagger sandboxes. Leave unset to use the default `ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim` image.
   - Default: unset
   - Use this to point at a custom Debian-based image or a pre-baked sandbox base.
+
+- **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE`** - Resources for an engine Archestra creates. Lower them for a small cluster. They apply to new engines only; delete an engine to resize it.
+  - Defaults: `2`, `8Gi`, `16Gi`, `50Gi`
+  - Values: Kubernetes quantity strings
+
+- **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS`** - Extra IPv4 ranges an engine cannot reach. An engine with no [network policy](./platform-environments) already blocks private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges, so sandboxed code cannot reach in-cluster services. An entry that is not a valid IPv4 CIDR is ignored, and the backend logs which ones.
+  - Default: unset
+  - Values: comma-separated CIDRs, for example `100.68.0.0/16,34.118.224.0/20`
 
 - **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Set `true` only when `ARCHESTRA_DAGGER_RUNTIME_IMAGE` points at a pre-baked sandbox base image that already contains the apt toolbelt, the `uv` virtualenv, and the default Python dependencies. The runtime then skips the per-sandbox apt/`uv` build steps and instead verifies a provenance marker on the image — failing loudly if the image isn't the baked base — so an engine with restricted egress no longer needs to reach `ghcr.io`, the Debian mirrors, or PyPI when it materializes a sandbox; only the registry hosting the base image. Leave `false` (the default) to build the base from the stock runtime image on first use.
   - Default: `false`
@@ -850,11 +858,18 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
 
 ### Authentication & Security
 
-- **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens, encrypting secrets stored in the database, and encrypting JWKS private keys.
-  - Auto-generated once on first run. Set manually if you need to control the secret value. Must be at least 32 characters long.
-  - Example: `something-really-really-secret-12345`
-  - **Warning:** Do not change this value after deployment. Rotating this secret will invalidate all user sessions (forcing re-login), make existing encrypted secrets unreadable, break JWT signing (JWKS private keys are encrypted with this secret), and break two-factor authentication for enrolled users.
-  - Startup verifies this key against previously encrypted secrets and aborts on a mismatch. See `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY` to accept a deliberate rotation.
+- **`ARCHESTRA_AUTH_SESSION_SECRET`** - Session-signing secret (better-auth). Signs session cookies and the `session_data` cookie cache, and encrypts better-auth-internal material: JWKS private keys and two-factor secrets.
+  - Auto-generated once by Helm in the auth Secret under the `session-secret` key. Set manually to control it; must be at least 32 characters.
+  - **Rotating it** invalidates all sessions (forces re-login), regenerates JWKS (in-flight JWTs stop verifying), and breaks two-factor enrollment (enrolled users must re-enroll). No database migration is needed.
+
+- **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`** - Derives the AES key that encrypts secrets stored in the database (`secret` table). Independent of sessions/JWKS/2FA.
+  - Auto-generated once by Helm in the auth Secret under the `secrets-encryption-secret` key. Set manually to control it; must be at least 32 characters.
+  - Startup verifies this key against previously encrypted secrets and aborts on a mismatch (see `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`).
+  - **Rotating it** requires re-encrypting existing rows: set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and restart — the app re-encrypts stored secrets on startup, decrypting each with the previous key and re-encrypting with the new one (idempotent, and a no-op when the key is unchanged). You can also run it explicitly with `pnpm --filter backend db:reencrypt-secrets`. Vault-managed secrets are unaffected.
+
+- **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.
+
+  > When using an external `authSecret.existingSecretName`, that Secret must include `session-secret` and `secrets-encryption-secret` keys (add them before upgrading). Rotate by updating a key in your own secret manager.
 
 - **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
   - Default: `admin@example.com`
@@ -915,10 +930,10 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Options: `DB`, `VAULT`, or `READONLY_VAULT`
   - Note: When set to `VAULT` or `READONLY_VAULT`, requires `ARCHESTRA_HASHICORP_VAULT_ADDR` and the credentials for the selected auth method. See [Secrets Management](/docs/platform-secrets-management) for the full configuration reference (KV version, secret path prefix, auth methods).
 
-- **`ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`** - One-boot escape hatch after a deliberate `ARCHESTRA_AUTH_SECRET` change.
+- **`ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`** - One-boot escape hatch after a deliberate encryption-secret change made without the re-encryption migration.
   - Default: `false`
-  - Startup aborts when the current auth secret cannot decrypt previously stored secrets. Set to `true` for one boot to accept the new key, then unset it.
-  - Secrets encrypted with the previous key stay unreadable — re-enter them after the change.
+  - Startup aborts when the current encryption secret cannot decrypt previously stored secrets. Set to `true` for one boot to accept the new key, then unset it.
+  - Secrets encrypted with the previous key stay unreadable — re-enter them after the change. To keep them, use `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` and the re-encryption migration instead.
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
   - Required when: `ARCHESTRA_SECRETS_MANAGER=VAULT` or `READONLY_VAULT`

@@ -2627,6 +2627,7 @@ export type PerplexityChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     stream?: boolean | null;
+    stream_mode?: 'full' | 'concise';
 };
 
 export type PerplexityChatCompletionResponseInput = {
@@ -4205,6 +4206,7 @@ export type ZhipuaiChatCompletionRequestInput = {
     } | {
         role: 'assistant';
         content?: string | null;
+        reasoning_content?: string | null;
         name?: string;
         tool_calls?: Array<{
             id: string;
@@ -5067,10 +5069,56 @@ export type ArchestraChatCompletionResponseInput = {
 
 export type MinimaxChatCompletionRequestInput = {
     model: string;
-    /**
-     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
-     */
     messages: Array<{
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | null;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | null;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+         */
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | null;
+        name?: string;
+        reasoning_content?: string | null;
+        refusal?: string | null;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+        reasoning_details?: Array<{
+            text: string;
+        }>;
+    } | {
         content: string | Array<{
             type: 'text';
             text: string;
@@ -5359,6 +5407,7 @@ export type MinimaxChatCompletionRequestInput = {
         type: 'text' | 'json_object';
     };
     user?: string;
+    reasoning_split?: boolean;
     extra_body?: {
         reasoning_split?: boolean;
     };
@@ -5379,6 +5428,7 @@ export type MinimaxChatCompletionResponseInput = {
             reasoning_details?: Array<{
                 text: string;
             }>;
+            reasoning_content?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
              */
@@ -8421,6 +8471,7 @@ export type PerplexityChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     stream?: boolean | null;
+    stream_mode?: 'full' | 'concise';
 };
 
 export type PerplexityChatCompletionResponse = {
@@ -9999,6 +10050,7 @@ export type ZhipuaiChatCompletionRequest = {
     } | {
         role: 'assistant';
         content?: string | null;
+        reasoning_content?: string | null;
         name?: string;
         tool_calls?: Array<{
             id: string;
@@ -10861,10 +10913,56 @@ export type ArchestraChatCompletionResponse = {
 
 export type MinimaxChatCompletionRequest = {
     model: string;
-    /**
-     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
-     */
     messages: Array<{
+        role: 'assistant';
+        audio?: {
+            id: string;
+        } | null;
+        content?: string | Array<{
+            type: 'text';
+            text: string;
+        }> | Array<{
+            type: 'refusal';
+            refusal: string;
+        }> | null;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431
+         */
+        function_call?: {
+            arguments: string;
+            name: string;
+        } | null;
+        name?: string;
+        reasoning_content?: string | null;
+        refusal?: string | null;
+        /**
+         * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
+         */
+        tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1165
+             */
+            function: {
+                arguments: string;
+                name: string;
+            };
+        } | {
+            id: string;
+            type: 'custom';
+            /**
+             * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1128
+             */
+            custom: {
+                input: string;
+                name: string;
+            };
+        }>;
+        reasoning_details?: Array<{
+            text: string;
+        }>;
+    } | {
         content: string | Array<{
             type: 'text';
             text: string;
@@ -11153,6 +11251,7 @@ export type MinimaxChatCompletionRequest = {
         type: 'text' | 'json_object';
     };
     user?: string;
+    reasoning_split?: boolean;
     extra_body?: {
         reasoning_split?: boolean;
     };
@@ -11173,6 +11272,7 @@ export type MinimaxChatCompletionResponse = {
             reasoning_details?: Array<{
                 text: string;
             }>;
+            reasoning_content?: string | null;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197
              */
@@ -17300,6 +17400,90 @@ export type DownloadAppRecordingVideoData = {
 };
 
 export type DownloadAppRecordingVideoResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
+
+export type ReviewAppRecordingData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Absolute https://raw.githubusercontent.com/... URL of the submission's recording.json.
+         */
+        src: string;
+    };
+    url: '/api/app-recording/review';
+};
+
+export type ReviewAppRecordingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ReviewAppRecordingError = ReviewAppRecordingErrors[keyof ReviewAppRecordingErrors];
+
+export type ReviewAppRecordingResponses = {
     /**
      * Default Response
      */
@@ -38083,10 +38267,10 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
-            request: XaiChatCompletionRequest | {
+            request: PerplexityChatCompletionRequest | {
                 [key: string]: unknown;
             };
-            processedRequest?: XaiChatCompletionRequest | {
+            processedRequest?: PerplexityChatCompletionRequest | {
                 [key: string]: unknown;
             } | null;
             response: PerplexityChatCompletionResponse | {
@@ -44047,10 +44231,10 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
-        request: XaiChatCompletionRequest | {
+        request: PerplexityChatCompletionRequest | {
             [key: string]: unknown;
         };
-        processedRequest?: XaiChatCompletionRequest | {
+        processedRequest?: PerplexityChatCompletionRequest | {
             [key: string]: unknown;
         } | null;
         response: PerplexityChatCompletionResponse | {
@@ -55413,6 +55597,10 @@ export type GetModelsWithApiKeysResponses = {
             scope: string;
             isSystem: boolean;
         }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
         pricePerMillionInput: string | null;
         pricePerMillionOutput: string | null;
         isCustomPrice: boolean;
@@ -55448,6 +55636,7 @@ export type UpdateModelData = {
             num_predict?: number;
             reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
         } | null;
+        teamIds?: Array<string>;
     };
     path: {
         id: string;
@@ -69625,7 +69814,7 @@ export type GetOrganizationMemberResponses = {
 export type GetOrganizationMemberResponse = GetOrganizationMemberResponses[keyof GetOrganizationMemberResponses];
 
 export type PerplexityChatCompletionsWithDefaultAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: PerplexityChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client
@@ -69716,7 +69905,7 @@ export type PerplexityChatCompletionsWithDefaultAgentResponses = {
 export type PerplexityChatCompletionsWithDefaultAgentResponse = PerplexityChatCompletionsWithDefaultAgentResponses[keyof PerplexityChatCompletionsWithDefaultAgentResponses];
 
 export type PerplexityChatCompletionsWithAgentData = {
-    body: XaiChatCompletionRequestInput;
+    body: PerplexityChatCompletionRequestInput;
     headers: {
         /**
          * The user agent of the client

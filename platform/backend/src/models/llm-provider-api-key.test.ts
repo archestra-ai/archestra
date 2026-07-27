@@ -706,12 +706,13 @@ describe("LlmProviderApiKeyModel", () => {
         name: "Key From Before Rotation",
       });
 
-      // Simulate an auth-secret rotation: the stored secret was encrypted
-      // under the previous ARCHESTRA_AUTH_SECRET and can no longer be
-      // decrypted with the current one.
+      // Simulate an encryption-secret rotation: the stored secret was encrypted
+      // under the previous ARCHESTRA_SECRETS_ENCRYPTION_SECRET and can no longer
+      // be decrypted with the current one.
       _resetCachedKey();
-      const original = config.auth.secret;
-      config.auth.secret = "rotated-auth-secret-that-cannot-decrypt-old-rows";
+      const original = config.secretsManager.encryptionSecret;
+      config.secretsManager.encryptionSecret =
+        "rotated-encryption-secret-that-cannot-decrypt-old-rows";
 
       try {
         const visible = await LlmProviderApiKeyModel.getVisibleKeys(
@@ -727,7 +728,7 @@ describe("LlmProviderApiKeyModel", () => {
         expect(visible[0].isChatgptSubscription).toBe(false);
         expect(visible[0].vaultSecretPath).toBeNull();
       } finally {
-        config.auth.secret = original;
+        config.secretsManager.encryptionSecret = original;
         _resetCachedKey();
       }
     });

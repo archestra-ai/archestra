@@ -248,6 +248,22 @@ describe("chat-error.utils", () => {
       });
     });
 
+    it("maps an HTML error page to a retryable ServerError with friendly copy", () => {
+      // The AI SDK throws the response text verbatim, so a proxy/ingress 502
+      // in front of the backend produces an Error whose message is raw HTML.
+      const result = mapClientError(
+        new Error(
+          "<html> <head><title>502 Bad Gateway</title></head> <body> <center><h1>502 Bad Gateway</h1></center> </body> </html> <!-- a padding to disable MSIE and Chrome friendly error page -->",
+        ),
+      );
+      expect(result).toEqual({
+        code: ChatErrorCode.ServerError,
+        message:
+          "The service is temporarily unavailable. Please try again shortly.",
+        isRetryable: true,
+      });
+    });
+
     it("maps api_internal_server_error to retryable ServerError", () => {
       expect(
         mapClientError(

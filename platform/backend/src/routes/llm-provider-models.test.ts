@@ -7,6 +7,7 @@ import AuditLogModel from "@/models/audit-log";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import ModelTeamModel from "@/models/model-team";
 import OrganizationModel from "@/models/organization";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import type { FastifyInstanceWithZod } from "@/server";
@@ -14,7 +15,7 @@ import { createFastifyInstance } from "@/server";
 import { modelSyncService } from "@/services/model-sync";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
+import type { Model, User } from "@/types";
 import {
   getStaleModelSyncApiKeys,
   isModelSyncStateStale,
@@ -920,6 +921,194 @@ describe("chat model routes", () => {
 
     resolveSync?.(1);
     await Promise.all(firstSyncs);
+  });
+
+  describe("team-restricted models", () => {
+    async function createLinkedChatModels(params: {
+      apiKeyId: string;
+    }): Promise<{ openModel: Model; frontierModel: Model }> {
+      const openModel = await ModelModel.create({
+        externalId: "gemini/gemini-2.5-flash",
+        provider: "gemini",
+        modelId: "gemini-2.5-flash",
+        description: "Gemini 2.5 Flash",
+        contextLength: 1_000_000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.000001",
+        completionPricePerToken: "0.000002",
+        ignored: false,
+        lastSyncedAt: new Date(),
+      });
+      const frontierModel = await ModelModel.create({
+        externalId: "gemini/gemini-2.5-pro",
+        provider: "gemini",
+        modelId: "gemini-2.5-pro",
+        description: "Gemini 2.5 Pro",
+        contextLength: 1_000_000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        promptPricePerToken: "0.00001",
+        completionPricePerToken: "0.00003",
+        ignored: false,
+        lastSyncedAt: new Date(),
+      });
+      await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+        params.apiKeyId,
+        [
+          { id: openModel.id, modelId: openModel.modelId },
+          { id: frontierModel.id, modelId: frontierModel.modelId },
+        ],
+        "gemini",
+      );
+      return { openModel, frontierModel };
+    }
+
+    test("GET /api/llm-models/available hides restricted models from non-members and shows them to team members", async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "gemini",
+        scope: "org",
+      });
+      const { frontierModel } = await createLinkedChatModels({
+        apiKeyId: apiKey.id,
+      });
+
+      const devTeam = await makeTeam(organizationId, user.id);
+      await ModelTeamModel.syncModelTeams(frontierModel.id, [devTeam.id]);
+
+      // The caller is a plain member, not a catalog manager — no bypass.
+      mockUserHasPermission.mockResolvedValue(false);
+
+      const before = await app.inject({
+        method: "GET",
+        url: "/api/llm-models/available",
+      });
+      expect(before.statusCode).toBe(200);
+      expect(before.json().map((m: { id: string }) => m.id)).toEqual([
+        "gemini-2.5-flash",
+      ]);
+
+      await makeTeamMember(devTeam.id, user.id);
+
+      const after = await app.inject({
+        method: "GET",
+        url: "/api/llm-models/available",
+      });
+      expect(after.statusCode).toBe(200);
+      expect(after.json().map((m: { id: string }) => m.id)).toEqual(
+        expect.arrayContaining(["gemini-2.5-flash", "gemini-2.5-pro"]),
+      );
+    });
+
+    test("GET /api/llm-models/available keeps restricted models visible to catalog managers outside the team", async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeTeam,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "gemini",
+        scope: "org",
+      });
+      const { frontierModel } = await createLinkedChatModels({
+        apiKeyId: apiKey.id,
+      });
+
+      const devTeam = await makeTeam(organizationId, user.id);
+      await ModelTeamModel.syncModelTeams(frontierModel.id, [devTeam.id]);
+
+      // The caller holds llmModel:update (org admins included) but is not a
+      // member of the restriction team — full visibility anyway.
+      mockUserHasPermission.mockResolvedValue(true);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/llm-models/available",
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().map((m: { id: string }) => m.id)).toEqual(
+        expect.arrayContaining(["gemini-2.5-flash", "gemini-2.5-pro"]),
+      );
+    });
+
+    test("GET /api/llm-models returns each model's team restrictions", async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeTeam,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "gemini",
+        scope: "org",
+      });
+      const { openModel, frontierModel } = await createLinkedChatModels({
+        apiKeyId: apiKey.id,
+      });
+
+      const devTeam = await makeTeam(organizationId, user.id, {
+        name: "Dev Team",
+      });
+      await ModelTeamModel.syncModelTeams(frontierModel.id, [devTeam.id]);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/llm-models",
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      const restricted = body.find(
+        (m: { id: string }) => m.id === frontierModel.id,
+      );
+      const unrestricted = body.find(
+        (m: { id: string }) => m.id === openModel.id,
+      );
+      expect(restricted.teams).toEqual([{ id: devTeam.id, name: "Dev Team" }]);
+      expect(unrestricted.teams).toEqual([]);
+    });
+
+    test("PATCH /api/llm-models/:id sets and clears team restrictions", async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeTeam,
+    }) => {
+      const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+      const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider: "gemini",
+        scope: "org",
+      });
+      const { frontierModel } = await createLinkedChatModels({
+        apiKeyId: apiKey.id,
+      });
+      const devTeam = await makeTeam(organizationId, user.id);
+
+      const restrict = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${frontierModel.id}`,
+        body: { teamIds: [devTeam.id] },
+      });
+      expect(restrict.statusCode).toBe(200);
+      expect(
+        await ModelTeamModel.getTeamIdsForModels([frontierModel.id]),
+      ).toEqual(new Map([[frontierModel.id, [devTeam.id]]]));
+
+      const clear = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-models/${frontierModel.id}`,
+        body: { teamIds: [] },
+      });
+      expect(clear.statusCode).toBe(200);
+      expect(
+        await ModelTeamModel.getTeamIdsForModels([frontierModel.id]),
+      ).toEqual(new Map());
+    });
   });
 
   describe("PATCH /api/llm-models/:id — configuredParameters", () => {

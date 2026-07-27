@@ -8,7 +8,7 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
-import { Copy, Eye, EyeOff, RefreshCw, Trash2 } from "lucide-react";
+import { Copy, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -21,23 +21,25 @@ import { GenericAuthRow } from "@/app/connection/mcp-client-instructions";
 import { GenericEndpointCard } from "@/app/connection/proxy-client-instructions";
 import { TerminalBlock } from "@/app/connection/terminal-block";
 import { useUpdateUrlParams } from "@/app/connection/use-update-url-params";
-import { CreateOAuthClientDialog } from "@/app/credentials/_parts/create-oauth-client-dialog";
-import {
-  type CreatedCredentials,
-  OAuthClientCreatedDialog,
-} from "@/app/credentials/_parts/oauth-client-created-dialog";
 import { ConnectDialog } from "@/components/connect-dialog";
+import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
 import {
   CreateVirtualKeyDialogWithData,
   type VirtualKeyType,
 } from "@/components/create-virtual-key-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { formatProviderKeySummary } from "@/components/provider-key-mappings-field";
+import { EditOAuthClientDialog as LlmEditOAuthClientDialog } from "@/components/llm-oauth-client-dialogs";
+import { McpOauthManagement } from "@/components/mcp-oauth-management";
+import {
+  type CreatedCredentials,
+  OAuthClientCreatedDialog,
+} from "@/components/oauth-client-created-dialog";
 import { SECRET_PLACEHOLDER_TOKEN } from "@/components/secret-copy-button";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { VirtualKeyManagement } from "@/components/virtual-key-management";
 import { useProfile, useProfiles } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import config from "@/lib/config/config";
@@ -46,15 +48,11 @@ import {
   useDeleteLlmOauthClient,
   useLlmOauthClients,
   useRotateLlmOauthClientSecret,
+  useUpdateLlmOauthClient,
 } from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useCreateMcpOauthClient } from "@/lib/mcp-oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
-import {
-  useAllVirtualApiKeys,
-  useDeleteVirtualApiKey,
-  useFetchVirtualApiKeyValue,
-} from "@/lib/virtual-api-keys.query";
 
 /**
  * "Plug" row-action dialogs for the LLM Proxies and MCP Gateways tables.
@@ -224,7 +222,7 @@ function LlmProxyAuthSurface({
               ["Send", "as the API key (Authorization header)"],
             ]}
           />
-          <VirtualKeyTable keyType="standard" />
+          <VirtualKeyManagement keyType="standard" />
           <AuthActionsRow
             summary={null}
             action={
@@ -269,7 +267,7 @@ function LlmProxyAuthSurface({
               },
             ]}
           />
-          <VirtualKeyTable keyType="passthrough" />
+          <VirtualKeyManagement keyType="passthrough" />
           <AuthActionsRow
             summary="Passthrough keys are attribution-only — they grant nothing."
             action={
@@ -291,10 +289,10 @@ function LlmProxyAuthSurface({
         <div className="space-y-3">
           <AuthFacts
             rows={[
-              ["For", "machine-to-machine apps"],
+              ["For", "applications calling as themselves or for a user"],
               [
                 "Downstream",
-                "resolves to stored provider keys, like a virtual key",
+                "app tokens use mapped provider keys; user tokens use the signed-in user's keys",
               ],
               ["Routes", "Model Router + provider routes"],
             ]}
@@ -302,7 +300,7 @@ function LlmProxyAuthSurface({
           <TerminalBlock
             rows={[
               {
-                comment: "get an access token",
+                comment: "client credentials example",
                 code: `POST ${tokenEndpoint}\n  grant_type=client_credentials\n  client_id=<client-id>  client_secret=<client-secret>`,
               },
             ]}
@@ -312,18 +310,7 @@ function LlmProxyAuthSurface({
             clients={canReadOauth ? oauthClients : undefined}
           />
           <AuthActionsRow
-            summary={
-              <>
-                Secrets are shown once at creation — rotate in{" "}
-                <Link
-                  href="/credentials/oauth-clients"
-                  className="text-primary hover:underline"
-                >
-                  Client Credentials
-                </Link>{" "}
-                to reissue.
-              </>
-            }
+            summary="Secrets are shown once at creation or rotation."
             action={
               canCreateOauth ? (
                 <Button
@@ -394,6 +381,7 @@ function OauthClientCreateFlow({
         open={open}
         onOpenChange={onOpenChange}
         defaultClientType="llm"
+        fixedClientType="llm"
         defaultAllowedProxyIds={[proxyId]}
         gateways={gateways}
         llmProxies={llmProxies}
@@ -452,23 +440,38 @@ function McpGatewayAuthSurface({
       </div>
       <Tabs value={tab} onValueChange={(v) => setTab(v as GatewayAuthTab)}>
         <TabsList>
-          <TabsTrigger value="oauth">OAuth 2.1</TabsTrigger>
+          <TabsTrigger value="oauth">OAuth</TabsTrigger>
           <TabsTrigger value="token">Platform token</TabsTrigger>
           <TabsTrigger value="idp">Identity provider</TabsTrigger>
         </TabsList>
       </Tabs>
 
       {tab === "oauth" && (
-        <AuthFacts
-          rows={[
-            ["For", "interactive MCP clients (Claude, Cursor, VS Code, …)"],
-            [
-              "How",
-              "the client registers and signs in on first connect — nothing to copy",
-            ],
-            ["Access", "tools filtered by the signed-in user's permissions"],
-          ]}
-        />
+        <div className="space-y-3">
+          <AuthFacts
+            rows={[
+              ["For", "interactive MCP clients such as Claude and Cursor"],
+              [
+                "How",
+                "the client registers and signs in on first connect — nothing to copy",
+              ],
+              ["Access", "tools filtered by the signed-in user's permissions"],
+            ]}
+          />
+          <div className="space-y-3 border-t pt-3">
+            <div className="space-y-1">
+              <p className="text-xs font-medium">Registered OAuth clients</p>
+              <p className="text-xs text-muted-foreground">
+                Use these for applications calling as themselves or on behalf of
+                signed-in users.
+              </p>
+            </div>
+            <McpOauthManagement
+              resourceId={gateway.id}
+              resourceKind="gateway"
+            />
+          </div>
+        </div>
       )}
 
       {tab === "token" && (
@@ -566,195 +569,8 @@ function IdentityProviderStatus({
   );
 }
 
-const KEY_TABLE_LIMIT = 8;
-
-type VirtualKeyRow =
-  archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
 type LlmOauthClientRow =
   archestraApiTypes.GetLlmOauthClientsResponses["200"][number];
-
-/**
- * Compact key table for the auth tabs. Keys the viewer authored reveal and
- * copy their real value (author-only backend route); others stay masked.
- */
-function VirtualKeyTable({ keyType }: { keyType: "standard" | "passthrough" }) {
-  const { data: session } = useSession();
-  const currentUserId = session?.user?.id;
-  const { data: canRead } = useHasPermissions({ llmVirtualKey: ["read"] });
-  const { data: canDelete } = useHasPermissions({ llmVirtualKey: ["delete"] });
-  const { data, isPending } = useAllVirtualApiKeys({
-    keyType,
-    limit: KEY_TABLE_LIMIT,
-    toastOnError: false,
-    enabled: canRead === true,
-  });
-  const deleteMutation = useDeleteVirtualApiKey();
-  const [deletingKey, setDeletingKey] = useState<VirtualKeyRow | null>(null);
-
-  if (canRead === false) return null;
-  const keys = data?.data ?? [];
-  const total = data?.pagination.total ?? 0;
-  if (!isPending && keys.length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        No {keyType === "passthrough" ? "passthrough " : ""}keys yet.
-      </p>
-    );
-  }
-
-  return (
-    <div className="overflow-hidden rounded-md border">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b bg-muted/40 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-            <th className="px-3 py-1.5 font-medium">Name</th>
-            <th className="px-3 py-1.5 font-medium">Key</th>
-            {keyType === "standard" && (
-              <th className="px-3 py-1.5 font-medium">Providers</th>
-            )}
-            <th className="px-3 py-1.5 font-medium">Owner</th>
-            {canDelete && <th className="w-8 px-2 py-1.5" />}
-          </tr>
-        </thead>
-        <tbody>
-          {keys.map((key: VirtualKeyRow) => (
-            <tr key={key.id} className="border-b last:border-0">
-              <td className="max-w-[150px] truncate px-3 py-1.5 font-medium">
-                {key.name}
-              </td>
-              <td className="px-3 py-1.5">
-                <VirtualKeyValueCell
-                  id={key.id}
-                  tokenStart={key.tokenStart}
-                  canReveal={key.authorId === currentUserId}
-                />
-              </td>
-              {keyType === "standard" && (
-                <td className="max-w-[140px] truncate px-3 py-1.5 text-muted-foreground">
-                  {formatProviderKeySummary(key.providerApiKeys)}
-                </td>
-              )}
-              <td className="px-3 py-1.5 text-muted-foreground">
-                {key.authorId === currentUserId
-                  ? "Me"
-                  : (key.authorName ?? "—")}
-              </td>
-              {canDelete && (
-                <td className="px-2 py-1.5">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Delete ${key.name}`}
-                    onClick={() => setDeletingKey(key)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                  </Button>
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {total > keys.length && (
-        <div className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
-          {total - keys.length} more —{" "}
-          <Link
-            href="/credentials/virtual-keys"
-            className="text-primary hover:underline"
-          >
-            Client Credentials
-          </Link>
-        </div>
-      )}
-
-      <DeleteConfirmDialog
-        open={!!deletingKey}
-        onOpenChange={(open) => {
-          if (!open) setDeletingKey(null);
-        }}
-        title="Delete Virtual Key"
-        description={`Are you sure you want to delete "${deletingKey?.name}"? This action cannot be undone.`}
-        confirmLabel="Delete"
-        isPending={deleteMutation.isPending}
-        onConfirm={() => {
-          if (!deletingKey) return;
-          deleteMutation.mutate(
-            { id: deletingKey.id },
-            {
-              onSuccess: () => setDeletingKey(null),
-            },
-          );
-        }}
-      />
-    </div>
-  );
-}
-
-function VirtualKeyValueCell({
-  id,
-  tokenStart,
-  canReveal,
-}: {
-  id: string;
-  tokenStart: string;
-  canReveal: boolean;
-}) {
-  const fetchValue = useFetchVirtualApiKeyValue();
-  const [value, setValue] = useState<string | null>(null);
-  const [visible, setVisible] = useState(false);
-
-  const resolveValue = async () => {
-    if (value) return value;
-    const fetched = await fetchValue.mutateAsync(id);
-    if (fetched) setValue(fetched);
-    return fetched;
-  };
-
-  return (
-    <div className="flex items-center gap-1 font-mono">
-      <code className={visible && value ? "break-all" : "whitespace-nowrap"}>
-        {visible && value ? value : `${tokenStart}…`}
-      </code>
-      {canReveal && (
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={visible ? "Hide key" : "Reveal key"}
-            disabled={fetchValue.isPending}
-            onClick={async () => {
-              if (!visible && !(await resolveValue())) return;
-              setVisible(!visible);
-            }}
-          >
-            {visible ? (
-              <EyeOff className="h-3.5 w-3.5" />
-            ) : (
-              <Eye className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Copy key"
-            disabled={fetchValue.isPending}
-            onClick={async () => {
-              const resolved = await resolveValue();
-              if (!resolved) return;
-              await copyToClipboard(resolved);
-              toast.success("Key copied");
-            }}
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-        </>
-      )}
-    </div>
-  );
-}
 
 /** OAuth clients that can authenticate to this proxy. Secrets are not stored
  *  retrievably, so only the client ID is copyable. */
@@ -773,6 +589,14 @@ function OauthClientTable({
   });
   const deleteMutation = useDeleteLlmOauthClient();
   const rotateMutation = useRotateLlmOauthClientSecret();
+  const updateMutation = useUpdateLlmOauthClient();
+  const { data: llmProxies = [] } = useProfiles({
+    filters: { agentTypes: ["llm_proxy"] },
+  });
+  const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
+  const [editingClient, setEditingClient] = useState<LlmOauthClientRow | null>(
+    null,
+  );
   const [deletingClient, setDeletingClient] =
     useState<LlmOauthClientRow | null>(null);
   const [rotatingClient, setRotatingClient] =
@@ -802,7 +626,7 @@ function OauthClientTable({
             <th className="px-3 py-1.5 font-medium">Name</th>
             <th className="px-3 py-1.5 font-medium">Client ID</th>
             <th className="px-3 py-1.5 font-medium">Providers</th>
-            {canDelete && <th className="w-8 px-2 py-1.5" />}
+            {(canUpdate || canDelete) && <th className="w-8 px-2 py-1.5" />}
           </tr>
         </thead>
         <tbody>
@@ -842,29 +666,42 @@ function OauthClientTable({
                       .join(", ")
                   : "—"}
               </td>
-              {canDelete && (
+              {(canUpdate || canDelete) && (
                 <td className="px-2 py-1.5">
                   <div className="flex items-center">
                     {canUpdate && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Edit ${client.name}`}
+                          onClick={() => setEditingClient(client)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Rotate secret for ${client.name}`}
+                          onClick={() => setRotatingClient(client)}
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
+                    {canDelete && (
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={`Rotate secret for ${client.name}`}
-                        onClick={() => setRotatingClient(client)}
+                        aria-label={`Delete ${client.name}`}
+                        onClick={() => setDeletingClient(client)}
                       >
-                        <RefreshCw className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
                       </Button>
                     )}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Delete ${client.name}`}
-                      onClick={() => setDeletingClient(client)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                    </Button>
                   </div>
                 </td>
               )}
@@ -872,6 +709,20 @@ function OauthClientTable({
           ))}
         </tbody>
       </table>
+
+      <LlmEditOAuthClientDialog
+        oauthClient={editingClient}
+        onOpenChange={(open) => {
+          if (!open) setEditingClient(null);
+        }}
+        llmProxies={llmProxies}
+        providerApiKeys={providerApiKeys}
+        onSubmit={async (id, body) => {
+          if (await updateMutation.mutateAsync({ id, body }))
+            setEditingClient(null);
+        }}
+        isSubmitting={updateMutation.isPending}
+      />
 
       <DeleteConfirmDialog
         open={!!rotatingClient}

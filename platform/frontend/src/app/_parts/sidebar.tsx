@@ -20,7 +20,6 @@ import {
   FolderKanban,
   Github,
   Inbox,
-  KeyRound,
   type LucideIcon,
   MessageCircle,
   MessagesSquare,
@@ -322,17 +321,6 @@ const contentNavGroups: NavGroup[] = [
           pathname.startsWith("/llm/model-providers") ||
           pathname.startsWith("/llm/models"),
         dotKey: "nav:model-providers",
-      },
-      {
-        title: "Client Credentials",
-        url: "/credentials",
-        icon: KeyRound,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/credentials"),
-        permissionUrls: [
-          "/credentials/virtual-keys",
-          "/credentials/oauth-clients",
-        ],
       },
       {
         title: "Costs & Limits",

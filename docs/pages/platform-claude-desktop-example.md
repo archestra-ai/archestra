@@ -3,7 +3,7 @@ title: Using Claude Desktop (Cowork)
 category: Examples
 order: 9
 description: Route Claude Desktop's inference and tools through Archestra
-lastUpdated: 2026-07-07
+lastUpdated: 2026-07-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,7 +17,7 @@ configuration profile. Cover:
 - The two embedded credentials: standard virtual key as the inference API key,
   passthrough virtual key in the X-Archestra-Virtual-Key custom header for
   per-user attribution (X-Archestra-Agent-Id identifies the client, not secret);
-  key reuse across downloads and revocation on the Virtual Keys page.
+  key reuse across downloads and revocation in the LLM Proxy Connect dialog.
 - Prerequisites (LLM proxy with an Anthropic provider key, optional MCP gateway,
   llmVirtualKey:create, Claude Desktop developer mode).
 - The end-to-end steps shown on the Connect page and mirrored in Claude Desktop:

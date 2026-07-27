@@ -3,14 +3,14 @@
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import { Globe, Key, Loader2, User, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  OwnerSelectField,
-  shouldShowOwnerField,
-} from "@/app/credentials/virtual-keys/owner-select-field";
 import { CopyableCode } from "@/components/copyable-code";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
+import {
+  OwnerSelectField,
+  shouldShowOwnerField,
+} from "@/components/owner-select-field";
 import {
   type ProviderApiKeyMap,
   providerApiKeyMapToArray,
@@ -47,8 +47,8 @@ export type VirtualKeyType = NonNullable<
 >;
 
 /**
- * Self-contained variant for surfaces outside the Client Credentials page
- * (e.g. the proxy connect dialog): gathers the option data the form needs.
+ * Self-contained variant for resource connection surfaces: gathers the option
+ * data the form needs.
  */
 export function CreateVirtualKeyDialogWithData({
   open,

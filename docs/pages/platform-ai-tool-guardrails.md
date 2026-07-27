@@ -102,6 +102,8 @@ Available actions:
 
 Use tool call policies to separate safe internal read paths from tools that could exfiltrate data or cause side effects.
 
+A coding CLI's own tools (Claude Code's `Bash`, for example) are discovered with **Allow always** so the client keeps working when the session turns sensitive. The client's MCP tools — names starting with `mcp__` — get the configured default instead. Each stamp is a per-tool policy you can tighten.
+
 For example, a `send_email` tool may only be acceptable for internal recipients:
 
 ```json

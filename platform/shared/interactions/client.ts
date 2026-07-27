@@ -11,6 +11,16 @@ import type { SupportedProvider } from "../model-constants";
  * {@link CLAUDE_CLIENT_LABEL} in the UI.
  */
 
+/**
+ * The prefix coding-CLI clients put on MCP-server tool names in their LLM
+ * requests (`mcp__<server>__<tool>`). Claude Code always applies it; Codex
+ * uses the same prefix by default (codex-rs `LEGACY_MCP_TOOL_NAME_PREFIX`),
+ * though it ships an opt-in mode that omits it per server. A tool name in an
+ * attributed coding-CLI request WITHOUT this prefix is one of the client's own
+ * native tools (Bash, shell, apply_patch, …).
+ */
+export const CLIENT_MCP_TOOL_NAME_PREFIX = "mcp__";
+
 /** Human-readable label for every Claude client id in the UI. */
 export const CLAUDE_CLIENT_LABEL = "Claude";
 

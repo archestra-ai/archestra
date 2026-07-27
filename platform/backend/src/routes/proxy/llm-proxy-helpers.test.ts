@@ -748,14 +748,51 @@ describe("handleError", () => {
     );
   });
 
-  test("does not tag an explicit 503 without overload wording", () => {
+  test("tags any explicit provider 503 as overloaded, regardless of wording", () => {
+    // Providers phrase unavailability differently (Google returns UNAVAILABLE
+    // "experiencing high demand" with no "overloaded" wording) — a 503 from
+    // the provider call is provider unavailability either way.
     const thrown = throwErrorFor(
       Object.assign(new Error("Service Unavailable"), { status: 503 }),
       makeReply(false).reply,
     );
 
     expect(thrown.statusCode).toBe(503);
-    expect(thrown.internalCode).toBeUndefined();
+    expect(thrown.internalCode).toBe(
+      ArchestraInternalErrorCode.ProviderOverloaded,
+    );
+    expect(thrown.upstream).toBe(true);
+  });
+
+  test("reads the HTTP status from AWS SDK response metadata", () => {
+    // AWS SDK errors (Bedrock) carry the status on $metadata — without it a
+    // throttling 429 surfaced as a generic 500.
+    const throttled = throwErrorFor(
+      Object.assign(new Error("Too many requests, please wait."), {
+        $metadata: { httpStatusCode: 429 },
+      }),
+      makeReply(false).reply,
+    );
+    expect(throttled.statusCode).toBe(429);
+
+    const providerFault = throwErrorFor(
+      Object.assign(new Error("Bedrock is unable to process your request."), {
+        $metadata: { httpStatusCode: 500 },
+      }),
+      makeReply(false).reply,
+    );
+    expect(providerFault.statusCode).toBe(500);
+    expect(providerFault.upstream).toBe(true);
+  });
+
+  test("does not mark an internal 500 as an upstream failure", () => {
+    const thrown = throwErrorFor(
+      new TypeError("cannot read x of undefined"),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.upstream).toBeFalsy();
   });
 
   test("forwards the upstream Retry-After header before headers commit", () => {

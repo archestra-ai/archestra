@@ -154,7 +154,11 @@ export const AuditableSnapshotSchema = z
 export type AuditableSnapshot = z.infer<typeof AuditableSnapshotSchema>;
 
 export const SelectAuditLogSchema = createSelectSchema(schema.auditLogsTable, {
-  action: AuditEventNameSchema,
+  // Persisted rows are re-validated on read-back, so this must tolerate
+  // actions written by other releases (the registered-action set changes
+  // between versions); one nonconforming row would otherwise 500 the entire
+  // audit log listing. Writes stay strict via InsertAuditLogSchema.
+  action: AuditEventNameSchema.or(z.string()),
   actorType: AuditActorTypeSchema,
   outcome: AuditOutcomeSchema,
 }).extend({

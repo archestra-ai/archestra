@@ -301,7 +301,7 @@ export type OpenAiChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -1807,7 +1807,7 @@ export type CerebrasChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/Cerebras/cerebras-cloud-sdk-node/blob/main/src/resources/chat/completions.ts
@@ -2274,7 +2274,7 @@ export type MistralChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -2634,7 +2634,7 @@ export type PerplexityChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -2993,7 +2993,7 @@ export type GroqChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -3356,7 +3356,7 @@ export type OpenrouterChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -3696,7 +3696,7 @@ export type VllmChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * The assistant message in the response
@@ -4023,7 +4023,7 @@ export type OllamaChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * The assistant message in the response
@@ -4289,7 +4289,7 @@ export type ZhipuaiChatCompletionResponseInput = {
     request_id?: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error';
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://docs.z.ai/api-reference/llm/chat-completion#response
@@ -4641,7 +4641,7 @@ export type DeepSeekChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -5001,7 +5001,7 @@ export type ArchestraChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -5417,7 +5417,7 @@ export type MinimaxChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter';
-        index: number;
+        index?: number;
         logprobs?: unknown;
         /**
          * https://platform.minimax.io/docs/api-reference/text-openai-api#response
@@ -5765,7 +5765,7 @@ export type XaiChatCompletionResponseInput = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -6145,7 +6145,7 @@ export type OpenAiChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -7651,7 +7651,7 @@ export type CerebrasChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/Cerebras/cerebras-cloud-sdk-node/blob/main/src/resources/chat/completions.ts
@@ -8118,7 +8118,7 @@ export type MistralChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -8478,7 +8478,7 @@ export type PerplexityChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -8837,7 +8837,7 @@ export type GroqChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -9200,7 +9200,7 @@ export type OpenrouterChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -9540,7 +9540,7 @@ export type VllmChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * The assistant message in the response
@@ -9867,7 +9867,7 @@ export type OllamaChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * The assistant message in the response
@@ -10133,7 +10133,7 @@ export type ZhipuaiChatCompletionResponse = {
     request_id?: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error';
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://docs.z.ai/api-reference/llm/chat-completion#response
@@ -10485,7 +10485,7 @@ export type DeepSeekChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -10845,7 +10845,7 @@ export type ArchestraChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -11261,7 +11261,7 @@ export type MinimaxChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter';
-        index: number;
+        index?: number;
         logprobs?: unknown;
         /**
          * https://platform.minimax.io/docs/api-reference/text-openai-api#response
@@ -11609,7 +11609,7 @@ export type XaiChatCompletionResponse = {
     id: string;
     choices: Array<{
         finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-        index: number;
+        index?: number;
         logprobs: unknown;
         /**
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -20110,7 +20110,7 @@ export type GetAuditLogsResponses = {
             actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
             actorName: string | null;
             actorEmail: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -20230,7 +20230,7 @@ export type GetAuditLogResponses = {
         actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
         actorName: string | null;
         actorEmail: string | null;
-        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -22031,7 +22031,7 @@ export type AzureChatCompletionsWithDefaultAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -22532,7 +22532,7 @@ export type AzureChatCompletionsWithAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -33947,7 +33947,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -34396,7 +34396,7 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -39770,7 +39770,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                    index: number;
+                    index?: number;
                     logprobs: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -40504,7 +40504,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                    index: number;
+                    index?: number;
                     logprobs: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -41238,7 +41238,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                    index: number;
+                    index?: number;
                     logprobs: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -41486,7 +41486,7 @@ export type GetInteractionsResponses = {
                 id: string;
                 choices: Array<{
                     finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                    index: number;
+                    index?: number;
                     logprobs: unknown;
                     /**
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -45788,7 +45788,7 @@ export type GetInteractionResponses = {
             id: string;
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                index: number;
+                index?: number;
                 logprobs: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -46522,7 +46522,7 @@ export type GetInteractionResponses = {
             id: string;
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                index: number;
+                index?: number;
                 logprobs: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -47256,7 +47256,7 @@ export type GetInteractionResponses = {
             id: string;
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                index: number;
+                index?: number;
                 logprobs: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -47504,7 +47504,7 @@ export type GetInteractionResponses = {
             id: string;
             choices: Array<{
                 finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-                index: number;
+                index?: number;
                 logprobs: unknown;
                 /**
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -50890,7 +50890,7 @@ export type KimiChatCompletionsWithDefaultAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -51339,7 +51339,7 @@ export type KimiChatCompletionsWithAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -61239,7 +61239,7 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
@@ -61688,7 +61688,7 @@ export type Microsoft365CopilotChatCompletionsWithAgentResponses = {
         id: string;
         choices: Array<{
             finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
-            index: number;
+            index?: number;
             logprobs: unknown;
             /**
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000

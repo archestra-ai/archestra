@@ -194,6 +194,88 @@ describe("PUT /api/internal_mcp_catalog/:id — multi-tenant shared-pod rollout"
     expect((await getServerRow(serverIds[0])).reinstallRequired).toBe(false);
   });
 
+  test("a non-prompted env var change recreates the shared pod without touching execution config", async ({
+    makeMcpServer,
+  }) => {
+    const { catalog, name, serverIds } = await makeCatalogWithInstalls(
+      makeMcpServer,
+      { multitenant: true },
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        name,
+        serverType: "local",
+        // Image, command and args all identical — only the shared env moves.
+        localConfig: {
+          ...localConfig,
+          environment: [
+            {
+              key: "LOG_LEVEL",
+              type: "plain_text",
+              value: "debug",
+              promptOnInstallation: false,
+            },
+          ],
+        },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    await drainCascade();
+
+    // Non-prompted entries are baked into the shared pod's spec, so this takes
+    // the one-shot recreate rather than the per-install auto path.
+    expect(reinstallSharedSpy).toHaveBeenCalledWith(catalog.id);
+    expect((await getCatalogRow(catalog.id)).catalogReinstallRequired).toBe(
+      false,
+    );
+    expect((await getServerRow(serverIds[0])).reinstallRequired).toBe(false);
+  });
+
+  test("a prompted-only change leaves the shared pod alone and defers to per-install input", async ({
+    makeMcpServer,
+  }) => {
+    const { catalog, name, serverIds } = await makeCatalogWithInstalls(
+      makeMcpServer,
+      { multitenant: true },
+    );
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        name,
+        serverType: "local",
+        localConfig: {
+          ...localConfig,
+          environment: [
+            {
+              key: "API_TOKEN",
+              type: "secret",
+              sensitive: true,
+              required: true,
+              promptOnInstallation: true,
+            },
+          ],
+        },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    await drainCascade();
+
+    // Prompted entries are per-install secrets resolved at request time; they
+    // never reach the shared pod, so nothing about it changed.
+    expect(reinstallSharedSpy).not.toHaveBeenCalled();
+    expect((await getCatalogRow(catalog.id)).catalogReinstallRequired).toBe(
+      false,
+    );
+    const row = await getServerRow(serverIds[0]);
+    expect(row.reinstallRequired).toBe(true);
+    expect(row.reinstallReason).toBe("new-input");
+  });
+
   test("an image bump carrying a new required prompted env var defers the recreate instead", async ({
     makeMcpServer,
   }) => {

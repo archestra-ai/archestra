@@ -250,10 +250,6 @@ function LlmProxyAuthSurface({
           <TerminalBlock
             rows={[
               {
-                comment: "required — provider API key or subscription token",
-                code: "Authorization: Bearer <provider-key-or-subscription-token>",
-              },
-              {
                 comment: "optional — link the request to a user",
                 code: "X-Archestra-Virtual-Key: arch_<passthrough-key>",
               },

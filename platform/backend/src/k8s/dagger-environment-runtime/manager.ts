@@ -235,6 +235,92 @@ class DaggerEnvironmentRuntimeManager {
     });
   }
 
+  /**
+   * Delete the org-default engine from a namespace it no longer lives in.
+   * `reconcileOrganizationDefault` provisions the engine in the org's current
+   * namespace but leaves any engine in the previous one; without this a default
+   * namespace change strands a privileged pod and its Retain-policy cache PVC in
+   * the old namespace. Call after reconciling the new engine, with the
+   * pre-change namespace. Best-effort and idempotent.
+   */
+  async teardownOrganizationDefaultEngine(
+    organization: OrganizationDefaultEngineTarget,
+    previousNamespace: string | null | undefined,
+  ): Promise<void> {
+    if (!this.isEnabled()) return;
+    if (config.daggerRuntime.runnerHost) return;
+    const from = this.engineNamespace(previousNamespace);
+    const to = this.engineNamespace(organization.defaultEnvironmentNamespace);
+    // Both resolve to the same namespace (e.g. the old value was invalid and
+    // fell back to the release namespace, same as the new), so the engine never
+    // moved — tearing `from` down would delete the engine just reconciled.
+    if (from === to) return;
+    await this.teardownEngine(deriveOrgEngineId(organization.id), from);
+  }
+
+  // Remove one engine's StatefulSet, its cache PVC (the volumeClaimTemplate is
+  // Retain, so deleting the StatefulSet alone would strand it — safe to drop
+  // here since the build cache is rebuildable and the engine has left this
+  // namespace), ConfigMap, and every managed egress policy kind. Each delete is
+  // idempotent: an already-absent object is not an error.
+  private async teardownEngine(
+    engineId: string,
+    namespace: string,
+  ): Promise<void> {
+    const { kubeConfig } = loadKubeConfig();
+    const clients = createK8sClients(kubeConfig, namespace);
+    const name = daggerEngineDeploymentName(engineId);
+
+    await this.deleteIfPresent("StatefulSet", namespace, name, () =>
+      clients.appsApi.deleteNamespacedStatefulSet({ name, namespace }),
+    );
+    await this.deleteIfPresent(
+      "PersistentVolumeClaim",
+      namespace,
+      `varlib-${name}-0`,
+      () =>
+        clients.coreApi.deleteNamespacedPersistentVolumeClaim({
+          name: `varlib-${name}-0`,
+          namespace,
+        }),
+    );
+    await this.deleteIfPresent(
+      "ConfigMap",
+      namespace,
+      engineConfigMapName(engineId),
+      () =>
+        clients.coreApi.deleteNamespacedConfigMap({
+          name: engineConfigMapName(engineId),
+          namespace,
+        }),
+    );
+    // Empty desired set → every managed policy kind is pruned.
+    await this.pruneStalePolicies(
+      clients,
+      namespace,
+      constructManagedNetworkPolicyName(name),
+      new Set(),
+    );
+  }
+
+  private async deleteIfPresent(
+    kind: string,
+    namespace: string,
+    name: string,
+    del: () => Promise<unknown>,
+  ): Promise<void> {
+    try {
+      await del();
+    } catch (error) {
+      if (!isK8sNotFoundError(error)) {
+        logger.warn(
+          { err: error, namespace, name, kind },
+          "[DaggerEnvRuntime] failed to delete engine resource on teardown",
+        );
+      }
+    }
+  }
+
   private async reconcileEngine(target: EngineReconcileTarget): Promise<void> {
     const { engineId, namespace } = target;
     const { kubeConfig } = loadKubeConfig();

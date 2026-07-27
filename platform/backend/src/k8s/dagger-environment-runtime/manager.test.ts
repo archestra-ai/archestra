@@ -527,9 +527,12 @@ describe("reconcileOrganizationDefault", () => {
       coreApi: {
         createNamespacedConfigMap: vi.fn().mockResolvedValue({}),
         replaceNamespacedConfigMap: vi.fn().mockResolvedValue({}),
+        deleteNamespacedConfigMap: vi.fn().mockResolvedValue({}),
+        deleteNamespacedPersistentVolumeClaim: vi.fn().mockResolvedValue({}),
       },
       appsApi: {
         createNamespacedStatefulSet: vi.fn().mockResolvedValue({}),
+        deleteNamespacedStatefulSet: vi.fn().mockResolvedValue({}),
       },
       networkingApi: {
         createNamespacedNetworkPolicy: vi.fn().mockResolvedValue({}),
@@ -708,5 +711,68 @@ describe("reconcileOrganizationDefault", () => {
         r.to?.some((t) => t.ipBlock?.cidr === "0.0.0.0/0"),
     );
     expect(hasPublicAllow).toBe(false);
+  });
+
+  it("tears down the old namespace's engine (StatefulSet, PVC, ConfigMap, policy) when the default namespace changes", async () => {
+    const org = makeOrg({ id: "org-x", defaultEnvironmentNamespace: "new-ns" });
+
+    await daggerEnvironmentRuntimeManager.teardownOrganizationDefaultEngine(
+      org,
+      "old-ns",
+    );
+
+    // Everything is deleted in the OLD namespace it moved away from.
+    expect(mockCreateK8sClients).toHaveBeenCalledWith(
+      expect.anything(),
+      "old-ns",
+    );
+    expect(clients.appsApi.deleteNamespacedStatefulSet).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: "old-ns" }),
+    );
+    // The Retain-policy cache PVC is `varlib-<statefulset>-0`; deleting the
+    // StatefulSet alone would strand it.
+    const pvcCall =
+      clients.coreApi.deleteNamespacedPersistentVolumeClaim.mock.calls[0][0];
+    expect(pvcCall.namespace).toBe("old-ns");
+    expect(pvcCall.name).toMatch(/^varlib-.*-0$/);
+    expect(clients.coreApi.deleteNamespacedConfigMap).toHaveBeenCalledWith(
+      expect.objectContaining({ namespace: "old-ns" }),
+    );
+    expect(
+      clients.networkingApi.deleteNamespacedNetworkPolicy,
+    ).toHaveBeenCalledWith(expect.objectContaining({ namespace: "old-ns" }));
+  });
+
+  it("does not tear down when the namespace resolves to the same place (would delete the live engine)", async () => {
+    // Both the previous and current values are invalid, so both fall back to the
+    // release namespace — the engine never moved.
+    const org = makeOrg({ id: "org-x", defaultEnvironmentNamespace: "Bad_NS" });
+
+    await daggerEnvironmentRuntimeManager.teardownOrganizationDefaultEngine(
+      org,
+      "Also_Bad",
+    );
+
+    expect(clients.appsApi.deleteNamespacedStatefulSet).not.toHaveBeenCalled();
+    expect(
+      clients.coreApi.deleteNamespacedPersistentVolumeClaim,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("tears down nothing behind a BYO runner host (no org-default engine exists)", async () => {
+    const original = config.daggerRuntime.runnerHost;
+    (config.daggerRuntime as { runnerHost?: string }).runnerHost =
+      "tcp://byo:1234";
+    try {
+      await daggerEnvironmentRuntimeManager.teardownOrganizationDefaultEngine(
+        makeOrg({ id: "org-x", defaultEnvironmentNamespace: "new-ns" }),
+        "old-ns",
+      );
+      expect(
+        clients.appsApi.deleteNamespacedStatefulSet,
+      ).not.toHaveBeenCalled();
+    } finally {
+      (config.daggerRuntime as { runnerHost?: string }).runnerHost = original;
+    }
   });
 });

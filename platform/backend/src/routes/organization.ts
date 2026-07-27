@@ -524,6 +524,17 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // A namespace change provisions the engine in the new namespace above but
+      // leaves the old one running with its retained cache PVC; tear it down.
+      // currentOrganization holds the pre-patch namespace (loaded before the
+      // patch when the namespace was changing).
+      if (namespaceActuallyChanging) {
+        await daggerEnvironmentRuntimeManager.teardownOrganizationDefaultEngine(
+          organization,
+          currentOrganization?.defaultEnvironmentNamespace ?? null,
+        );
+      }
+
       return reply.send(organization);
     },
   );

@@ -25,6 +25,7 @@ vi.mock("@/k8s/mcp-server-runtime/manager", () => ({
 }));
 
 import { hasPermission } from "@/auth";
+import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
 import { InternalMcpCatalogModel } from "@/models";
 
@@ -441,6 +442,44 @@ describe("PATCH /api/organization/default-environment", () => {
     expect(
       mcpServerRuntimeManager.reinstallSharedDeployment,
     ).toHaveBeenCalledWith(sharedCatalog.id);
+  });
+
+  test("tears down the old-namespace default engine on a namespace change, but not on a policy-only change", async ({
+    makeUser,
+    makeOrganization,
+  }) => {
+    vi.clearAllMocks();
+    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    const teardown = vi
+      .spyOn(
+        daggerEnvironmentRuntimeManager,
+        "teardownOrganizationDefaultEngine",
+      )
+      .mockResolvedValue();
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    app = await buildApp(user, organizationId);
+
+    // Policy-only change: no engine relocation, so no teardown.
+    await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { networkPolicy: { egressMode: "off" } },
+    });
+    expect(teardown).not.toHaveBeenCalled();
+
+    // Namespace change: tear down the engine in the previous namespace (null,
+    // the org's default) while reconciling the new one.
+    await app.inject({
+      method: "PATCH",
+      url: "/api/organization/default-environment",
+      payload: { namespace: "moved-ns" },
+    });
+    expect(teardown).toHaveBeenCalledWith(
+      expect.objectContaining({ id: organizationId }),
+      null,
+    );
   });
 
   test("does not reconcile when the namespace is unchanged", async ({

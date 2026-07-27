@@ -764,7 +764,7 @@ Upgrading from a chart that ran the bundled engine leaves its cache volume behin
   - Use this to point at a custom Debian-based image or a pre-baked sandbox base.
 
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE`** - Resources for an engine Archestra creates. Lower them for a small cluster. They apply to new engines only; delete an engine to resize it.
-  - The memory limit bounds the buildkit daemon, not sandboxed code: sandbox containers run in a top-level `buildkit` cgroup outside the pod's accounting. Raising it does not raise how much a sandbox may allocate, and that usage does not appear in `kubectl top pod`. The memory request is what reserves node capacity for that sandbox memory — raise it if you expect heavy concurrent sandbox use, and lower `ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT` if you cannot.
+  - The memory limit bounds the buildkit daemon, not sandboxed code: sandbox containers run in a top-level `buildkit` cgroup outside the pod's accounting. Raising it does not raise how much a sandbox may allocate, and that usage does not appear in `kubectl top pod`. The memory request reserves node capacity for that sandbox memory but does not cap it: `ARCHESTRA_SKILLS_SANDBOX_MEMORY_LIMIT_BYTES` is applied per process, so one run that spawns several processes holds a multiple of it. Raise the request if you expect heavy concurrent sandbox use, and lower `ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT` to reduce the load a node can see at once.
   - Defaults: `2`, `4Gi`, `4Gi`, `50Gi`
   - Values: Kubernetes quantity strings
 

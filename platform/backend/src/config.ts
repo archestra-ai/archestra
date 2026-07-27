@@ -2175,10 +2175,11 @@ const config = {
     // scheduler. The request is therefore the only node-level reservation for
     // that sandbox memory, and is set well above the daemon's own footprint to
     // cover concurrent runs; the limit only tracks it because Kubernetes
-    // requires `request <= limit`. Reserving the full ceiling (`maxConcurrent`
-    // runs each at the per-run RLIMIT_AS) would not fit an ordinary node, so a
-    // deployment that sustains that load should raise the request and lower
-    // `maxConcurrent` together.
+    // requires `request <= limit`. It reserves rather than bounds, and there is
+    // no value here that would bound: the per-run cap is an RLIMIT_AS, which is
+    // per-process, so a single run that spawns N processes holds N times it.
+    // Raising the request and lowering `maxConcurrent` reduce the pressure a
+    // heavy workload puts on the node; neither caps it.
     engine: {
       cpuRequest:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST || "2",

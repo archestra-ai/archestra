@@ -7,16 +7,20 @@
  * Decision tree (must match backend exactly):
  *   1. No installs to affect → "skip"
  *   2. Any field requires user re-prompt → "manual"
- *      (covers: runtime config, prompted env schema breaks,
- *       required userConfig changes, OAuth added/removed —
+ *      (covers: single-tenant runtime config, prompted env schema
+ *       breaks, required userConfig changes, OAuth added/removed —
  *       NOT the name: a rename is a pure DB cascade)
- *   3. Only forward-compatible env/userConfig changes (or pure
+ *   3. Execution-config or shared-env drift on a multitenant local
+ *      catalog → "auto". One shared pod serves every tenant, so the
+ *      backend recreates it once on save rather than marking each
+ *      install; no tenant owes input, so there's nothing to re-prompt.
+ *   4. Only forward-compatible env/userConfig changes (or pure
  *      metadata) → "skip" — unless the name changed: a rename alone →
  *      "rename" (tools re-slug in place, no pod restarts), upgraded to
  *      "manual" when the catalog's deploymentSpecYaml references the
  *      serverName placeholder (the one way the display name reaches a
  *      pod spec, so those installs genuinely need a reinstall).
- *   4. Otherwise → "auto" (breaking change with no re-prompt needed).
+ *   5. Otherwise → "auto" (breaking change with no re-prompt needed).
  *      Remote catalogs don't pause here: the backend cascade restarts
  *      nothing for them (no pod — it only re-syncs tools), so the form
  *      saves directly ("skip"), or shows "rename" when a rename rides
@@ -127,6 +131,16 @@ export function computeCascadeOutcome(
   // re-issue secrets, etc.).
   if (requiresUserReprompt(prev, next)) return { mode: "manual", renamed };
 
+  // ── Multitenant shared-pod rollout ───────────────────────────────
+  // Mirror of the backend's `catalogScopeChangeOnMultitenant` branch,
+  // which returns before the forward-compat gate below ever runs. It
+  // has to sit here for that reason: `dockerImage` and friends aren't
+  // in `anyNonForwardCompatChange`'s projection, so an image bump would
+  // otherwise fall through as "skip" and the bar would never appear.
+  if (multitenantSharedPodChanged(prev, next)) {
+    return { mode: "auto", renamed };
+  }
+
   // ── Skip / rename via forward-compat ─────────────────────────────
   // Mirror of backend `onlyForwardCompatibleEnvDiff`. After the manual
   // checks pass, the remaining diffs may be entirely forward-
@@ -176,8 +190,17 @@ function requiresUserReprompt(
     // Name changes are handled by the rename mode, not here — deployment
     // identity is frozen and secret names are id-keyed, so a rename needs
     // no re-prompt.
-    // 1. localExecutionConfigChanged
-    if (localExecutionConfigChanged(prev, next)) return true;
+    // 1. localExecutionConfigChanged. Single-tenant only: each install owns
+    //    its own pod, so restarting everyone's on one admin's save would
+    //    surprise them. A multitenant catalog's single shared pod is the
+    //    saving admin's own, and rolls immediately — see
+    //    `multitenantSharedPodChanged`.
+    if (
+      !(next.multitenant ?? prev.multitenant) &&
+      localExecutionConfigChanged(prev, next)
+    ) {
+      return true;
+    }
     // 2. promptedEnvVarsChanged (schema evolution on prompted env vars)
     if (promptedEnvVarsChanged(prev, next)) return true;
     // 3. requiredUserConfigChanged (required field added/removed/type)
@@ -211,6 +234,33 @@ function localExecutionConfigChanged(
     serviceAccount: s.localConfig?.serviceAccount ?? "",
   });
   return JSON.stringify(shape(prev)) !== JSON.stringify(shape(next));
+}
+
+/**
+ * Mirror of the backend route's `catalogScopeChangeOnMultitenant`. True when
+ * an edit changes what the one shared pod runs — execution config, or the
+ * non-prompted env vars baked into its spec. Prompted entries are per-install
+ * secrets resolved at request time, so they never reach the shared pod.
+ */
+function multitenantSharedPodChanged(
+  prev: CascadeSnapshot,
+  next: CascadeSnapshot,
+): boolean {
+  const serverType = next.serverType ?? prev.serverType;
+  if (serverType !== "local") return false;
+  if (!(next.multitenant ?? prev.multitenant)) return false;
+
+  if (localExecutionConfigChanged(prev, next)) return true;
+
+  // `key + type + value` only — the backend ignores description/required
+  // and other metadata that doesn't reach the pod env.
+  const sharedEnv = (s: CascadeSnapshot) =>
+    JSON.stringify(
+      (s.localConfig?.environment ?? [])
+        .filter((e) => !e?.promptOnInstallation)
+        .map((e) => ({ key: e.key, type: e.type, value: e.value })),
+    );
+  return sharedEnv(prev) !== sharedEnv(next);
 }
 
 // Schema-evolution predicates. Mirror of backend/src/services/mcp-reinstall.ts.

@@ -14,7 +14,8 @@ import { broadcastMcpInstallationStatus } from "@/websocket";
  * Checks if a catalog edit requires a manual reinstall.
  *
  * Returns true (manual reinstall required) when:
- * - Local execution config changed (command/args/docker/transport) - restart should be explicit
+ * - Local execution config changed (command/args/docker/transport) on a
+ *   single-tenant catalog - restart should be explicit
  * - Prompted env vars changed: added, removed, or key/required/type changed (local servers)
  * - OAuth config changed: added or removed (remote servers)
  * - Required userConfig fields changed: added, removed, or type changed (local + remote servers)
@@ -76,13 +77,12 @@ export function manualReinstallReason(
       return "new-input";
     }
 
-    // Multi-tenant catalogs handle execution-config drift via the
-    // catalog-level `catalogReinstallRequired` flag (one shared pod across
-    // all installs; the catalog-reinstall endpoint applies the change for
-    // everyone in one shot). Single-tenant: each install owns its own pod,
-    // so a silent auto-restart of others' pods would surprise them; mark
-    // every install reinstall-required and let owners reinstall explicitly.
-    // Stored credentials stay valid — no re-prompt, just a restart.
+    // Single-tenant only: each install owns its own pod, so auto-restarting
+    // everyone's on one admin's save would surprise them; mark every install
+    // reinstall-required and let owners restart explicitly. Stored
+    // credentials stay valid — no re-prompt, just a restart. A multi-tenant
+    // catalog's one shared pod belongs to the admin doing the edit and rolls
+    // immediately instead — see `multitenantSharedPodChanged`.
     if (
       !newCatalogItem.multitenant &&
       localExecutionConfigChanged(oldCatalogItem, newCatalogItem)
@@ -129,6 +129,43 @@ export function manualReinstallReason(
 
   // Builtin servers don't need reinstall
   return null;
+}
+
+/**
+ * True when an edit changes what a multi-tenant local catalog's single shared
+ * pod runs — execution config, or the non-prompted env vars baked into its
+ * spec. Prompted entries are per-install secrets resolved at request time and
+ * never reach the shared pod, so they're excluded (they're tracked separately
+ * by `promptedEnvVarsChanged`). Shared env is compared on `key + type + value`
+ * only; `description`, `required`, and other metadata don't reach the pod env.
+ *
+ * The catalog edit route recreates the shared deployment when this is true and
+ * no manual reason applies. Mirrored on the frontend by the identically-named
+ * predicate in `frontend/.../cascade-decision.ts`.
+ */
+export function multitenantSharedPodChanged(
+  oldCatalogItem: InternalMcpCatalog,
+  newCatalogItem: InternalMcpCatalog,
+): boolean {
+  if (
+    newCatalogItem.multitenant !== true ||
+    newCatalogItem.serverType !== "local"
+  ) {
+    return false;
+  }
+  if (localExecutionConfigChanged(oldCatalogItem, newCatalogItem)) return true;
+
+  const sharedEnv = (catalog: InternalMcpCatalog) =>
+    JSON.stringify(
+      (catalog.localConfig?.environment ?? [])
+        .filter((entry) => !entry.promptOnInstallation)
+        .map((entry) => ({
+          key: entry.key,
+          type: entry.type,
+          value: entry.value,
+        })),
+    );
+  return sharedEnv(oldCatalogItem) !== sharedEnv(newCatalogItem);
 }
 
 /**
@@ -698,7 +735,7 @@ function promptedEnvVarsRuntimeChanged(
   return false;
 }
 
-export function localExecutionConfigChanged(
+function localExecutionConfigChanged(
   oldCatalog: InternalMcpCatalog,
   newCatalog: InternalMcpCatalog,
 ): boolean {

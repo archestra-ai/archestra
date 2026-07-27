@@ -44,6 +44,7 @@ async function getCatalogTools(catalogId: string) {
 
 import {
   autoReinstallServer,
+  multitenantSharedPodChanged,
   onlyForwardCompatibleEnvDiff,
   reinstallMultitenantCatalog,
   reloadToolsForServer,
@@ -1678,6 +1679,17 @@ function simulateCascadeOutcome(
   prev: InternalMcpCatalog,
   next: InternalMcpCatalog,
 ): "skip" | "auto" | "manual" {
+  // Gate order matches the route: the manual check and the multitenant
+  // shared-pod recreate both run ahead of the metadata / forward-compat
+  // gates and return early. Ordering is load-bearing for the multitenant
+  // branch — `dockerImage` isn't part of the forward-compat projection, so
+  // an image bump reaching that gate would be misread as "skip".
+  if (requiresNewUserInputForReinstall(prev, next)) {
+    return "manual";
+  }
+  if (multitenantSharedPodChanged(prev, next)) {
+    return "auto";
+  }
   if (
     isMetadataOnlyEdit(
       prev as unknown as Record<string, unknown>,
@@ -1688,9 +1700,6 @@ function simulateCascadeOutcome(
   }
   if (onlyForwardCompatibleEnvDiff(prev, next)) {
     return "skip";
-  }
-  if (requiresNewUserInputForReinstall(prev, next)) {
-    return "manual";
   }
   return "auto";
 }

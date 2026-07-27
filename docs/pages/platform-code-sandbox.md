@@ -76,15 +76,9 @@ Each command runs under fixed caps: 30 seconds of CPU, 1 GiB of memory, and 120 
 
 ## Enabling the Sandbox
 
-The quickstart Docker image and the Helm chart enable the sandbox by default. To turn it off, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker, or `archestra.codeRuntime.enabled=false` in Helm values. That setting wins over everything else.
+The quickstart Docker image and the Helm chart enable the sandbox by default. To turn it off, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker or `archestra.codeRuntime.enabled=false` in Helm.
 
-A manual deployment sets `ARCHESTRA_CODE_RUNTIME_ENABLED=true`. On Kubernetes, Archestra then creates one Dagger engine per organization. Point it at the cluster with `ARCHESTRA_ORCHESTRATOR_KUBECONFIG`, or with `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true` when the backend runs inside the cluster.
-
-To run your own engine instead, set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST` to its address — a `tcp://` or `kube-pod://` URL. Archestra sends agents without an environment to that engine, and creates no default engine.
-
-An agent bound to an [environment](./platform-environments) always runs on that environment's own engine, so its network policy applies. Archestra creates those engines even when you run your own, and they need Kubernetes.
-
-A `kube-pod://` engine is reached by running a command inside its pod, so it needs Kubernetes too. Only a `tcp://` engine runs without it — point at one and leave agents unbound. See [Deployment](./platform-deployment#code-sandbox) for the full list.
+A manual deployment turns it on with `ARCHESTRA_CODE_RUNTIME_ENABLED=true`. The sandbox needs Kubernetes — that's where Archestra runs the Dagger engines — unless you point it at an engine you run yourself. See [Deployment](./platform-deployment#code-sandbox) for the setup.
 
 Running a command needs the `sandbox:execute` permission. See [Access Control](./platform-access-control).
 

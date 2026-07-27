@@ -1288,7 +1288,7 @@ export const parseSandboxMemoryMaxBytes = (
   envValue: string | undefined,
   memoryRequest: string,
 ): number => {
-  const bytes = parsePositiveInt(envValue, 3 * 1024 * 1024 * 1024);
+  const bytes = parsePositiveInt(envValue, 5 * 1024 * 1024 * 1024);
   const requestBytes = k8sMemoryQuantityToBytes(memoryRequest);
   if (requestBytes !== undefined && bytes >= requestBytes) {
     logger.error(
@@ -1492,7 +1492,7 @@ const skillsSandboxEnabled = isCodeRuntimeEnabled({
 // code-managed per-organization mode, where each run carries its own target.
 // Read before the config object so the sandbox ceiling can be checked against it.
 const daggerEngineMemoryRequest =
-  process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "4Gi";
+  process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "6Gi";
 const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
 const daggerRuntimeEnabled = skillsSandboxEnabled;
 
@@ -2236,7 +2236,7 @@ const config = {
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST || "2",
       memoryRequest: daggerEngineMemoryRequest,
       memoryLimit:
-        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "4Gi",
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "6Gi",
       cacheStorage:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE || "50Gi",
       // Ceiling on everything the sandboxes hold at once, written verbatim to

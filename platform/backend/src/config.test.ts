@@ -1999,7 +1999,7 @@ describe("k8sMemoryQuantityToBytes", () => {
 
 describe("parseSandboxMemoryMaxBytes", () => {
   test("defaults to 3Gi and honours an explicit byte count", () => {
-    expect(parseSandboxMemoryMaxBytes(undefined, "4Gi")).toBe(3 * 1024 ** 3);
+    expect(parseSandboxMemoryMaxBytes(undefined, "6Gi")).toBe(5 * 1024 ** 3);
     expect(parseSandboxMemoryMaxBytes("1073741824", "4Gi")).toBe(1024 ** 3);
   });
 

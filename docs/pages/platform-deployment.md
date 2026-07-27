@@ -765,13 +765,13 @@ Upgrading from a chart that ran the bundled engine leaves its cache volume behin
 
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE`** - Resources for an engine Archestra creates. Lower them for a small cluster. They apply to new engines only; delete an engine to resize it.
   - The memory limit bounds the buildkit daemon, not sandboxed code. Sandbox containers run in a `buildkit` cgroup outside the pod's accounting, so their usage does not appear in `kubectl top pod` and the scheduler cannot see it — which is why the memory request has to reserve node capacity for the daemon and the sandboxes together. What sandboxed code may allocate is capped by `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX_BYTES` instead.
-  - Defaults: `2`, `4Gi`, `4Gi`, `50Gi`
+  - Defaults: `2`, `6Gi`, `6Gi`, `50Gi`
   - Values: Kubernetes quantity strings
 
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX_BYTES`** - Ceiling on everything an engine's sandboxes hold at once, written to the `memory.max` of the cgroup buildkit runs them in. A run that pushes past it is killed and reports a failure; the engine and any other runs keep going. Without it nothing bounds sandbox memory in aggregate — `ARCHESTRA_SKILLS_SANDBOX_MEMORY_LIMIT_BYTES` is applied per process, so a single run that spawns several processes holds a multiple of it.
   - This is a ceiling for the engine, not a per-run allowance, and it is reached before `ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT` runs have each used their `ARCHESTRA_SKILLS_SANDBOX_MEMORY_LIMIT_BYTES`. Concurrent runs that together exceed it are OOM-killed by the kernel, which picks the largest one rather than the one that grew last. Raise this and the memory request together for heavy concurrent workloads, or lower `ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`.
   - Applied to newly-created engines only. An engine created before this setting existed keeps running sandboxes unbounded until its StatefulSet is deleted and recreated; the backend logs a warning naming each one.
-  - Default: `3221225472` (3Gi). Keep it below `ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST` so the reservation covers the sandboxes plus the daemon.
+  - Default: `5368709120` (5Gi). Keep it below `ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST` so the reservation covers the sandboxes plus the daemon.
   - Values: bytes
 
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS`** - Extra IPv4 ranges an engine cannot reach. An engine with no [network policy](./platform-environments) already blocks private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges, so sandboxed code cannot reach in-cluster services. An entry that is not a valid IPv4 CIDR is ignored, and the backend logs which ones.

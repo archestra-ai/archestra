@@ -3114,6 +3114,76 @@ describe("InteractionModel", () => {
       expect(usage[0].tokensOut).toBe(200);
     });
 
+    test("skips limit accumulation for subscription-billed interactions", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      const agent = await makeAgent();
+      const user = await makeUser();
+
+      const userLimit = await LimitModel.create({
+        entityType: "user",
+        entityId: user.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        userId: user.id,
+        model: "gpt-4o",
+        billingMode: "subscription",
+        inputTokens: 100,
+        outputTokens: 200,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Tick to the task queue effectively draining the microtask queue
+      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Subscription usage costs the org $0 and must not burn down the limit
+      let usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      expect(usage).toHaveLength(1);
+      expect(usage[0].tokensIn).toBe(0);
+      expect(usage[0].tokensOut).toBe(0);
+
+      // A metered interaction on the same limit still accrues
+      await InteractionModel.create({
+        profileId: agent.id,
+        userId: user.id,
+        model: "gpt-4o",
+        billingMode: "metered",
+        inputTokens: 10,
+        outputTokens: 20,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      expect(usage).toHaveLength(1);
+      expect(usage[0].tokensIn).toBe(10);
+      expect(usage[0].tokensOut).toBe(20);
+    });
+
     test("updates virtual_key limit usage when interaction has virtualKeyId", async ({
       makeAgent,
       makeOrganization,

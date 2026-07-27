@@ -18,7 +18,6 @@
   "user_config": {},
   "readme": "# Chargebee Model Context Protocol (MCP) Server\n\n![MCP Chargebee](https://img.shields.io/badge/MCP-Chargebee-blue)\n[![npm version](https://img.shields.io/npm/v/@chargebee/mcp.svg)](https://www.npmjs.com/package/@chargebee/mcp)\n\nModel Context Protocol (MCP) is a [standardized protocol](https://modelcontextprotocol.io/introduction) designed to manage context between large language models (LLMs) and external systems.\n\nThe [Chargebee MCP Server](https://npmjs.com/package/@chargebee/mcp) offers a robust set of tools to improve developer efficiency. It integrates with AI-powered code editors like Cursor, Windsurf, and Cline, as well as general-purpose tools such as Claude Desktop. It is compatible with any MCP Client.\n\nWith this MCP Server, you can:\n\n- Get immediate answers about the Chargebee products and API services.\n\n- Receive context-aware code snippets tailored to your integration needs.\n\n- Access Chargebee's knowledge base, including:\n  - Documentation\n  - FAQs\n  - Release notes\n  - And much more\n\n![MCP Demo](https://raw.githubusercontent.com/chargebee/agentkit/main/media/mcp-demo.gif)\n\n## Prerequisites\n\n- [Node.js LTS](https://nodejs.org/en/download/) - The Chargebee MCP server requires the Node.js LTS version to function correctly.\n\n## Setup\n\nTo run the Chargebee MCP server using [Node.js npx](https://docs.npmjs.com/cli/v10/commands/npx), execute the following command:\n\n```sh\nnpx -y @chargebee/mcp@latest\n```\n\n## Available Tools\n\n| Tool                                 | Description                                                                                      |\n| -------------------------------------| -------------------------------------------------------------------------------------------------|\n| `chargebee_documentation_search`     | Search Chargebee's documentation to retrieve detailed information and usage guides.              |\n| `chargebee_code_planner`             | Generate structured code outlines and sample code for integrating Chargebee's APIs and features. |\n\n## Installation\n\n### Cursor\n\nTo add this server to Cursor IDE:\n\n1. Navigate to `Cursor Settings` > `MCP`.\n2. Click `+ Add new Global MCP Server`.\n3. Add the following configuration to your global `.cursor/mcp.json` file:\n\n```json\n{\n  \"mcpServers\": {\n    \"chargebee\": {\n      \"command\": \"npx\",\n      \"args\": [\n          \"-y\",\n          \"@chargebee/mcp\"\n      ]\n    }\n  }\n}\n```\n\nRefer to the [Cursor documentation](https://docs.cursor.com/context/model-context-protocol) for additional details. Note: You can also add this to your project-specific Cursor configuration (supported in Cursor 0.46+).\n\n\n### Windsurf\n\nTo set up MCP with Cascade:\n\n1. Open Windsurf and navigate to `Settings` > `Advanced Settings` or use the Command Palette > `Open Windsurf Settings Page`.\n2. Scroll to the Cascade section to add a new server, view existing servers, or access the raw JSON config file at `mcp_config.json`.\n3. Click “Add custom server +” to include the Chargebee MCP server directly in `mcp_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"chargebee\": {\n      \"command\": \"npx\",\n      \"args\": [\n          \"-y\",\n          \"@chargebee/mcp\"\n      ]\n    }\n  }\n}\n```\n\nRefer to the [Windsurf documentation](https://docs.codeium.com/windsurf/mcp) for more information.\n\n\n### VS Code\n\nInstall the Chargebee MCP server in VS Code using one of these buttons:\n\n[<img alt=\"Install in VS Code Insiders\" src=\"https://img.shields.io/badge/VS_Code_Insiders-VS_Code_Insiders?style=flat-square&label=Install%20Server&color=24bfa5\">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522chargebee%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522-y%2522%252C%2522%2540chargebee%252Fmcp%2522%255D%257D)\n\nAlternatively, you can install the Chargebee MCP server using the VS Code CLI:\n\n```bash\n# For VS Code\ncode --add-mcp '{\"name\":\"chargebee\",\"command\":\"npx\",\"args\":[\"-y\",\"@chargebee/mcp\"]}'\n```\n\n```bash\n# For VS Code Insiders\ncode-insiders --add-mcp '{\"name\":\"chargebee\",\"command\":\"npx\",\"args\":[\"-y\",\"@chargebee/mcp\"]}'\n```\n\nAfter installation, the Chargebee MCP server will be available for use with your GitHub Copilot agent in VS Code.\n\n\n### Claude\n\nAdd the following configuration to your `claude_desktop_config.json` file. Refer to the [Claude Desktop documentation](https://modelcontextprotocol.io/quickstart/user) for more details:\n\n```json\n{\n  \"mcpServers\": {\n    \"chargebee\": {\n      \"command\": \"npx\",\n      \"args\": [\n          \"-y\",\n          \"@chargebee/mcp\"\n      ]\n    }\n  }\n}\n```\n\n### Cline\n\nManually add the following JSON to your `cline_mcp_settings.json` file via the Cline MCP Server settings:\n\n```json\n{\n  \"mcpServers\": {\n    \"chargebee\": {\n      \"command\": \"npx\",\n      \"args\": [\n          \"-y\",\n          \"@chargebee/mcp\"\n      ]\n    }\n  }\n}\n```\n\n### Roo Code\n\nAccess the MCP settings by selecting `Edit MCP Settings` in Roo Code settings or using the `Roo Code: Open MCP Config` command in the VS Code command palette:\n\n```json\n{\n  \"mcpServers\": {\n    \"chargebee\": {\n      \"command\": \"npx\",\n      \"args\": [\n          \"-y\",\n          \"@chargebee/mcp\"\n      ]\n    }\n  }\n}\n```\n\n## Contribution\n\nTo contribute to this project, refer to the [contribution guide](CONTRIBUTING.md).\n\n## License\n\n[MIT](https://github.com/chargebee/agentkit/blob/main/LICENSE)\n",
   "category": "AI Tools",
-  "quality_score": 59,
   "archestra_config": {
     "client_config_permutations": {
       "chargebee-mcp": {
@@ -46,34 +45,5 @@
     "ci_cd": false,
     "latest_commit_hash": "39d859432b215895e9f001138b1190c34a72c5b7"
   },
-  "programming_language": "TypeScript",
-  "framework": null,
-  "last_scraped_at": "2025-09-07T22:18:05.614Z",
-  "evaluation_model": "gemini-2.5-flash",
-  "protocol_features": {
-    "implementing_tools": true,
-    "implementing_prompts": false,
-    "implementing_resources": true,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": true,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [
-    {
-      "name": "@modelcontextprotocol/sdk",
-      "importance": 10
-    },
-    {
-      "name": "commander",
-      "importance": 8
-    },
-    {
-      "name": "zod",
-      "importance": 4
-    }
-  ],
-  "raw_dependencies": "=== package.json ===\n{\n\t\"name\": \"@chargebee/mcp\",\n\t\"version\": \"0.0.8\",\n\t\"description\": \"MCP server for interacting with Chargebee\",\n\t\"type\": \"module\",\n\t\"main\": \"dist/index.js\",\n\t\"module\": \"dist/index.js\",\n\t\"types\": \"dist/index.d.ts\",\n\t\"bin\": \"dist/index.js\",\n\t\"publishConfig\": {\n\t\t\"access\": \"public\"\n\t},\n\t\"files\": [\n\t\t\"dist\",\n\t\t\"README.md\"\n\t],\n\t\"scripts\": {\n\t\t\"prepublish\": \"npm run build\",\n\t\t\"build\": \"cross-env NODE_ENV=production tsup\",\n\t\t\"postbuild\": \"shx chmod +x dist/*.js\",\n\t\t\"check\": \"tsc --noEmit\",\n\t\t\"dev\": \"cross-env NODE_ENV=development tsup --watch\"\n\t},\n\t\"keywords\": [\n\t\t\"chargebee\",\n\t\t\"mcp\",\n\t\t\"mcp-server\",\n\t\t\"modelcontextprotocol\"\n\t],\n\t\"author\": \"Chargebee, Inc. (https://chargebee.com)\",\n\t\"license\": \"MIT\",\n\t\"engines\": {\n\t\t\"node\": \">=18\"\n\t},\n\t\"bugs\": {\n\t\t\"url\": \"https://github.com/chargebee/agentkit/issues/new\",\n\t\t\"email\": \"support@chargebee.com\"\n\t},\n\t\"devDependencies\": {\n\t\t\"@types/node\": \"^22.13.10\",\n\t\t\"cross-env\": \"^7.0.3\",\n\t\t\"dotenv\": \"^16.4.7\",\n\t\t\"shx\": \"^0.3.4\",\n\t\t\"tsup\": \"^8.4.0\",\n\t\t\"typescript\": \"^5.8.2\"\n\t},\n\t\"dependencies\": {\n\t\t\"@modelcontextprotocol/sdk\": \"^1.6.1\",\n\t\t\"commander\": \"^13.1.0\",\n\t\t\"zod\": \"^3.24.2\"\n\t}\n}\n"
+  "programming_language": "TypeScript"
 }

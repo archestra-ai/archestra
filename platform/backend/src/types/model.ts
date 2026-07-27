@@ -220,6 +220,11 @@ export const PatchModelBodySchema = createUpdateSchema(
       .nullable()
       .optional(),
     outputModalities: z.array(ModelOutputModalitySchema).nullable().optional(),
+    /**
+     * Team restriction sync: when provided, replaces the model's team
+     * restrictions. Empty array clears the restriction (available to everyone).
+     */
+    teamIds: z.array(z.string()).optional(),
     // Per-model generation parameters sent on every native Ollama chat turn.
     configuredParameters: ConfiguredParametersSchema.nullable().optional(),
   })
@@ -308,6 +313,15 @@ export const LinkedApiKeySchema = z.object({
 export type LinkedApiKey = z.infer<typeof LinkedApiKeySchema>;
 
 /**
+ * Schema for a team a model is restricted to (minimal info for display)
+ */
+export const ModelTeamDetailSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+export type ModelTeamDetail = z.infer<typeof ModelTeamDetailSchema>;
+
+/**
  * Schema for model with linked API keys (for settings page display)
  */
 export const ModelWithApiKeysSchema = SelectModelSchema.extend({
@@ -315,6 +329,8 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   isBest: z.boolean(),
   /** API keys that provide access to this model */
   apiKeys: z.array(LinkedApiKeySchema),
+  /** Teams this model is restricted to (empty = available to everyone) */
+  teams: z.array(ModelTeamDetailSchema),
   /** Price per million tokens for input (computed from raw/custom pricing) */
   pricePerMillionInput: z.string().nullable(),
   /** Price per million tokens for output (computed from raw/custom pricing) */

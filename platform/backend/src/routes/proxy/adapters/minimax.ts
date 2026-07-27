@@ -213,12 +213,6 @@ class MinimaxRequestAdapter
 
   constructor(request: MinimaxRequest) {
     this.request = request;
-    // Enable reasoning_split by default for interleaved thinking support
-    if (!this.request.extra_body) {
-      this.request.extra_body = { reasoning_split: true };
-    } else if (this.request.extra_body.reasoning_split === undefined) {
-      this.request.extra_body.reasoning_split = true;
-    }
   }
 
   /**
@@ -357,10 +351,21 @@ class MinimaxRequestAdapter
       this.request.messages,
     );
 
+    // `extra_body` only exists in MiniMax's Python examples, where the OpenAI
+    // SDK merges its keys into the top level of the request body. Forwarding it
+    // verbatim over HTTP means MiniMax sees one unknown key and ignores the flag
+    // inside it, so unwrap it here. reasoning_split defaults on: without it the
+    // M-series inlines thinking in `content` as `<think>` tags instead of
+    // returning it in `reasoning_details`.
+    const { extra_body, ...request } = this.request;
+
     return {
-      ...this.request,
+      ...request,
+      ...extra_body,
+      reasoning_split:
+        this.request.reasoning_split ?? extra_body?.reasoning_split ?? true,
       model: this.getModel(),
-      messages: processedMessages,
+      messages: convertReasoningContentToDetails(processedMessages),
     };
   }
 
@@ -460,7 +465,7 @@ class MinimaxResponseAdapter implements LLMResponseAdapter<MinimaxResponse> {
   private response: MinimaxResponse;
 
   constructor(response: MinimaxResponse) {
-    this.response = response;
+    this.response = mirrorReasoningDetailsIntoContent(response);
   }
 
   getId(): string {
@@ -571,6 +576,7 @@ class MinimaxStreamAdapter
   readonly state: StreamAccumulatorState;
   private currentToolCallIndices = new Map<number, number>();
   private lastReasoningText = ""; // Track full reasoning text seen so far
+  private warnedNonCumulativeReasoning = false;
   // Set to the refusal text when the streamed response was replaced by a policy
   // refusal, so toProviderResponse persists the refusal (finish_reason "stop",
   // no tool calls) instead of the blocked tool calls.
@@ -615,18 +621,52 @@ class MinimaxStreamAdapter
     }
 
     // Handle reasoning_details delta (thinking content)
-    // MiniMax sends full accumulated text in each chunk, so we need to extract the delta
+    // MiniMax sends full accumulated text in each chunk, so we need to extract
+    // the delta. OpenAI-compatible clients only parse the DeepSeek-style
+    // `reasoning_content` field and expect incremental deltas, so the new text
+    // is mirrored there on the forwarded chunk; `reasoning_details` is
+    // forwarded untouched for clients that consume MiniMax's native shape.
     if (delta.reasoning_details && delta.reasoning_details.length > 0) {
-      // Get the full reasoning text from the first detail
-      const fullReasoningText = delta.reasoning_details[0]?.text || "";
+      const fullReasoningText = delta.reasoning_details
+        .map((detail) => detail.text || "")
+        .join("");
 
-      // Extract only the new text (delta)
-      if (fullReasoningText.length > this.lastReasoningText.length) {
-        // Note: reasoning is stored but not in StreamAccumulatorState - tracked separately
+      let reasoningDelta = "";
+      if (fullReasoningText.startsWith(this.lastReasoningText)) {
+        reasoningDelta = fullReasoningText.slice(this.lastReasoningText.length);
         this.lastReasoningText = fullReasoningText;
+      } else if (fullReasoningText) {
+        // Text that doesn't extend what we've seen: treat it as an incremental
+        // chunk rather than dropping it. If the stream is actually cumulative
+        // this duplicates text, so leave a trace for diagnosis.
+        reasoningDelta = fullReasoningText;
+        this.lastReasoningText += fullReasoningText;
+        if (!this.warnedNonCumulativeReasoning) {
+          this.warnedNonCumulativeReasoning = true;
+          logger.warn(
+            { model: this.state.model },
+            "MiniMax reasoning_details chunk did not extend the accumulated text; treating the stream as incremental",
+          );
+        }
       }
 
-      sseData = `data: ${JSON.stringify(chunk)}\n\n`;
+      const [firstChoice, ...restChoices] = chunk.choices;
+      const forwardedChunk: MinimaxStreamChunk = reasoningDelta
+        ? {
+            ...chunk,
+            choices: [
+              {
+                ...firstChoice,
+                delta: {
+                  ...firstChoice.delta,
+                  reasoning_content: reasoningDelta,
+                },
+              },
+              ...restChoices,
+            ],
+          }
+        : chunk;
+      sseData = `data: ${JSON.stringify(forwardedChunk)}\n\n`;
     }
 
     // Handle tool_calls delta
@@ -795,9 +835,13 @@ class MinimaxStreamAdapter
           message: {
             role: "assistant",
             content: this.replacedText ?? (this.state.text || null),
-            // Convert accumulated reasoning back to reasoning_details format if present
+            // Convert accumulated reasoning back to reasoning_details format if
+            // present, mirrored into reasoning_content for OpenAI-compatible clients
             ...(this.replacedText === null && this.lastReasoningText
-              ? { reasoning_details: [{ text: this.lastReasoningText }] }
+              ? {
+                  reasoning_details: [{ text: this.lastReasoningText }],
+                  reasoning_content: this.lastReasoningText,
+                }
               : {}),
             ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
           },
@@ -891,6 +935,58 @@ class MinimaxStreamAdapter
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
+
+/**
+ * Mirror the thinking text from MiniMax's native reasoning_details into the
+ * DeepSeek-style reasoning_content field, the only one OpenAI-compatible
+ * clients parse.
+ */
+function mirrorReasoningDetailsIntoContent(
+  response: MinimaxResponse,
+): MinimaxResponse {
+  const [choice, ...restChoices] = response.choices;
+  const details = choice?.message.reasoning_details;
+  if (!details?.length || choice.message.reasoning_content != null) {
+    return response;
+  }
+  return {
+    ...response,
+    choices: [
+      {
+        ...choice,
+        message: {
+          ...choice.message,
+          reasoning_content: details.map((detail) => detail.text).join(""),
+        },
+      },
+      ...restChoices,
+    ],
+  };
+}
+
+/**
+ * Translate assistant reasoning_content (the DeepSeek-style field clients send
+ * back) into MiniMax's native reasoning_details so interleaved thinking is
+ * preserved across tool-call turns. Messages that already carry
+ * reasoning_details are forwarded as-is; reasoning_content is always stripped
+ * because MiniMax only documents reasoning_details on requests.
+ */
+function convertReasoningContentToDetails(
+  messages: MinimaxMessages,
+): MinimaxMessages {
+  return messages.map((message) => {
+    if (message.role !== "assistant") {
+      return message;
+    }
+    const { reasoning_content, ...rest } = message;
+    const existingDetails =
+      "reasoning_details" in rest ? rest.reasoning_details : undefined;
+    if (existingDetails?.length || !reasoning_content) {
+      return rest;
+    }
+    return { ...rest, reasoning_details: [{ text: reasoning_content }] };
+  });
+}
 
 /**
  * Convert tool results to TOON format for compression

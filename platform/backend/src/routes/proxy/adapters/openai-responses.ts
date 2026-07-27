@@ -641,10 +641,6 @@ class OpenAiResponsesStreamAdapter
   }
 
   toProviderResponse(): OpenAiResponsesResponse {
-    if (this.replacedText === null && this.completedResponse) {
-      return this.completedResponse;
-    }
-
     const outputItems: OpenAiResponsesResponse["output"] = [];
 
     const messageText = this.replacedText ?? this.state.text;
@@ -675,6 +671,24 @@ class OpenAiResponsesStreamAdapter
           status: "completed" as const,
         })),
       );
+    }
+
+    // The upstream `response.completed` envelope is the richest record (it
+    // echoes tools, reasoning config and the real ids), so it wins — but only
+    // when it actually carries the turn. Reasoning turns finish with an empty
+    // `output` even though the text arrived in `response.output_text.delta`
+    // chunks; persisting that verbatim lost the whole assistant side of the
+    // interaction, leaving LLM Logs with nothing to render. Keep the envelope
+    // and restore the items we accumulated.
+    if (this.replacedText === null && this.completedResponse) {
+      const upstreamOutput = this.completedResponse.output;
+      if (
+        (Array.isArray(upstreamOutput) && upstreamOutput.length > 0) ||
+        outputItems.length === 0
+      ) {
+        return this.completedResponse;
+      }
+      return { ...this.completedResponse, output: outputItems };
     }
 
     return {

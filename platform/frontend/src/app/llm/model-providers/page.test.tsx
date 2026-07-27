@@ -317,7 +317,7 @@ describe("ApiKeysPage", () => {
     fireEvent.click(screen.getAllByText("Connect")[0]);
 
     expect(screen.getByTestId("create-dialog")).toHaveTextContent(
-      "Connect ChatGPT",
+      "Sign in with ChatGPT",
     );
     expect(screen.getByTestId("create-dialog")).toHaveTextContent(
       '"openaiAuthMethod":"chatgpt-subscription"',

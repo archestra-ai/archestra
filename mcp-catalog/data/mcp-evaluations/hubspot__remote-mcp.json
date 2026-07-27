@@ -8,7 +8,6 @@
   "user_config": {},
   "readme": null,
   "category": "CRM",
-  "quality_score": 80,
   "archestra_config": {
     "client_config_permutations": null,
     "oauth": {
@@ -17,10 +16,6 @@
     },
     "works_in_archestra": true
   },
-  "framework": null,
-  "last_scraped_at": "2025-09-05T19:30:23.066Z",
-  "evaluation_model": null,
-  "raw_dependencies": null,
   "author": {
     "name": "hubspot"
   },

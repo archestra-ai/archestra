@@ -25,6 +25,11 @@ import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import { DelegationLoopError } from "@/agents/errors";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
+import {
+  isOpenAiReasoningSummaryMarkedUnsupported,
+  markOpenAiReasoningSummaryUnsupported,
+  openAiReasoningSummaryCacheKey,
+} from "@/agents/openai-reasoning-summary";
 import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
@@ -338,18 +343,19 @@ export async function executeA2AMessage(
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
     // Pass agent's llmApiKeyId so it can be used without user access check
-    const { model, anthropicNativeEndpoint } = await createLLMModelForAgent({
-      organizationId,
-      userId,
-      agentId: agent.id,
-      model: selectedModel,
-      provider,
-      sessionId,
-      source,
-      externalAgentId: delegationChain,
-      agentLlmApiKeyId: agent.llmApiKeyId,
-      contextIsTrusted: parentContextIsTrusted,
-    });
+    const { model, anthropicNativeEndpoint, chatApiKeyId } =
+      await createLLMModelForAgent({
+        organizationId,
+        userId,
+        agentId: agent.id,
+        model: selectedModel,
+        provider,
+        sessionId,
+        source,
+        externalAgentId: delegationChain,
+        agentLlmApiKeyId: agent.llmApiKeyId,
+        contextIsTrusted: parentContextIsTrusted,
+      });
 
     // Which attachment mime types this model can read. A missing model row
     // (lookup failure or unknown model) falls back to the safe default set
@@ -445,6 +451,25 @@ export async function executeA2AMessage(
           })
         : undefined;
 
+    // Responses-routed OpenAI turns request reasoning summaries, mirroring the
+    // interactive chat route: reasoning is billed either way, the summary is
+    // the only visible signal, and scheduled-run views render it through the
+    // same chat reasoning UI. Skipped while the credential is negative-cached
+    // as unable to generate summaries (unverified OpenAI org) — the
+    // runAgentStream recovery marks it and retries without.
+    const openAiReasoningSummaryKey =
+      provider === "openai" && requiresOpenAiResponsesApi(selectedModel)
+        ? openAiReasoningSummaryCacheKey({
+            organizationId,
+            llmApiKeyId: chatApiKeyId ?? null,
+          })
+        : null;
+    const requestOpenAiReasoningSummary =
+      openAiReasoningSummaryKey !== null &&
+      !(await isOpenAiReasoningSummaryMarkedUnsupported(
+        openAiReasoningSummaryKey,
+      ));
+
     const baseConfig = {
       model,
       system: systemPrompt,
@@ -489,7 +514,16 @@ export async function executeA2AMessage(
           : {
               maxOutputTokens,
               ...(provider === "openai"
-                ? { providerOptions: { openai: { store: false } } }
+                ? {
+                    providerOptions: {
+                      openai: {
+                        store: false,
+                        ...(requestOpenAiReasoningSummary
+                          ? { reasoningSummary: "auto" }
+                          : {}),
+                      },
+                    },
+                  }
                 : {}),
             }),
       // Per-step context guard: cap oversized tool results and keep the
@@ -535,7 +569,17 @@ export async function executeA2AMessage(
     try {
       const runStream = await runAgentStream({
         config: streamConfig,
-        recovery: { logContext: { agentId: agent.id, sessionId } },
+        recovery: {
+          logContext: { agentId: agent.id, sessionId },
+          ...(openAiReasoningSummaryKey !== null
+            ? {
+                onReasoningSummaryUnsupported: () =>
+                  markOpenAiReasoningSummaryUnsupported(
+                    openAiReasoningSummaryKey,
+                  ),
+              }
+            : {}),
+        },
       });
       const stream = runStream.result;
       getCapturedStreamError = runStream.getCapturedStreamError;

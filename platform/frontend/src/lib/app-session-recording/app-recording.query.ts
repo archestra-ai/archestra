@@ -372,6 +372,39 @@ export function fallbackRecordingDescription(appName: string): string {
 }
 
 /**
+ * Longest first-message fallback prompt kept — a whole opening paragraph reads
+ * fine on a gallery card, but a runaway pasted spec should be clipped rather
+ * than shipped verbatim. Well under the enhancement schema's 20k prompt cap.
+ */
+const FALLBACK_BUILD_PROMPT_MAX_CHARS = 2_000;
+
+/**
+ * The build prompt used when none was AI-drafted or hand-written: the builder's
+ * opening chat message — the ask that actually started the app — else a bare
+ * app-name ask. Never empty, so a submission is never blocked on a missing
+ * prompt (the builder is still nudged to write a polished one for the card).
+ */
+export function fallbackRecordingBuildPrompt(
+  bundle: AppRecordingBundle,
+): string {
+  const firstUser = bundle.recording.transcript.find(
+    (message) => message.role === "user",
+  );
+  const text = (firstUser?.parts ?? [])
+    .filter(
+      (part): part is Extract<typeof part, { type: "text" }> =>
+        part.type === "text",
+    )
+    .map((part) => part.text)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text
+    ? text.slice(0, FALLBACK_BUILD_PROMPT_MAX_CHARS)
+    : `Build ${bundle.app.name}.`;
+}
+
+/**
  * Draft the AI enhancement (one-sentence description + consolidated build
  * prompt) for the conversation's recording. Pure generation — nothing is
  * stored until it is applied (automatically at stop, or via the edit

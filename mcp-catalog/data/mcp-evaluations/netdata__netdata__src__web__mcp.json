@@ -1,0 +1,39 @@
+{
+  "name": "netdata__netdata__src__web__mcp",
+  "display_name": "Netdata",
+  "description": "The fastest path to AI-powered full stack observability, even for lean teams.",
+  "author": {
+    "name": "netdata"
+  },
+  "server": {
+    "command": "",
+    "args": [],
+    "env": {},
+    "type": "local"
+  },
+  "readme": null,
+  "category": "Monitoring",
+  "programming_language": "C",
+  "github_info": {
+    "owner": "netdata",
+    "repo": "netdata",
+    "url": "https://github.com/netdata/netdata/tree/master/src/web/mcp",
+    "name": "netdata__netdata__src__web__mcp",
+    "path": "src/web/mcp",
+    "stars": 75677,
+    "contributors": 663,
+    "issues": 8117,
+    "releases": true,
+    "ci_cd": true,
+    "latest_commit_hash": "31e1f6dd6089c87a8aeca06d792fbf0974531f04"
+  },
+  "user_config": {},
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  }
+}

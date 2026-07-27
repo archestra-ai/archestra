@@ -54,7 +54,6 @@
   },
   "readme": null,
   "category": "File Management",
-  "quality_score": 80,
   "archestra_config": {
     "client_config_permutations": null,
     "oauth": {
@@ -63,10 +62,6 @@
     },
     "works_in_archestra": true
   },
-  "framework": null,
-  "last_scraped_at": null,
-  "evaluation_model": null,
-  "raw_dependencies": null,
   "author": {
     "name": "Google"
   },

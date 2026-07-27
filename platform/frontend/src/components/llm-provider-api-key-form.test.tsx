@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { type UseFormReturn, useForm } from "react-hook-form";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +16,11 @@ import {
   type LlmProviderApiKeyFormValues,
   type LlmProviderApiKeyResponse,
 } from "./llm-provider-api-key-form";
+
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.setPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
+Element.prototype.scrollIntoView = vi.fn();
 
 const DEFAULTS: LlmProviderApiKeyFormValues = {
   name: "",
@@ -44,10 +50,16 @@ function Harness({
   existingKeys,
   existingKey,
   defaults,
+  credentialMode,
+  progressive,
+  allowPersonalSubscriptions,
 }: {
   existingKeys?: LlmProviderApiKeyResponse[];
   existingKey?: LlmProviderApiKeyResponse;
   defaults?: Partial<LlmProviderApiKeyFormValues>;
+  credentialMode?: "api-key" | "subscription";
+  progressive?: boolean;
+  allowPersonalSubscriptions?: boolean;
 }) {
   form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: { ...DEFAULTS, ...defaults },
@@ -59,6 +71,9 @@ function Harness({
       showConsoleLink={false}
       existingKeys={existingKeys}
       existingKey={existingKey}
+      credentialMode={credentialMode}
+      progressive={progressive}
+      allowPersonalSubscriptions={allowPersonalSubscriptions}
     />
   );
 }
@@ -67,6 +82,9 @@ function renderForm(options?: {
   existingKeys?: LlmProviderApiKeyResponse[];
   existingKey?: LlmProviderApiKeyResponse;
   defaults?: Partial<LlmProviderApiKeyFormValues>;
+  credentialMode?: "api-key" | "subscription";
+  progressive?: boolean;
+  allowPersonalSubscriptions?: boolean;
 }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -77,6 +95,9 @@ function renderForm(options?: {
         existingKeys={options?.existingKeys}
         existingKey={options?.existingKey}
         defaults={options?.defaults}
+        credentialMode={options?.credentialMode}
+        progressive={options?.progressive}
+        allowPersonalSubscriptions={options?.allowPersonalSubscriptions}
       />
     </QueryClientProvider>,
   );
@@ -97,6 +118,59 @@ beforeEach(() => {
 });
 
 describe("LlmProviderApiKeyForm", () => {
+  it("shows only sign-in content for a focused subscription flow", () => {
+    renderForm({
+      credentialMode: "subscription",
+      defaults: {
+        provider: "openai",
+        openaiAuthMethod: "chatgpt-subscription",
+      },
+    });
+
+    expect(screen.getByText(/Sign in with ChatGPT/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Provider")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Name/)).not.toBeInTheDocument();
+    expect(screen.queryByText("API Key")).not.toBeInTheDocument();
+    expect(screen.queryByText("Scope")).not.toBeInTheDocument();
+    expect(screen.queryByText("Primary key")).not.toBeInTheDocument();
+    expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Extra HTTP headers")).not.toBeInTheDocument();
+  });
+
+  it("reveals optional API key settings progressively", async () => {
+    const user = userEvent.setup();
+    renderForm({ credentialMode: "api-key", progressive: true });
+
+    expect(screen.getByLabelText("Provider")).toBeInTheDocument();
+    expect(screen.getByText("API Key")).toBeInTheDocument();
+    expect(screen.getByText("Scope")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Name/)).toBeInTheDocument();
+    expect(screen.queryByText("Primary key")).not.toBeInTheDocument();
+    expect(screen.queryByText("Base URL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Extra HTTP headers")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Advanced settings" }));
+
+    expect(screen.getByText("Primary key")).toBeInTheDocument();
+    expect(screen.getByText("Base URL")).toBeInTheDocument();
+    expect(screen.getByText("Extra HTTP headers")).toBeInTheDocument();
+  });
+
+  it("excludes subscription-only providers from the API key flow", async () => {
+    const user = userEvent.setup();
+    renderForm({
+      credentialMode: "api-key",
+      progressive: true,
+      allowPersonalSubscriptions: false,
+    });
+
+    await user.click(screen.getByLabelText("Provider"));
+
+    expect(screen.queryByText("GitHub Copilot")).not.toBeInTheDocument();
+    expect(screen.queryByText("Microsoft 365 Copilot")).not.toBeInTheDocument();
+    expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
+  });
+
   it("clears provider-specific credentials when the provider changes", async () => {
     renderForm();
 

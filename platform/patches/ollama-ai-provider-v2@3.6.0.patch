@@ -1,0 +1,94 @@
+diff --git a/dist/index.js b/dist/index.js
+index ad6323f848138a41552515f843659fc605371e74..65206239cf6b1d858ca1b3148e10128dfe1d3466 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -629,13 +629,6 @@ var OllamaResponseProcessor = class {
+   extractContent(response) {
+     var _a, _b, _c, _d, _e;
+     const content = [];
+-    const text = response.message.content;
+-    if (text != null && text.length > 0) {
+-      content.push({
+-        type: "text",
+-        text
+-      });
+-    }
+     const thinking = response.message.thinking;
+     if (thinking != null && thinking.length > 0) {
+       content.push({
+@@ -643,6 +636,13 @@ var OllamaResponseProcessor = class {
+         text: thinking
+       });
+     }
++    const text = response.message.content;
++    if (text != null && text.length > 0) {
++      content.push({
++        type: "text",
++        text
++      });
++    }
+     for (const toolCall of (_a = response.message.tool_calls) != null ? _a : []) {
+       content.push({
+         type: "tool-call",
+@@ -1283,12 +1283,12 @@ var OllamaStreamProcessor = class {
+     }
+   }
+   processDelta(delta, controller) {
+-    this.processTextContent(delta, controller);
+     this.processThinking(delta, controller);
++    this.processTextContent(delta, controller);
+     this.processToolCalls(delta, controller);
+   }
+   processTextContent(delta, controller) {
+-    if ((delta == null ? void 0 : delta.content) != null) {
++    if (delta == null ? void 0 : delta.content) {
+       if (!this.state.hasTextStarted) {
+         controller.enqueue({ type: "text-start", id: this.state.textId });
+         this.state.hasTextStarted = true;
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 7d175b9498f2ba24853c1aa7ce92f1046e69133e..a93eba390d5df2c0f229272a2a3b1188f00866a1 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -627,13 +627,6 @@ var OllamaResponseProcessor = class {
+   extractContent(response) {
+     var _a, _b, _c, _d, _e;
+     const content = [];
+-    const text = response.message.content;
+-    if (text != null && text.length > 0) {
+-      content.push({
+-        type: "text",
+-        text
+-      });
+-    }
+     const thinking = response.message.thinking;
+     if (thinking != null && thinking.length > 0) {
+       content.push({
+@@ -641,6 +634,13 @@ var OllamaResponseProcessor = class {
+         text: thinking
+       });
+     }
++    const text = response.message.content;
++    if (text != null && text.length > 0) {
++      content.push({
++        type: "text",
++        text
++      });
++    }
+     for (const toolCall of (_a = response.message.tool_calls) != null ? _a : []) {
+       content.push({
+         type: "tool-call",
+@@ -1287,12 +1287,12 @@ var OllamaStreamProcessor = class {
+     }
+   }
+   processDelta(delta, controller) {
+-    this.processTextContent(delta, controller);
+     this.processThinking(delta, controller);
++    this.processTextContent(delta, controller);
+     this.processToolCalls(delta, controller);
+   }
+   processTextContent(delta, controller) {
+-    if ((delta == null ? void 0 : delta.content) != null) {
++    if (delta == null ? void 0 : delta.content) {
+       if (!this.state.hasTextStarted) {
+         controller.enqueue({ type: "text-start", id: this.state.textId });
+         this.state.hasTextStarted = true;

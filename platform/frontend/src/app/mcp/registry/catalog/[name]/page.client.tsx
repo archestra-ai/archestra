@@ -114,12 +114,6 @@ function ServerDetails({
               {server.license && (
                 <Badge variant="outline">{server.license}</Badge>
               )}
-              {server.quality_score !== null &&
-                server.quality_score !== undefined && (
-                  <Badge variant="outline">
-                    Quality {Math.round(server.quality_score)}
-                  </Badge>
-                )}
             </div>
           </div>
         </div>
@@ -492,11 +486,6 @@ function ServerDetails({
                 <SidebarRow label="Releases">
                   {server.github_info.releases ? "Yes" : "No"}
                 </SidebarRow>
-                {server.last_scraped_at && (
-                  <SidebarRow label="Last updated">
-                    {new Date(server.last_scraped_at).toLocaleDateString()}
-                  </SidebarRow>
-                )}
               </CardContent>
             </Card>
           )}

@@ -190,12 +190,6 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  {server?.quality_score !== null &&
-                    server?.quality_score !== undefined && (
-                      <Badge variant="secondary">
-                        Quality Score: {Math.round(server.quality_score)}
-                      </Badge>
-                    )}
                   {server?.category && (
                     <Badge variant="outline">{server.category}</Badge>
                   )}
@@ -652,7 +646,7 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
               </>
             )}
 
-            {server?.last_scraped_at && (
+            {server?.programming_language && (
               <>
                 <Separator />
                 <section>
@@ -662,19 +656,9 @@ export function DetailsDialog({ server, onClose }: DetailsDialogProps) {
                   </h3>
                   <div className="space-y-1 text-sm">
                     <div>
-                      <span className="text-muted-foreground">
-                        Last Updated:{" "}
-                      </span>
-                      {new Date(server.last_scraped_at).toLocaleDateString()}
+                      <span className="text-muted-foreground">Language: </span>
+                      {server.programming_language}
                     </div>
-                    {server.programming_language && (
-                      <div>
-                        <span className="text-muted-foreground">
-                          Language:{" "}
-                        </span>
-                        {server.programming_language}
-                      </div>
-                    )}
                   </div>
                 </section>
               </>

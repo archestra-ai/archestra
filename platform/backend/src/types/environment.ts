@@ -133,7 +133,7 @@ export const EnvironmentListSchema = z.object({
   defaultAssignedCatalogCount: z.number().int().nonnegative(),
 });
 
-const KubernetesNamespaceSchema = z
+export const KubernetesNamespaceSchema = z
   .string()
   .trim()
   .min(1)

@@ -3,13 +3,11 @@
 export {
   getMcpServer,
   getMcpServerCategories,
-  getMcpServerQualityBadge,
   type Options,
   searchMcpServerCatalog,
 } from "./sdk.gen";
 export type {
   ArchestraMcpServerManifest,
-  ArchestraMcpServerManifestWithScoreBreakdown,
   ClientOptions,
   GetMcpServerCategoriesData,
   GetMcpServerCategoriesResponse,
@@ -17,11 +15,6 @@ export type {
   GetMcpServerData,
   GetMcpServerError,
   GetMcpServerErrors,
-  GetMcpServerQualityBadgeData,
-  GetMcpServerQualityBadgeError,
-  GetMcpServerQualityBadgeErrors,
-  GetMcpServerQualityBadgeResponse,
-  GetMcpServerQualityBadgeResponses,
   GetMcpServerResponse,
   GetMcpServerResponses,
   SearchMcpServerCatalogData,

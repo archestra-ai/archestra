@@ -58,7 +58,6 @@ export type ArchestraMcpServerManifest = {
     instructions?: string;
     readme: string | null;
     category: 'Aggregators' | 'Art & Culture' | 'Healthcare' | 'Browser Automation' | 'Cloud' | 'Development' | 'CLI Tools' | 'Communication' | 'Data' | 'Logistics' | 'Data Science' | 'IoT' | 'File Management' | 'Finance' | 'Gaming' | 'Knowledge' | 'Location' | 'Marketing' | 'Monitoring' | 'Media' | 'AI Tools' | 'Search' | 'Security' | 'Social Media' | 'Sports' | 'Support' | 'Translation' | 'Audio' | 'Travel' | 'Messengers' | 'Email' | 'CRM' | 'Enterprise' | 'Job Search' | 'Local files' | 'General' | 'MCP Apps Demo' | null;
-    quality_score: number | null;
     archestra_config?: {
         client_config_permutations: {
             [key: string]: {
@@ -93,25 +92,6 @@ export type ArchestraMcpServerManifest = {
         latest_commit_hash: string | null;
     } | null;
     programming_language: string | null;
-    framework: string | null;
-    last_scraped_at: string | null;
-    evaluation_model: string | null;
-    protocol_features?: {
-        implementing_tools: boolean;
-        implementing_prompts: boolean;
-        implementing_resources: boolean;
-        implementing_sampling: boolean;
-        implementing_roots: boolean;
-        implementing_logging: boolean;
-        implementing_stdio: boolean;
-        implementing_streamable_http: boolean;
-        implementing_oauth2: boolean;
-    };
-    dependencies?: Array<{
-        name: string;
-        importance: number;
-    }>;
-    raw_dependencies: string | null;
     oauth_config?: {
         name: string;
         server_url: string;
@@ -154,18 +134,6 @@ export type ArchestraMcpServerManifest = {
     };
 };
 
-export type ArchestraMcpServerManifestWithScoreBreakdown = ArchestraMcpServerManifest & {
-    score_breakdown: {
-        mcp_protocol: number;
-        github_metrics: number;
-        deployment_maturity: number;
-        documentation: number;
-        dependencies: number;
-        badge_usage: number;
-        total: number;
-    };
-};
-
 export type SearchMcpServerCatalogData = {
     body?: never;
     path?: never;
@@ -187,9 +155,9 @@ export type SearchMcpServerCatalogData = {
          */
         worksInArchestra?: boolean;
         /**
-         * Sort results by field
+         * Sort results by field ('quality' is a deprecated alias of 'stars', kept for older Archestra clients)
          */
-        sortBy?: 'quality' | 'stars' | 'name';
+        sortBy?: 'stars' | 'name' | 'quality';
         /**
          * Number of results to return
          */
@@ -244,46 +212,10 @@ export type GetMcpServerResponses = {
     /**
      * Successful response
      */
-    200: ArchestraMcpServerManifestWithScoreBreakdown;
+    200: ArchestraMcpServerManifest;
 };
 
 export type GetMcpServerResponse = GetMcpServerResponses[keyof GetMcpServerResponses];
-
-export type GetMcpServerQualityBadgeData = {
-    body?: never;
-    path: {
-        /**
-         * GitHub organization
-         */
-        org: string;
-        /**
-         * GitHub repository name
-         */
-        repo: string;
-    };
-    query?: never;
-    url: '/badge/quality/{org}/{repo}';
-};
-
-export type GetMcpServerQualityBadgeErrors = {
-    /**
-     * Server not found
-     */
-    404: {
-        error: string;
-    };
-};
-
-export type GetMcpServerQualityBadgeError = GetMcpServerQualityBadgeErrors[keyof GetMcpServerQualityBadgeErrors];
-
-export type GetMcpServerQualityBadgeResponses = {
-    /**
-     * SVG image content
-     */
-    200: Blob | File;
-};
-
-export type GetMcpServerQualityBadgeResponse = GetMcpServerQualityBadgeResponses[keyof GetMcpServerQualityBadgeResponses];
 
 export type GetMcpServerCategoriesData = {
     body?: never;

@@ -8,8 +8,9 @@ import {
   UNTRUSTED_CONTEXT_HEADER,
   USER_ID_HEADER,
 } from "@archestra/shared";
-import { generateText, streamText } from "ai";
+import { generateObject, generateText, streamText } from "ai";
 import { vi } from "vitest";
+import { z } from "zod";
 import { ConversationModel, LlmProviderApiKeyModel } from "@/models";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { describe, expect, it, test } from "@/test";
@@ -17,13 +18,27 @@ import { describe, expect, it, test } from "@/test";
 // Mock the gemini-client module before importing llm-client
 const mockIsVertexAiEnabled = vi.hoisted(() => vi.fn(() => false));
 const mockIsAzureOpenAiEntraIdEnabled = vi.hoisted(() => vi.fn(() => false));
+// Capture the fetch option passed to createAnthropic, so the thinking-display
+// injection can be asserted against the body that actually goes out.
+const capturedCreateAnthropicOptions = vi.hoisted(() => ({
+  fetch: undefined as typeof globalThis.fetch | undefined,
+}));
 const mockCreateAnthropic = vi.hoisted(() =>
-  vi.fn(({ headers }: { headers?: Record<string, string> }) =>
-    vi.fn((modelName: string) => ({
-      provider: "anthropic",
-      modelName,
+  vi.fn(
+    ({
       headers,
-    })),
+      fetch,
+    }: {
+      headers?: Record<string, string>;
+      fetch?: typeof globalThis.fetch;
+    }) => {
+      capturedCreateAnthropicOptions.fetch = fetch;
+      return vi.fn((modelName: string) => ({
+        provider: "anthropic",
+        modelName,
+        headers,
+      }));
+    },
   ),
 );
 vi.mock("@/clients/gemini-client", () => ({
@@ -144,14 +159,31 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("creates a model for vllm provider without API key", () => {
+  it("creates keyless vLLM models on the openai-compatible provider", () => {
     const model = createDirectLLMModel({
       provider: "vllm",
       apiKey: undefined,
-      modelName: "default",
-      baseUrl: null,
+      modelName: "deepseek-ai/DeepSeek-R1",
+      baseUrl: "http://localhost:8000/v1",
     });
-    expect(model).toBeDefined();
+    // vLLM serves DeepSeek-style reasoning models that stream
+    // `reasoning_content` and expect it passed back on tool-call turns; the
+    // strict openai provider ("openai.chat") drops it in both directions,
+    // while the openai-compatible provider round-trips it.
+    expect((model as { provider: string }).provider).toBe("vllm.chat");
+  });
+
+  it("rejects vllm models without a base URL", () => {
+    // vLLM has no default base URL; without the guard a missing URL would
+    // silently route the request to api.openai.com.
+    expect(() =>
+      createDirectLLMModel({
+        provider: "vllm",
+        apiKey: undefined,
+        modelName: "default",
+        baseUrl: null,
+      }),
+    ).toThrow("vLLM base URL is required.");
   });
 
   it("creates a model for ollama provider without API key", () => {
@@ -164,14 +196,179 @@ describe("createDirectLLMModel", () => {
     expect(model).toBeDefined();
   });
 
-  it("creates a model for zhipuai provider", () => {
+  it("creates DeepSeek models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "deepseek",
+      apiKey: "test-key",
+      modelName: "deepseek-reasoner",
+      baseUrl: null,
+    });
+    // DeepSeek thinking mode requires `reasoning_content` passed back on
+    // tool-call turns; the strict openai provider ("openai.chat") drops it in
+    // both directions, while the openai-compatible provider round-trips it.
+    expect((model as { provider: string }).provider).toBe("deepseek.chat");
+  });
+
+  it("creates Kimi models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "kimi",
+      apiKey: "test-key",
+      modelName: "kimi-k3",
+      baseUrl: null,
+    });
+    // Kimi thinking models stream reasoning in `reasoning_content` and expect
+    // it passed back on tool-call turns; the strict openai provider
+    // ("openai.chat") drops it in both directions, while the openai-compatible
+    // provider round-trips it.
+    expect((model as { provider: string }).provider).toBe("kimi.chat");
+  });
+
+  it("creates MiniMax models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "minimax",
+      apiKey: "test-key",
+      modelName: "MiniMax-M2.5",
+      baseUrl: null,
+    });
+    // The proxy's minimax adapter surfaces thinking as DeepSeek-style
+    // `reasoning_content`; the strict openai provider ("openai.chat") drops
+    // that field in both directions, while the openai-compatible provider
+    // round-trips it.
+    expect((model as { provider: string }).provider).toBe("minimax.chat");
+  });
+
+  it("creates OpenRouter models on the openai-compatible provider", () => {
+    const model = createDirectLLMModel({
+      provider: "openrouter",
+      apiKey: "test-key",
+      modelName: "deepseek/deepseek-r1",
+      baseUrl: null,
+    });
+    // OpenRouter streams thinking as a `reasoning` delta field; the strict
+    // openai provider ("openai.chat") drops it, while the openai-compatible
+    // provider surfaces it as reasoning parts.
+    expect((model as { provider: string }).provider).toBe("openrouter.chat");
+  });
+
+  it("sends the json_schema response_format for OpenRouter structured outputs", async () => {
+    let sent: Record<string, unknown> | undefined;
+    const mockFetch = vi.fn(
+      async (_input: unknown, init: RequestInit | undefined) => {
+        sent = JSON.parse(init?.body as string);
+        return new Response("upstream stub", { status: 500 });
+      },
+    );
+    // Must be stubbed BEFORE the model is built: createResponseHealingFetch
+    // captures `globalThis.fetch` at construction time.
+    vi.stubGlobal("fetch", mockFetch);
+
+    const model = createDirectLLMModel({
+      provider: "openrouter",
+      apiKey: "test-key",
+      modelName: "deepseek/deepseek-r1",
+      baseUrl: null,
+    });
+
+    // The stubbed upstream fails the call; the request body is captured
+    // before that, which is all this assertion needs.
+    await generateObject({
+      model,
+      schema: z.object({ answer: z.number() }),
+      prompt: "2 + 2?",
+      maxRetries: 0,
+    }).catch(() => {});
+
+    if (!sent) {
+      throw new Error("Expected a request to reach the fetch stub");
+    }
+    // generateObject flows (KB reranker, dual-LLM subagents) rely on the
+    // provider enforcing the schema: without supportsStructuredOutputs the
+    // compatible client downgrades to a schema-less `json_object` response
+    // format, and nothing else carries the schema to the model.
+    const responseFormat = (
+      sent as {
+        response_format?: { type?: string; json_schema?: { schema?: unknown } };
+      }
+    ).response_format;
+    expect(responseFormat?.type).toBe("json_schema");
+    expect(responseFormat?.json_schema?.schema).toBeDefined();
+  });
+
+  it("creates Zhipu AI models on the openai-compatible provider", () => {
     const model = createDirectLLMModel({
       provider: "zhipuai",
       apiKey: "test-key",
-      modelName: "glm-4-flash",
+      modelName: "glm-4.7",
       baseUrl: null,
     });
-    expect(model).toBeDefined();
+    // GLM thinking mode streams the chain of thought in `reasoning_content`,
+    // which the strict openai provider ("openai.chat") drops; the
+    // openai-compatible provider parses it into native reasoning parts.
+    expect((model as { provider: string }).provider).toBe("zhipuai.chat");
+  });
+
+  // generateObject callers (KB reranker, dual-LLM subagents, tool-call arg
+  // repair) hand their schema to the provider via responseFormat. Z.ai's API
+  // accepts only `text`/`json_object` response formats (mirrored by the proxy
+  // request schema in types/llm-providers/zhipuai/api.ts), so the strict
+  // openai provider's `json_schema` request would be rejected; the
+  // openai-compatible provider must fall back to bare `json_object` and leave
+  // schema enforcement to the SDK's validation of the returned text.
+  describe("zhipuai structured output fallback", () => {
+    it("sends response_format json_object for generateObject and parses the result", async () => {
+      let sent: Record<string, unknown> | undefined;
+      const mockFetch = vi.fn(
+        async (_input: unknown, init: RequestInit | undefined) => {
+          sent = JSON.parse(init?.body as string);
+          return new Response(
+            JSON.stringify({
+              id: "chatcmpl-glm",
+              object: "chat.completion",
+              created: 0,
+              model: "glm-4.7",
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: "assistant",
+                    content: '{"scores":[{"index":0,"score":9}]}',
+                  },
+                  finish_reason: "stop",
+                },
+              ],
+              usage: {
+                prompt_tokens: 1,
+                completion_tokens: 1,
+                total_tokens: 2,
+              },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        },
+      );
+      vi.stubGlobal("fetch", mockFetch);
+
+      const model = createDirectLLMModel({
+        provider: "zhipuai",
+        apiKey: "test-key",
+        modelName: "glm-4.7",
+        baseUrl: null,
+      });
+
+      const { object } = await generateObject({
+        model,
+        schema: z.object({
+          scores: z.array(z.object({ index: z.number(), score: z.number() })),
+        }),
+        prompt: "Score the passage.",
+        maxRetries: 0,
+      });
+
+      // Exact match: a `json_schema` response_format here would 400 against
+      // the real API and the proxy's request validation alike.
+      expect(sent?.response_format).toEqual({ type: "json_object" });
+      expect(object).toEqual({ scores: [{ index: 0, score: 9 }] });
+    });
   });
 
   it("throws ApiError for unsupported provider", () => {
@@ -386,6 +583,86 @@ describe("createDirectLLMModel", () => {
       });
 
       expect(mockFetch.mock.calls[0][1].body).toBe("not json");
+    });
+  });
+
+  // Sonnet 5 / Fable 5-class models think — and bill those tokens — on every
+  // request, but `display` defaults to "omitted", so without an injected
+  // `thinking` config the response carries only empty signature blocks and
+  // the chat UI has nothing to render. The installed @ai-sdk/anthropic has no
+  // `display` provider option (its closed Zod schema strips unknown thinking
+  // keys), so the injection happens in a fetch wrapper against the raw
+  // request body — these tests pin that wire-level rewrite.
+  describe("anthropic thinking display injection", () => {
+    const sendBody = async (body: string): Promise<RequestInit> => {
+      const mockFetch = vi.fn().mockResolvedValue(new Response("{}"));
+      // Must be stubbed BEFORE the model is built: the wrapper captures
+      // globalThis.fetch at construction time.
+      vi.stubGlobal("fetch", mockFetch);
+
+      createDirectLLMModel({
+        provider: "anthropic",
+        apiKey: "test-key",
+        modelName: "claude-sonnet-5",
+        baseUrl: null,
+      });
+      const wrapped = capturedCreateAnthropicOptions.fetch;
+      if (!wrapped) {
+        throw new Error("Expected anthropic fetch wrapper to be configured");
+      }
+
+      await wrapped("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        body,
+      });
+
+      return mockFetch.mock.calls[0][1];
+    };
+
+    const wireBodyFor = async (
+      requestBody: Record<string, unknown>,
+    ): Promise<Record<string, unknown>> => {
+      const init = await sendBody(JSON.stringify(requestBody));
+      return JSON.parse(init.body as string);
+    };
+
+    it("requests summarized thinking for models that think by default", async () => {
+      for (const model of [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-sonnet-5-20250929",
+        "claude-fable-5",
+      ]) {
+        const body = await wireBodyFor({ model, messages: [] });
+        expect(body.thinking).toEqual({
+          type: "adaptive",
+          display: "summarized",
+        });
+      }
+    });
+
+    it("leaves models whose thinking is off by default untouched", async () => {
+      // Injecting thinking here would ENABLE it — new tokens, new cost —
+      // rather than surface what already runs.
+      const body = await wireBodyFor({
+        model: "claude-opus-4-8",
+        messages: [],
+      });
+      expect(body).not.toHaveProperty("thinking");
+    });
+
+    it("respects an explicit thinking configuration", async () => {
+      const body = await wireBodyFor({
+        model: "claude-sonnet-5",
+        messages: [],
+        thinking: { type: "disabled" },
+      });
+      expect(body.thinking).toEqual({ type: "disabled" });
+    });
+
+    it("passes a non-JSON body through untouched", async () => {
+      const init = await sendBody("not json");
+      expect(init.body).toBe("not json");
     });
   });
 

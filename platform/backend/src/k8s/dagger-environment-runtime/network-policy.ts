@@ -82,6 +82,14 @@ export function buildDaggerEgressPolicies(params: {
    * degraded mode the MCP path uses when the cluster DNS IP can't be resolved.
    */
   clusterDnsIps?: string[];
+  /**
+   * Extra IPv4 CIDRs to block from the unrestricted floor's public-egress rule,
+   * on top of the built-in RFC1918/link-local/metadata ranges. Set to the
+   * cluster's Service and Pod CIDRs when they fall outside RFC1918 (common on
+   * GKE and other managed clusters) so sandboxed code can't reach in-cluster
+   * ClusterIP services. Only consumed by the floor.
+   */
+  additionalDeniedCidrs?: string[];
 }): DaggerEgressPolicyObject[] {
   const { environmentId, effectivePolicy, capabilities } = params;
   const clusterDnsIps = params.clusterDnsIps ?? [];
@@ -103,6 +111,12 @@ export function buildDaggerEgressPolicies(params: {
             "app.kubernetes.io/managed-by": "archestra",
             "archestra.io/resource": "dagger-egress-policy",
           },
+          // Engine pods on clusters whose resolver isn't a labelled kube-dns
+          // pod (NodeLocal DNSCache, custom DNS) need :53 to the resolver IPs
+          // explicitly; the public-egress rule blocks the private/link-local
+          // range such a resolver usually lives in.
+          clusterDnsIps,
+          additionalDeniedCidrs: params.additionalDeniedCidrs ?? [],
         }),
       },
     ];

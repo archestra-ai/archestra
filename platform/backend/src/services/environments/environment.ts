@@ -29,6 +29,24 @@ function reconcileEnvironmentEngine(environment: Environment): void {
     );
 }
 
+/**
+ * Tear down the environment's Dagger engine after the environment is deleted,
+ * so it does not leave a privileged pod and retained cache PVC behind.
+ * Fire-and-forget for symmetry with reconcile: the row is already gone, a k8s
+ * hiccup must not fail the deletion, and the manager no-ops when
+ * code-runtime/k8s is off.
+ */
+function teardownEnvironmentEngine(environment: Environment): void {
+  void daggerEnvironmentRuntimeManager
+    .teardownEnvironmentEngine(environment)
+    .catch((err) =>
+      logger.error(
+        { err, environmentId: environment.id },
+        "[DaggerEnvRuntime] background teardown failed",
+      ),
+    );
+}
+
 // === Public API ===
 
 export async function listEnvironments(
@@ -253,6 +271,8 @@ export async function deleteEnvironment(params: {
   if (!deleted) {
     throw new ApiError(404, "Environment not found");
   }
+
+  teardownEnvironmentEngine(environment);
 }
 
 // === Internal helpers ===

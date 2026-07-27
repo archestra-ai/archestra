@@ -1,64 +1,19 @@
 # code execution runtime — the Dagger Engine that backs the sandbox tools
 # (archestra__run_command / upload_file / download_file).
 #
-# deployed through the dagger-runtime companion chart with network policies
-# disabled, because the backend runs on the developer machine and reaches dagger
-# through a local kubectl port-forward. This runtime is dev-only (it is not
-# deployed in production). The root Tiltfile loads this file only when
-# ARCHESTRA_CODE_RUNTIME_ENABLED=true, so the privileged engine is not deployed
-# unless the feature is on.
-
-# render the chart client-side and let Tilt own the apply — same pattern as the
-# mcp-rbac resources in Tiltfile.dev. Everything goes into `default` alongside
-# the rest of the dev cluster: the subchart's Service template omits a namespace
-# and `helm template` does not inject one, so rendering into any namespace other
-# than the kube-context default would strand the Service (and break the
-# port-forward below). Since this runtime is dev-only, a dedicated namespace
-# buys nothing here.
-# When ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST is set in .env the backend is
-# pointed at an already-running engine (e.g. a parallel worktree stack sharing
-# the main stack's engine on :1234). Deploying a second engine then would only
-# collide — same `default`-namespace helm release and the same :1234
-# port-forward — so skip the engine + port-forward and just build the napi addon
-# below. A single Dagger engine is session-multiplexed, so sharing one is fine.
-external_engine = bool(os.getenv('ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST'))
-
-if not external_engine:
-  k8s_yaml(local(
-    'helm template dagger-runtime ../helm/dagger-runtime --namespace default ' +
-    '--set networkPolicy.create=false ' +
-    '--set service.create=true ' +
-    '--set dagger.engine.port=1234 ' +
-    # the production default request (8Gi) does not fit a default colima VM;
-    # 4Gi is plenty for local code-runtime use.
-    '--set dagger.engine.resources.requests.memory=4Gi ' +
-    '--set dagger.engine.readinessProbeSettings.periodSeconds=60 ' +
-    '--set dagger.engine.livenessProbeSettings.periodSeconds=120',
-    quiet=True,
-  ))
-
-  # the backend reaches this service through the local port-forward below.
-  k8s_resource(
-    'dagger-runtime-engine',
-    new_name='dagger-engine',
-    labels=['code-runtime'],
-    # bundle the chart's free-floating objects into this resource so Tilt groups
-    # them with the engine instead of leaving them in `uncategorized`. the Service
-    # auto-attaches via its selector on the StatefulSet, so it is not listed here.
-    objects=[
-      'dagger-runtime:serviceaccount',
-      'dagger-runtime-engine-config:configmap',
-    ],
-  )
-
-  # everything renders into `default`, so the Service has live endpoints (its pod
-  # is in the same namespace) and we can port-forward the Service directly.
-  local_resource(
-    'dagger-runtime-port-forward',
-    serve_cmd='while true; do kubectl -n default wait --for=condition=Ready pod -l name=dagger-runtime-engine --timeout=60s >/dev/null 2>&1 && kubectl -n default port-forward svc/dagger-runtime 1234:1234; sleep 2; done',
-    labels=['code-runtime'],
-    resource_deps=['dagger-engine'],
-  )
+# The engine is NOT deployed here. The backend provisions a Dagger Engine per
+# organization (and per environment) in code via the Kubernetes API and reaches
+# it over the kube-pod:// transport (kubectl exec), the same machinery it uses
+# for MCP server pods. This file only builds the native addon the backend loads.
+# The root Tiltfile loads it when ARCHESTRA_CODE_RUNTIME_ENABLED=true.
+#
+# Because the dev backend runs on the host rather than in a pod, it reaches the
+# cluster through a kubeconfig file (ARCHESTRA_ORCHESTRATOR_KUBECONFIG), not the
+# in-pod service account, and it needs small engine resources
+# (ARCHESTRA_DAGGER_RUNTIME_ENGINE_* — a default colima VM can't fit the 8Gi/50Gi
+# production defaults); run-backend-dev.sh sets these when they're unset. Setting
+# an explicit ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST still points the backend
+# at a pre-existing engine instead (the bring-your-own escape hatch).
 
 # Rebuild the native skill-sandbox addon (napi) when its Rust sources change.
 # Tilt has no other knowledge of the cargo build, and the compiled .node is

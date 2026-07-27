@@ -21,7 +21,6 @@
     "works_in_archestra": true
   },
   "category": "Job Search",
-  "quality_score": null,
   "github_info": {
     "owner": "Matvey-Kuk",
     "repo": "archestra-work-at-mcp",
@@ -36,23 +35,7 @@
     "name": "matvey-kuk__archestra-work-at-mcp"
   },
   "programming_language": "JavaScript",
-  "protocol_features": {
-    "implementing_tools": true,
-    "implementing_prompts": false,
-    "implementing_resources": false,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": true,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
   "tools": [],
   "prompts": [],
-  "readme": "# work-at-archestra\n\nAn MCP server that applies to a job at [archestra.ai](https://archestra.ai).\n\n## Use\n\n1. Install [Archestra](https://github.com/archestra-ai/archestra).\n2. Click \"Add an MCP server from the remote catalog.\"\n3. Search for **\"work at archestra\"**.",
-  "framework": null,
-  "last_scraped_at": "2026-04-29T00:00:00.000Z",
-  "evaluation_model": null,
-  "dependencies": [],
-  "raw_dependencies": null
+  "readme": "# work-at-archestra\n\nAn MCP server that applies to a job at [archestra.ai](https://archestra.ai).\n\n## Use\n\n1. Install [Archestra](https://github.com/archestra-ai/archestra).\n2. Click \"Add an MCP server from the remote catalog.\"\n3. Search for **\"work at archestra\"**."
 }

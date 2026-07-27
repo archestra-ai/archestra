@@ -95,6 +95,22 @@ class SecretModel {
   }
 
   /**
+   * Overwrite a row's stored secret blob directly, WITHOUT re-encrypting.
+   * Used only by the encryption-key re-encryption migration, which supplies a
+   * value already encrypted under the new key. Never use for normal writes —
+   * those go through {@link create}/{@link update}, which encrypt.
+   */
+  static async updateRawSecret(
+    id: string,
+    encrypted: { __encrypted: string },
+  ): Promise<void> {
+    await db
+      .update(schema.secretsTable)
+      .set({ secret: encrypted })
+      .where(eq(schema.secretsTable.id, id));
+  }
+
+  /**
    * Delete a secret by ID
    */
   static async delete(id: string): Promise<boolean> {

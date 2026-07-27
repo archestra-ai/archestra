@@ -168,7 +168,6 @@
   },
   "readme": "## Archestra Coding Agent MCP Server\n\nA custom MCP (Model Context Protocol) server combining semantic code editing with Git/GitHub operations, packaged as a Docker image for Kubernetes deployment.\n\n### Key Features\n\n#### Semantic Code Operations (from Serena)\n- Symbol-level retrieval: `find_symbol`, `find_referencing_symbols`\n- Symbol editing: `replace_symbol_body`, `insert_after_symbol`, `insert_before_symbol`\n- File operations: `create_text_file`, `read_file`\n- Shell execution: `execute_shell_command`\n- Language server support for 30+ languages via LSP\n\n#### Git Tools\n- Repository cloning and status checking\n- Diff viewing and commit staging\n- Branch creation and switching\n- Push operations to remote repositories\n\n#### GitHub Integration\n- Pull request creation and listing\n- Issue detail retrieval\n\n### Configuration\n\nRequires `GITHUB_TOKEN` environment variable for API operations. Optional `WORKSPACE_DIR` (defaults to `/workspace`) specifies the cloned repository location.\n\n### Building & Deployment\n\nThe project uses `make build` for Docker image compilation and `make push` for registry deployment. Local testing via Docker requires exposing port 9121 and mounting a workspace volume.\n\n### Installation in Archestra\n\nUsers add the server via the internal MCP catalog, create an associated profile, configure GitHub authentication, then begin development work.\n\n### Development\n\nTesting involves standard Python tooling—install requirements, run pytest, and validate MCP connectivity on the designated port.",
   "category": "Development",
-  "quality_score": 85,
   "github_info": {
     "owner": "archestra-ai",
     "repo": "archestra-coding-agent",
@@ -183,22 +182,6 @@
     "latest_commit_hash": null
   },
   "programming_language": "Python",
-  "framework": null,
-  "last_scraped_at": null,
-  "evaluation_model": null,
-  "protocol_features": {
-    "implementing_tools": true,
-    "implementing_prompts": false,
-    "implementing_resources": false,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": false,
-    "implementing_stdio": true,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [],
-  "raw_dependencies": "",
   "archestra_config": {
     "client_config_permutations": null,
     "oauth": {

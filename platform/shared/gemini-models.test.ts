@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   isLegacyGeminiModel,
   isUsableGeminiCatalogModel,
+  supportsGeminiThoughtSummaries,
 } from "./gemini-models";
 
 describe("isUsableGeminiCatalogModel", () => {
@@ -46,6 +47,38 @@ describe("isUsableGeminiCatalogModel", () => {
   test("is case-insensitive", () => {
     expect(isUsableGeminiCatalogModel("Gemini-2.5-Pro")).toBe(true);
     expect(isUsableGeminiCatalogModel("GEMINI-1.5-PRO")).toBe(false);
+  });
+});
+
+describe("supportsGeminiThoughtSummaries", () => {
+  test.each([
+    // Gemini chat models >= 2.5 think by default.
+    ["gemini-2.5-pro", true],
+    ["gemini-2.5-flash", true],
+    ["gemini-2.5-pro-preview-06-05", true],
+    ["gemini-3-pro-preview", true],
+    ["gemini-3-flash-preview", true],
+    ["gemini-3.5-flash", true],
+    // flash-lite has thinking off by default; bare includeThoughts is a 400.
+    ["gemini-2.5-flash-lite", false],
+    ["gemini-3.5-flash-lite", false],
+    // gemma has no thinking support.
+    ["gemma-3-27b-it", false],
+    // Pre-thinking generations.
+    ["gemini-2.0-flash", false],
+    ["gemini-1.5-pro", false],
+    // Non-text output and embedding variants.
+    ["gemini-2.5-flash-image", false],
+    ["gemini-2.5-flash-preview-tts", false],
+    ["gemini-embedding-001", false],
+    // Unversioned ids.
+    ["gemini-pro", false],
+  ])("%s -> thoughts=%s", (modelId, expected) => {
+    expect(supportsGeminiThoughtSummaries(modelId)).toBe(expected);
+  });
+
+  test("is case-insensitive", () => {
+    expect(supportsGeminiThoughtSummaries("Gemini-2.5-Pro")).toBe(true);
   });
 });
 

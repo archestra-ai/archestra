@@ -310,6 +310,36 @@ describe("buildEngineStatefulSet", () => {
       podSpec?.volumes?.find((v) => v.name === "config")?.configMap?.name,
     ).toBe("dagger-engine-abcdef00-1111-2222-3333-444455556666-config");
   });
+
+  it("caps sandbox memory in a per-engine cgroup and keeps the image entrypoint", () => {
+    const engine = config.daggerRuntime.engine;
+    const original = { ...engine };
+    Object.assign(engine, { sandboxMemoryMaxBytes: 1234567 });
+    try {
+      const script = build().spec?.template.spec?.containers[0].command?.[2];
+      const cgroup = "archestra-sandbox-abcdef00-1111-2222-3333-444455556666";
+      // The configured ceiling reaches the cgroup verbatim; a stale or rounded
+      // value would silently leave sandboxes bounded at the wrong number.
+      expect(script).toContain(
+        `echo 1234567 > /sys/fs/cgroup/${cgroup}/memory.max`,
+      );
+      // Named per engine, not shared: a privileged pod sees the host's cgroup
+      // tree, so engines on one node would otherwise share a single budget.
+      expect(script).toContain(`defaultCgroupParent = "/${cgroup}"`);
+      // Buildkit only puts sandboxes there if pointed at it, and only reads
+      // that from the legacy config file.
+      expect(script).toContain("> /etc/dagger/engine.toml");
+      // The image entrypoint has to be what ends up running: it delegates the
+      // cgroup controllers this cap depends on and raises the open-file limit.
+      expect(script).toContain("exec /usr/local/bin/dagger-entrypoint.sh");
+      // A cluster that never delegates the memory controller must end up with
+      // an unbounded engine rather than a crash-looping one, since engine
+      // StatefulSets are created once and never reconciled afterwards.
+      expect(script).toContain("archestra: sandbox memory is NOT capped");
+    } finally {
+      Object.assign(engine, original);
+    }
+  });
 });
 
 describe("resolveEngineEffectivePolicy", () => {

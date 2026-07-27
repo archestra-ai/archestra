@@ -2169,17 +2169,14 @@ const config = {
       50,
     ),
     // Resource requests/limits for a code-managed engine StatefulSet (K8s
-    // quantity strings). The memory limit bounds the buildkit daemon only:
-    // sandbox containers run in a top-level `buildkit` cgroup outside the pod's
-    // accounting, so no pod limit constrains them and they are invisible to the
-    // scheduler. The request is therefore the only node-level reservation for
-    // that sandbox memory, and is set well above the daemon's own footprint to
-    // cover concurrent runs; the limit only tracks it because Kubernetes
-    // requires `request <= limit`. It reserves rather than bounds, and there is
-    // no value here that would bound: the per-run cap is an RLIMIT_AS, which is
-    // per-process, so a single run that spawns N processes holds N times it.
-    // Raising the request and lowering `maxConcurrent` reduce the pressure a
-    // heavy workload puts on the node; neither caps it.
+    // quantity strings). Two separate budgets, because the workloads live in
+    // two separate cgroups: the pod's request/limit cover the buildkit daemon,
+    // while `sandboxMemoryMaxBytes` caps the sandbox containers buildkit runs
+    // beside it. The memory request is sized to hold node capacity for both,
+    // since the sandbox cgroup sits outside the pod's accounting and the
+    // scheduler cannot see it; the limit tracks the request because Kubernetes
+    // requires `request <= limit`, and it stays far above the daemon's own
+    // footprint so ordinary sandbox load can never OOM-kill the engine.
     engine: {
       cpuRequest:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST || "2",
@@ -2189,6 +2186,16 @@ const config = {
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "4Gi",
       cacheStorage:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE || "50Gi",
+      // Ceiling on everything the sandboxes hold at once, written verbatim to
+      // the `memory.max` of the cgroup buildkit runs them in — hence bytes.
+      // Without it nothing bounds them: the per-run cap is an RLIMIT_AS, which
+      // the kernel applies per process, so one run that spawns N processes
+      // holds N times it. Keep it below `memoryRequest` so the reservation
+      // covers the sandboxes plus the daemon.
+      sandboxMemoryMaxBytes: parsePositiveInt(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX_BYTES,
+        3 * 1024 * 1024 * 1024,
+      ),
       // Extra IPv4 CIDRs to block from an unrestricted engine's public-egress
       // floor (on top of the built-in RFC1918/link-local/metadata ranges). Set
       // to the cluster's Service/Pod CIDRs when they fall outside RFC1918 so

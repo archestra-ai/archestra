@@ -227,6 +227,27 @@ export function isAzureOpenAiFirstPartyModelName(
   );
 }
 
+/**
+ * Whether an Azure deployment name denotes a model that produces separate
+ * thinking output when asked for it.
+ *
+ * Foundry serves open models on vLLM, and a reasoning model only splits its
+ * thinking into `reasoning_content` when the request carries
+ * `reasoning_effort` — without it the thinking is narrated inline in
+ * `content`, indistinguishable from the answer. Archestra therefore defaults
+ * the parameter for these deployments.
+ *
+ * Deliberately an allowlist rather than "every non-OpenAI deployment": a
+ * deployment whose backend does not accept `reasoning_effort` rejects the
+ * whole request, so a family belongs here only once it is known to accept it.
+ * DeepSeek (including Microsoft's R1 derivative) is verified; add others as
+ * they are confirmed.
+ */
+export function isAzureThinkingModelName(deploymentName: string): boolean {
+  const name = deploymentName.toLowerCase();
+  return name.startsWith("deepseek") || name.startsWith("mai-ds");
+}
+
 function getRequestUrl(input: URL | RequestInfo): string {
   if (typeof input === "string") {
     return input;

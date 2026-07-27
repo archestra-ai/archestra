@@ -11,6 +11,7 @@ import {
   isAzureAiFoundryBaseUrl,
   isAzureOpenAiFirstPartyModelName,
   isAzureOpenAiV1BaseUrl,
+  isAzureThinkingModelName,
   normalizeAzureApiKey,
 } from "./azure-url";
 
@@ -399,6 +400,26 @@ describe("extractAzureDeploymentName", () => {
     expect(
       extractAzureDeploymentName("https://my-resource.openai.azure.com/openai"),
     ).toBeNull();
+  });
+});
+
+describe("isAzureThinkingModelName", () => {
+  it.each([
+    "DeepSeek-R1",
+    "DeepSeek-V4-Pro",
+    "deepseek-v3.2",
+    "MAI-DS-R1",
+  ])("returns true for the verified thinking family %s", (name) => {
+    expect(isAzureThinkingModelName(name)).toBe(true);
+  });
+
+  it.each([
+    "gpt-4o",
+    "claude-opus-5",
+    "Phi-4-reasoning",
+    "Llama-3.3-70B",
+  ])("returns false for %s, which is not known to accept reasoning_effort", (name) => {
+    expect(isAzureThinkingModelName(name)).toBe(false);
   });
 });
 

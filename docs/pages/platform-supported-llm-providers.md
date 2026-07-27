@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-07-23
+lastUpdated: 2026-07-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -729,6 +729,12 @@ Archestra fetches the model list from the upstream's `{base-url}/models` endpoin
 - **Base URL**: `http://localhost:9000/v1/bedrock/{profile-id}`
 - **Authentication**: Bearer API key or AWS IAM (see below)
 
+### Region
+
+Each Bedrock key carries an AWS region. Amazon enables models per region, so the region decides which models the key can use — pick the one where your models are turned on.
+
+A key can also point at a custom endpoint instead, for a VPC or PrivateLink setup. Archestra reads the region back out of that endpoint, and falls back to `us-east-1` when the endpoint carries no region.
+
 ### Authentication Methods
 
 Bedrock supports two authentication methods:
@@ -792,7 +798,10 @@ Archestra calls the Bedrock **Converse API**, and the **InvokeModel API** for cl
     },
     {
       "Effect": "Allow",
-      "Action": ["bedrock:ListInferenceProfiles"],
+      "Action": [
+        "bedrock:ListInferenceProfiles",
+        "bedrock:ListFoundationModels"
+      ],
       "Resource": "*"
     }
   ]
@@ -800,6 +809,8 @@ Archestra calls the Bedrock **Converse API**, and the **InvokeModel API** for cl
 ```
 
 Use `*` for the region in resource ARNs — cross-region inference profiles (`us.` prefix) can route requests to any US region.
+
+The two list actions populate the model picker. `ListInferenceProfiles` returns cross-region and application inference profiles. `ListFoundationModels` adds on-demand models that have no inference profile. Without it, those models are not offered.
 
 ### Environment Variables
 

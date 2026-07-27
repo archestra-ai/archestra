@@ -1247,6 +1247,57 @@ export const parseEngineDeniedCidrs = (
   return valid;
 };
 
+/**
+ * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
+ * undefined when it is not one.
+ *
+ * @public — exported for testability
+ */
+export const k8sMemoryQuantityToBytes = (
+  quantity: string,
+): number | undefined => {
+  const match = quantity
+    .trim()
+    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|k|M|G|T)?$/);
+  if (!match) return undefined;
+  const multipliers: Record<string, number> = {
+    Ki: 1024,
+    Mi: 1024 ** 2,
+    Gi: 1024 ** 3,
+    Ti: 1024 ** 4,
+    k: 1000,
+    M: 1000 ** 2,
+    G: 1000 ** 3,
+    T: 1000 ** 4,
+  };
+  return Number(match[1]) * (match[2] ? multipliers[match[2]] : 1);
+};
+
+/**
+ * The sandbox memory ceiling, checked against the engine's memory request.
+ *
+ * The sandboxes are charged to a cgroup the scheduler cannot see, so the
+ * request is the only thing reserving node capacity for them. A ceiling at or
+ * above the request means the engine can hold more than it reserved and the
+ * shortfall lands on whatever else the node is running. Lowering the request
+ * alone is enough to get there, so say so rather than let it pass silently.
+ *
+ * @public — exported for testability
+ */
+export const parseSandboxMemoryMaxBytes = (
+  envValue: string | undefined,
+  memoryRequest: string,
+): number => {
+  const bytes = parsePositiveInt(envValue, 3 * 1024 * 1024 * 1024);
+  const requestBytes = k8sMemoryQuantityToBytes(memoryRequest);
+  if (requestBytes !== undefined && bytes >= requestBytes) {
+    logger.error(
+      `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX_BYTES (${bytes}) is not below ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST (${memoryRequest}): the engine can hold more memory than it reserves on the node`,
+    );
+  }
+  return bytes;
+};
+
 const IPV4_CIDR =
   /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\/(3[0-2]|[12]?\d)$/;
 
@@ -1439,6 +1490,9 @@ const skillsSandboxEnabled = isCodeRuntimeEnabled({
 // the Dagger runtime fronts the sandbox; enabling the sandbox lights it up.
 // runnerHost is the optional process-default/BYO engine — unset in the
 // code-managed per-organization mode, where each run carries its own target.
+// Read before the config object so the sandbox ceiling can be checked against it.
+const daggerEngineMemoryRequest =
+  process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "4Gi";
 const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
 const daggerRuntimeEnabled = skillsSandboxEnabled;
 
@@ -2180,8 +2234,7 @@ const config = {
     engine: {
       cpuRequest:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST || "2",
-      memoryRequest:
-        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "4Gi",
+      memoryRequest: daggerEngineMemoryRequest,
       memoryLimit:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "4Gi",
       cacheStorage:
@@ -2190,11 +2243,13 @@ const config = {
       // the `memory.max` of the cgroup buildkit runs them in — hence bytes.
       // Without it nothing bounds them: the per-run cap is an RLIMIT_AS, which
       // the kernel applies per process, so one run that spawns N processes
-      // holds N times it. Keep it below `memoryRequest` so the reservation
-      // covers the sandboxes plus the daemon.
-      sandboxMemoryMaxBytes: parsePositiveInt(
+      // holds N times it. It is an engine-wide ceiling rather than a per-run
+      // allowance, so `maxConcurrent` runs each at the per-run limit can reach
+      // it; raise this and `memoryRequest` together, or lower `maxConcurrent`,
+      // for deployments that sustain that.
+      sandboxMemoryMaxBytes: parseSandboxMemoryMaxBytes(
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX_BYTES,
-        3 * 1024 * 1024 * 1024,
+        daggerEngineMemoryRequest,
       ),
       // Extra IPv4 CIDRs to block from an unrestricted engine's public-egress
       // floor (on top of the built-in RFC1918/link-local/metadata ranges). Set

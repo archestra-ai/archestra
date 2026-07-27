@@ -336,9 +336,28 @@ describe("buildEngineStatefulSet", () => {
       // an unbounded engine rather than a crash-looping one, since engine
       // StatefulSets are created once and never reconciled afterwards.
       expect(script).toContain("archestra: sandbox memory is NOT capped");
+      // ...and the retry has to be backgrounded to stay non-fatal: run inline,
+      // it holds every engine on such a cluster for 60 sleeps before the
+      // entrypoint starts.
+      expect(script).toContain(") &");
+      // memory.max does not bound swap, and this cgroup is not under kubepods,
+      // so the kubelet's swap policy never reaches it — a runaway run would
+      // swap past the ceiling instead of being killed.
+      expect(script).toContain(
+        `echo 0 > /sys/fs/cgroup/${cgroup}/memory.swap.max`,
+      );
     } finally {
       Object.assign(engine, original);
     }
+  });
+
+  it("reaps the sandbox cgroup it created in the host tree", () => {
+    const container = build().spec?.template.spec?.containers[0];
+    // Created outside the pod's own tree, so it survives the pod unless the
+    // pod removes it on the way out.
+    expect(container?.lifecycle?.preStop?.exec?.command?.join(" ")).toContain(
+      "rmdir /sys/fs/cgroup/archestra-sandbox-abcdef00-1111-2222-3333-444455556666",
+    );
   });
 });
 

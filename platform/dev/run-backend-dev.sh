@@ -55,9 +55,9 @@ if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-}" = "true" ]; then
   # Without an explicit runner host, the backend provisions per-organization
   # Dagger engines in-cluster, so it needs the orchestrator wired to the local
   # cluster and engine resources small enough to fit a local VM (the shipped
-  # 2Gi/50Gi defaults reserve for multi-tenant concurrency and a large build
-  # cache). An explicit ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
-  # points the backend at a pre-existing engine instead and skips all of this.
+  # defaults reserve room for concurrent sandbox load and a large build cache).
+  # An explicit ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST points the backend at
+  # a pre-existing engine instead and skips all of this.
   if [ -z "${ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST:-}" ]; then
     # This backend runs on the developer's machine, not in a pod, so it reaches
     # the cluster through a kubeconfig file. ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG

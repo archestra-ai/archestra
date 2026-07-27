@@ -286561,6 +286561,65 @@
             "schema": {
               "type": "string",
               "enum": [
+                "personal",
+                "team",
+                "org"
+              ]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "description": "Filter by visibility scope: personal, team, or org."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "teamIds",
+            "required": false,
+            "description": "Team IDs (comma-separated); only used when scope=team."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "authorIds",
+            "required": false,
+            "description": "Author user IDs (comma-separated). Admin-only; used with scope=personal."
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "excludeAuthorIds",
+            "required": false,
+            "description": "Exclude author user IDs (comma-separated). Admin-only; used with scope=personal."
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "excludeOtherPersonalSkills",
+            "required": false,
+            "description": "Hide personal skills owned by other users. Admin-only; no-op for non-admins."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
                 "usageCount",
                 "lastUsedAt",
                 "name",

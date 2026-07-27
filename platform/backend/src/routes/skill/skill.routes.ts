@@ -229,6 +229,12 @@ const SkillManifestInputSchema = z
   })
   .superRefine((data, ctx) => refineUniqueFilePaths(data.files, ctx));
 
+/** A comma-separated query param parsed into a string[] (mirrors the agents list). */
+const CommaSeparatedIds = z.preprocess(
+  (val) => (typeof val === "string" ? val.split(",").filter(Boolean) : val),
+  z.array(z.string()),
+);
+
 const DiscoveredSkillSchema = z.object({
   skillPath: z.string(),
   name: z.string(),
@@ -255,6 +261,27 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "environment (skills with no environment assignments and " +
               "built-in skills are visible everywhere).",
           ),
+          scope: ResourceVisibilityScopeSchema.optional().describe(
+            "Filter by visibility scope: personal, team, or org.",
+          ),
+          teamIds: CommaSeparatedIds.optional().describe(
+            "Team IDs (comma-separated); only used when scope=team.",
+          ),
+          authorIds: CommaSeparatedIds.optional().describe(
+            "Author user IDs (comma-separated). Admin-only; used with scope=personal.",
+          ),
+          excludeAuthorIds: CommaSeparatedIds.optional().describe(
+            "Exclude author user IDs (comma-separated). Admin-only; used with scope=personal.",
+          ),
+          excludeOtherPersonalSkills: z
+            .preprocess(
+              (val) => (typeof val === "string" ? val === "true" : val),
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Hide personal skills owned by other users. Admin-only; no-op for non-admins.",
+            ),
         }).merge(createSortingQuerySchema(SkillSortBy)),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillListItemSchema),
@@ -263,7 +290,19 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { limit, offset, search, sourceRepo, forAgentId, ...sorting },
+        query: {
+          limit,
+          offset,
+          search,
+          sourceRepo,
+          forAgentId,
+          scope,
+          teamIds,
+          authorIds,
+          excludeAuthorIds,
+          excludeOtherPersonalSkills,
+          ...sorting
+        },
         organizationId,
         user,
       },
@@ -292,6 +331,17 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: user.id,
           });
 
+      // Author filters are an admin oversight surface (mirrors the agents
+      // list); non-admins are already restricted to their own scope.
+      const scopeFilters = {
+        scope,
+        teamIds,
+        authorIds: checker.isAdmin ? authorIds : undefined,
+        excludeAuthorIds: checker.isAdmin ? excludeAuthorIds : undefined,
+        excludeOtherPersonalForUserId:
+          checker.isAdmin && excludeOtherPersonalSkills ? user.id : undefined,
+      };
+
       const [skills, total] = await Promise.all([
         SkillModel.findByOrganization({
           organizationId,
@@ -301,6 +351,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sourceRepo,
           accessibleSkillIds,
           environmentId,
+          ...scopeFilters,
           sorting,
         }),
         SkillModel.countByOrganization({
@@ -309,11 +360,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sourceRepo,
           accessibleSkillIds,
           environmentId,
+          ...scopeFilters,
         }),
       ]);
 
       const skillIds = skills.map((skill) => skill.id);
-      const authorIds = [
+      const skillAuthorIds = [
         ...new Set(
           skills
             .map((skill) => skill.authorId)
@@ -330,7 +382,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         SkillFileModel.countBySkillIds(skillIds),
         SkillTeamModel.getTeamDetailsForSkills(skillIds),
         SkillEnvironmentModel.getEnvironmentDetailsForSkills(skillIds),
-        UserModel.getNamesByIds(authorIds),
+        UserModel.getNamesByIds(skillAuthorIds),
         SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
       ]);
 

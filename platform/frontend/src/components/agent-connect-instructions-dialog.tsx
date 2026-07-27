@@ -232,9 +232,9 @@ function LlmProxyAuthSurface({
         <div className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <p className="max-w-3xl text-xs text-muted-foreground">
-              Send your own provider API key or subscription token in the
-              Authorization header. A passthrough key is optional. It links
-              requests to a user but does not grant access.
+              Send your own provider API key or subscription token directly. An
+              optional passthrough key links requests to a user but does not
+              grant access.
             </p>
             {canCreateKey ? (
               <Button
@@ -247,6 +247,18 @@ function LlmProxyAuthSurface({
               </Button>
             ) : null}
           </div>
+          <TerminalBlock
+            rows={[
+              {
+                comment: "required — provider API key or subscription token",
+                code: "Authorization: Bearer <provider-key-or-subscription-token>",
+              },
+              {
+                comment: "optional — link the request to a user",
+                code: "X-Archestra-Virtual-Key: arch_<passthrough-key>",
+              },
+            ]}
+          />
           <VirtualKeyManagement keyType="passthrough" />
         </div>
       )}

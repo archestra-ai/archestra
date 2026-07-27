@@ -42,9 +42,10 @@ class OrganizationModel {
 
   /**
    * The role slug assigned to newly provisioned members that don't carry an
-   * explicit role (email/password self-signup, ChatOps auto-provisioning).
-   * Falls back to the built-in "member" role when unset. Org-wide mirror of the
-   * per-IdP SSO `roleMapping.defaultRole` fallback.
+   * explicit role (email/password self-signup, ChatOps auto-provisioning, and
+   * first-time SSO logins whose IdP defines no `roleMapping.defaultRole`).
+   * Falls back to the built-in "member" role when unset. A per-IdP SSO
+   * `roleMapping.defaultRole` still takes precedence over this org-wide value.
    */
   static async getDefaultMemberRole(organizationId: string): Promise<string> {
     const [organization] = await db

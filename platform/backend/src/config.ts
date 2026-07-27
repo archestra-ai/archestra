@@ -2169,15 +2169,21 @@ const config = {
       50,
     ),
     // Resource requests/limits for a code-managed engine StatefulSet (K8s
-    // quantity strings). Production defaults; override down for small/local
-    // clusters that can't schedule the full engine.
+    // quantity strings). The memory limit bounds the buildkit daemon only:
+    // sandbox containers run in a top-level `buildkit` cgroup outside the pod's
+    // accounting, so no pod limit constrains them and they are invisible to the
+    // scheduler. The request is therefore set above the daemon's own footprint,
+    // to reserve node headroom for typical concurrent sandbox use. It does not
+    // cover the ceiling (`maxConcurrent` runs each at the per-run RLIMIT_AS),
+    // which would reserve several times what an engine normally uses; a cluster
+    // that sustains that load should raise the request.
     engine: {
       cpuRequest:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST || "2",
       memoryRequest:
-        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "8Gi",
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "2Gi",
       memoryLimit:
-        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "16Gi",
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "4Gi",
       cacheStorage:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE || "50Gi",
       // Extra IPv4 CIDRs to block from an unrestricted engine's public-egress

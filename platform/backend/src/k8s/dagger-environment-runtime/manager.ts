@@ -63,9 +63,11 @@ interface OrganizationDefaultEngineTarget {
 const ENGINE_IMAGE = "registry.dagger.io/engine:v0.21.5";
 const ENGINE_CONTAINER = "dagger-engine";
 // Engine resources (cpu/memory requests, memory limit, buildkit cache PVC size)
-// come from config so small/local clusters can override the production defaults.
-// No CPU limit (build throughput); the memory limit caps a runaway build so it
-// can't OOM the node.
+// come from config so small/local clusters can override the defaults. No CPU
+// limit (build throughput). The memory limit caps the buildkit daemon, not the
+// sandboxes it runs: buildkit puts its containers in a top-level `buildkit`
+// cgroup outside this pod's accounting, so their memory is bounded by the
+// per-run RLIMIT_AS instead, and stays invisible to the kubelet.
 // Mirrors the chart engine config: disables insecure root capabilities and
 // bounds the buildkit GC so the cache PVC can't fill unreclaimed. Read by the
 // engine from /etc/dagger/engine.json.

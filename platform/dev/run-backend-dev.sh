@@ -54,8 +54,9 @@ trap cleanup EXIT INT TERM
 if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-}" = "true" ]; then
   # Without an explicit runner host, the backend provisions per-organization
   # Dagger engines in-cluster, so it needs the orchestrator wired to the local
-  # cluster and engine resources small enough to fit a local VM (the 8Gi/50Gi
-  # production defaults don't). An explicit ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+  # cluster and engine resources small enough to fit a local VM (the shipped
+  # 2Gi/50Gi defaults reserve for multi-tenant concurrency and a large build
+  # cache). An explicit ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
   # points the backend at a pre-existing engine instead and skips all of this.
   if [ -z "${ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST:-}" ]; then
     # This backend runs on the developer's machine, not in a pod, so it reaches
@@ -67,8 +68,8 @@ if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-}" = "true" ]; then
       export ARCHESTRA_ORCHESTRATOR_KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
     fi
     : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST:=500m}"
-    : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST:=2Gi}"
-    : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT:=4Gi}"
+    : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST:=512Mi}"
+    : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT:=1Gi}"
     : "${ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE:=10Gi}"
     export ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST \
       ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST \

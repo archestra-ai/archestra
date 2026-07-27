@@ -226,18 +226,20 @@ describe("buildEngineStatefulSet", () => {
   it("sources engine resources from config so small clusters can override them", () => {
     const engine = config.daggerRuntime.engine;
     const original = { ...engine };
+    // Every value differs from the shipped default, so hardcoding a default in
+    // buildEngineStatefulSet fails here instead of passing by coincidence.
     Object.assign(engine, {
       cpuRequest: "500m",
-      memoryRequest: "2Gi",
-      memoryLimit: "4Gi",
+      memoryRequest: "512Mi",
+      memoryLimit: "1Gi",
       cacheStorage: "10Gi",
     });
     try {
       const sts = build();
       const container = sts.spec?.template.spec?.containers[0];
       expect(container?.resources?.requests?.cpu).toBe("500m");
-      expect(container?.resources?.requests?.memory).toBe("2Gi");
-      expect(container?.resources?.limits?.memory).toBe("4Gi");
+      expect(container?.resources?.requests?.memory).toBe("512Mi");
+      expect(container?.resources?.limits?.memory).toBe("1Gi");
       expect(
         sts.spec?.volumeClaimTemplates?.[0].spec?.resources?.requests?.storage,
       ).toBe("10Gi");
@@ -294,8 +296,8 @@ describe("buildEngineStatefulSet", () => {
     const container = podSpec?.containers[0];
     // Resources mirror the dagger-runtime chart engine.
     expect(container?.resources?.requests?.cpu).toBe("2");
-    expect(container?.resources?.requests?.memory).toBe("8Gi");
-    expect(container?.resources?.limits?.memory).toBe("16Gi");
+    expect(container?.resources?.requests?.memory).toBe("2Gi");
+    expect(container?.resources?.limits?.memory).toBe("4Gi");
 
     // engine.json is mounted from the per-env ConfigMap (disables insecure root
     // capabilities + bounds the buildkit GC).

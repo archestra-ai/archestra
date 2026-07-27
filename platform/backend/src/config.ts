@@ -2172,16 +2172,18 @@ const config = {
     // quantity strings). The memory limit bounds the buildkit daemon only:
     // sandbox containers run in a top-level `buildkit` cgroup outside the pod's
     // accounting, so no pod limit constrains them and they are invisible to the
-    // scheduler. The request is therefore set above the daemon's own footprint,
-    // to reserve node headroom for typical concurrent sandbox use. It does not
-    // cover the ceiling (`maxConcurrent` runs each at the per-run RLIMIT_AS),
-    // which would reserve several times what an engine normally uses; a cluster
-    // that sustains that load should raise the request.
+    // scheduler. The request is therefore the only node-level reservation for
+    // that sandbox memory, and is set well above the daemon's own footprint to
+    // cover concurrent runs; the limit only tracks it because Kubernetes
+    // requires `request <= limit`. Reserving the full ceiling (`maxConcurrent`
+    // runs each at the per-run RLIMIT_AS) would not fit an ordinary node, so a
+    // deployment that sustains that load should raise the request and lower
+    // `maxConcurrent` together.
     engine: {
       cpuRequest:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST || "2",
       memoryRequest:
-        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "2Gi",
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "4Gi",
       memoryLimit:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "4Gi",
       cacheStorage:

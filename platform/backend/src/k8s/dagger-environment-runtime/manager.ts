@@ -67,7 +67,8 @@ const ENGINE_CONTAINER = "dagger-engine";
 // limit (build throughput). The memory limit caps the buildkit daemon, not the
 // sandboxes it runs: buildkit puts its containers in a top-level `buildkit`
 // cgroup outside this pod's accounting, so their memory is bounded by the
-// per-run RLIMIT_AS instead, and stays invisible to the kubelet.
+// per-run RLIMIT_AS instead, and stays invisible to the kubelet. The memory
+// request is what holds node capacity back for them.
 // Mirrors the chart engine config: disables insecure root capabilities and
 // bounds the buildkit GC so the cache PVC can't fill unreclaimed. Read by the
 // engine from /etc/dagger/engine.json.

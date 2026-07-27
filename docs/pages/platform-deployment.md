@@ -764,8 +764,8 @@ Upgrading from a chart that ran the bundled engine leaves its cache volume behin
   - Use this to point at a custom Debian-based image or a pre-baked sandbox base.
 
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE`** - Resources for an engine Archestra creates. Lower them for a small cluster. They apply to new engines only; delete an engine to resize it.
-  - The memory limit bounds the buildkit daemon, not sandboxed code: sandbox containers run in a top-level `buildkit` cgroup outside the pod's accounting. Raising it does not raise how much a sandbox may allocate, and that usage does not appear in `kubectl top pod`.
-  - Defaults: `2`, `2Gi`, `4Gi`, `50Gi`
+  - The memory limit bounds the buildkit daemon, not sandboxed code: sandbox containers run in a top-level `buildkit` cgroup outside the pod's accounting. Raising it does not raise how much a sandbox may allocate, and that usage does not appear in `kubectl top pod`. The memory request is what reserves node capacity for that sandbox memory — raise it if you expect heavy concurrent sandbox use, and lower `ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT` if you cannot.
+  - Defaults: `2`, `4Gi`, `4Gi`, `50Gi`
   - Values: Kubernetes quantity strings
 
 - **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS`** - Extra IPv4 ranges an engine cannot reach. An engine with no [network policy](./platform-environments) already blocks private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges, so sandboxed code cannot reach in-cluster services. An entry that is not a valid IPv4 CIDR is ignored, and the backend logs which ones.

@@ -296,7 +296,7 @@ describe("buildEngineStatefulSet", () => {
     const container = podSpec?.containers[0];
     // Resources mirror the dagger-runtime chart engine.
     expect(container?.resources?.requests?.cpu).toBe("2");
-    expect(container?.resources?.requests?.memory).toBe("2Gi");
+    expect(container?.resources?.requests?.memory).toBe("4Gi");
     expect(container?.resources?.limits?.memory).toBe("4Gi");
 
     // engine.json is mounted from the per-env ConfigMap (disables insecure root

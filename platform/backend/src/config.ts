@@ -1270,8 +1270,12 @@ export const k8sMemoryQuantityToBytes = (
     G: 1000 ** 3,
     T: 1000 ** 4,
   };
-  return Number(match[1]) * (match[2] ? multipliers[match[2]] : 1);
+  // Floored because the only consumers are a cgroup limit and a byte
+  // comparison, neither of which takes a fraction.
+  return Math.floor(Number(match[1]) * (match[2] ? multipliers[match[2]] : 1));
 };
+
+const DEFAULT_ENGINE_SANDBOX_MEMORY_MAX_BYTES = 5 * 1024 ** 3;
 
 /**
  * The sandbox memory ceiling, checked against the engine's memory request.
@@ -1288,11 +1292,24 @@ export const parseSandboxMemoryMaxBytes = (
   envValue: string | undefined,
   memoryRequest: string,
 ): number => {
-  const bytes = parsePositiveInt(envValue, 5 * 1024 * 1024 * 1024);
+  let bytes = DEFAULT_ENGINE_SANDBOX_MEMORY_MAX_BYTES;
+  const configured = envValue?.trim();
+  if (configured) {
+    const parsed = k8sMemoryQuantityToBytes(configured);
+    // Falling back beats honouring a half-understood value: a ceiling read as a
+    // handful of bytes would kill every sandbox the moment it allocated.
+    if (parsed === undefined || parsed <= 0) {
+      logger.error(
+        `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX is not a Kubernetes quantity (${configured}); using the default`,
+      );
+    } else {
+      bytes = parsed;
+    }
+  }
   const requestBytes = k8sMemoryQuantityToBytes(memoryRequest);
   if (requestBytes !== undefined && bytes >= requestBytes) {
     logger.error(
-      `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX_BYTES (${bytes}) is not below ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST (${memoryRequest}): the engine can hold more memory than it reserves on the node`,
+      `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX (${configured ?? "default"}) is not below ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST (${memoryRequest}): the engine can hold more memory than it reserves on the node`,
     );
   }
   return bytes;
@@ -2239,16 +2256,15 @@ const config = {
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "6Gi",
       cacheStorage:
         process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE || "50Gi",
-      // Ceiling on everything the sandboxes hold at once, written verbatim to
-      // the `memory.max` of the cgroup buildkit runs them in — hence bytes.
-      // Without it nothing bounds them: the per-run cap is an RLIMIT_AS, which
-      // the kernel applies per process, so one run that spawns N processes
-      // holds N times it. It is an engine-wide ceiling rather than a per-run
-      // allowance, so `maxConcurrent` runs each at the per-run limit can reach
-      // it; raise this and `memoryRequest` together, or lower `maxConcurrent`,
-      // for deployments that sustain that.
+      // Ceiling on everything the sandboxes hold at once. Without it nothing
+      // bounds them: the per-run cap is an RLIMIT_AS, which the kernel applies
+      // per process, so one run that spawns N processes holds N times it. It is
+      // an engine-wide ceiling rather than a per-run allowance, so
+      // `maxConcurrent` runs each at the per-run limit can reach it; raise this
+      // and `memoryRequest` together, or lower `maxConcurrent`, for deployments
+      // that sustain that. Resolved to bytes because it lands in a cgroup.
       sandboxMemoryMaxBytes: parseSandboxMemoryMaxBytes(
-        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX_BYTES,
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX,
         daggerEngineMemoryRequest,
       ),
       // Extra IPv4 CIDRs to block from an unrestricted engine's public-egress

@@ -75,7 +75,15 @@ class QueryService {
       return [];
     }
 
-    const expandedQueries = await expandQuery({ queryText, organizationId });
+    // A query scoped to one connector attributes its LLM calls to it; a fan-out
+    // across several has no single connector to name.
+    const connectorId = connectorIds.length === 1 ? connectorIds[0] : null;
+
+    const expandedQueries = await expandQuery({
+      queryText,
+      organizationId,
+      connectorId,
+    });
 
     const perQueryResults = await Promise.all(
       expandedQueries.map((eq) =>
@@ -83,6 +91,7 @@ class QueryService {
           queryText: eq.queryText,
           embeddingConfig,
           connectorIds,
+          connectorId,
           limit: overFetchLimit,
           userAcl: params.userAcl,
           bypassAcl,
@@ -130,6 +139,7 @@ class QueryService {
       queryText,
       chunks: topResults,
       organizationId,
+      connectorId,
     });
     topResults = topResults.slice(0, limit);
 
@@ -162,6 +172,8 @@ class QueryService {
     queryText: string;
     embeddingConfig: EmbeddingConfig;
     connectorIds: string[];
+    /** The one connector this query is scoped to, or null when it spans several. */
+    connectorId: string | null;
     limit: number;
     userAcl: AclEntry[];
     bypassAcl: boolean;
@@ -173,6 +185,7 @@ class QueryService {
       queryText,
       embeddingConfig,
       connectorIds,
+      connectorId,
       limit,
       userAcl,
       bypassAcl,
@@ -193,6 +206,7 @@ class QueryService {
         provider: embeddingConfig.provider,
         model: embeddingConfig.model,
         source: "knowledge:embedding",
+        connectorId,
         type: getEmbeddingDiscriminator(embeddingConfig.provider),
         callback: () =>
           callEmbedding({

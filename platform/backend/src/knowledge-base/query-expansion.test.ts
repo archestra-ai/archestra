@@ -17,6 +17,7 @@ vi.mock("./kb-interaction", () => ({
     .mockReturnValue("openai:chatCompletions"),
 }));
 
+import { withKbObservability } from "./kb-interaction";
 import { expandQuery } from "./query-expansion";
 
 let server: ReturnType<typeof useMswServer>;
@@ -253,5 +254,40 @@ describe("expandQuery", () => {
     expect(keywords).toHaveLength(2);
     expect(keywords[0].queryText).toBe("kw1");
     expect(keywords[1].queryText).toBe("kw2");
+  });
+
+  it("tags both expansion calls with the connector the query was scoped to", async () => {
+    mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
+    vi.mocked(withKbObservability).mockClear();
+    const connectorId = "7d4e2a10-5c3b-4f8e-9a1d-6b2c8e4f0a95";
+
+    serveExpansion({ semantic: "rephrased", keyword: "kw1" });
+
+    await expandQuery({
+      queryText: "test query",
+      organizationId: "org-1",
+      connectorId,
+    });
+
+    const sources = vi
+      .mocked(withKbObservability)
+      .mock.calls.map(([params]) => [params.source, params.connectorId]);
+    expect(sources).toEqual([
+      ["knowledge:query-expansion", connectorId],
+      ["knowledge:query-expansion", connectorId],
+    ]);
+  });
+
+  it("leaves both expansion calls unattributed when the query spans several connectors", async () => {
+    mockResolveRerankerConfig.mockResolvedValue(MOCK_RERANKER_CONFIG);
+    vi.mocked(withKbObservability).mockClear();
+
+    serveExpansion({ semantic: "rephrased", keyword: "kw1" });
+
+    await expandQuery({ queryText: "test query", organizationId: "org-1" });
+
+    for (const [params] of vi.mocked(withKbObservability).mock.calls) {
+      expect(params.connectorId).toBeNull();
+    }
   });
 });

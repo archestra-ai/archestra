@@ -179,6 +179,12 @@ const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit(
   DELTA_ENCODING_COLUMNS,
 ).extend({
   chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
+  /**
+   * Name of `connectorId`'s knowledge base connector, resolved within the
+   * caller's organization. Null once the connector is gone; absent on endpoints
+   * that do not resolve it.
+   */
+  connectorName: z.string().nullable().optional(),
 });
 
 /**

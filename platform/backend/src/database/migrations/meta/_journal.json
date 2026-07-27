@@ -2570,6 +2570,13 @@
       "when": 1785047887916,
       "tag": "0366_wide_paibok",
       "breakpoints": true
+    },
+    {
+      "idx": 367,
+      "version": "7",
+      "when": 1785155671343,
+      "tag": "0367_lovely_gladiator",
+      "breakpoints": true
     }
   ]
 }

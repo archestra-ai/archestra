@@ -36224,6 +36224,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36301,6 +36302,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -36312,6 +36314,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36496,6 +36499,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -36507,6 +36511,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36607,6 +36612,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -36616,6 +36622,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36716,6 +36723,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -36725,6 +36733,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36825,6 +36834,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -36834,6 +36844,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36911,6 +36922,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -36922,6 +36934,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -36999,6 +37012,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -37010,6 +37024,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -37511,6 +37526,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -37522,6 +37538,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38073,6 +38090,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38084,6 +38102,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38161,6 +38180,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38172,6 +38192,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38249,6 +38270,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38260,6 +38282,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38337,6 +38360,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38348,6 +38372,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38425,6 +38450,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38436,6 +38462,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38513,6 +38540,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38524,6 +38552,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38601,6 +38630,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38612,6 +38642,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38689,6 +38720,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -38698,6 +38730,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38775,6 +38808,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -38784,6 +38818,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38861,6 +38896,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
         } | {
             id: string;
             profileId: string | null;
@@ -38870,6 +38906,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -38947,6 +38984,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -38958,6 +38996,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -39035,6 +39074,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -39046,6 +39086,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -39123,6 +39164,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -39134,6 +39176,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -39855,6 +39898,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -39866,6 +39910,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -40587,6 +40632,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -40598,6 +40644,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -41319,6 +41366,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -41330,6 +41378,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -41407,6 +41456,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -41418,6 +41468,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -41563,6 +41614,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         } | {
@@ -41574,6 +41626,7 @@ export type GetInteractionsResponses = {
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
+            connectorId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
             source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -41758,6 +41811,7 @@ export type GetInteractionsResponses = {
                 };
                 createdAt: string;
             }>;
+            connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
         }>;
@@ -42188,6 +42242,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42265,6 +42320,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -42276,6 +42332,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42460,6 +42517,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -42471,6 +42529,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42571,6 +42630,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -42580,6 +42640,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42680,6 +42741,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -42689,6 +42751,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42789,6 +42852,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -42798,6 +42862,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42875,6 +42940,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -42886,6 +42952,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -42963,6 +43030,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -42974,6 +43042,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -43475,6 +43544,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -43486,6 +43556,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44037,6 +44108,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44048,6 +44120,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44125,6 +44198,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44136,6 +44210,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44213,6 +44288,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44224,6 +44300,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44301,6 +44378,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44312,6 +44390,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44389,6 +44468,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44400,6 +44480,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44477,6 +44558,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44488,6 +44570,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44565,6 +44648,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44576,6 +44660,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44653,6 +44738,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -44662,6 +44748,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44739,6 +44826,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -44748,6 +44836,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44825,6 +44914,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
     } | {
         id: string;
         profileId: string | null;
@@ -44834,6 +44924,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44911,6 +45002,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -44922,6 +45014,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -44999,6 +45092,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -45010,6 +45104,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -45087,6 +45182,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -45098,6 +45194,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -45819,6 +45916,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -45830,6 +45928,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -46551,6 +46650,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -46562,6 +46662,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -47283,6 +47384,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -47294,6 +47396,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -47371,6 +47474,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -47382,6 +47486,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -47527,6 +47632,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     } | {
@@ -47538,6 +47644,7 @@ export type GetInteractionResponses = {
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
+        connectorId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
         source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
@@ -47722,6 +47829,7 @@ export type GetInteractionResponses = {
             };
             createdAt: string;
         }>;
+        connectorName?: string | null;
         requestType?: 'main' | 'subagent';
         externalAgentIdLabel?: string | null;
     };

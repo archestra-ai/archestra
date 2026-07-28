@@ -165,7 +165,7 @@ The following table lists all available permissions that can be assigned to cust
 | `environment:create` | Create deployment environments |
 | `environment:update` | Modify deployment environments, including the org default environment |
 | `environment:delete` | Delete deployment environments |
-| `file:manage` | List, read, write, and delete files in chats and projects |
+| `file:manage` | List, read, write, and delete files in chats and projects (including Files-panel artifact edit/delete REST routes; matches the MCP `save_file` / `edit_file` / `delete_file` tools) |
 | `githubAppConfig:read` | View GitHub App configurations |
 | `githubAppConfig:create` | Create GitHub App configurations |
 | `githubAppConfig:update` | Modify GitHub App configurations |

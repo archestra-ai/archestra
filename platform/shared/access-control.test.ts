@@ -119,6 +119,25 @@ describe("access-control", () => {
         requiredEndpointPermissionsMap[RouteId.GetSkillSandboxArtifact];
       expect(required?.sandbox).toContain("execute");
     });
+
+    // Mutate routes operate on skill_sandbox_files like MCP save/edit/delete_file
+    // (file:manage). Requiring sandbox:execute here 403s roles that can already
+    // mutate files through the chat tools.
+    test("DeleteSkillSandboxArtifact requires file:manage, not sandbox:execute", () => {
+      const required =
+        requiredEndpointPermissionsMap[RouteId.DeleteSkillSandboxArtifact];
+      expect(required?.file).toContain("manage");
+      expect(required?.sandbox).toBeUndefined();
+    });
+
+    test("UpdateSkillSandboxArtifactContent requires file:manage, not sandbox:execute", () => {
+      const required =
+        requiredEndpointPermissionsMap[
+          RouteId.UpdateSkillSandboxArtifactContent
+        ];
+      expect(required?.file).toContain("manage");
+      expect(required?.sandbox).toBeUndefined();
+    });
   });
 
   describe("project file routes", () => {

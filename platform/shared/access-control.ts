@@ -1644,10 +1644,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetProjectInstructions]: { project: ["update"] },
   [RouteId.PinProject]: { project: ["read"] },
   [RouteId.UnpinProject]: { project: ["read"] },
-  [RouteId.DeleteSkillSandboxArtifact]: { sandbox: ["execute"] },
+  // Artifact mutate routes operate on `skill_sandbox_files` (same store as the
+  // MCP save_file / edit_file / delete_file tools), so they gate on
+  // `file:manage`. Per-file authorization stays in the handlers. Byte GET
+  // (GetSkillSandboxArtifact) remains sandbox:execute — it serves download_file.
+  [RouteId.DeleteSkillSandboxArtifact]: { file: ["manage"] },
   // Editing a file's text content shares the delete path's authorization
   // (author / project access), enforced per-file in the store handler.
-  [RouteId.UpdateSkillSandboxArtifactContent]: { sandbox: ["execute"] },
+  [RouteId.UpdateSkillSandboxArtifactContent]: { file: ["manage"] },
 
   // Audit Log Routes
   [RouteId.GetAuditLogs]: {

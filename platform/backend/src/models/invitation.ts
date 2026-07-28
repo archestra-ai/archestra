@@ -54,7 +54,8 @@ class InvitationModel {
   }
 
   /**
-   * Find the first pending invitation for an email address
+   * Find the first still-valid pending invitation for an email address.
+   * Expired and non-pending rows must not be auto-accepted on sign-in.
    */
   static async findPendingByEmail(email: string) {
     logger.debug(
@@ -62,7 +63,12 @@ class InvitationModel {
       "InvitationModel.findPendingByEmail: fetching pending invitation",
     );
     const invitations = await InvitationModel.findByEmail(email);
-    const pending = invitations.find((inv) => inv.status === "pending");
+    const now = new Date();
+    const pending = invitations.find(
+      (inv) =>
+        inv.status === "pending" &&
+        (!inv.expiresAt || new Date(inv.expiresAt) >= now),
+    );
     logger.debug(
       { email, found: !!pending },
       "InvitationModel.findPendingByEmail: completed",
@@ -93,6 +99,32 @@ class InvitationModel {
 
       if (!invitation) {
         logger.error(`❌ Invitation ${invitationId} not found`);
+        return;
+      }
+
+      // Mirror the sign-up beforeHook guards: only a still-pending, unexpired
+      // invitation for this user's email may grant membership. Sign-in
+      // auto-accept previously skipped these checks and could revive expired
+      // pending rows into org membership.
+      if (invitation.status !== "pending") {
+        logger.error(
+          `❌ Invitation ${invitationId} is not pending (status=${invitation.status})`,
+        );
+        return;
+      }
+
+      if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
+        logger.error(`❌ Invitation ${invitationId} has expired`);
+        return;
+      }
+
+      if (
+        invitation.email &&
+        invitation.email.toLowerCase() !== user.email.toLowerCase()
+      ) {
+        logger.error(
+          `❌ Invitation ${invitationId} email does not match user ${user.email}`,
+        );
         return;
       }
 

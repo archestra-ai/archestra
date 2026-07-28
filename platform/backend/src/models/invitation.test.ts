@@ -506,5 +506,102 @@ describe("InvitationModel", () => {
 
       expect(found).toBeUndefined();
     });
+
+    test("should ignore expired pending invitations", async ({
+      makeOrganization,
+      makeUser,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      const inviter = await makeUser();
+
+      await makeInvitation(org.id, inviter.id, {
+        email: "expired@example.com",
+        expiresAt: new Date(Date.now() - 60_000),
+      });
+
+      const found = await InvitationModel.findPendingByEmail(
+        "expired@example.com",
+      );
+
+      expect(found).toBeUndefined();
+    });
+  });
+
+  describe("accept guards", () => {
+    test("does not accept an expired invitation", async ({
+      makeOrganization,
+      makeUser,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      const inviter = await makeUser();
+      const invitee = await makeUser({ email: "invitee-expired@example.com" });
+      const invitation = await makeInvitation(org.id, inviter.id, {
+        email: invitee.email,
+        expiresAt: new Date(Date.now() - 60_000),
+      });
+
+      const session = {
+        id: crypto.randomUUID(),
+        userId: invitee.id,
+        expiresAt: new Date(Date.now() + 3600000),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        token: "test",
+        ipAddress: null,
+        userAgent: null,
+        activeOrganizationId: null,
+        impersonatedBy: null,
+      } as BetterAuthSession;
+
+      await InvitationModel.accept(
+        session,
+        invitee as BetterAuthSessionUser,
+        invitation.id,
+      );
+
+      const member = await MemberModel.getByUserId(invitee.id, org.id);
+      expect(member).toBeUndefined();
+      const stillPending = await InvitationModel.getById(invitation.id);
+      expect(stillPending?.status).toBe("pending");
+    });
+
+    test("does not accept an invitation for a different email", async ({
+      makeOrganization,
+      makeUser,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      const inviter = await makeUser();
+      const invitee = await makeUser({ email: "actual@example.com" });
+      const invitation = await makeInvitation(org.id, inviter.id, {
+        email: "someone-else@example.com",
+      });
+
+      const session = {
+        id: crypto.randomUUID(),
+        userId: invitee.id,
+        expiresAt: new Date(Date.now() + 3600000),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        token: "test",
+        ipAddress: null,
+        userAgent: null,
+        activeOrganizationId: null,
+        impersonatedBy: null,
+      } as BetterAuthSession;
+
+      await InvitationModel.accept(
+        session,
+        invitee as BetterAuthSessionUser,
+        invitation.id,
+      );
+
+      const member = await MemberModel.getByUserId(invitee.id, org.id);
+      expect(member).toBeUndefined();
+      const stillPending = await InvitationModel.getById(invitation.id);
+      expect(stillPending?.status).toBe("pending");
+    });
   });
 });

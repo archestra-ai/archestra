@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-07-21
+lastUpdated: 2026-07-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -102,3 +102,11 @@ Archestra stores the tool list discovered at install time. When the upstream ser
 Rename a registry entry from its edit dialog. Tools take the new name prefix (`newname__tool`) immediately — no reinstall, and running servers keep running. Tool assignments and policies are preserved.
 
 Connected MCP clients cache the tool list. After a rename they must reload it, or calls using the old tool names fail. Names are unique within the organization — a rename to a name another entry already uses is rejected. Built-in servers, like the browser preview server, cannot be renamed. App-backed registry entries cannot be renamed here either — change the name in the app's settings.
+
+## Uninstalling a Server
+
+Uninstall a connection from its registry card. Self-hosted servers are stopped and removed from the cluster. Stored credentials are deleted, including OAuth tokens. Reinstalling the entry creates a fresh connection — you authenticate again.
+
+Tool assignments and policies are kept. They work again when someone reinstalls the entry.
+
+Uninstalled connections stay selectable in the audit log's entity filter, marked as deleted, so you can review what a removed server did.

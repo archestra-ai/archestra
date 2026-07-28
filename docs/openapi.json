@@ -223691,6 +223691,12 @@
                     "transport": {
                       "type": "string"
                     },
+                    "protocolVersions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "capabilities": {
                       "type": "object",
                       "properties": {
@@ -223736,6 +223742,7 @@
                     "version",
                     "agentId",
                     "transport",
+                    "protocolVersions",
                     "capabilities"
                   ],
                   "additionalProperties": false

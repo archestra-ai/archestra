@@ -111666,6 +111666,14 @@
                         "hackathonRecorderOverrideActive": {
                           "type": "boolean"
                         },
+                        "hackathonVideoDownloadEnabled": {
+                          "type": "boolean"
+                        },
+                        "hackathonMaxFinalCutMs": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
                         "hackathonGalleryRepo": {
                           "nullable": true,
                           "type": "object",
@@ -111710,6 +111718,8 @@
                         "kbAutoSyncPermissionsEnabled",
                         "hackathonRecorderEnabled",
                         "hackathonRecorderOverrideActive",
+                        "hackathonVideoDownloadEnabled",
+                        "hackathonMaxFinalCutMs",
                         "hackathonGalleryRepo"
                       ],
                       "additionalProperties": false

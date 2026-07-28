@@ -88,34 +88,16 @@ export async function flagImageApprovalRequired(
   );
   if (gateable.length === 0) return required;
 
-  // Privileged authors (admin / team-admin) are exempt — only a plain member's
-  // untrusted image needs approval. Resolve privilege once per distinct author.
-  const privilegedByAuthor = new Map<string, boolean>();
-  await Promise.all(
-    [
-      ...new Set(
-        gateable
-          .map((c) => c.authorId)
-          .filter((id): id is string => id !== null),
-      ),
-    ].map(async (authorId) => {
-      privilegedByAuthor.set(
-        authorId,
-        await isAuthorPrivileged({ authorId, organizationId }),
-      );
-    }),
-  );
-  const candidates = gateable.filter(
-    (c) => !(c.authorId && privilegedByAuthor.get(c.authorId)),
-  );
-  if (candidates.length === 0) return required;
-
+  // Resolve trusted registries first: when no environment restricts images
+  // (the common case), nothing can be gated, and no author-privilege lookups
+  // are needed. Resolving privilege first cost a member+role lookup per
+  // distinct author on every registry listing — an N+1 on the list route.
   const registriesByEnv = new Map<
     string | null,
     TrustedImageRegistries | null
   >();
   await Promise.all(
-    [...new Set(candidates.map((c) => c.environmentId ?? null))].map(
+    [...new Set(gateable.map((c) => c.environmentId ?? null))].map(
       async (environmentId) => {
         const { registries } = await resolveTrustedImageRegistries({
           environmentId,
@@ -125,10 +107,34 @@ export async function flagImageApprovalRequired(
       },
     ),
   );
+  const gated = gateable.filter(
+    (item) =>
+      gatedImagesForRegistries(
+        item,
+        registriesByEnv.get(item.environmentId ?? null) ?? null,
+      ).length > 0,
+  );
+  if (gated.length === 0) return required;
 
-  for (const item of candidates) {
-    const registries = registriesByEnv.get(item.environmentId ?? null) ?? null;
-    if (gatedImagesForRegistries(item, registries).length > 0) {
+  // Privileged authors (admin / team-admin) are exempt — only a plain member's
+  // untrusted image needs approval. Resolve privilege once per distinct author,
+  // and only for authors of actually-gated items.
+  const privilegedByAuthor = new Map<string, boolean>();
+  await Promise.all(
+    [
+      ...new Set(
+        gated.map((c) => c.authorId).filter((id): id is string => id !== null),
+      ),
+    ].map(async (authorId) => {
+      privilegedByAuthor.set(
+        authorId,
+        await isAuthorPrivileged({ authorId, organizationId }),
+      );
+    }),
+  );
+
+  for (const item of gated) {
+    if (!(item.authorId && privilegedByAuthor.get(item.authorId))) {
       required.add(item.id);
     }
   }

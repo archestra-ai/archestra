@@ -141,9 +141,12 @@ describe("checkToolPermission", () => {
       noUserCtx,
     );
     expect(result).not.toBeNull();
+    // The message must name the cause (an application-scoped credential) and
+    // the way out, not read as an internal fault.
     expect((result?.content[0] as any).text).toContain(
-      "User context not available",
+      "requires an acting user",
     );
+    expect((result?.content[0] as any).text).toContain("personal token");
   });
 
   test("sandbox:execute gates the sandbox tools — admin allowed", async () => {

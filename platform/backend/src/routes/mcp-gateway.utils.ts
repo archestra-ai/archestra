@@ -129,6 +129,61 @@ export interface TokenAuthResult {
   rawToken?: string;
 }
 
+/**
+ * Why gateway authentication failed, so a caller can act on the answer instead
+ * of guessing at a blanket "invalid token".
+ *
+ * What is safe to disclose turns on whether the JWT's signature was verified
+ * first. `no_email_claim`, `unknown_user`, `not_org_member` and
+ * `no_gateway_access` are only ever reached by a caller holding a token this
+ * organization's own IdP signed — already inside the trust boundary — so naming
+ * the configuration problem tells them nothing they could not already learn.
+ * `idp_not_linked` / `idp_misconfigured` are decided before any signature check
+ * but reveal only that a gateway is (not) set up for JWKS, never anything about
+ * a user. Everything decided by the signature check itself — bad signature,
+ * expiry, issuer or audience mismatch — collapses into `invalid_token`, since
+ * distinguishing those would help tune a forgery.
+ */
+export type GatewayAuthFailureReason =
+  | "invalid_token"
+  | "idp_not_linked"
+  | "idp_misconfigured"
+  | "no_email_claim"
+  | "unknown_user"
+  | "not_org_member"
+  | "no_gateway_access";
+
+/** Outcome of gateway authentication: a result, or the reason there isn't one. */
+export type GatewayAuthOutcome =
+  | { result: TokenAuthResult; reason: null }
+  | { result: null; reason: GatewayAuthFailureReason };
+
+/**
+ * Client-facing explanation for a failed gateway authentication. Kept next to
+ * {@link GatewayAuthFailureReason} so the disclosure rules and the wording that
+ * implements them stay in one place.
+ */
+export function describeGatewayAuthFailure(
+  reason: GatewayAuthFailureReason,
+): string {
+  switch (reason) {
+    case "idp_not_linked":
+      return "Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an Archestra token or OAuth.";
+    case "idp_misconfigured":
+      return "Invalid token for this profile. The gateway's Identity Provider cannot be used to validate JWTs: it must be an OIDC provider with a client ID and a discoverable JWKS endpoint.";
+    case "no_email_claim":
+      return "Token validated, but it carries no email claim. Set the Identity Provider's Email Claim attribute mapping to the claim holding the email (IdPs that namespace custom claims do not populate the standard `email` claim).";
+    case "unknown_user":
+      return "Token validated, but its email does not match any Archestra user.";
+    case "not_org_member":
+      return "Token validated, but its user is not a member of this gateway's organization.";
+    case "no_gateway_access":
+      return "Token validated, but its user does not have access to this gateway. Grant access via a shared team.";
+    case "invalid_token":
+      return "Invalid token for this profile";
+  }
+}
+
 export type AgentInfo = {
   name: string;
   id: string;
@@ -1452,10 +1507,23 @@ export async function validateMCPGatewayToken(
   profileId: string,
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
+  return (await authenticateMCPGatewayRequest(profileId, tokenValue)).result;
+}
+
+/**
+ * Same as {@link validateMCPGatewayToken}, but also reports why authentication
+ * failed so the gateway route can return an actionable 401 instead of a
+ * catch-all. Failures are never cached (see `cacheTokenAuthResult`), so the
+ * reason is always computed against fresh state.
+ */
+export async function authenticateMCPGatewayRequest(
+  profileId: string,
+  tokenValue: string,
+): Promise<GatewayAuthOutcome> {
   const tokenHashes = buildTokenHashes(profileId, tokenValue);
   const cachedResult = getCachedTokenAuthResult(tokenHashes.cacheKey);
-  if (cachedResult !== undefined) {
-    return cachedResult;
+  if (cachedResult) {
+    return { result: cachedResult, reason: null };
   }
 
   let agentAccessContextPromise: Promise<AgentAccessContext | null> | undefined;
@@ -1468,15 +1536,17 @@ export async function validateMCPGatewayToken(
     };
 
   // Try external IdP JWKS validation first (if profile has an IdP configured)
+  let externalIdpReason: GatewayAuthFailureReason | null = null;
   if (!hasArchestraTokenPrefix(tokenValue)) {
-    const externalIdpResult = await validateExternalIdpToken(
+    const externalIdp = await authenticateExternalIdpToken(
       profileId,
       tokenValue,
     );
-    if (externalIdpResult) {
-      cacheTokenAuthResult(tokenHashes.cacheKey, externalIdpResult);
-      return externalIdpResult;
+    if (externalIdp.result) {
+      cacheTokenAuthResult(tokenHashes.cacheKey, externalIdp.result);
+      return externalIdp;
     }
+    externalIdpReason = externalIdp.reason;
   }
 
   if (hasArchestraTokenPrefix(tokenValue)) {
@@ -1494,7 +1564,7 @@ export async function validateMCPGatewayToken(
       });
       if (teamTokenResult) {
         cacheTokenAuthResult(tokenHashes.cacheKey, teamTokenResult);
-        return teamTokenResult;
+        return { result: teamTokenResult, reason: null };
       }
     }
 
@@ -1506,7 +1576,7 @@ export async function validateMCPGatewayToken(
       });
       if (userTokenResult) {
         cacheTokenAuthResult(tokenHashes.cacheKey, userTokenResult);
-        return userTokenResult;
+        return { result: userTokenResult, reason: null };
       }
     }
 
@@ -1515,7 +1585,7 @@ export async function validateMCPGatewayToken(
       "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
     );
     cacheTokenAuthResult(tokenHashes.cacheKey, null);
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 
   // Try OAuth token validation (for MCP clients like Open WebUI)
@@ -1528,7 +1598,7 @@ export async function validateMCPGatewayToken(
     // This cache is intentionally short-lived and process-local. Revocations
     // may take up to TOKEN_AUTH_CACHE_TTL_MS to fully age out across requests.
     cacheTokenAuthResult(tokenHashes.cacheKey, oauthResult);
-    return oauthResult;
+    return { result: oauthResult, reason: null };
   }
 
   logger.warn(
@@ -1536,7 +1606,16 @@ export async function validateMCPGatewayToken(
     "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
   );
   cacheTokenAuthResult(tokenHashes.cacheKey, null);
-  return null;
+
+  // A non-JWT that failed here was never a JWKS candidate, so an IdP-specific
+  // reason would be misleading — it most likely meant to be an OAuth token.
+  return {
+    result: null,
+    reason:
+      externalIdpReason && isJwtShaped(tokenValue)
+        ? externalIdpReason
+        : "invalid_token",
+  };
 }
 
 /**
@@ -1550,11 +1629,30 @@ export async function validateExternalIdpToken(
   tokenValue: string,
   permissionResource: "mcpGateway" | "llmProxy" = "mcpGateway",
 ): Promise<TokenAuthResult | null> {
+  const { result } = await authenticateExternalIdpToken(
+    profileId,
+    tokenValue,
+    permissionResource,
+  );
+  return result;
+}
+
+/**
+ * Same as {@link validateExternalIdpToken}, but reports *why* authentication
+ * failed so the gateway can answer with something more useful than a blanket
+ * "invalid token". See {@link GatewayAuthFailureReason} for what is safe to
+ * hand back to an unauthenticated caller.
+ */
+async function authenticateExternalIdpToken(
+  profileId: string,
+  tokenValue: string,
+  permissionResource: "mcpGateway" | "llmProxy" = "mcpGateway",
+): Promise<GatewayAuthOutcome> {
   try {
     // Look up the agent to check if it has an identity provider configured
     const agent = await AgentModel.findGatewayAgentById(profileId);
     if (!agent?.identityProviderId) {
-      return null;
+      return { result: null, reason: "idp_not_linked" };
     }
 
     // Look up the identity provider to get OIDC config
@@ -1566,7 +1664,7 @@ export async function validateExternalIdpToken(
         { profileId, identityProviderId: agent.identityProviderId },
         "validateExternalIdpToken: Identity provider not found",
       );
-      return null;
+      return { result: null, reason: "idp_misconfigured" };
     }
 
     if (!idpProvider.oidcConfig) {
@@ -1574,7 +1672,7 @@ export async function validateExternalIdpToken(
         { profileId, identityProviderId: agent.identityProviderId },
         "validateExternalIdpToken: identity provider has no OIDC config",
       );
-      return null;
+      return { result: null, reason: "idp_misconfigured" };
     }
 
     const oidcConfig = idpProvider.oidcConfig;
@@ -1584,7 +1682,7 @@ export async function validateExternalIdpToken(
         { profileId, identityProviderId: agent.identityProviderId },
         "validateExternalIdpToken: identity provider OIDC clientId is required for audience validation",
       );
-      return null;
+      return { result: null, reason: "idp_misconfigured" };
     }
 
     // Use the JWKS endpoint from OIDC config if available (avoids OIDC discovery
@@ -1599,19 +1697,22 @@ export async function validateExternalIdpToken(
         { profileId, issuer: idpProvider.issuer },
         "validateExternalIdpToken: could not determine JWKS URL",
       );
-      return null;
+      return { result: null, reason: "idp_misconfigured" };
     }
 
-    // Validate the JWT
+    // Validate the JWT. The IdP's attribute mapping decides which claim holds
+    // the email: an IdP that namespaces custom claims populates something like
+    // `https://example.com/email` and leaves the standard `email` claim unset.
     const result = await jwksValidator.validateJwt({
       token: tokenValue,
       issuerUrl: idpProvider.issuer,
       jwksUrl,
       audience: oidcConfig.clientId,
+      emailClaim: oidcConfig.mapping?.email ?? null,
     });
 
     if (!result) {
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     logger.info(
@@ -1629,10 +1730,14 @@ export async function validateExternalIdpToken(
     const userEmail = result.email ?? getEmailFromSubject(result.sub);
     if (!userEmail) {
       logger.warn(
-        { profileId, sub: result.sub },
+        {
+          profileId,
+          sub: result.sub,
+          configuredEmailClaim: oidcConfig.mapping?.email ?? null,
+        },
         "validateExternalIdpToken: JWT has no email claim, cannot match to Archestra user",
       );
-      return null;
+      return { result: null, reason: "no_email_claim" };
     }
 
     const user = await UserModel.findByEmail(userEmail);
@@ -1641,7 +1746,7 @@ export async function validateExternalIdpToken(
         { profileId, email: userEmail },
         "validateExternalIdpToken: JWT email does not match any Archestra user",
       );
-      return null;
+      return { result: null, reason: "unknown_user" };
     }
 
     const member = await MemberModel.getByUserId(user.id, agent.organizationId);
@@ -1650,7 +1755,7 @@ export async function validateExternalIdpToken(
         { profileId, userId: user.id, email: userEmail },
         "validateExternalIdpToken: user is not a member of the gateway's organization",
       );
-      return null;
+      return { result: null, reason: "not_org_member" };
     }
 
     // Check if user has admin permission for the target resource (MCP Gateway or LLM Proxy)
@@ -1661,29 +1766,7 @@ export async function validateExternalIdpToken(
       "admin",
     );
 
-    if (isAdmin) {
-      return {
-        tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: agent.organizationId,
-        isUserToken: true,
-        userId: user.id,
-        isExternalIdp: true,
-        rawToken: tokenValue,
-      };
-    }
-
-    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-    if (!(await AgentTeamModel.userHasAgentAccess(user.id, profileId, false))) {
-      logger.warn(
-        { profileId, userId: user.id },
-        "validateExternalIdpToken: profile not accessible via external IdP (no shared teams)",
-      );
-      return null;
-    }
-
-    return {
+    const authenticated: TokenAuthResult = {
       tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
       teamId: null,
       isOrganizationToken: false,
@@ -1693,6 +1776,21 @@ export async function validateExternalIdpToken(
       isExternalIdp: true,
       rawToken: tokenValue,
     };
+
+    if (isAdmin) {
+      return { result: authenticated, reason: null };
+    }
+
+    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
+    if (!(await AgentTeamModel.userHasAgentAccess(user.id, profileId, false))) {
+      logger.warn(
+        { profileId, userId: user.id },
+        "validateExternalIdpToken: profile not accessible via external IdP (no shared teams)",
+      );
+      return { result: null, reason: "no_gateway_access" };
+    }
+
+    return { result: authenticated, reason: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : undefined;
@@ -1700,14 +1798,35 @@ export async function validateExternalIdpToken(
       { profileId, error: message, stack },
       "validateExternalIdpToken: unexpected error",
     );
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 }
 
+/**
+ * Whether a token even looks like a JWT (three base64url segments). Used only
+ * to decide whether a JWKS-specific failure reason is worth reporting.
+ */
+function isJwtShaped(token: string): boolean {
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/.test(token);
+}
+
+/**
+ * Delimiters IdPs use to namespace a composite subject (`google-apps|a@b.com`,
+ * `oidc:a@b.com`). Such a subject satisfies a naive "looks like an email" test
+ * — `|` and `:` are legal in an address local part — but never matches a stored
+ * user, so accepting it turns a missing-email-claim misconfiguration into a
+ * misleading "no matching user".
+ */
+const COMPOSITE_SUBJECT_DELIMITERS = /[|:\\/]/;
+
 function getEmailFromSubject(subject: string | undefined): string | null {
-  // This fallback is intentionally loose: after token validation succeeds,
-  // it only decides whether an email-shaped subject can be used for lookup.
-  if (!subject || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(subject)) {
+  // This fallback exists for IdPs whose subject *is* the user's email. It is
+  // otherwise deliberately loose: after token validation succeeds, it only
+  // decides whether an email-shaped subject can be used for lookup.
+  if (!subject || COMPOSITE_SUBJECT_DELIMITERS.test(subject)) {
+    return null;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(subject)) {
     return null;
   }
   return subject;

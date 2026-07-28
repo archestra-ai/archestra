@@ -51,6 +51,7 @@ vi.mock("@/services/jwks-validator", () => ({
 }));
 
 const {
+  authenticateMCPGatewayRequest,
   createAgentServer,
   ensureRequestSocketDestroySoon,
   validateMCPGatewayToken,
@@ -1131,6 +1132,190 @@ describe("validateExternalIdpToken", () => {
     expect(result?.isOrganizationToken).toBe(false);
     expect(result?.organizationId).toBe(org.id);
     expect(result?.teamId).toBeNull();
+  });
+
+  test("passes the identity provider's configured email claim to JWKS validation", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    mockValidateJwt.mockClear();
+
+    const org = await makeOrganization();
+    const user = await makeUser({ email: "user@example.com" });
+    await makeMember(user.id, org.id, { role: "admin" });
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+        mapping: { email: "https://example.com/email" },
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "auth-provider|user-1",
+      email: "user@example.com",
+      name: "Test User",
+      rawClaims: { sub: "auth-provider|user-1" },
+    });
+
+    const result = await validateExternalIdpToken(agent.id, FAKE_JWT);
+
+    expect(result?.userId).toBe(user.id);
+    expect(mockValidateJwt).toHaveBeenCalledWith(
+      expect.objectContaining({ emailClaim: "https://example.com/email" }),
+    );
+  });
+
+  test("does not treat a provider-namespaced subject as an email address", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    // `google-apps|user@example.com` satisfies a naive email shape, so it used
+    // to be looked up verbatim — turning a missing email claim into a
+    // misleading "no matching user".
+    const org = await makeOrganization();
+    const user = await makeUser({ email: "user@example.com" });
+    await makeMember(user.id, org.id, { role: "admin" });
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "google-apps|user@example.com",
+      email: null,
+      name: null,
+      rawClaims: { sub: "google-apps|user@example.com" },
+    });
+
+    const outcome = await authenticateMCPGatewayRequest(agent.id, FAKE_JWT);
+
+    expect(outcome.result).toBeNull();
+    expect(outcome.reason).toBe("no_email_claim");
+  });
+});
+
+describe("authenticateMCPGatewayRequest failure reasons", () => {
+  const FAKE_JWT = "eyJhbGciOiJSUzI1NiJ9.fake.jwt";
+
+  test("reports that no identity provider is linked to the gateway", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+
+    const outcome = await authenticateMCPGatewayRequest(agent.id, FAKE_JWT);
+
+    expect(outcome.reason).toBe("idp_not_linked");
+  });
+
+  test("reports a misconfigured identity provider when the client id is missing", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    const outcome = await authenticateMCPGatewayRequest(agent.id, FAKE_JWT);
+
+    expect(outcome.reason).toBe("idp_misconfigured");
+  });
+
+  test("reports a missing email claim on an otherwise valid token", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "user-123",
+      email: null,
+      name: null,
+      rawClaims: { sub: "user-123" },
+    });
+
+    const outcome = await authenticateMCPGatewayRequest(agent.id, FAKE_JWT);
+
+    expect(outcome.reason).toBe("no_email_claim");
+  });
+
+  test("reports an unknown user when the token's email matches nobody", async ({
+    makeOrganization,
+    makeIdentityProvider,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const idp = await makeIdentityProvider(org.id, {
+      oidcConfig: {
+        clientId: "test-client",
+        jwksEndpoint: "https://example.com/.well-known/jwks.json",
+      },
+    });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      identityProviderId: idp.id,
+    });
+
+    mockValidateJwt.mockResolvedValueOnce({
+      sub: "user-123",
+      email: "nobody@example.com",
+      name: null,
+      rawClaims: { sub: "user-123" },
+    });
+
+    const outcome = await authenticateMCPGatewayRequest(agent.id, FAKE_JWT);
+
+    expect(outcome.reason).toBe("unknown_user");
+  });
+
+  test("stays generic for a token that was never a JWKS candidate", async ({
+    makeAgent,
+  }) => {
+    // An opaque token most likely meant to be an OAuth token; an IdP-specific
+    // reason would send the caller down the wrong path.
+    const agent = await makeAgent();
+
+    const outcome = await authenticateMCPGatewayRequest(
+      agent.id,
+      "not-a-jwt-at-all",
+    );
+
+    expect(outcome.reason).toBe("invalid_token");
   });
 });
 
@@ -3215,9 +3400,7 @@ describe("createAgentServer tools/list", () => {
 
     expect(response.isError).not.toBe(true);
     expect(response.structuredContent?.items).toEqual(expect.any(Array));
-    expect(response.content[0]?.text).not.toContain(
-      "User context not available",
-    );
+    expect(response.content[0]?.text).not.toContain("requires an acting user");
   });
 
   test("forwards downstream elicitation requests to the MCP caller", async ({

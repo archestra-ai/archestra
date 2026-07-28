@@ -20,9 +20,11 @@ import {
   validateRoutingHeaders,
 } from "./mcp-gateway.protocol";
 import {
+  authenticateMCPGatewayRequest,
   createAgentServer,
   createStatelessTransport,
   deriveAuthMethod,
+  describeGatewayAuthFailure,
   ensureRequestSocketDestroySoon,
   extractPassthroughHeaders,
   extractProfileIdAndTokenFromRequest,
@@ -337,7 +339,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
-      const tokenAuth = await validateMCPGatewayToken(profileId, token);
+      const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
+        profileId,
+        token,
+      );
       if (!tokenAuth) {
         setWWWAuthenticateHeader(request, reply);
         reply.status(401);
@@ -345,7 +350,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           jsonrpc: "2.0",
           error: {
             code: -32000,
-            message: "Unauthorized: Invalid token for this profile",
+            message: `Unauthorized: ${describeGatewayAuthFailure(reason)}`,
           },
           id: null,
         };

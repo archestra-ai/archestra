@@ -63,6 +63,7 @@ import {
   type GatewayAgent,
   type InteractionAuthMethod,
   type InteractionRequest,
+  type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
@@ -1199,6 +1200,49 @@ async function handleStreaming<
   // to prevent streaming data for tools that appear after a blocked tool.
   let bufferAllToolCalls = false;
 
+  // The finally-block persist is gated on usage, so any stream that ends without
+  // the provider ever reporting usage — a mid-stream failure, or a stream the
+  // provider truncates cleanly — would otherwise leave no trace in LLM logs /
+  // session history. Both paths funnel through here; the flag keeps a failed
+  // stream from being recorded twice (the catch persists, then finally runs).
+  let usagelessInteractionRecorded = false;
+  const recordUsagelessInteraction = async (response: unknown) => {
+    if (usagelessInteractionRecorded) {
+      return;
+    }
+    usagelessInteractionRecorded = true;
+
+    try {
+      await InteractionModel.create({
+        profileId: agent.id,
+        externalAgentId,
+        executionId,
+        userId,
+        virtualKeyId,
+        passthroughVirtualKeyId,
+        sessionId,
+        sessionSource,
+        source,
+        authMethod,
+        authenticatedAppId: authenticatedApp?.id,
+        authenticatedAppName: authenticatedApp?.name,
+        type: provider.interactionType,
+        request: originalRequest as InteractionRequest,
+        processedRequest: request as InteractionRequest,
+        response: response as InteractionResponse,
+        model: actualModel,
+        baselineModel,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+    } catch (interactionError) {
+      logger.error(
+        { err: interactionError, profileId: agent.id },
+        "Failed to create interaction record for stream without usage",
+      );
+    }
+  };
+
   logger.debug(
     { model: actualModel },
     `[${providerName}Proxy] Starting streaming request`,
@@ -1544,44 +1588,16 @@ async function handleStreaming<
       requestDurationRecorded = true;
     }
 
-    // The finally-block persist below is gated on usage, so a stream that
-    // fails before any usage arrives (e.g. a provider 400 rejecting the
-    // request) would otherwise leave no trace in LLM logs / session history.
+    // A stream that fails before any usage arrives (e.g. a provider 400
+    // rejecting the request, or a mid-stream failure once SSE headers and
+    // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
-      try {
-        const errorMessage = provider.extractErrorMessage(error);
-        logger.info(
-          { profileId: agent.id, errorMessage },
-          "Persisting error interaction record for failed stream",
-        );
-        await InteractionModel.create({
-          profileId: agent.id,
-          externalAgentId,
-          executionId,
-          userId,
-          virtualKeyId,
-          passthroughVirtualKeyId,
-          sessionId,
-          sessionSource,
-          source,
-          authMethod,
-          authenticatedAppId: authenticatedApp?.id,
-          authenticatedAppName: authenticatedApp?.name,
-          type: provider.interactionType,
-          request: originalRequest as InteractionRequest,
-          processedRequest: request as InteractionRequest,
-          response: { error: errorMessage },
-          model: actualModel,
-          baselineModel,
-          inputTokens: 0,
-          outputTokens: 0,
-        });
-      } catch (interactionError) {
-        logger.error(
-          { err: interactionError, profileId: agent.id },
-          "Failed to create error interaction record for failed stream",
-        );
-      }
+      const errorMessage = provider.extractErrorMessage(error);
+      logger.info(
+        { profileId: agent.id, errorMessage },
+        "Persisting error interaction record for failed stream",
+      );
+      await recordUsagelessInteraction({ error: errorMessage });
     }
 
     return handleError(
@@ -1692,6 +1708,12 @@ async function handleStreaming<
           "Failed to create interaction record (agent may have been deleted)",
         );
       }
+    } else {
+      // No usage ever arrived. On the error path the catch has already recorded
+      // the failure; otherwise the provider ended the stream early (a truncated
+      // response), and the partial content is all we have to log. Either way the
+      // call must not disappear from interaction history.
+      await recordUsagelessInteraction(streamAdapter.toProviderResponse());
     }
   }
 }

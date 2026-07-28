@@ -27,6 +27,7 @@ import config, {
   isCodeRuntimeEnabled,
   k8sMemoryQuantityToBytes,
   parseActiveChatRunPollIntervalMs,
+  parseActiveUsersRefreshIntervalMs,
   parseAnthropicWifConfig,
   parseAuditLogRetentionDays,
   parseBodyLimit,
@@ -1034,6 +1035,41 @@ describe("parseDatabaseStatementTimeoutMillis", () => {
     expect(parseDatabaseStatementTimeoutMillis("-1")).toBe(30000);
     expect(logger.warn).toHaveBeenCalledWith(
       'Invalid ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS value "-1", using default 30000',
+    );
+  });
+});
+
+describe("parseActiveUsersRefreshIntervalMs", () => {
+  const DEFAULT = 5 * 60 * 1000;
+  const FLOOR = 30 * 1000;
+
+  test("returns the default when no value provided", () => {
+    expect(parseActiveUsersRefreshIntervalMs(undefined)).toBe(DEFAULT);
+    expect(parseActiveUsersRefreshIntervalMs("")).toBe(DEFAULT);
+    expect(parseActiveUsersRefreshIntervalMs("   ")).toBe(DEFAULT);
+  });
+
+  test("parses a valid interval", () => {
+    expect(parseActiveUsersRefreshIntervalMs("600000")).toBe(600000);
+    expect(parseActiveUsersRefreshIntervalMs("  120000  ")).toBe(120000);
+  });
+
+  test("treats 0 as explicitly disabled rather than falling back to the default", () => {
+    expect(parseActiveUsersRefreshIntervalMs("0")).toBe(0);
+  });
+
+  test("raises sub-floor intervals to the floor so the DISTINCT count is not run continuously", () => {
+    expect(parseActiveUsersRefreshIntervalMs("1000")).toBe(FLOOR);
+    expect(logger.warn).toHaveBeenCalledWith(
+      `ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "1000" is below the ${FLOOR}ms floor, using the floor`,
+    );
+  });
+
+  test("returns the default and warns for non-numeric or negative values", () => {
+    expect(parseActiveUsersRefreshIntervalMs("abc")).toBe(DEFAULT);
+    expect(parseActiveUsersRefreshIntervalMs("-1")).toBe(DEFAULT);
+    expect(logger.warn).toHaveBeenCalledWith(
+      `Invalid ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "-1", using default ${DEFAULT}`,
     );
   });
 });

@@ -551,6 +551,7 @@ export const RouteId = {
   GetTeamStatistics: "getTeamStatistics",
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
+  GetUserStatistics: "getUserStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
 

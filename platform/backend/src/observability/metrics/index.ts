@@ -1,3 +1,4 @@
+export * as activeUsers from "./active-users";
 export * as agentExecution from "./agent-execution";
 export * as audit from "./audit";
 export * as chat from "./chat";

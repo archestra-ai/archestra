@@ -1462,6 +1462,31 @@ class InteractionModel {
 
     return result;
   }
+
+  /**
+   * Number of distinct users with at least one attributed interaction since
+   * `since`. Backs the `llm_active_users` gauge.
+   *
+   * Deliberately an aggregate: per-user identity is not exported to Prometheus
+   * (a user_id label would multiply every LLM metric's series count by the size
+   * of the org — the same reason external_agent_id is not a label). Per-user
+   * detail belongs to the statistics API, which reads this table directly.
+   */
+  static async countDistinctActiveUsersSince(since: Date): Promise<number> {
+    const [row] = await db
+      .select({
+        activeUsers: sql<number>`CAST(COUNT(DISTINCT ${schema.interactionsTable.userId}) AS INTEGER)`,
+      })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          gte(schema.interactionsTable.createdAt, since),
+          isNotNull(schema.interactionsTable.userId),
+        ),
+      );
+
+    return Number(row?.activeUsers) || 0;
+  }
 }
 
 export default InteractionModel;

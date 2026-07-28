@@ -409,6 +409,8 @@ const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
 const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
 const DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS = 60;
 const DEFAULT_METRICS_PORT = 9050;
+const DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS = 30 * 1000;
 const MIN_TCP_PORT = 1;
 const MAX_TCP_PORT = 65_535;
 const OTEL_TRACES_PATH = "/v1/traces";
@@ -750,6 +752,44 @@ export const parseMetricsPort = (envValue?: string | undefined): number => {
       `Invalid ARCHESTRA_METRICS_PORT value "${value}", using default ${DEFAULT_METRICS_PORT}`,
     );
     return DEFAULT_METRICS_PORT;
+  }
+
+  return parsed;
+};
+
+/**
+ * Parse the refresh interval for the `llm_active_users` gauge (milliseconds).
+ * `0` disables collection entirely. The value is clamped to a floor because the
+ * underlying query is a DISTINCT count over the (very large) interactions
+ * table, and every replica runs it — a small interval turns into steady
+ * background load for a number that barely moves.
+ * @public — exported for testability
+ */
+export const parseActiveUsersRefreshIntervalMs = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "${value}", using default ${DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS}`,
+    );
+    return DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS;
+  }
+
+  if (parsed === 0) {
+    return 0;
+  }
+
+  if (parsed < MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS) {
+    logger.warn(
+      `ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "${value}" is below the ${MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS}ms floor, using the floor`,
+    );
+    return MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS;
   }
 
   return parsed;
@@ -2451,6 +2491,9 @@ const config = {
       endpoint: "/metrics",
       port: parseMetricsPort(process.env.ARCHESTRA_METRICS_PORT),
       secret: process.env.ARCHESTRA_METRICS_SECRET,
+      activeUsersRefreshIntervalMs: parseActiveUsersRefreshIntervalMs(
+        process.env.ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS,
+      ),
     },
     sentry: {
       enabled: sentryDsn !== "",

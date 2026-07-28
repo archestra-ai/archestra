@@ -1440,6 +1440,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetModelStatistics]: {
     llmCost: ["read"],
   },
+  // Per-user usage is employee-level data, so the route additionally checks
+  // `member:read` at request time: callers without it see only their own usage
+  // rather than the whole org (see the GetUserStatistics handler).
+  [RouteId.GetUserStatistics]: {
+    llmCost: ["read"],
+  },
   [RouteId.GetOverviewStatistics]: {
     llmCost: ["read"],
   },

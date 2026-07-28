@@ -23,10 +23,19 @@ import { cn } from "@/lib/utils";
  * Renders nothing when the call resolved no upstream credential (a platform
  * built-in, a blocked call) or predates the descriptor.
  */
+/**
+ * An identity that makes calls: a person, or a gateway token, which acts for a
+ * team or for the whole organization rather than for anybody in particular.
+ */
+export type CallerIdentity = {
+  label: string;
+  scope: keyof typeof scopeStyles;
+};
+
 export function ExecutedAsBadge({
   executedAs,
   meUserId,
-  callerName,
+  caller,
 }: {
   executedAs: McpExecutedAs | null | undefined;
   /**
@@ -36,11 +45,11 @@ export function ExecutedAsBadge({
    */
   meUserId?: string | null;
   /**
-   * Display name of the user who made the call, for the calls the platform ran
-   * itself (they carry only the caller's id). Omit where it is unknown; the
-   * badge then says "the caller".
+   * Who made the call, for the calls the platform ran itself (they carry only
+   * the caller's id). Omit where it is unknown; the badge then says "the
+   * caller".
    */
-  callerName?: string | null;
+  caller?: CallerIdentity | null;
 }) {
   const appName = useAppName();
 
@@ -53,7 +62,7 @@ export function ExecutedAsBadge({
     style,
     label,
     tooltip,
-  } = describeExecutedAs(executedAs, { meUserId, callerName, appName });
+  } = describeExecutedAs(executedAs, { meUserId, caller, appName });
 
   return (
     <TooltipProvider>
@@ -85,7 +94,7 @@ type ExecutedAsDisplay = {
 
 type ExecutedAsContext = {
   meUserId: string | null | undefined;
-  callerName: string | null | undefined;
+  caller: CallerIdentity | null | undefined;
   appName: string;
 };
 
@@ -152,29 +161,45 @@ const executedAsDescriptors: {
       "The calling client supplied the credential the MCP server was called with.",
   }),
   platform: (executedAs, context) => {
-    const caller = describeCaller(executedAs.callerUserId, context);
-    return {
-      ...caller,
-      tooltip:
-        caller.label === SELF_LABEL
-          ? `This call used your own connection to the ${context.appName}`
-          : `This call used ${caller.label}'s own connection to the ${context.appName}`,
-    };
+    const display = describeCaller(executedAs.callerUserId, context);
+    return { ...display, tooltip: describePlatformCall(display, context) };
   },
 };
 
-// The kinds that ran as the calling user share one peel: their own name, or
-// "Me" when the reader is that user.
+// The kinds that ran as the calling identity share one peel: that identity's
+// own name, or "Me" when the reader is it.
 function describeCaller(
   callerUserId: string | null,
-  { meUserId, callerName }: ExecutedAsContext,
+  { meUserId, caller }: ExecutedAsContext,
 ): Omit<ExecutedAsDisplay, "tooltip"> {
-  const isMe = !!meUserId && callerUserId === meUserId;
+  if (!!meUserId && callerUserId === meUserId) {
+    return { icon: User, style: scopeStyles.personal, label: SELF_LABEL };
+  }
+  if (!caller) {
+    return { icon: User, style: scopeStyles.personal, label: "The caller" };
+  }
   return {
-    icon: User,
-    style: scopeStyles.personal,
-    label: isMe ? SELF_LABEL : (callerName ?? "The caller"),
+    // A gateway token is not a person, so it carries the key icon and its own
+    // scope's color instead of reading as somebody's personal identity.
+    icon: caller.scope === "personal" ? User : KeyRound,
+    style: scopeStyles[caller.scope],
+    label: caller.label,
   };
+}
+
+// A platform call reached no MCP server, so the identity is whoever asked for
+// it — and for a token, that is the team or organization it belongs to.
+function describePlatformCall(
+  display: Omit<ExecutedAsDisplay, "tooltip">,
+  { caller, appName }: ExecutedAsContext,
+): string {
+  if (display.label === SELF_LABEL) {
+    return `This call used your own connection to the ${appName}`;
+  }
+  if (caller && caller.scope !== "personal") {
+    return `This call used the ${caller.label} to reach the ${appName}`;
+  }
+  return `This call used ${display.label}'s own connection to the ${appName}`;
 }
 
 function describeExecutedAs(

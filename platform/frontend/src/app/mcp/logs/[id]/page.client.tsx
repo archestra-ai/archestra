@@ -198,7 +198,7 @@ function McpToolCallDetail({
             <MetadataItem label="Called as">
               <ExecutedAsBadge
                 executedAs={executedAs}
-                callerName={formatCallerIdentity(mcpToolCall)}
+                caller={formatCallerIdentity(mcpToolCall)}
               />
             </MetadataItem>
           )}

@@ -313,7 +313,7 @@ function McpToolCallsTable({
         return (
           <ExecutedAsBadge
             executedAs={executedAs}
-            callerName={formatCallerIdentity(row.original)}
+            caller={formatCallerIdentity(row.original)}
           />
         );
       },

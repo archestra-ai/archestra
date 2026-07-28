@@ -2,6 +2,7 @@ import type { McpExecutedAs } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { scopeStyles } from "@/components/resource-visibility-badge";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { ExecutedAsBadge } from "./executed-as-badge";
 
@@ -86,11 +87,34 @@ describe("ExecutedAsBadge", () => {
       <ExecutedAsBadge
         executedAs={{ kind: "platform", callerUserId: "user-2" }}
         meUserId="user-1"
-        callerName="Grace Hopper"
+        caller={{ label: "Grace Hopper", scope: "personal" }}
       />,
     );
 
     expect(screen.getByText("Grace Hopper")).toBeInTheDocument();
+  });
+
+  it("draws a gateway token as its own scope, not as a person", async () => {
+    const user = userEvent.setup();
+    render(
+      <ExecutedAsBadge
+        executedAs={{ kind: "platform", callerUserId: null }}
+        caller={{ label: "Org Token", scope: "org" }}
+      />,
+    );
+
+    // A token belongs to the organization, so it must not wear the personal
+    // peel that names somebody's own connection.
+    const label = screen.getByText("Org Token");
+    expect(label.closest("span")?.parentElement).toHaveClass(
+      ...scopeStyles.org.split(" "),
+    );
+    await user.hover(label);
+    expect(
+      await screen.findAllByText(
+        "This call used the Org Token to reach the Acme AI",
+      ),
+    ).not.toHaveLength(0);
   });
 
   it("describes a platform-served call with the deployment's own name", async () => {
@@ -117,7 +141,7 @@ describe("ExecutedAsBadge", () => {
     render(
       <ExecutedAsBadge
         executedAs={{ kind: "platform", callerUserId: "user-2" }}
-        callerName="Grace Hopper"
+        caller={{ label: "Grace Hopper", scope: "personal" }}
       />,
     );
 

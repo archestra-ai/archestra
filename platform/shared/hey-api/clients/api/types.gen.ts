@@ -4150,7 +4150,7 @@ export type OllamaNativeChatResponseInput = {
     created_at?: string;
     message: {
         role: string;
-        content: string;
+        content?: string;
         thinking?: string;
         tool_calls?: Array<{
             id?: string;
@@ -9994,7 +9994,7 @@ export type OllamaNativeChatResponse = {
     created_at?: string;
     message: {
         role: string;
-        content: string;
+        content?: string;
         thinking?: string;
         tool_calls?: Array<{
             id?: string;
@@ -23136,7 +23136,7 @@ export type BedrockConverseWithDefaultAgentResponses = {
                 }>;
             };
         };
-        stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'model_context_window_exceeded';
+        stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'malformed_model_output' | 'malformed_tool_use' | 'model_context_window_exceeded' | string;
         usage: {
             inputTokens: number;
             outputTokens: number;
@@ -23475,7 +23475,7 @@ export type BedrockConverseWithAgentResponses = {
                 }>;
             };
         };
-        stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'model_context_window_exceeded';
+        stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'malformed_model_output' | 'malformed_tool_use' | 'model_context_window_exceeded' | string;
         usage: {
             inputTokens: number;
             outputTokens: number;
@@ -24233,7 +24233,7 @@ export type BedrockConverseWithAgentAndModelResponses = {
                 }>;
             };
         };
-        stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'model_context_window_exceeded';
+        stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'malformed_model_output' | 'malformed_tool_use' | 'model_context_window_exceeded' | string;
         usage: {
             inputTokens: number;
             outputTokens: number;
@@ -37423,7 +37423,7 @@ export type GetInteractionsResponses = {
                         }>;
                     };
                 };
-                stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'model_context_window_exceeded';
+                stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'malformed_model_output' | 'malformed_tool_use' | 'model_context_window_exceeded' | string;
                 usage: {
                     inputTokens: number;
                     outputTokens: number;
@@ -43441,7 +43441,7 @@ export type GetInteractionResponses = {
                     }>;
                 };
             };
-            stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'model_context_window_exceeded';
+            stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'malformed_model_output' | 'malformed_tool_use' | 'model_context_window_exceeded' | string;
             usage: {
                 inputTokens: number;
                 outputTokens: number;

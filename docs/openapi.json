@@ -13417,8 +13417,7 @@
               }
             },
             "required": [
-              "role",
-              "content"
+              "role"
             ],
             "additionalProperties": {}
           },
@@ -33060,8 +33059,7 @@
               }
             },
             "required": [
-              "role",
-              "content"
+              "role"
             ],
             "additionalProperties": {}
           },
@@ -80035,15 +80033,24 @@
                       "additionalProperties": false
                     },
                     "stopReason": {
-                      "type": "string",
-                      "enum": [
-                        "end_turn",
-                        "tool_use",
-                        "max_tokens",
-                        "stop_sequence",
-                        "guardrail_intervened",
-                        "content_filtered",
-                        "model_context_window_exceeded"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "end_turn",
+                            "tool_use",
+                            "max_tokens",
+                            "stop_sequence",
+                            "guardrail_intervened",
+                            "content_filtered",
+                            "malformed_model_output",
+                            "malformed_tool_use",
+                            "model_context_window_exceeded"
+                          ]
+                        },
+                        {
+                          "type": "string"
+                        }
                       ]
                     },
                     "usage": {
@@ -81374,15 +81381,24 @@
                       "additionalProperties": false
                     },
                     "stopReason": {
-                      "type": "string",
-                      "enum": [
-                        "end_turn",
-                        "tool_use",
-                        "max_tokens",
-                        "stop_sequence",
-                        "guardrail_intervened",
-                        "content_filtered",
-                        "model_context_window_exceeded"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "end_turn",
+                            "tool_use",
+                            "max_tokens",
+                            "stop_sequence",
+                            "guardrail_intervened",
+                            "content_filtered",
+                            "malformed_model_output",
+                            "malformed_tool_use",
+                            "model_context_window_exceeded"
+                          ]
+                        },
+                        {
+                          "type": "string"
+                        }
                       ]
                     },
                     "usage": {
@@ -84466,15 +84482,24 @@
                       "additionalProperties": false
                     },
                     "stopReason": {
-                      "type": "string",
-                      "enum": [
-                        "end_turn",
-                        "tool_use",
-                        "max_tokens",
-                        "stop_sequence",
-                        "guardrail_intervened",
-                        "content_filtered",
-                        "model_context_window_exceeded"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "end_turn",
+                            "tool_use",
+                            "max_tokens",
+                            "stop_sequence",
+                            "guardrail_intervened",
+                            "content_filtered",
+                            "malformed_model_output",
+                            "malformed_tool_use",
+                            "model_context_window_exceeded"
+                          ]
+                        },
+                        {
+                          "type": "string"
+                        }
                       ]
                     },
                     "usage": {
@@ -135764,15 +135789,24 @@
                                         "additionalProperties": false
                                       },
                                       "stopReason": {
-                                        "type": "string",
-                                        "enum": [
-                                          "end_turn",
-                                          "tool_use",
-                                          "max_tokens",
-                                          "stop_sequence",
-                                          "guardrail_intervened",
-                                          "content_filtered",
-                                          "model_context_window_exceeded"
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "enum": [
+                                              "end_turn",
+                                              "tool_use",
+                                              "max_tokens",
+                                              "stop_sequence",
+                                              "guardrail_intervened",
+                                              "content_filtered",
+                                              "malformed_model_output",
+                                              "malformed_tool_use",
+                                              "model_context_window_exceeded"
+                                            ]
+                                          },
+                                          {
+                                            "type": "string"
+                                          }
                                         ]
                                       },
                                       "usage": {
@@ -165417,15 +165451,24 @@
                                   "additionalProperties": false
                                 },
                                 "stopReason": {
-                                  "type": "string",
-                                  "enum": [
-                                    "end_turn",
-                                    "tool_use",
-                                    "max_tokens",
-                                    "stop_sequence",
-                                    "guardrail_intervened",
-                                    "content_filtered",
-                                    "model_context_window_exceeded"
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "end_turn",
+                                        "tool_use",
+                                        "max_tokens",
+                                        "stop_sequence",
+                                        "guardrail_intervened",
+                                        "content_filtered",
+                                        "malformed_model_output",
+                                        "malformed_tool_use",
+                                        "model_context_window_exceeded"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string"
+                                    }
                                   ]
                                 },
                                 "usage": {

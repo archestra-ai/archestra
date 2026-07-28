@@ -8,6 +8,7 @@ import {
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
   DEFAULT_APP_NAME,
+  DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
   DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
   isValidK8sCpuQuantity,
@@ -2124,6 +2125,17 @@ const config = {
     ),
     rateMeteredMaxOutputTokensCeiling: parseChatRateMeteredMaxOutputTokens(
       process.env.ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS,
+    ),
+    /**
+     * Largest single upload a chat turn may store as a conversation
+     * attachment. Independent of the sandbox artifact limit: bigger files skip
+     * sandbox staging but still land in the Files panel. Raising this needs
+     * `ARCHESTRA_API_BODY_LIMIT` raised too — uploads arrive base64-encoded
+     * (~4/3 of the byte size) alongside the conversation JSON.
+     */
+    attachmentStorageBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT,
+      DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
     ),
   },
   enterpriseFeatures: {

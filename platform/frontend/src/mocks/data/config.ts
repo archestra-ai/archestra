@@ -1,6 +1,7 @@
 import {
   APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   type archestraApiTypes,
+  DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
 } from "@archestra/shared";
 
 type Config = archestraApiTypes.GetConfigResponses["200"];
@@ -33,6 +34,7 @@ export function makeConfig(
       orchestratorK8sRuntime: false,
       sandbox: false,
       sandboxArtifactBytesLimit: 16 * 1024 * 1024,
+      chatAttachmentStorageBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       byosEnabled: false,
       byosVaultKvVersion: "1",
       azureOpenAiEntraIdEnabled: false,

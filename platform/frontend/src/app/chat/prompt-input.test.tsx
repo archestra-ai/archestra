@@ -12,15 +12,26 @@ const {
   mockControllerState,
   mockFeatureState,
   mockProfileState,
+  mockUploadPolicy,
 } = vi.hoisted(() => ({
   mockUseChatPlaceholder: vi.fn(),
   mockUseSkillsPaginated: vi.fn(),
   mockTextInputSetInput: vi.fn(),
   mockTextInputClear: vi.fn(),
   mockControllerState: { value: "", files: [] as { url: string }[] },
-  mockFeatureState: { chatSecretScanEnabled: false },
+  mockFeatureState: {
+    chatSecretScanEnabled: false,
+    chatAttachmentStorageBytesLimit: undefined as number | undefined,
+  },
   mockProfileState: {
     agent: null as { sandboxAvailable: boolean } | null,
+  },
+  // The upload policy the composer hands to the file picker: the byte cap it
+  // enforces and the per-file check it runs. Captured so tests can exercise
+  // the real policy the way the picker does.
+  mockUploadPolicy: {
+    maxFileSize: undefined as number | undefined,
+    validateFile: undefined as ((file: File) => string | null) | undefined,
   },
 }));
 
@@ -149,9 +160,19 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   PromptInputHeader: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  PromptInputProvider: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
+  PromptInputProvider: ({
+    children,
+    maxFileSize,
+    validateFile,
+  }: {
+    children: React.ReactNode;
+    maxFileSize?: number;
+    validateFile?: (file: File) => string | null;
+  }) => {
+    mockUploadPolicy.maxFileSize = maxFileSize;
+    mockUploadPolicy.validateFile = validateFile;
+    return <div>{children}</div>;
+  },
   PromptInputSpeechButton: () => <button type="button">Speech</button>,
   PromptInputSubmit: ({
     status,
@@ -306,8 +327,14 @@ describe("ArchestraPromptInput", () => {
       if (flag === "chatSecretScanEnabled") {
         return mockFeatureState.chatSecretScanEnabled;
       }
+      if (flag === "chatAttachmentStorageBytesLimit") {
+        return mockFeatureState.chatAttachmentStorageBytesLimit;
+      }
       return undefined;
     });
+    mockFeatureState.chatAttachmentStorageBytesLimit = undefined;
+    mockUploadPolicy.maxFileSize = undefined;
+    mockUploadPolicy.validateFile = undefined;
     mockUseChatPlaceholder.mockReturnValue({
       placeholder: "Animated placeholder",
       isAnimating: true,
@@ -420,6 +447,64 @@ describe("ArchestraPromptInput", () => {
       expect(
         screen.queryByTestId(E2eTestId.ChatDisabledFileUploadButton),
       ).not.toBeInTheDocument();
+    });
+
+    describe("attachment size policy", () => {
+      // The policy reads `file.size`, never the bytes, so declare the size
+      // rather than allocating tens of megabytes per case.
+      const sized = (bytes: number, name = "archive.zip"): File => {
+        const file = new File([], name, { type: "application/zip" });
+        Object.defineProperty(file, "size", { value: bytes });
+        return file;
+      };
+
+      const renderComposer = () =>
+        render(
+          <ArchestraPromptInput
+            {...defaultProps}
+            allowFileUploads={true}
+            inputModalities={["text", "image"]}
+          />,
+        );
+
+      it("caps the picker at the server's storage limit", () => {
+        mockFeatureState.chatAttachmentStorageBytesLimit = 8 * 1024 * 1024;
+        renderComposer();
+
+        expect(mockUploadPolicy.maxFileSize).toBe(8 * 1024 * 1024);
+      });
+
+      it("rejects a file over the storage limit, naming that limit", () => {
+        mockFeatureState.chatAttachmentStorageBytesLimit = 8 * 1024 * 1024;
+        renderComposer();
+
+        expect(
+          mockUploadPolicy.validateFile?.(sized(8 * 1024 * 1024 + 1)),
+        ).toBe('"archive.zip" exceeds the maximum attachment size of 8 MB.');
+      });
+
+      it("accepts a file the model can't read and the sandbox can't take", () => {
+        // Over the 16 MiB sandbox artifact limit but under the storage cap: it
+        // skips the sandbox and still lands in the conversation's Files panel.
+        mockFeatureState.chatAttachmentStorageBytesLimit = 50 * 1024 * 1024;
+        renderComposer();
+
+        expect(
+          mockUploadPolicy.validateFile?.(sized(20 * 1024 * 1024)),
+        ).toBeNull();
+      });
+
+      it("falls back to the 50 MB default before /api/config resolves", () => {
+        renderComposer();
+
+        expect(mockUploadPolicy.maxFileSize).toBe(50 * 1024 * 1024);
+        expect(
+          mockUploadPolicy.validateFile?.(sized(50 * 1024 * 1024)),
+        ).toBeNull();
+        expect(
+          mockUploadPolicy.validateFile?.(sized(50 * 1024 * 1024 + 1)),
+        ).toBe('"archive.zip" exceeds the maximum attachment size of 50 MB.');
+      });
     });
 
     it("should render enabled file upload button for text-only models", () => {

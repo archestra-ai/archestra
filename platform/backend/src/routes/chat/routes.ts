@@ -358,13 +358,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Gate uploaded attachments before any bytes are persisted: anything
-      // within the storage byte limit is accepted — a file the model can't
-      // ingest still lands in the conversation's Files panel (and is staged
-      // into the sandbox when one is available). The frontend mirrors this for
-      // UX, but a custom client bypasses it, so this is the authoritative
-      // check. Runs before extractInlineAttachments and before the active run
-      // is acquired, so a rejected request stores nothing. Skipped (with its
-      // model/sandbox lookups) on the common turn that uploads nothing.
+      // within the attachment storage cap is accepted — a file the model can't
+      // ingest, or one too big for the sandbox, still lands in the
+      // conversation's Files panel (and is staged into the sandbox when one is
+      // available and the file fits it). The frontend mirrors this for UX, but
+      // a custom client bypasses it, so this is the authoritative check. Runs
+      // before extractInlineAttachments and before the active run is acquired,
+      // so a rejected request stores nothing. Skipped (with its model/sandbox
+      // lookups) on the common turn that uploads nothing.
       if (messagesHaveNewInlineAttachments(messages as ChatMessage[])) {
         const attachmentModelRow = conversation.modelId
           ? await ModelModel.findById(conversation.modelId)
@@ -381,6 +382,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               agentId: conversation.agentId,
             }),
             sandboxByteLimit: config.skillsSandbox.artifactBytesLimit,
+            fileStorageByteLimit: config.chat.attachmentStorageBytesLimit,
           },
         });
       }

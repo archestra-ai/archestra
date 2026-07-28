@@ -582,17 +582,27 @@ export function isInlineableTextMimeType(mimeType: string): boolean {
 export const INLINE_TEXT_MAX_BYTES = 256 * 1024;
 
 /**
+ * Default cap on what a single chat upload may store as a conversation
+ * attachment. Deliberately independent of the sandbox artifact limit: a file
+ * too big for the sandbox still has the Files panel to land in, so the sandbox
+ * is bypassed rather than made the gatekeeper. Shared so the backend default
+ * and the frontend's pre-`/api/config` fallback can never drift.
+ */
+export const DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES = 50 * 1024 * 1024;
+
+/**
  * Why an upload is not acceptable, or `null` when it is. Single source of truth
  * for the attachment policy shared by the backend ingest gate (authoritative)
  * and the frontend composer (mirrors it for UX). A file is acceptable when the
  * model can ingest its type, OR it is a small inlineable text document, OR a
  * sandbox is available to stage it within the sandbox artifact size limit, OR
- * (with `fileStorageFallback`) it fits the same byte limit and is stored as a
- * conversation file the user can reach from the chat Files panel.
+ * (with `fileStorageByteLimit`) it is stored as a conversation file the user can
+ * reach from the chat Files panel.
  */
 export type ChatUploadRejectionReason =
   | "text_too_large"
   | "too_large_for_sandbox"
+  | "too_large_to_store"
   | "unsupported_type";
 
 export function chatUploadRejectionReason(params: {
@@ -602,12 +612,13 @@ export function chatUploadRejectionReason(params: {
   sandboxAvailable: boolean;
   sandboxByteLimit: number;
   /**
-   * Whether a file the model can't read (and the sandbox can't take) is still
-   * accepted and kept as a conversation attachment surfaced in the chat Files
-   * panel. The chat upload path has that surface, so it passes true; A2A has no
-   * per-conversation Files panel for its callers and keeps rejecting.
+   * Cap on what may be stored as a conversation attachment surfaced in the chat
+   * Files panel, enabling that fallback for files the model can't read and the
+   * sandbox can't take. The chat upload path has that surface, so it passes its
+   * configured cap; A2A has no per-conversation Files panel for its callers, so
+   * it omits this and keeps rejecting.
    */
-  fileStorageFallback?: boolean;
+  fileStorageByteLimit?: number;
 }): ChatUploadRejectionReason | null {
   const {
     mimeType,
@@ -615,36 +626,41 @@ export function chatUploadRejectionReason(params: {
     ingestibleMimeTypes,
     sandboxAvailable,
     sandboxByteLimit,
-    fileStorageFallback = false,
+    fileStorageByteLimit,
   } = params;
 
-  // The sandbox artifact limit doubles as the storage cap for Files-panel-only
-  // attachments: both paths persist the same conversation_attachments row, so
-  // one knob bounds what a chat turn may store.
-  const fitsStorage = byteLength <= sandboxByteLimit;
-  const fitsSandbox = sandboxAvailable && fitsStorage;
-  const fitsFileStorage = fileStorageFallback && fitsStorage;
+  // Every accepted upload is persisted as a conversation attachment — the Files
+  // panel and sandbox staging both read that one row — so when the fallback is
+  // active its cap bounds the turn, including types the model reads natively.
+  const fileStorageFallback = fileStorageByteLimit != null;
+  if (fileStorageFallback && byteLength > fileStorageByteLimit) {
+    return "too_large_to_store";
+  }
+
+  // Under the storage cap, the sandbox limit only decides whether the file can
+  // additionally be staged for the model — never whether it is accepted.
+  const fitsSandbox = sandboxAvailable && byteLength <= sandboxByteLimit;
 
   // Inlineable text is size-gated even though a text-capable model lists these
   // MIMEs as readable: a large text file would otherwise blow the context
   // window. Checked before the generic ingestible short-circuit for that reason.
   if (isInlineableTextMimeType(mimeType)) {
-    if (byteLength <= INLINE_TEXT_MAX_BYTES || fitsSandbox || fitsFileStorage) {
+    if (
+      byteLength <= INLINE_TEXT_MAX_BYTES ||
+      fitsSandbox ||
+      fileStorageFallback
+    ) {
       return null;
     }
-    return sandboxAvailable || fileStorageFallback
-      ? "too_large_for_sandbox"
-      : "text_too_large";
+    return sandboxAvailable ? "too_large_for_sandbox" : "text_too_large";
   }
 
   // Non-text types the model can ingest natively (images, PDFs, …) carry no
-  // inline-text budget; the request body limit is the only size bound.
+  // inline-text budget; only the storage cap above bounds them.
   if (ingestibleMimeTypes.has(mimeType)) return null;
 
-  if (fitsSandbox || fitsFileStorage) return null;
-  return sandboxAvailable || fileStorageFallback
-    ? "too_large_for_sandbox"
-    : "unsupported_type";
+  if (fitsSandbox || fileStorageFallback) return null;
+  return sandboxAvailable ? "too_large_for_sandbox" : "unsupported_type";
 }
 
 /**

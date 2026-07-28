@@ -13,7 +13,7 @@ import {
 } from "./extract-inline-attachments";
 
 type Attachment = Awaited<
-  ReturnType<typeof ConversationAttachmentModel.findByIdsWithData>
+  ReturnType<typeof ConversationAttachmentModel.findByIdsWithoutData>
 >[number];
 
 /**
@@ -63,10 +63,13 @@ export async function materializeAttachments({
   // data: URL file parts (legacy messages or same-tab follow-ups whose FE
   // state lags the backend rewrite) need cache_control applied here, since
   // the alternative is Anthropic re-billing the full file on every turn.
+  //
+  // Metadata first: an attachment the model can't read is described from its
+  // mime type and size alone. Reading its bytes on every turn would mean
+  // re-streaming a large file out of Postgres for the whole life of the
+  // conversation just to render a one-line notice.
   const attachments =
-    refIds.length === 0
-      ? []
-      : await ConversationAttachmentModel.findByIdsWithData(refIds);
+    await ConversationAttachmentModel.findByIdsWithoutData(refIds);
   // Filter to attachments owned by the current conversation. Anything
   // referencing an id outside this conversation is silently dropped from
   // the rehydration map — those parts stay with their ref URL, which
@@ -76,6 +79,15 @@ export async function materializeAttachments({
       .filter((a) => a.conversationId === conversationId)
       .map((a) => [a.id, a]),
   );
+
+  const inlinedIds = Array.from(byId.values())
+    .filter((attachment) =>
+      willInline(attachment, ingestibleMimeTypes, rerouteBinaryDocsToSandbox),
+    )
+    .map((attachment) => attachment.id);
+  const withData =
+    await ConversationAttachmentModel.findByIdsWithData(inlinedIds);
+  const bytesById = new Map(withData.map((a) => [a.id, a.fileData]));
 
   return messages.map((message) => {
     if (!message.parts || message.parts.length === 0) {
@@ -87,6 +99,7 @@ export async function materializeAttachments({
         materializePart(
           part,
           byId,
+          bytesById,
           ingestibleMimeTypes,
           applyAnthropicCacheControl,
           rerouteBinaryDocsToSandbox,
@@ -95,6 +108,28 @@ export async function materializeAttachments({
       ),
     };
   });
+}
+
+/**
+ * Whether this attachment's bytes end up embedded in the prompt as a `data:`
+ * URL. When false it becomes a text notice built from metadata alone, so its
+ * bytes are never read. Mirrors the branch in {@link materializePart}.
+ */
+function willInline(
+  attachment: Attachment,
+  ingestibleMimeTypes: Set<string> | undefined,
+  rerouteBinaryDocsToSandbox: boolean,
+): boolean {
+  const modelCannotRead =
+    ingestibleMimeTypes !== undefined &&
+    !ingestibleMimeTypes.has(attachment.mimeType);
+  const endpointRejectsBinaryDoc =
+    rerouteBinaryDocsToSandbox &&
+    isNonInlineableBinaryDocMimeType(attachment.mimeType);
+  const textTooLargeToInline =
+    isInlineableTextMimeType(attachment.mimeType) &&
+    attachment.fileSize > INLINE_TEXT_MAX_BYTES;
+  return !(modelCannotRead || endpointRejectsBinaryDoc || textTooLargeToInline);
 }
 
 function collectRefIds(messages: ChatMessage[]): string[] {
@@ -114,6 +149,7 @@ function collectRefIds(messages: ChatMessage[]): string[] {
 function materializePart(
   part: ChatMessagePart,
   byId: Map<string, Attachment>,
+  bytesById: Map<string, Buffer>,
   ingestibleMimeTypes: Set<string> | undefined,
   applyAnthropicCacheControl: boolean,
   rerouteBinaryDocsToSandbox: boolean,
@@ -167,30 +203,30 @@ function materializePart(
   }
 
   // A file the selected model can't read must not be inlined as a document the
-  // provider would reject (which hard-errors the whole turn). Two cases:
-  //   - the model's modalities don't cover this mime; or
-  //   - an Anthropic-compatible third-party endpoint can't accept the binary
-  //     `document` block this mime would become (PDF and other non-image,
-  //     non-text-inlineable types), regardless of the model's nominal modality.
-  // Either way the file has auto-staged into the sandbox, so reference it there.
-  const modelCannotRead =
-    ingestibleMimeTypes !== undefined &&
-    !ingestibleMimeTypes.has(attachment.mimeType);
-  const endpointRejectsBinaryDoc =
-    rerouteBinaryDocsToSandbox &&
-    isNonInlineableBinaryDocMimeType(attachment.mimeType);
-  // A text document over the inline budget is routed to the sandbox instead of
-  // being embedded in the prompt. The ingest gate only admits an over-budget
-  // text file when the sandbox is available, so it has been auto-staged there.
-  const textTooLargeToInline =
-    isInlineableTextMimeType(attachment.mimeType) &&
-    attachment.fileData.byteLength > INLINE_TEXT_MAX_BYTES;
-  if (modelCannotRead || endpointRejectsBinaryDoc || textTooLargeToInline) {
+  // provider would reject (which hard-errors the whole turn). Three cases,
+  // spelled out in `willInline`: the model's modalities don't cover this mime;
+  // an Anthropic-compatible third-party endpoint can't accept the binary
+  // `document` block it would become; or it is a text document over the inline
+  // budget. In each the file lives in the Files panel — and in the sandbox when
+  // it fits — so reference it there rather than embedding it.
+  if (
+    !willInline(attachment, ingestibleMimeTypes, rerouteBinaryDocsToSandbox)
+  ) {
     return referenceSandboxFilePart(attachment, sandboxAvailable);
   }
 
   // findByIdsWithData normalizes bytea to Buffer at the model boundary
-  const dataUrl = `data:${attachment.mimeType};base64,${attachment.fileData.toString("base64")}`;
+  const fileData = bytesById.get(id);
+  if (!fileData) {
+    // Soft-deleted between the metadata and byte reads. Same outcome as a
+    // missing row: leave the ref unresolved rather than fail the turn.
+    logger.warn(
+      { attachmentId: id },
+      "[materializeAttachments] Attachment bytes not found; skipping materialization",
+    );
+    return { ...part };
+  }
+  const dataUrl = `data:${attachment.mimeType};base64,${fileData.toString("base64")}`;
   // Mark the part for Anthropic ephemeral prompt caching when the endpoint
   // accepts it. The AI SDK reads this via the file UI part's provider metadata
   // (`providerMetadata`); convertToModelMessages translates it into the
@@ -249,9 +285,7 @@ function dualAvailabilityPointer(
   if (!sandboxAvailable || !isInlineableTextMimeType(attachment.mimeType)) {
     return null;
   }
-  if (
-    attachment.fileData.byteLength > config.skillsSandbox.artifactBytesLimit
-  ) {
+  if (attachment.fileSize > config.skillsSandbox.artifactBytesLimit) {
     return null;
   }
 
@@ -322,7 +356,7 @@ function referenceSandboxFilePart(
   attachment: Attachment,
   sandboxAvailable: boolean,
 ): ChatMessagePart {
-  const sizeBytes = attachment.fileData.byteLength;
+  const sizeBytes = attachment.fileSize;
   const name = JSON.stringify(attachment.originalName ?? "attachment");
   const label = `${name} (${attachment.mimeType}, ${sizeBytes} bytes)`;
   const limit = config.skillsSandbox.artifactBytesLimit;

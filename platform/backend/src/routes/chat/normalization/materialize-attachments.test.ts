@@ -2,6 +2,7 @@ import {
   getModelReadableMimeTypes,
   INLINE_TEXT_MAX_BYTES,
 } from "@archestra/shared";
+import { vi } from "vitest";
 import config from "@/config";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
@@ -1057,6 +1058,93 @@ test("an inline data: binary document is dropped with a notice on a non-native e
   // The data: bytes are NOT emitted as a document block the endpoint rejects.
   expect(part.text).not.toContain("data:");
   expect(part.url).toBeUndefined();
+});
+
+test("reads bytes only for attachments that are actually inlined", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  // A conversation can carry a large file the model will never read (it only
+  // ever gets a one-line notice). Loading its bytes on every subsequent turn
+  // would re-stream it out of Postgres for the life of the conversation.
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  const makeRow = async (mimeType: string, name: string) => {
+    const bytes = Buffer.from(`bytes for ${name}`, "utf8");
+    return ConversationAttachmentModel.create({
+      organizationId: conversation.organizationId,
+      conversationId: conversation.id,
+      uploadedByUserId: conversation.userId,
+      originalName: name,
+      mimeType,
+      fileSize: bytes.byteLength,
+      contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+      fileData: bytes,
+    });
+  };
+  const readable = await makeRow("image/png", "chart.png");
+  const unreadable = await makeRow("application/octet-stream", "archive.zip");
+
+  const refPart = (id: string, mediaType: string, filename: string) => ({
+    type: "file" as const,
+    url: `/api/chat/attachments/${id}/content`,
+    mediaType,
+    filename,
+  });
+
+  const withDataSpy = vi.spyOn(
+    ConversationAttachmentModel,
+    "findByIdsWithData",
+  );
+  try {
+    const output = await materializeAttachments({
+      messages: [
+        {
+          role: "user",
+          parts: [
+            refPart(readable.id, "image/png", "chart.png"),
+            refPart(unreadable.id, "application/octet-stream", "archive.zip"),
+          ],
+        },
+      ],
+      conversationId: conversation.id,
+      ingestibleMimeTypes: INGESTIBLE,
+      sandboxAvailable: true,
+    });
+
+    expect(withDataSpy).toHaveBeenCalledTimes(1);
+    expect(withDataSpy).toHaveBeenCalledWith([readable.id]);
+
+    // Output is unchanged by the optimization: the PNG still inlines, the
+    // opaque binary still becomes a sandbox notice.
+    const inlined = expectPresent(output[0].parts?.[0]);
+    expect(inlined.url).toContain("data:image/png;base64,");
+    const notice = expectPresent(output[0].parts?.[1]);
+    expect(notice.type).toBe("text");
+    expect(notice.text).toContain("/home/sandbox/attachments");
+
+    // A turn referencing only the unreadable file touches no bytes at all.
+    withDataSpy.mockClear();
+    await materializeAttachments({
+      messages: [
+        {
+          role: "user",
+          parts: [
+            refPart(unreadable.id, "application/octet-stream", "archive.zip"),
+          ],
+        },
+      ],
+      conversationId: conversation.id,
+      ingestibleMimeTypes: INGESTIBLE,
+      sandboxAvailable: true,
+    });
+    expect(withDataSpy).toHaveBeenCalledWith([]);
+  } finally {
+    withDataSpy.mockRestore();
+  }
 });
 
 test("no refs in messages returns a clone without DB hits", async () => {

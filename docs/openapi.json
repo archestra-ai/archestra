@@ -1127,7 +1127,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
@@ -4345,8 +4344,6 @@
           "content",
           "model",
           "role",
-          "stop_reason",
-          "stop_sequence",
           "type",
           "usage"
         ]
@@ -5985,13 +5982,20 @@
             ]
           },
           "finish_reason": {
-            "type": "string",
-            "enum": [
-              "COMPLETE",
-              "MAX_TOKENS",
-              "STOP_SEQUENCE",
-              "TOOL_CALL",
-              "ERROR"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "MAX_TOKENS",
+                  "STOP_SEQUENCE",
+                  "TOOL_CALL",
+                  "ERROR"
+                ]
+              },
+              {
+                "type": "string"
+              }
             ]
           },
           "usage": {
@@ -7124,7 +7128,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
@@ -8296,7 +8299,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
@@ -9461,7 +9463,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
@@ -10643,7 +10644,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
@@ -11708,13 +11708,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -11854,7 +11861,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "description": "The assistant message in the response"
@@ -12887,13 +12893,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -13029,7 +13042,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "description": "The assistant message in the response"
@@ -13867,13 +13879,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "sensitive",
-                    "network_error"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "sensitive",
+                        "network_error"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -13960,7 +13979,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "description": "https://docs.z.ai/api-reference/llm/chat-completion#response"
@@ -15167,7 +15185,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
@@ -16333,7 +16350,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
@@ -17607,12 +17623,19 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -17734,7 +17757,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "description": "https://platform.minimax.io/docs/api-reference/text-openai-api#response"
@@ -18896,7 +18918,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000"
@@ -20212,7 +20233,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "additionalProperties": false,
@@ -23571,8 +23591,6 @@
           "content",
           "model",
           "role",
-          "stop_reason",
-          "stop_sequence",
           "type",
           "usage"
         ],
@@ -25287,13 +25305,20 @@
             "additionalProperties": false
           },
           "finish_reason": {
-            "type": "string",
-            "enum": [
-              "COMPLETE",
-              "MAX_TOKENS",
-              "STOP_SEQUENCE",
-              "TOOL_CALL",
-              "ERROR"
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "COMPLETE",
+                  "MAX_TOKENS",
+                  "STOP_SEQUENCE",
+                  "TOOL_CALL",
+                  "ERROR"
+                ]
+              },
+              {
+                "type": "string"
+              }
             ]
           },
           "usage": {
@@ -26480,7 +26505,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "additionalProperties": false,
@@ -27705,7 +27729,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "additionalProperties": false,
@@ -28923,7 +28946,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "additionalProperties": false,
@@ -30158,7 +30180,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "additionalProperties": false,
@@ -31271,13 +31292,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -31422,7 +31450,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "additionalProperties": false,
@@ -32504,13 +32531,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter",
-                    "function_call"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter",
+                        "function_call"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -32651,7 +32685,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "additionalProperties": false,
@@ -33503,13 +33536,20 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "sensitive",
-                    "network_error"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "sensitive",
+                        "network_error"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -33599,7 +33639,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "additionalProperties": false,
@@ -34861,7 +34900,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "additionalProperties": false,
@@ -36079,7 +36117,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "additionalProperties": false,
@@ -37413,12 +37450,19 @@
               "type": "object",
               "properties": {
                 "finish_reason": {
-                  "type": "string",
-                  "enum": [
-                    "stop",
-                    "length",
-                    "tool_calls",
-                    "content_filter"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "content_filter"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "index": {
@@ -37545,7 +37589,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "additionalProperties": false,
@@ -38762,7 +38805,6 @@
                     }
                   },
                   "required": [
-                    "content",
                     "role"
                   ],
                   "additionalProperties": false,
@@ -76307,7 +76349,6 @@
                               }
                             },
                             "required": [
-                              "content",
                               "role"
                             ],
                             "additionalProperties": false,
@@ -78007,7 +78048,6 @@
                               }
                             },
                             "required": [
-                              "content",
                               "role"
                             ],
                             "additionalProperties": false,
@@ -121693,7 +121733,6 @@
                               }
                             },
                             "required": [
-                              "content",
                               "role"
                             ],
                             "additionalProperties": false,
@@ -123145,7 +123184,6 @@
                               }
                             },
                             "required": [
-                              "content",
                               "role"
                             ],
                             "additionalProperties": false,
@@ -148679,7 +148717,6 @@
                                                 }
                                               },
                                               "required": [
-                                                "content",
                                                 "role"
                                               ],
                                               "additionalProperties": false,
@@ -151441,7 +151478,6 @@
                                                 }
                                               },
                                               "required": [
-                                                "content",
                                                 "role"
                                               ],
                                               "additionalProperties": false,
@@ -154198,7 +154234,6 @@
                                                 }
                                               },
                                               "required": [
-                                                "content",
                                                 "role"
                                               ],
                                               "additionalProperties": false,
@@ -155585,7 +155620,6 @@
                                                 }
                                               },
                                               "required": [
-                                                "content",
                                                 "role"
                                               ],
                                               "additionalProperties": false,
@@ -178336,7 +178370,6 @@
                                           }
                                         },
                                         "required": [
-                                          "content",
                                           "role"
                                         ],
                                         "additionalProperties": false,
@@ -181098,7 +181131,6 @@
                                           }
                                         },
                                         "required": [
-                                          "content",
                                           "role"
                                         ],
                                         "additionalProperties": false,
@@ -183855,7 +183887,6 @@
                                           }
                                         },
                                         "required": [
-                                          "content",
                                           "role"
                                         ],
                                         "additionalProperties": false,
@@ -185242,7 +185273,6 @@
                                           }
                                         },
                                         "required": [
-                                          "content",
                                           "role"
                                         ],
                                         "additionalProperties": false,
@@ -198492,7 +198522,6 @@
                               }
                             },
                             "required": [
-                              "content",
                               "role"
                             ],
                             "additionalProperties": false,
@@ -199949,7 +199978,6 @@
                               }
                             },
                             "required": [
-                              "content",
                               "role"
                             ],
                             "additionalProperties": false,
@@ -239073,7 +239101,6 @@
                               }
                             },
                             "required": [
-                              "content",
                               "role"
                             ],
                             "additionalProperties": false,
@@ -240530,7 +240557,6 @@
                               }
                             },
                             "required": [
-                              "content",
                               "role"
                             ],
                             "additionalProperties": false,

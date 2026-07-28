@@ -307,7 +307,7 @@ export type OpenAiChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -1499,8 +1499,8 @@ export type AnthropicMessagesResponseInput = {
     }>;
     model: string;
     role: 'assistant';
-    stop_reason: unknown;
-    stop_sequence: string | null;
+    stop_reason?: unknown;
+    stop_sequence?: string | null;
     type: 'message';
     usage: {
         input_tokens: number;
@@ -1968,7 +1968,7 @@ export type CohereChatResponseInput = {
             };
         }>;
     };
-    finish_reason: 'COMPLETE' | 'MAX_TOKENS' | 'STOP_SEQUENCE' | 'TOOL_CALL' | 'ERROR';
+    finish_reason: 'COMPLETE' | 'MAX_TOKENS' | 'STOP_SEQUENCE' | 'TOOL_CALL' | 'ERROR' | string;
     usage?: {
         billed_units?: {
             input_tokens?: number;
@@ -2280,7 +2280,7 @@ export type MistralChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -2640,7 +2640,7 @@ export type PerplexityChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -2999,7 +2999,7 @@ export type GroqChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -3362,7 +3362,7 @@ export type OpenrouterChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -3695,14 +3695,14 @@ export type VllmChatCompletionRequestInput = {
 export type VllmChatCompletionResponseInput = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
         logprobs: unknown;
         /**
          * The assistant message in the response
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -4022,14 +4022,14 @@ export type OllamaChatCompletionRequestInput = {
 export type OllamaChatCompletionResponseInput = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
         logprobs: unknown;
         /**
          * The assistant message in the response
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -4288,14 +4288,14 @@ export type ZhipuaiChatCompletionResponseInput = {
     id: string;
     request_id?: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error' | string;
         index?: number;
         logprobs: unknown;
         /**
          * https://docs.z.ai/api-reference/llm/chat-completion#response
          */
         message: {
-            content: string | null;
+            content?: string | null;
             role: 'assistant';
             reasoning_content?: string;
             tool_calls?: Array<{
@@ -4647,7 +4647,7 @@ export type DeepSeekChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -5007,7 +5007,7 @@ export type ArchestraChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -5416,14 +5416,14 @@ export type MinimaxChatCompletionRequestInput = {
 export type MinimaxChatCompletionResponseInput = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | string;
         index?: number;
         logprobs?: unknown;
         /**
          * https://platform.minimax.io/docs/api-reference/text-openai-api#response
          */
         message: {
-            content: string | null;
+            content?: string | null;
             role: 'assistant';
             reasoning_details?: Array<{
                 text: string;
@@ -5771,7 +5771,7 @@ export type XaiChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -6151,7 +6151,7 @@ export type OpenAiChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -7343,8 +7343,8 @@ export type AnthropicMessagesResponse = {
     }>;
     model: string;
     role: 'assistant';
-    stop_reason: unknown;
-    stop_sequence: string | null;
+    stop_reason?: unknown;
+    stop_sequence?: string | null;
     type: 'message';
     usage: {
         input_tokens: number;
@@ -7812,7 +7812,7 @@ export type CohereChatResponse = {
             };
         }>;
     };
-    finish_reason: 'COMPLETE' | 'MAX_TOKENS' | 'STOP_SEQUENCE' | 'TOOL_CALL' | 'ERROR';
+    finish_reason: 'COMPLETE' | 'MAX_TOKENS' | 'STOP_SEQUENCE' | 'TOOL_CALL' | 'ERROR' | string;
     usage?: {
         billed_units?: {
             input_tokens?: number;
@@ -8124,7 +8124,7 @@ export type MistralChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -8484,7 +8484,7 @@ export type PerplexityChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -8843,7 +8843,7 @@ export type GroqChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -9206,7 +9206,7 @@ export type OpenrouterChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -9539,14 +9539,14 @@ export type VllmChatCompletionRequest = {
 export type VllmChatCompletionResponse = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
         logprobs: unknown;
         /**
          * The assistant message in the response
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -9866,14 +9866,14 @@ export type OllamaChatCompletionRequest = {
 export type OllamaChatCompletionResponse = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | 'function_call' | string;
         index?: number;
         logprobs: unknown;
         /**
          * The assistant message in the response
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -10132,14 +10132,14 @@ export type ZhipuaiChatCompletionResponse = {
     id: string;
     request_id?: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'sensitive' | 'network_error' | string;
         index?: number;
         logprobs: unknown;
         /**
          * https://docs.z.ai/api-reference/llm/chat-completion#response
          */
         message: {
-            content: string | null;
+            content?: string | null;
             role: 'assistant';
             reasoning_content?: string;
             tool_calls?: Array<{
@@ -10491,7 +10491,7 @@ export type DeepSeekChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -10851,7 +10851,7 @@ export type ArchestraChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -11260,14 +11260,14 @@ export type MinimaxChatCompletionRequest = {
 export type MinimaxChatCompletionResponse = {
     id: string;
     choices: Array<{
-        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter';
+        finish_reason: 'stop' | 'length' | 'tool_calls' | 'content_filter' | string;
         index?: number;
         logprobs?: unknown;
         /**
          * https://platform.minimax.io/docs/api-reference/text-openai-api#response
          */
         message: {
-            content: string | null;
+            content?: string | null;
             role: 'assistant';
             reasoning_details?: Array<{
                 text: string;
@@ -11615,7 +11615,7 @@ export type XaiChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
          */
         message: {
-            content: string | null;
+            content?: string | null;
             refusal?: string | null;
             role: 'assistant';
             annotations?: Array<unknown> | null;
@@ -22037,7 +22037,7 @@ export type AzureChatCompletionsWithDefaultAgentResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
             message: {
-                content: string | null;
+                content?: string | null;
                 refusal?: string | null;
                 role: 'assistant';
                 annotations?: Array<unknown> | null;
@@ -22538,7 +22538,7 @@ export type AzureChatCompletionsWithAgentResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
             message: {
-                content: string | null;
+                content?: string | null;
                 refusal?: string | null;
                 role: 'assistant';
                 annotations?: Array<unknown> | null;
@@ -33953,7 +33953,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
             message: {
-                content: string | null;
+                content?: string | null;
                 refusal?: string | null;
                 role: 'assistant';
                 annotations?: Array<unknown> | null;
@@ -34402,7 +34402,7 @@ export type GithubCopilotChatCompletionsWithAgentResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
             message: {
-                content: string | null;
+                content?: string | null;
                 refusal?: string | null;
                 role: 'assistant';
                 annotations?: Array<unknown> | null;
@@ -39776,7 +39776,7 @@ export type GetInteractionsResponses = {
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
                     message: {
-                        content: string | null;
+                        content?: string | null;
                         refusal?: string | null;
                         role: 'assistant';
                         annotations?: Array<unknown> | null;
@@ -40510,7 +40510,7 @@ export type GetInteractionsResponses = {
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
                     message: {
-                        content: string | null;
+                        content?: string | null;
                         refusal?: string | null;
                         role: 'assistant';
                         annotations?: Array<unknown> | null;
@@ -41244,7 +41244,7 @@ export type GetInteractionsResponses = {
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
                     message: {
-                        content: string | null;
+                        content?: string | null;
                         refusal?: string | null;
                         role: 'assistant';
                         annotations?: Array<unknown> | null;
@@ -41492,7 +41492,7 @@ export type GetInteractionsResponses = {
                      * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                      */
                     message: {
-                        content: string | null;
+                        content?: string | null;
                         refusal?: string | null;
                         role: 'assistant';
                         annotations?: Array<unknown> | null;
@@ -45794,7 +45794,7 @@ export type GetInteractionResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
                 message: {
-                    content: string | null;
+                    content?: string | null;
                     refusal?: string | null;
                     role: 'assistant';
                     annotations?: Array<unknown> | null;
@@ -46528,7 +46528,7 @@ export type GetInteractionResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
                 message: {
-                    content: string | null;
+                    content?: string | null;
                     refusal?: string | null;
                     role: 'assistant';
                     annotations?: Array<unknown> | null;
@@ -47262,7 +47262,7 @@ export type GetInteractionResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
                 message: {
-                    content: string | null;
+                    content?: string | null;
                     refusal?: string | null;
                     role: 'assistant';
                     annotations?: Array<unknown> | null;
@@ -47510,7 +47510,7 @@ export type GetInteractionResponses = {
                  * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
                  */
                 message: {
-                    content: string | null;
+                    content?: string | null;
                     refusal?: string | null;
                     role: 'assistant';
                     annotations?: Array<unknown> | null;
@@ -50896,7 +50896,7 @@ export type KimiChatCompletionsWithDefaultAgentResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
             message: {
-                content: string | null;
+                content?: string | null;
                 refusal?: string | null;
                 role: 'assistant';
                 annotations?: Array<unknown> | null;
@@ -51345,7 +51345,7 @@ export type KimiChatCompletionsWithAgentResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
             message: {
-                content: string | null;
+                content?: string | null;
                 refusal?: string | null;
                 role: 'assistant';
                 annotations?: Array<unknown> | null;
@@ -61245,7 +61245,7 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
             message: {
-                content: string | null;
+                content?: string | null;
                 refusal?: string | null;
                 role: 'assistant';
                 annotations?: Array<unknown> | null;
@@ -61694,7 +61694,7 @@ export type Microsoft365CopilotChatCompletionsWithAgentResponses = {
              * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1000
              */
             message: {
-                content: string | null;
+                content?: string | null;
                 refusal?: string | null;
                 role: 'assistant';
                 annotations?: Array<unknown> | null;

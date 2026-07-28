@@ -76948,6 +76948,137 @@ export type GetModelStatisticsResponses = {
 
 export type GetModelStatisticsResponse = GetModelStatisticsResponses[keyof GetModelStatisticsResponses];
 
+export type GetUserStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        /**
+         * Include a per-user cost time series. Off by default: it multiplies the response by the number of time buckets.
+         */
+        includeTimeSeries?: string;
+        /**
+         * Include each user's per-model usage breakdown. Off by default: it costs an extra aggregation.
+         */
+        includeModels?: string;
+        limit?: number;
+        offset?: number;
+        sortBy?: 'totalTokens' | 'requests' | 'billedCost' | 'lastActiveAt' | 'userName';
+        sortDirection?: 'asc' | 'desc';
+    };
+    url: '/api/statistics/users';
+};
+
+export type GetUserStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetUserStatisticsError = GetUserStatisticsErrors[keyof GetUserStatisticsErrors];
+
+export type GetUserStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            userId: string;
+            userName: string;
+            userEmail: string;
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            totalTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+            activeDays: number;
+            lastActiveAt: string | null;
+            models?: Array<{
+                model: string;
+                requests: number;
+                inputTokens: number;
+                outputTokens: number;
+                cacheReadTokens: number;
+                billedCost: number;
+                subscriptionCost: number;
+            }>;
+            timeSeries?: Array<{
+                timestamp: string;
+                value: number;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetUserStatisticsResponse = GetUserStatisticsResponses[keyof GetUserStatisticsResponses];
+
 export type GetOverviewStatisticsData = {
     body?: never;
     path?: never;

@@ -1,23 +1,36 @@
-import type { StatisticsTimeFrame } from "@archestra/shared";
+import type { PaginationQuery, StatisticsTimeFrame } from "@archestra/shared";
 import {
   type AnyColumn,
   and,
+  asc,
+  desc,
   eq,
   gte,
   inArray,
+  isNotNull,
   lte,
   type SQL,
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
 import type {
   AgentStatistics,
   CostSavingsStatistics,
   ModelStatistics,
   OverviewStatistics,
+  SortDirection,
   StatisticsTimeSeriesData,
+  StatisticsTimeSeriesPoint,
+  StatisticsUserTimeSeriesData,
   TeamStatistics,
+  UserModelUsage,
+  UserStatistics,
+  UserStatisticsSortBy,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
 
@@ -728,6 +741,187 @@ class StatisticsModel {
   }
 
   /**
+   * Per-user usage for adoption reporting.
+   *
+   * Differs from the sibling team/agent/model aggregations in three ways, all
+   * forced by user cardinality: an org has tens of teams and models but can
+   * have thousands of users, so returning every entity with a full time series
+   * in one payload does not scale.
+   *
+   * 1. Totals are paginated and sorted in SQL; only the requested page is
+   *    returned.
+   * 2. The time series is opt-in AND scoped to the page's users, so the
+   *    response is bounded by `limit * buckets` rather than `users * buckets`.
+   * 3. The per-model cut is opt-in and likewise page-scoped.
+   *
+   * Rows with a NULL `user_id` (unattributed traffic — e.g. a shared provider
+   * key with no user context) are excluded by the join, so totals here are
+   * deliberately <= org-wide totals.
+   */
+  static async getUserStatistics(params: {
+    timeframe: StatisticsTimeFrame;
+    pagination: PaginationQuery;
+    sortBy: UserStatisticsSortBy;
+    sortDirection: SortDirection;
+    includeTimeSeries: boolean;
+    includeModels: boolean;
+    /** Caller, used for agent-access scoping. */
+    requestingUserId?: string;
+    isAgentAdmin?: boolean;
+    /**
+     * When false the caller may only see their own usage. Per-user usage is
+     * employee-level data, so it is gated more tightly than the aggregate
+     * team/model views.
+     */
+    canReadAllUsers: boolean;
+  }): Promise<PaginatedResult<UserStatistics>> {
+    const {
+      timeframe,
+      pagination,
+      sortBy,
+      sortDirection,
+      includeTimeSeries,
+      includeModels,
+      requestingUserId,
+      isAgentAdmin,
+      canReadAllUsers,
+    } = params;
+
+    // Scope to agents the caller can see, matching the sibling statistics
+    // aggregations.
+    const scopeConditions: SQL[] = [
+      ...StatisticsModel.timeframeConditions(timeframe),
+    ];
+
+    if (requestingUserId && !isAgentAdmin) {
+      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
+        requestingUserId,
+        false,
+      );
+      if (accessibleAgentIds.length === 0) {
+        return createPaginatedResult([], 0, pagination);
+      }
+      scopeConditions.push(
+        inArray(schema.interactionsTable.profileId, accessibleAgentIds),
+      );
+    }
+
+    // Without permission to read the roster, a caller sees only themselves.
+    if (!canReadAllUsers) {
+      if (!requestingUserId) {
+        return createPaginatedResult([], 0, pagination);
+      }
+      scopeConditions.push(
+        eq(schema.interactionsTable.userId, requestingUserId),
+      );
+    }
+
+    const whereClause = and(...scopeConditions);
+
+    const totalTokensExpr = sql<number>`COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) + COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0)`;
+    const billedCostExpr = billedSum(
+      schema.interactionsTable.cost,
+      "DOUBLE PRECISION",
+    );
+
+    const sortExpr = {
+      totalTokens: totalTokensExpr,
+      requests: sql`COUNT(*)`,
+      billedCost: billedCostExpr,
+      lastActiveAt: sql`MAX(${schema.interactionsTable.createdAt})`,
+      userName: sql`${schema.usersTable.name}`,
+    }[sortBy];
+
+    // PHASE 1 — paginated per-user totals.
+    const [rows, [{ total }]] = await Promise.all([
+      db
+        .select({
+          userId: schema.usersTable.id,
+          userName: schema.usersTable.name,
+          userEmail: schema.usersTable.email,
+          requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+          inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
+          outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
+          cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
+          totalTokens: sql<number>`CAST(${totalTokensExpr} AS INTEGER)`,
+          billedCost: billedCostExpr,
+          subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
+          activeDays: sql<number>`CAST(COUNT(DISTINCT DATE(${schema.interactionsTable.createdAt})) AS INTEGER)`,
+          lastActiveAt: sql<string>`MAX(${schema.interactionsTable.createdAt})`,
+        })
+        .from(schema.interactionsTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.interactionsTable.userId, schema.usersTable.id),
+        )
+        .where(whereClause)
+        .groupBy(
+          schema.usersTable.id,
+          schema.usersTable.name,
+          schema.usersTable.email,
+        )
+        .orderBy(sortDirection === "asc" ? asc(sortExpr) : desc(sortExpr))
+        .limit(pagination.limit)
+        .offset(pagination.offset),
+      db
+        .select({
+          total: sql<number>`CAST(COUNT(DISTINCT ${schema.interactionsTable.userId}) AS INTEGER)`,
+        })
+        .from(schema.interactionsTable)
+        .innerJoin(
+          schema.usersTable,
+          eq(schema.interactionsTable.userId, schema.usersTable.id),
+        )
+        .where(whereClause),
+    ]);
+
+    const pageUserIds = rows.map((row) => row.userId);
+
+    // PHASE 2 — page-scoped enrichment. Skipped entirely when the page is empty
+    // so an empty `inArray` never reaches SQL.
+    const [timeSeriesByUser, modelsByUser] = await Promise.all([
+      includeTimeSeries && pageUserIds.length > 0
+        ? StatisticsModel.getUserTimeSeries({
+            timeframe,
+            userIds: pageUserIds,
+            whereClause,
+          })
+        : Promise.resolve(new Map<string, StatisticsTimeSeriesPoint[]>()),
+      includeModels && pageUserIds.length > 0
+        ? StatisticsModel.getUserModelBreakdown({
+            userIds: pageUserIds,
+            whereClause,
+          })
+        : Promise.resolve(new Map<string, UserModelUsage[]>()),
+    ]);
+
+    const data = rows.map((row) => ({
+      userId: row.userId,
+      userName: row.userName,
+      userEmail: row.userEmail,
+      requests: Number(row.requests) || 0,
+      inputTokens: Number(row.inputTokens) || 0,
+      outputTokens: Number(row.outputTokens) || 0,
+      cacheReadTokens: Number(row.cacheReadTokens) || 0,
+      totalTokens: Number(row.totalTokens) || 0,
+      billedCost: Number(row.billedCost) || 0,
+      subscriptionCost: Number(row.subscriptionCost) || 0,
+      activeDays: Number(row.activeDays) || 0,
+      lastActiveAt: row.lastActiveAt
+        ? new Date(row.lastActiveAt).toISOString()
+        : null,
+      ...(includeModels
+        ? { models: modelsByUser.get(row.userId) ?? [] }
+        : {}),
+      ...(includeTimeSeries
+        ? { timeSeries: timeSeriesByUser.get(row.userId) ?? [] }
+        : {}),
+    }));
+
+    return createPaginatedResult(data, Number(total) || 0, pagination);
+  }
+
+  /**
    * Get overview statistics
    */
   static async getOverviewStatistics(
@@ -997,6 +1191,139 @@ class StatisticsModel {
       totalCacheSavings,
       timeSeries,
     };
+  }
+
+  // ─── Private helpers ──────────────────────────────────────────────────────
+
+  /**
+   * WHERE conditions restricting `interactions` to a timeframe, covering both
+   * the relative presets and `custom:<start>_<end>` ranges.
+   */
+  private static timeframeConditions(timeframe: StatisticsTimeFrame): SQL[] {
+    const interval = StatisticsModel.getTimeframeInterval(timeframe);
+
+    if (interval) {
+      return [
+        gte(
+          schema.interactionsTable.createdAt,
+          sql`NOW() - INTERVAL ${sql.raw(`'${interval}'`)}`,
+        ),
+      ];
+    }
+
+    const customRange = StatisticsModel.parseCustomTimeframe(timeframe);
+    if (!customRange) {
+      return [];
+    }
+    return [
+      gte(schema.interactionsTable.createdAt, customRange.startTime),
+      lte(schema.interactionsTable.createdAt, customRange.endTime),
+    ];
+  }
+
+  /**
+   * Cost time series for a bounded set of users, keyed by user id. Reuses the
+   * same bucketing as the other statistics views so the chart shapes match.
+   */
+  private static async getUserTimeSeries(params: {
+    timeframe: StatisticsTimeFrame;
+    userIds: string[];
+    whereClause: SQL | undefined;
+  }): Promise<Map<string, StatisticsTimeSeriesPoint[]>> {
+    const { timeframe, userIds, whereClause } = params;
+    const timeBucket = StatisticsModel.getTimeBucket(timeframe);
+
+    const rawRows = await db
+      .select({
+        userId: schema.interactionsTable.userId,
+        timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
+        requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+        inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
+        outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
+        cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
+      })
+      .from(schema.interactionsTable)
+      .where(
+        and(whereClause, inArray(schema.interactionsTable.userId, userIds)),
+      )
+      .groupBy(
+        schema.interactionsTable.userId,
+        sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
+      )
+      .orderBy(
+        sql`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
+      );
+
+    const bucketed = StatisticsModel.groupTimeSeries(
+      // `user_id` is non-null here: the caller's WHERE already restricts to the
+      // page's user ids, which come from an inner join on users.
+      rawRows as StatisticsUserTimeSeriesData[],
+      timeframe,
+      "userId",
+    );
+
+    const byUser = new Map<string, StatisticsTimeSeriesPoint[]>();
+    for (const row of bucketed) {
+      const points = byUser.get(row.userId) ?? [];
+      points.push({ timestamp: row.timeBucket, value: Number(row.cost) || 0 });
+      byUser.set(row.userId, points);
+    }
+    return byUser;
+  }
+
+  /**
+   * Per-model usage for a bounded set of users, keyed by user id, ordered
+   * heaviest model first. Interactions with no recorded model are skipped
+   * rather than bucketed under a placeholder name.
+   */
+  private static async getUserModelBreakdown(params: {
+    userIds: string[];
+    whereClause: SQL | undefined;
+  }): Promise<Map<string, UserModelUsage[]>> {
+    const { userIds, whereClause } = params;
+
+    const rows = await db
+      .select({
+        userId: schema.interactionsTable.userId,
+        model: schema.interactionsTable.model,
+        requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
+        inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
+        outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
+        cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
+        billedCost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
+        subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
+      })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          whereClause,
+          inArray(schema.interactionsTable.userId, userIds),
+          isNotNull(schema.interactionsTable.model),
+        ),
+      )
+      .groupBy(schema.interactionsTable.userId, schema.interactionsTable.model)
+      .orderBy(
+        desc(
+          sql`COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) + COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0)`,
+        ),
+      );
+
+    const byUser = new Map<string, UserModelUsage[]>();
+    for (const row of rows) {
+      if (!row.userId || !row.model) continue;
+      const entries = byUser.get(row.userId) ?? [];
+      entries.push({
+        model: row.model,
+        requests: Number(row.requests) || 0,
+        inputTokens: Number(row.inputTokens) || 0,
+        outputTokens: Number(row.outputTokens) || 0,
+        cacheReadTokens: Number(row.cacheReadTokens) || 0,
+        billedCost: Number(row.billedCost) || 0,
+        subscriptionCost: Number(row.subscriptionCost) || 0,
+      });
+      byUser.set(row.userId, entries);
+    }
+    return byUser;
   }
 }
 

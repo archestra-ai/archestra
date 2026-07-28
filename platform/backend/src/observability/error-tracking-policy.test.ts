@@ -98,6 +98,8 @@ describe("classifyErrorForTracking", () => {
     for (const name of [
       "McpServerNotReadyError",
       "McpServerConnectionTimeoutError",
+      "McpServerUnreachableError",
+      "McpServerDeploymentFailedError",
     ]) {
       expect(classifyErrorForTracking(namedError(name)).report).toBe(false);
     }

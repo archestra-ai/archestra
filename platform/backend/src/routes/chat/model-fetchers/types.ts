@@ -1,8 +1,25 @@
 import type { SupportedProvider } from "@archestra/shared";
+import { ApiError } from "@/types";
 import type { ModelDefaultParameters } from "@/types/model";
 
 export const PLACEHOLDER_API_KEY = "EMPTY";
 export const PLACEHOLDER_BEARER_TOKEN = `Bearer ${PLACEHOLDER_API_KEY}`;
+
+/**
+ * Map a provider's model-listing failure to the error surfaced to the caller.
+ * The upstream status is relayed for client errors (an invalid provider key is
+ * a 401, not a crash of ours) and mapped to 502 for provider 5xx — either way
+ * the failure carries its real classification instead of a generic 500.
+ */
+export function modelFetchError(
+  label: string,
+  upstreamStatus: number,
+): ApiError {
+  return new ApiError(
+    upstreamStatus >= 500 ? 502 : upstreamStatus,
+    `Failed to fetch ${label}: ${upstreamStatus}`,
+  );
+}
 
 /**
  * Capabilities a fetcher can read straight from a provider's models endpoint.

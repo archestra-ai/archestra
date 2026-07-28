@@ -131,6 +131,9 @@ describe("draftRecordingEnhancement", () => {
       prompt: null,
       response: null,
       category: null,
+      // Empty is not the same failure as every candidate model failing, and
+      // the caller degrades to different copy for each.
+      reason: "empty_transcript",
     });
     expect(mockGenerate).not.toHaveBeenCalled();
   });

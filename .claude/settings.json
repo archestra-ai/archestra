@@ -5,8 +5,7 @@
   },
   "permissions": {
     "deny": [
-      "Read(./**/*.gen.ts)",
-      "Read(./docs/openapi.json)"
+      "Read(/docs/openapi.json)"
     ]
   },
   "hooks": {

@@ -57,7 +57,8 @@ class ActiveUsersMetricCollector {
   private timer: NodeJS.Timeout | null = null;
 
   start(): void {
-    const intervalMs = config.observability.metrics.activeUsersRefreshIntervalMs;
+    const intervalMs =
+      config.observability.metrics.activeUsersRefreshIntervalMs;
 
     if (intervalMs <= 0) {
       logger.info(
@@ -95,9 +96,10 @@ class ActiveUsersMetricCollector {
     try {
       const now = Date.now();
       for (const window of ACTIVE_USER_WINDOWS) {
-        const activeUsers = await InteractionModel.countDistinctActiveUsersSince(
-          new Date(now - window.ms),
-        );
+        const activeUsers =
+          await InteractionModel.countDistinctActiveUsersSince(
+            new Date(now - window.ms),
+          );
         activeUsersGauge.set({ window: window.label }, activeUsers);
       }
     } catch (error) {

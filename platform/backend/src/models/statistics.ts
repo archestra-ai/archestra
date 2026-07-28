@@ -910,9 +910,7 @@ class StatisticsModel {
       lastActiveAt: row.lastActiveAt
         ? new Date(row.lastActiveAt).toISOString()
         : null,
-      ...(includeModels
-        ? { models: modelsByUser.get(row.userId) ?? [] }
-        : {}),
+      ...(includeModels ? { models: modelsByUser.get(row.userId) ?? [] } : {}),
       ...(includeTimeSeries
         ? { timeSeries: timeSeriesByUser.get(row.userId) ?? [] }
         : {}),
@@ -1290,7 +1288,10 @@ class StatisticsModel {
         inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
         outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
         cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
-        billedCost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
+        billedCost: billedSum(
+          schema.interactionsTable.cost,
+          "DOUBLE PRECISION",
+        ),
         subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
       })
       .from(schema.interactionsTable)

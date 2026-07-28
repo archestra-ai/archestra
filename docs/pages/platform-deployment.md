@@ -1363,6 +1363,11 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
   - Default: `archestra-metrics-secret`
   - Note: When set, clients must include `Authorization: Bearer <token>` header to access `/metrics`
 
+- **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often, in milliseconds, to recompute the `llm_active_users` gauge.
+  - Default: `300000` (5 minutes)
+  - Set to `0` to disable collection entirely
+  - Values below `30000` are raised to that floor: the gauge is a distinct count over the interactions table, so a short interval turns into steady background load for a number that changes slowly
+
 ### Incoming Email Configuration
 
 These environment variables configure the Incoming Email feature, which allows external users to invoke agents by sending emails. See [Incoming Email](/docs/platform-agent-triggers-email) for setup instructions.

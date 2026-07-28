@@ -12,9 +12,61 @@ const {
   getTeamStatistics,
   getAgentStatistics,
   getModelStatistics,
+  getUserStatistics,
   getOverviewStatistics,
   getCostSavingsStatistics,
 } = archestraApiSdk;
+
+/**
+ * Per-user usage. Unlike the sibling statistics hooks this one is paginated —
+ * an org can have far more users than teams or models — so callers pass the
+ * page size they intend to render.
+ */
+export function useUserStatistics({
+  timeframe = "24h",
+  limit = 10,
+  offset = 0,
+  sortBy = "totalTokens",
+  includeModels = false,
+  enabled = true,
+}: {
+  timeframe?: StatisticsTimeFrame;
+  limit?: number;
+  offset?: number;
+  sortBy?: "totalTokens" | "requests" | "billedCost" | "lastActiveAt";
+  includeModels?: boolean;
+  enabled?: boolean;
+} = {}) {
+  return useQuery({
+    queryKey: [
+      "statistics",
+      "users",
+      timeframe,
+      limit,
+      offset,
+      sortBy,
+      includeModels,
+    ],
+    queryFn: async () => {
+      const { data, error } = await getUserStatistics({
+        // `includeModels` is a string over the wire: the endpoint parses
+        // "true"/"false" explicitly rather than coercing, so that an explicit
+        // `false` is not read as truthy.
+        query: {
+          timeframe,
+          limit,
+          offset,
+          sortBy,
+          includeModels: String(includeModels),
+        },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    enabled,
+    refetchInterval: 30_000, // Refresh every 30 seconds
+  });
+}
 
 export function useTeamStatistics({
   timeframe = "24h",

@@ -889,6 +889,7 @@ async function makeInteraction(
       | "billingMode"
       | "sessionId"
       | "cacheReadTokens"
+      | "userId"
     >
   > = {},
 ) {

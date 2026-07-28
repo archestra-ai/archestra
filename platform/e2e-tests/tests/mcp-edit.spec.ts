@@ -4,9 +4,10 @@ import { goToPage, type Page, test } from "../fixtures";
 import { closeOpenDialogs } from "../utils";
 
 /**
- * The catalog edit form decides which confirm bar to show from
- * `computeCascadeOutcome`, a frontend mirror of the backend cascade gate. The
- * two have drifted before: after the backend stopped treating execution-config
+ * Saving a catalog edit can restart the servers running it, and the form warns
+ * about that with an inline confirm bar. Which bar it shows comes from
+ * `computeCascadeOutcome`, a frontend mirror of the backend gate that decides
+ * what the save actually does. The two have drifted before: after the backend stopped treating execution-config
  * drift on a multi-tenant catalog as needing user input, the mirror kept
  * classifying it as "manual", so bumping a docker image told admins the change
  * "needs a new value" and parked the rollout behind a second click — for a
@@ -16,7 +17,7 @@ import { closeOpenDialogs } from "../utils";
  * two layers are observed together. Tenancy is the only difference between the
  * first two cases, so they fail in opposite directions if the mirror regresses.
  *
- * Deliberately no wait on pod health: what's under test is the cascade
+ * Deliberately no wait on pod health: what's under test is the save
  * decision, which the route makes from the catalog row and the existence of an
  * install. Tying these to a pod coming up would import that flakiness for no
  * added assertion.
@@ -45,7 +46,7 @@ async function apiJson(
 }
 
 /**
- * A catalog item plus one install, which is all the cascade gate reads. The
+ * A catalog item plus one install, which is all the save gate reads. The
  * install is not waited on: `affectedServerCount > 0` is what makes the form
  * offer a confirm bar, and that holds the moment the row exists.
  */
@@ -56,7 +57,7 @@ async function createCatalogWithInstall(
 ): Promise<InstalledFixture> {
   const catalog = await apiJson(page, "post", "/api/internal_mcp_catalog", {
     name,
-    description: "e2e cascade bar fixture",
+    description: "e2e confirm bar fixture",
     serverType: "local",
     multitenant,
     localConfig: {
@@ -91,7 +92,7 @@ async function destroyFixture(page: Page, fixture: InstalledFixture | null) {
 }
 
 /**
- * Bump the image tag on the catalog's edit route until the cascade confirm bar
+ * Bump the image tag on the catalog's edit route until the confirm bar
  * is on screen, then leave it there for the caller to assert against.
  *
  * Deep-linking rather than driving the registry card: that path adds a search
@@ -133,7 +134,7 @@ async function readInstall(page: Page, serverId: string) {
   return apiJson(page, "get", `/api/mcp_server/${serverId}`);
 }
 
-test.describe("MCP catalog edit — multi-tenant cascade confirm bar", () => {
+test.describe("MCP catalog edit — reinstall confirm bar", () => {
   test.describe.configure({ timeout: 240_000 });
 
   let fixture: InstalledFixture | null = null;
@@ -152,7 +153,7 @@ test.describe("MCP catalog edit — multi-tenant cascade confirm bar", () => {
   }) => {
     fixture = await createCatalogWithInstall(
       adminPage,
-      makeRandomString(8, "mt-cascade"),
+      makeRandomString(8, "mt-edit"),
       true,
     );
 
@@ -187,7 +188,7 @@ test.describe("MCP catalog edit — multi-tenant cascade confirm bar", () => {
   }) => {
     fixture = await createCatalogWithInstall(
       adminPage,
-      makeRandomString(8, "st-cascade"),
+      makeRandomString(8, "st-edit"),
       false,
     );
 

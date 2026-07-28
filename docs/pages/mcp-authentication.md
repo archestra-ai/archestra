@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-07-27
+lastUpdated: 2026-07-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -110,6 +110,8 @@ Bearer tokens authenticate the client to Archestra. They are not enterprise asse
 
 For per-user access to downstream systems like GitHub or Jira, bearer tokens should usually be **personal user tokens**. Team and organization tokens can authenticate to the gateway, but they do not identify a specific user strongly enough for Archestra to broker per-user downstream credentials on their own.
 
+Built-in Archestra tools that act for a person — querying a knowledge base, for example — are unavailable to team and organization tokens for the same reason. They are hidden from `tools/list`, and calling one returns an error naming the credential as the cause. Use a personal token, a user OAuth token, or an Identity Provider JWT.
+
 ### Identity Assertion JWT Authorization Grant (ID-JAG)
 
 This option implements the MCP [Enterprise-Managed Authorization](https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization) extension using an [Identity Assertion JWT Authorization Grant (ID-JAG)](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-identity-assertion-authz-grant). It is designed for organizations that already use a corporate IdP to sign users into MCP clients. The identity provider must be able to:
@@ -162,7 +164,7 @@ This credential resolution supports a common setup: an admin installs upstream M
 4. Client sends requests to the gateway with `Authorization: Bearer <jwt>`
 5. Gateway discovers the JWKS URL from the IdP's OIDC discovery endpoint
 6. Gateway validates the JWT signature, issuer, audience (IdP's client ID), and expiration
-7. Gateway extracts the `email` claim from the JWT and matches it to an Archestra user account
+7. Gateway reads the email claim from the JWT and matches it to an Archestra user account
 8. Gateway resolves upstream credentials: if the server has its own credentials, those are used; otherwise the original JWT is propagated
 
 #### Requirements
@@ -170,9 +172,17 @@ This credential resolution supports a common setup: an admin installs upstream M
 - The Identity Provider must be an **OIDC provider** (SAML providers do not support JWKS)
 - The IdP must expose a standard OIDC discovery endpoint (`.well-known/openid-configuration`) with a `jwks_uri`
 - The JWT `iss` claim must match the IdP's issuer URL
-- The JWT `aud` claim must match the IdP's client ID (if configured)
-- The JWT must contain an `email` claim that matches an existing Archestra user
+- The IdP must have a client ID, and the JWT `aud` claim must match it
+- The JWT must carry an email that matches an existing Archestra user
 - The user must have `profile:admin` permission or be a member of at least one team associated with the gateway they are trying to use
+
+#### Namespaced Email Claims
+
+The gateway reads the email from the `email` claim by default. Some IdPs namespace their custom claims — `https://example.com/email`, for example — and leave the standard `email` claim unset.
+
+Set **Email Claim** under the Identity Provider's Attribute Mapping to the claim that carries the email. The gateway reads that claim first and falls back to `email`.
+
+Use the Identity Provider's **Token Debugger** to see which claims your tokens actually carry.
 
 ## Upstream MCP Server Authentication
 

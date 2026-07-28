@@ -93,7 +93,7 @@ describe("mcp server tool execution", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain(
-      "User context not available",
+      "Organization context not available",
     );
   });
 

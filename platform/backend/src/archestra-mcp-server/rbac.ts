@@ -243,14 +243,20 @@ export async function checkToolPermission(
   if (!perm) return null;
 
   if (!context.organizationId) {
-    return errorResult("User context not available");
+    return errorResult("Organization context not available");
   }
 
   // org/team-token sessions have no user; they may still use read-only tools
   // that operate at organization scope — the handlers restrict the results.
   if (!context.userId) {
     if (ORG_CONTEXT_READ_TOOLS.has(typedShortName)) return null;
-    return errorResult("User context not available");
+    // Name the cause: this is reached whenever the caller authenticated with a
+    // credential that acts for an application rather than a person, and the
+    // previous wording ("User context not available") read as an internal
+    // fault rather than a fixable choice of credential.
+    return errorResult(
+      `${toolName} requires an acting user, but the credential used to authenticate does not identify one. Team tokens, organization tokens, and OAuth client-credentials tokens act for an application, not a person. Re-authenticate with a personal token, a user OAuth token, or an Identity Provider JWT.`,
+    );
   }
 
   const allowed = await userHasPermission(

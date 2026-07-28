@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-07-09
+lastUpdated: 2026-07-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -86,6 +86,14 @@ MCP Gateways support four client authentication paths:
 Use OAuth 2.1 for standard MCP clients, ID-JAG or JWKS for enterprise-managed identity, and bearer tokens for direct service integrations or simple local setup.
 
 See [MCP Authentication](/docs/mcp-authentication) for more details.
+
+## Protocol Versions
+
+Gateways serve both the `2025-11-25` and `2026-07-28` MCP revisions from the same endpoint. Clients pick one with the `MCP-Protocol-Version` header. A client that sends no header keeps the older behavior, so existing integrations need no change.
+
+The `2026-07-28` revision drops the `initialize` handshake and the session header. Clients on it call `server/discover` for capabilities and send `Mcp-Method` and `Mcp-Name` routing headers on every request. The gateway rejects a request whose routing headers disagree with its body.
+
+Tool lists carry a freshness hint so clients can cache them. The hint is always marked private — a gateway filters tools per caller, so two users can see different lists.
 
 ## Access Control
 

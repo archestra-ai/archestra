@@ -35,6 +35,7 @@ export function makeConfig(
       sandbox: false,
       sandboxArtifactBytesLimit: 16 * 1024 * 1024,
       chatAttachmentStorageBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+      apiBodyLimitBytes: 70 * 1024 * 1024,
       byosEnabled: false,
       byosVaultKvVersion: "1",
       azureOpenAiEntraIdEnabled: false,

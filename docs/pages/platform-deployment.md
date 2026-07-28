@@ -726,6 +726,7 @@ The following environment variables can be used to configure Archestra Platform.
   - Default: `70MB` (73400320 bytes)
   - Format: Numeric bytes (e.g., `73400320`) or human-readable (e.g., `70MB`, `100KB`, `1GB`)
   - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat. The default carries a max-size chat attachment as base64 plus room for history; raising `ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT` requires raising this too.
+  - All attachments of one chat message travel in a single request, so this also bounds their combined size. The chat composer blocks a message whose attachments exceed it and asks the user to send them separately.
 
 - **`ARCHESTRA_FRONTEND_URL`** - Setting this variable enables origin validation for CORS and authentication. When set, only requests from this origin (and any in `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`) are allowed. When not set, all origins are accepted.
   - Example: `https://frontend.example.com`

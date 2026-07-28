@@ -1,5 +1,6 @@
 import { type ChatSkillMetadata, E2eTestId } from "@archestra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { NEW_CHAT_DRAFT_STORAGE_KEY } from "@/lib/chat/chat-utils";
@@ -22,6 +23,7 @@ const {
   mockFeatureState: {
     chatSecretScanEnabled: false,
     chatAttachmentStorageBytesLimit: undefined as number | undefined,
+    apiBodyLimitBytes: undefined as number | undefined,
   },
   mockProfileState: {
     agent: null as { sandboxAvailable: boolean } | null,
@@ -58,6 +60,11 @@ Object.defineProperty(window, "matchMedia", {
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })),
+});
+
+vi.mock("sonner", () => {
+  const toast = Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() });
+  return { toast, Toaster: () => null };
 });
 
 // Mock all the complex dependencies
@@ -330,9 +337,13 @@ describe("ArchestraPromptInput", () => {
       if (flag === "chatAttachmentStorageBytesLimit") {
         return mockFeatureState.chatAttachmentStorageBytesLimit;
       }
+      if (flag === "apiBodyLimitBytes") {
+        return mockFeatureState.apiBodyLimitBytes;
+      }
       return undefined;
     });
     mockFeatureState.chatAttachmentStorageBytesLimit = undefined;
+    mockFeatureState.apiBodyLimitBytes = undefined;
     mockUploadPolicy.maxFileSize = undefined;
     mockUploadPolicy.validateFile = undefined;
     mockUseChatPlaceholder.mockReturnValue({
@@ -717,6 +728,45 @@ describe("ArchestraPromptInput", () => {
 
       expect(onCompactConversation).toHaveBeenCalledTimes(1);
       expect(mockTextInputClear).toHaveBeenCalled();
+    });
+  });
+
+  describe("turn attachment budget", () => {
+    // Each file passes the per-file cap on its own, but they all ride in one
+    // request body. Without this guard the send reaches the body parser and
+    // dies with an opaque 413.
+    const dataUrlOfBytes = (bytes: number) => ({
+      url: `data:application/pdf;base64,${"A".repeat(bytes)}`,
+    });
+
+    it("blocks a send whose attachments exceed the body limit", () => {
+      const onSubmit = vi.fn();
+      mockFeatureState.apiBodyLimitBytes = 10 * 1024 * 1024;
+      mockControllerState.value = "here are two files";
+      mockControllerState.files = [
+        dataUrlOfBytes(6 * 1024 * 1024),
+        dataUrlOfBytes(6 * 1024 * 1024),
+      ];
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("Send them in separate messages."),
+      );
+    });
+
+    it("allows a single attachment that fits on its own", () => {
+      const onSubmit = vi.fn();
+      mockFeatureState.apiBodyLimitBytes = 10 * 1024 * 1024;
+      mockControllerState.value = "here is one file";
+      mockControllerState.files = [dataUrlOfBytes(6 * 1024 * 1024)];
+
+      render(<ArchestraPromptInput {...defaultProps} onSubmit={onSubmit} />);
+      fireEvent.submit(screen.getByTestId("prompt-input"));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
     });
   });
 

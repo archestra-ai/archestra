@@ -96,6 +96,35 @@ function useChatAttachmentStorageByteLimit(): number {
   );
 }
 
+// Fallback request body ceiling before /api/config resolves (mirrors the
+// backend default). Leaves room for the message text, history refs, and the
+// JSON envelope that ride alongside the attachments in the same request.
+const DEFAULT_API_BODY_LIMIT_BYTES = 70 * 1024 * 1024;
+const TURN_BODY_RESERVE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * How many base64 attachment characters one turn may carry. A single file is
+ * bounded by the storage cap, but nothing bounds their sum — and every
+ * attachment of a turn travels base64-encoded in one request, so two
+ * within-cap files can still overrun the body parser. It rejects the request
+ * before any handler runs, so the composer has to catch this itself or the
+ * user gets an opaque 413.
+ */
+function useTurnAttachmentBudget(): number {
+  const bodyLimit =
+    useFeature("apiBodyLimitBytes") ?? DEFAULT_API_BODY_LIMIT_BYTES;
+  return Math.max(0, bodyLimit - TURN_BODY_RESERVE_BYTES);
+}
+
+/**
+ * Serialized size of a turn's attachments. By submit time each file's `url` is
+ * already the base64 `data:` URL that goes on the wire, so its length is the
+ * exact cost — no encoding estimate needed.
+ */
+function attachmentPayloadBytes(files: readonly { url?: string }[]): number {
+  return files.reduce((total, file) => total + (file.url?.length ?? 0), 0);
+}
+
 /**
  * Options riding alongside a submitted message. At most one is set: a `/`
  * slash command activates a skill, a `!` prefix marks the message for direct
@@ -225,6 +254,7 @@ const PromptInputContent = ({
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
   const storageByteLimit = useChatAttachmentStorageByteLimit();
+  const turnAttachmentBudget = useTurnAttachmentBudget();
   const [subscriptionConnectRequest, setSubscriptionConnectRequest] =
     useState(0);
   const requestSubscriptionConnect = useCallback(() => {
@@ -519,6 +549,17 @@ const PromptInputContent = ({
         return;
       }
 
+      // Each file passed the per-file cap on its own, but they all ride in one
+      // request. Stop here rather than letting the body parser 413 the send.
+      const payloadBytes = attachmentPayloadBytes(message.files);
+      if (payloadBytes > turnAttachmentBudget) {
+        e.preventDefault();
+        toast.error(
+          `These attachments total ${formatBytes(payloadBytes)}, over the ${formatBytes(turnAttachmentBudget)} limit for one message. Send them in separate messages.`,
+        );
+        return;
+      }
+
       const trimmed = message.text.trim();
 
       if (trimmed === "/compact" && onCompactConversation) {
@@ -586,6 +627,7 @@ const PromptInputContent = ({
       sensitiveDataDetectionEnabled,
       skillCommands,
       subscriptionConnectRequired,
+      turnAttachmentBudget,
     ],
   );
 

@@ -111575,6 +111575,9 @@
                         "chatAttachmentStorageBytesLimit": {
                           "type": "number"
                         },
+                        "apiBodyLimitBytes": {
+                          "type": "number"
+                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -111701,6 +111704,7 @@
                         "sandbox",
                         "sandboxArtifactBytesLimit",
                         "chatAttachmentStorageBytesLimit",
+                        "apiBodyLimitBytes",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",

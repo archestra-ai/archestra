@@ -58,6 +58,12 @@ replays the full ordered `skill_sandbox_replay_events` log before executing the
 new command. Each event is applied in `sequence` order: a command re-executes,
 an upload re-writes its bytes at its absolute path, a skill mount writes the
 pinned version's `SKILL.md` (+ its version files) under `/skills/<name>`.
+Small uploads inline their bytes in the recipe; large ones (over
+`SPOOL_MIN_BYTES` in `upload-spool.ts`) are spooled to a local cache dir and
+referenced by path, so BuildKit filesync ships the bytes to the engine once per
+content instead of on every materialize — and a spool hit skips the Postgres
+payload read entirely. The spool is pure cache: recreated from the DB on
+demand, evicted LRU past its size cap, safe to clear.
 Interleaving is preserved, so a file uploaded between command A and command B is
 **not** present while A replays — the on-disk order always matches the order
 operations were accepted.

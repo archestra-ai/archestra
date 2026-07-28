@@ -792,6 +792,9 @@ Upgrading from a chart that ran the bundled engine leaves its cache volume behin
 - **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Maximum size of a file the sandbox can export to the conversation's Files panel, and of a chat attachment it can stage for the agent to read.
   - Default: `52428800` (50 MiB), matching `ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT` so every stored attachment can be staged.
   - Lowering it does not cap what chat can upload. An attachment over this limit skips sandbox staging and is still stored.
+- **`ARCHESTRA_SKILLS_SANDBOX_SPOOL_DIR`** - Local directory where large sandbox uploads are cached so the engine syncs them once per content instead of receiving them inline on every command.
+  - Default: `archestra-sandbox-upload-spool` under the system temp directory.
+  - The spool is a cache; it is recreated from the database on demand and is safe to clear.
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`** - Sandbox commands the shared Dagger session runs at once, deployment-wide. Raise it with the engine's CPU and memory.
   - Default: `10`
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH`** - Sandbox commands allowed to wait for a free slot. Past this, a command fails with a runtime-at-capacity error instead of queueing.

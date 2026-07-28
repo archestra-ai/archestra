@@ -21,7 +21,7 @@ import { SKILL_MANIFEST_FILENAME } from "@/skills/parser";
 import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { shellQuote } from "@/utils/shell-quote";
-import { readRowBytes, storageFilename } from "./file-storage";
+import { storageFilename } from "./file-storage";
 import { fileStore } from "./file-store";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
@@ -43,6 +43,7 @@ import {
   type UploadFileParams,
   type UploadRef,
 } from "./types";
+import { uploadReplayEntry } from "./upload-spool";
 
 const CONSUMER_ID = "skill-sandbox";
 // synthetic exit code recorded when the runtime errored mid-call and the real
@@ -124,6 +125,7 @@ class SkillSandboxRuntimeService {
           environment: params.environment,
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
+          spoolRoot: config.skillsSandbox.spoolDir,
           cpuSeconds: config.skillsSandbox.cpuLimit,
           memoryBytes: config.skillsSandbox.memoryLimit,
         });
@@ -234,6 +236,7 @@ class SkillSandboxRuntimeService {
           // here invalidates Dagger's per-replay layer cache.
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
+          spoolRoot: config.skillsSandbox.spoolDir,
           cpuSeconds: config.skillsSandbox.cpuLimit,
           memoryBytes: config.skillsSandbox.memoryLimit,
         });
@@ -657,14 +660,9 @@ class SkillSandboxRuntimeService {
               },
             };
           case "upload":
-            return {
-              kind: "file",
-              file: {
-                path: entry.upload.path,
-                encoding: "base64",
-                content: (await readRowBytes(entry.upload)).toString("base64"),
-              },
-            };
+            // transport choice (inline vs host-synced spool file) lives in
+            // upload-spool.ts; a spool hit never reads the payload from the DB.
+            return uploadReplayEntry(entry.upload);
           case "skill_mount":
             return {
               kind: "skill_mount",

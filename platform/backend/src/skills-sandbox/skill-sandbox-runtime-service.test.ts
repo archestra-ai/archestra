@@ -491,7 +491,11 @@ describe("stageConversationAttachments (db)", () => {
     if (upload?.kind !== "upload") throw new Error("expected an upload event");
     // filename is sanitized (space -> underscore) and lands under the dir.
     expect(upload.upload.path).toBe("/home/sandbox/attachments/pi_mc.gif");
-    expect(upload.upload.data?.toString("utf8")).toBe("GIF89a-bytes");
+    expect(
+      (
+        await SkillSandboxFileModel.findUploadDataById(upload.upload.id)
+      )?.toString("utf8"),
+    ).toBe("GIF89a-bytes");
     expect(upload.upload.sourceAttachmentId).not.toBeNull();
   });
 

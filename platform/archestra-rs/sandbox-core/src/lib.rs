@@ -12,7 +12,7 @@ mod validation;
 
 use crate::validation::{
     skill_root_path, validate_artifact_path, validate_cwd, validate_file_encoding,
-    validate_snapshot_file_path, validate_upload_path,
+    validate_host_file_path, validate_snapshot_file_path, validate_upload_path,
 };
 
 pub use backends::dagger::{DEFAULT_APT_PACKAGES, DEFAULT_BASE_IMAGE};
@@ -136,6 +136,14 @@ pub struct ReplayInputFile {
     pub path: String,
     pub encoding: String,
     pub content: String,
+    /// when set, the file's bytes come from this client-host path via BuildKit
+    /// filesync instead of `content` (which must then be empty, with
+    /// `encoding: "binary"`) — the recipe carries a reference, never the
+    /// payload. must resolve under the request's `spoolRoot`; validated at the
+    /// boundary before any engine work.
+    #[cfg_attr(feature = "napi", napi(js_name = "hostPath"))]
+    #[serde(default)]
+    pub host_path: Option<String>,
 }
 
 /// a skill mounted into the sandbox at its replay sequence point. `files` are
@@ -178,11 +186,17 @@ pub(crate) enum ReplayStep {
     SkillMount(ReplaySkillMount),
 }
 
-fn replay_entries_to_steps(entries: Vec<ReplayEntry>) -> Result<Vec<ReplayStep>> {
-    entries.into_iter().map(replay_entry_to_step).collect()
+fn replay_entries_to_steps(
+    entries: Vec<ReplayEntry>,
+    spool_root: Option<&str>,
+) -> Result<Vec<ReplayStep>> {
+    entries
+        .into_iter()
+        .map(|entry| replay_entry_to_step(entry, spool_root))
+        .collect()
 }
 
-fn replay_entry_to_step(entry: ReplayEntry) -> Result<ReplayStep> {
+fn replay_entry_to_step(entry: ReplayEntry, spool_root: Option<&str>) -> Result<ReplayStep> {
     match entry.kind.as_str() {
         "command" => entry.command.map(ReplayStep::Command).ok_or_else(|| {
             SandboxError::InvalidInput(
@@ -196,7 +210,30 @@ fn replay_entry_to_step(entry: ReplayEntry) -> Result<ReplayStep> {
                 )
             })?;
             validate_upload_path(&file.path)?;
-            validate_file_encoding(&file.encoding)?;
+            match (file.host_path.as_deref(), spool_root) {
+                (Some(host_path), Some(root)) => {
+                    // exactly one byte source: a host-synced upload carries a
+                    // reference, never an inline payload.
+                    if !file.content.is_empty() {
+                        return Err(SandboxError::InvalidInput(
+                            "host-synced upload must not carry inline content".to_string(),
+                        ));
+                    }
+                    if file.encoding != "binary" {
+                        return Err(SandboxError::InvalidInput(format!(
+                            "host-synced upload must use encoding \"binary\", got {:?}",
+                            file.encoding
+                        )));
+                    }
+                    validate_host_file_path(host_path, root)?;
+                }
+                (Some(_), None) => {
+                    return Err(SandboxError::InvalidInput(
+                        "host-synced upload requires the request to set spoolRoot".to_string(),
+                    ));
+                }
+                (None, _) => validate_file_encoding(&file.encoding)?,
+            }
             Ok(ReplayStep::File(file))
         }
         "skill_mount" => {
@@ -332,6 +369,11 @@ pub struct RunSandboxInput {
     /// The isolation target for this run; omit (null) for the process-default
     /// engine. The Dagger address is built in the backend from this.
     pub environment: Option<EnvironmentTarget>,
+    /// Client-local directory every host-synced upload path must resolve
+    /// under. A request whose entries carry `hostPath` fails without it.
+    #[cfg_attr(feature = "napi", napi(js_name = "spoolRoot"))]
+    #[serde(default)]
+    pub spool_root: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -351,6 +393,11 @@ pub struct ReadArtifactInput {
     /// The isolation target the artifact must be read from — the same engine the
     /// sandbox ran on; omit (null) for the process-default engine.
     pub environment: Option<EnvironmentTarget>,
+    /// Client-local directory every host-synced upload path must resolve
+    /// under. A request whose entries carry `hostPath` fails without it.
+    #[cfg_attr(feature = "napi", napi(js_name = "spoolRoot"))]
+    #[serde(default)]
+    pub spool_root: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -405,7 +452,7 @@ pub async fn run_sandbox(input: RunSandboxInput) -> Result<CommandExecution> {
     let traceparent = tracing_ctx::current_traceparent(&span).or_else(|| input.traceparent.clone());
     validate_cwd(&input.cwd)?;
     let target = runtime_target_from(input.environment)?;
-    let replay_steps = replay_entries_to_steps(input.replay_entries)?;
+    let replay_steps = replay_entries_to_steps(input.replay_entries, input.spool_root.as_deref())?;
     let req = backend::RunRequest {
         replay_steps,
         limits: input.limits,
@@ -429,7 +476,7 @@ pub async fn read_artifact(input: ReadArtifactInput) -> Result<ArtifactBytes> {
     validate_artifact_path(&input.path)?;
     validate_cwd(&input.default_cwd)?;
     let target = runtime_target_from(input.environment)?;
-    let replay_steps = replay_entries_to_steps(input.replay_entries)?;
+    let replay_steps = replay_entries_to_steps(input.replay_entries, input.spool_root.as_deref())?;
     let req = backend::ArtifactRequest {
         replay_steps,
         limits: input.limits,

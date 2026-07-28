@@ -292111,6 +292111,11 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "deletedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
                           "fileCount": {
                             "type": "number"
                           },
@@ -292211,6 +292216,7 @@
                           "lastUsedAt",
                           "createdAt",
                           "updatedAt",
+                          "deletedAt",
                           "fileCount",
                           "teams",
                           "users",
@@ -292745,6 +292751,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -292888,6 +292899,7 @@
                     "lastUsedAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "files",
                     "teams",
                     "users",
@@ -293322,6 +293334,11 @@
                           "type": "string",
                           "format": "date-time"
                         },
+                        "deletedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "files": {
                           "type": "array",
                           "items": {
@@ -293465,6 +293482,7 @@
                         "lastUsedAt",
                         "createdAt",
                         "updatedAt",
+                        "deletedAt",
                         "files",
                         "teams",
                         "users",
@@ -294212,6 +294230,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -294355,6 +294378,7 @@
                     "lastUsedAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "files",
                     "teams",
                     "users",
@@ -294849,6 +294873,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -294992,6 +295021,7 @@
                     "lastUsedAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "files",
                     "teams",
                     "users",
@@ -296265,6 +296295,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -296408,6 +296443,7 @@
                     "lastUsedAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "files",
                     "teams",
                     "users",
@@ -296852,6 +296888,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -296995,6 +297036,7 @@
                     "lastUsedAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "files",
                     "teams",
                     "users",
@@ -298819,6 +298861,11 @@
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "deletedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -298848,7 +298895,8 @@
                           "usageCount",
                           "lastUsedAt",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "deletedAt"
                         ],
                         "additionalProperties": false
                       }

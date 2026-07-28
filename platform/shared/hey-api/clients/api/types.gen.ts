@@ -75446,6 +75446,7 @@ export type GetSkillsResponses = {
             lastUsedAt: string | null;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
             fileCount: number;
             teams: Array<{
                 id: string;
@@ -75609,6 +75610,7 @@ export type CreateSkillResponses = {
         lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         files: Array<{
             id: string;
             skillId: string;
@@ -75748,6 +75750,7 @@ export type ConvertAgentToSkillResponses = {
             lastUsedAt: string | null;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
             files: Array<{
                 id: string;
                 skillId: string;
@@ -76065,6 +76068,7 @@ export type GetSkillResponses = {
         lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         files: Array<{
             id: string;
             skillId: string;
@@ -76227,6 +76231,7 @@ export type UpdateSkillResponses = {
         lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         files: Array<{
             id: string;
             skillId: string;
@@ -76540,6 +76545,7 @@ export type ResetSkillResponses = {
         lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         files: Array<{
             id: string;
             skillId: string;
@@ -76688,6 +76694,7 @@ export type UpdateSkillGithubSyncResponses = {
         lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         files: Array<{
             id: string;
             skillId: string;
@@ -77228,6 +77235,7 @@ export type ImportGithubSkillsResponses = {
             lastUsedAt: string | null;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
         }>;
         skipped: Array<string>;
         /**

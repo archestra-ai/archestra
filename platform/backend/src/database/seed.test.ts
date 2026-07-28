@@ -385,6 +385,34 @@ describe("syncBuiltInSkills", () => {
     expect(preserved?.content).toBe("EDITED BY USER");
   });
 
+  test("a soft-deleted built-in stays deleted across syncs (durable opt-out)", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const sourceRef = builtInSkillSourceRef(BASE_SKILL.builtInSkillId);
+
+    await syncBuiltInSkills();
+    const seeded = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    if (!seeded) throw new Error("seed failed");
+
+    await SkillModel.delete(seeded.id);
+    await syncBuiltInSkills();
+
+    // not resurrected: no new copy, the soft-deleted row is untouched, and
+    // the skill stays invisible to reads.
+    expect(await countBuiltInSkills(org.id)).toBe(BUILT_IN_SKILLS.length);
+    const afterSync = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    expect(afterSync?.id).toBe(seeded.id);
+    expect(afterSync?.deletedAt).toBeInstanceOf(Date);
+    expect(await SkillModel.findById(seeded.id)).toBeNull();
+  });
+
   test("brands the seeded skill under the org's white-label app name", async ({
     makeOrganization,
   }) => {

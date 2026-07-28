@@ -532,4 +532,144 @@ describe("SkillModel.findDueGithubSyncs", () => {
     expect(disconnected?.githubPatId).toBeNull();
     expect(disconnected?.lastSyncError).toBeNull();
   });
+
+  test("excludes soft-deleted skills from the due scan", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "deleted-synced",
+        githubSyncInterval: "15m",
+      }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    expect((await SkillModel.findDueGithubSyncs()).map((s) => s.id)).toContain(
+      skill.id,
+    );
+
+    await SkillModel.delete(skill.id);
+
+    expect(
+      (await SkillModel.findDueGithubSyncs()).map((s) => s.id),
+    ).not.toContain(skill.id);
+  });
+});
+
+describe("SkillModel soft delete", () => {
+  test("delete() hides the row from reads but keeps it in the table", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "doomed" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    expect(await SkillModel.delete(skill.id)).toBe(true);
+
+    expect(await SkillModel.findById(skill.id)).toBeNull();
+    expect(await SkillModel.findByIds([skill.id])).toEqual([]);
+    expect(await SkillModel.findAllByName(org.id, "doomed")).toEqual([]);
+    expect(
+      (await SkillModel.findByOrganization({ organizationId: org.id })).map(
+        (s) => s.id,
+      ),
+    ).not.toContain(skill.id);
+    expect(
+      await SkillModel.countByOrganization({ organizationId: org.id }),
+    ).toBe(0);
+
+    // the row itself survives, stamped with deletedAt.
+    const [raw] = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(eq(schema.skillsTable.id, skill.id));
+    expect(raw?.deletedAt).toBeInstanceOf(Date);
+  });
+
+  test("delete() is idempotent", async ({ makeOrganization }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "once" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    expect(await SkillModel.delete(skill.id)).toBe(true);
+    expect(await SkillModel.delete(skill.id)).toBe(false);
+  });
+
+  test("a deleted skill frees its name for re-use", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const first = await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "notes",
+        scope: "org",
+      }),
+      files: [],
+    });
+    if (!first) throw new Error("seed failed");
+    await SkillModel.delete(first.id);
+
+    // the freed name is no longer an import collision either.
+    expect(
+      await SkillModel.findImportNameCollisions({
+        organizationId: org.id,
+        userId: "any-user",
+        names: ["notes"],
+      }),
+    ).toEqual(new Set());
+
+    const second = await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "notes",
+        scope: "org",
+      }),
+      files: [],
+    });
+    expect(second).not.toBeNull();
+  });
+
+  test("updateWithFiles refuses a soft-deleted skill", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "frozen" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+    await SkillModel.delete(skill.id);
+
+    const updated = await SkillModel.updateWithFiles({
+      id: skill.id,
+      skill: { description: "new description" },
+    });
+    expect(updated).toBeNull();
+  });
+
+  test("findByIdForAudit still returns a soft-deleted skill", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "audited" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+    await SkillModel.delete(skill.id);
+
+    const audit = await SkillModel.findByIdForAudit(skill.id, org.id);
+    expect(audit).not.toBeNull();
+    expect(audit?.name).toBe("audited");
+  });
 });

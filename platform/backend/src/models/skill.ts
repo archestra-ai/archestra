@@ -15,6 +15,8 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
@@ -144,7 +146,9 @@ class SkillModel {
     const [result] = await db
       .select()
       .from(schema.skillsTable)
-      .where(eq(schema.skillsTable.id, id));
+      .where(
+        and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)),
+      );
 
     return result ?? null;
   }
@@ -154,10 +158,22 @@ class SkillModel {
     return await db
       .select()
       .from(schema.skillsTable)
-      .where(inArray(schema.skillsTable.id, ids));
+      .where(
+        and(
+          inArray(schema.skillsTable.id, ids),
+          notDeleted(schema.skillsTable),
+        ),
+      );
   }
 
-  /** Locate a shipped built-in skill by its stable `source_ref` within an org. */
+  /**
+   * Locate a shipped built-in skill by its stable `source_ref` within an org.
+   *
+   * Deliberately includes soft-deleted rows: the startup seeder uses this to
+   * reconcile shipped definitions, and a soft-deleted built-in must be seen
+   * (and skipped) there — otherwise every boot would resurrect it as a fresh
+   * copy. Deleting a built-in skill is a durable opt-out.
+   */
   static async findBuiltIn(params: {
     organizationId: string;
     sourceRef: string;
@@ -195,6 +211,7 @@ class SkillModel {
         and(
           eq(schema.skillsTable.organizationId, organizationId),
           eq(schema.skillsTable.name, name),
+          notDeleted(schema.skillsTable),
         ),
       )
       .orderBy(desc(schema.skillsTable.createdAt));
@@ -222,6 +239,9 @@ class SkillModel {
         and(
           eq(schema.skillsTable.organizationId, params.organizationId),
           inArray(schema.skillsTable.name, params.names),
+          // mirrors the partial unique indexes, which exclude soft-deleted
+          // rows — a deleted skill's name is free for re-use.
+          notDeleted(schema.skillsTable),
           or(
             inArray(schema.skillsTable.scope, sharedScopes),
             and(
@@ -340,7 +360,12 @@ class SkillModel {
       const [skill] = await tx
         .update(schema.skillsTable)
         .set(params.skill)
-        .where(eq(schema.skillsTable.id, params.id))
+        .where(
+          and(
+            eq(schema.skillsTable.id, params.id),
+            notDeleted(schema.skillsTable),
+          ),
+        )
         .returning();
 
       if (!skill) return null;
@@ -452,6 +477,7 @@ class SkillModel {
       .where(
         and(
           isNotNull(schema.skillsTable.githubSyncInterval),
+          notDeleted(schema.skillsTable),
           sql`(${schema.skillsTable.lastSyncedAt} IS NULL OR ${schema.skillsTable.lastSyncedAt} <= now() - CASE ${schema.skillsTable.githubSyncInterval}
             WHEN '15m' THEN interval '15 minutes'
             WHEN '1h' THEN interval '1 hour'
@@ -463,7 +489,9 @@ class SkillModel {
 
   /**
    * Synced skills whose scheduled pulls authenticate with this stored PAT.
-   * Deleting the PAT is blocked while this is non-zero.
+   * Deleting the PAT is blocked while this is non-zero. Soft-deleted skills
+   * don't count — they no longer sync, so they must not block credential
+   * deletion (their FK is ON DELETE SET NULL).
    */
   static async countSyncedReferencingGithubPat(
     githubPatId: string,
@@ -475,6 +503,7 @@ class SkillModel {
         and(
           eq(schema.skillsTable.githubPatId, githubPatId),
           isNotNull(schema.skillsTable.githubSyncInterval),
+          notDeleted(schema.skillsTable),
         ),
       );
     return result?.count ?? 0;
@@ -491,6 +520,7 @@ class SkillModel {
         and(
           eq(schema.skillsTable.githubAppConfigId, githubAppConfigId),
           isNotNull(schema.skillsTable.githubSyncInterval),
+          notDeleted(schema.skillsTable),
         ),
       );
     return result?.count ?? 0;
@@ -513,7 +543,9 @@ class SkillModel {
         lastSyncError: error,
         updatedAt: sql`${schema.skillsTable.updatedAt}`,
       })
-      .where(eq(schema.skillsTable.id, id));
+      .where(
+        and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)),
+      );
   }
 
   /**
@@ -538,7 +570,7 @@ class SkillModel {
               lastSyncError: null,
             },
       )
-      .where(eq(schema.skillsTable.id, id))
+      .where(and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)))
       .returning();
     return updated ?? null;
   }
@@ -562,7 +594,9 @@ class SkillModel {
         lastUsedAt: usedAt,
         updatedAt: sql`${schema.skillsTable.updatedAt}`,
       })
-      .where(eq(schema.skillsTable.id, skillId));
+      .where(
+        and(eq(schema.skillsTable.id, skillId), notDeleted(schema.skillsTable)),
+      );
     const eventWrite = db
       .insert(schema.skillUsageEventsTable)
       .values({ skillId, userId, createdAt: usedAt });
@@ -580,15 +614,21 @@ class SkillModel {
     );
   }
 
+  /**
+   * Soft-delete a skill (frees its name for re-use via the partial unique
+   * indexes). Junction rows, files, and versions are kept — reads are
+   * filtered instead.
+   */
   static async delete(id: string): Promise<boolean> {
-    const rows = await db
-      .delete(schema.skillsTable)
-      .where(eq(schema.skillsTable.id, id))
-      .returning({ id: schema.skillsTable.id });
-
-    return rows.length > 0;
+    const count = await softDelete(
+      db,
+      schema.skillsTable,
+      eq(schema.skillsTable.id, id),
+    );
+    return count > 0;
   }
 
+  /** Audit lookup: the raw row scoped to an org, including soft-deleted. */
   static async findByIdForAudit(
     id: string,
     organizationId: string,
@@ -673,6 +713,7 @@ function buildOrgFilters(params: {
   const normalizedSourceRepo = params.sourceRepo?.trim();
   return [
     eq(schema.skillsTable.organizationId, params.organizationId),
+    notDeleted(schema.skillsTable),
     ...(params.accessibleSkillIds !== undefined
       ? [inArray(schema.skillsTable.id, params.accessibleSkillIds)]
       : []),

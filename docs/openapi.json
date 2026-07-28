@@ -202979,6 +202979,12 @@
                                       "type": "string"
                                     }
                                   },
+                                  "includePaths": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
                                   "labelsToSkip": {
                                     "type": "array",
                                     "items": {
@@ -204263,6 +204269,12 @@
                               "type": "string"
                             }
                           },
+                          "includePaths": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "labelsToSkip": {
                             "type": "array",
                             "items": {
@@ -205160,6 +205172,12 @@
                               "type": "boolean"
                             },
                             "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includePaths": {
                               "type": "array",
                               "items": {
                                 "type": "string"
@@ -206395,6 +206413,12 @@
                                 "type": "string"
                               }
                             },
+                            "includePaths": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
                             "labelsToSkip": {
                               "type": "array",
                               "items": {
@@ -207511,6 +207535,12 @@
                               "type": "string"
                             }
                           },
+                          "includePaths": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "labelsToSkip": {
                             "type": "array",
                             "items": {
@@ -208406,6 +208436,12 @@
                               "type": "boolean"
                             },
                             "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includePaths": {
                               "type": "array",
                               "items": {
                                 "type": "string"

@@ -24,6 +24,7 @@ export function transformConfigArrayFields(
     "assignmentGroups",
     "driveIds",
     "fileTypes",
+    "includePaths",
     "depotPaths",
     "excludePaths",
     "userIds",

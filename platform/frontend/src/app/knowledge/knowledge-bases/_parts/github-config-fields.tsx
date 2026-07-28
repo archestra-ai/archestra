@@ -236,23 +236,44 @@ export function GithubConfigFields({
       )}
 
       {!hideRepositoryOptions && includeRepositoryFiles === true && (
-        <FormField
-          control={form.control}
-          name={`${prefix}.fileTypes`}
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>File Types (optional)</FormLabel>
-              <FormControl>
-                <Input placeholder=".md, .mdx, .yaml, .yml" {...field} />
-              </FormControl>
-              <FormDescription>
-                Comma-separated extensions to index when repository files are
-                enabled. Defaults to Markdown and YAML.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <>
+          <FormField
+            control={form.control}
+            name={`${prefix}.fileTypes`}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>File Types (optional)</FormLabel>
+                <FormControl>
+                  <Input placeholder=".md, .mdx, .yaml, .yml" {...field} />
+                </FormControl>
+                <FormDescription>
+                  Comma-separated extensions to index when repository files are
+                  enabled. Defaults to Markdown and YAML.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name={`${prefix}.includePaths`}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Folders (optional)</FormLabel>
+                <FormControl>
+                  <Input placeholder="docs, packages/api/src" {...field} />
+                </FormControl>
+                <FormDescription>
+                  Comma-separated folders to index, relative to the repository
+                  root. Applies to every selected repository. Leave blank to
+                  index the whole repository.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </>
       )}
     </div>
   );

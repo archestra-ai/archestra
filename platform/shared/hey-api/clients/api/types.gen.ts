@@ -52114,6 +52114,7 @@ export type GetConnectorsResponses = {
                 includePullRequests?: boolean;
                 includeRepositoryFiles?: boolean;
                 fileTypes?: Array<string>;
+                includePaths?: Array<string>;
                 labelsToSkip?: Array<string>;
             } | {
                 type: 'gitlab';
@@ -52291,6 +52292,7 @@ export type CreateConnectorData = {
             includePullRequests?: boolean;
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
+            includePaths?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -52524,6 +52526,7 @@ export type CreateConnectorResponses = {
             includePullRequests?: boolean;
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
+            includePaths?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -52851,6 +52854,7 @@ export type GetConnectorResponses = {
             includePullRequests?: boolean;
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
+            includePaths?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -53014,6 +53018,7 @@ export type UpdateConnectorData = {
             includePullRequests?: boolean;
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
+            includePaths?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';
@@ -53248,6 +53253,7 @@ export type UpdateConnectorResponses = {
             includePullRequests?: boolean;
             includeRepositoryFiles?: boolean;
             fileTypes?: Array<string>;
+            includePaths?: Array<string>;
             labelsToSkip?: Array<string>;
         } | {
             type: 'gitlab';

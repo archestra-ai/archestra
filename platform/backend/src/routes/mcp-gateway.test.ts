@@ -36,7 +36,14 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mustExist,
+  test,
+} from "@/test";
 import mcpGatewayRoutes from "./mcp-gateway";
 
 /**
@@ -588,7 +595,7 @@ describe("MCP Gateway (stateless mode)", () => {
     });
     const server = await McpServerModel.findById(disabledApp.mcpServerId!);
     const [launchTool] = await ToolModel.findByCatalogIdWithMeta(
-      server!.catalogId,
+      mustExist(server!.catalogId),
     );
     const launchToolName = launchTool.name;
 

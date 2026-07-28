@@ -506,9 +506,13 @@ export async function reloadToolsForServer(server: McpServer): Promise<{
   unchanged: number;
   deleted: number;
 }> {
-  const catalogItem = await InternalMcpCatalogModel.findById(server.catalogId, {
-    expandSecrets: false,
-  });
+  // catalogId is null only on tombstones whose catalog was deleted — treat it
+  // like a missing catalog item.
+  const catalogItem = server.catalogId
+    ? await InternalMcpCatalogModel.findById(server.catalogId, {
+        expandSecrets: false,
+      })
+    : null;
   if (!catalogItem) {
     throw new Error(
       `Catalog item ${server.catalogId} not found for MCP server ${server.id}`,

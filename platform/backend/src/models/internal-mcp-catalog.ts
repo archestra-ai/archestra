@@ -942,13 +942,6 @@ class InternalMcpCatalogModel {
       // Soft-delete: each install is torn down (pod, secret, pins) but
       // tombstoned for audit history. The catalog hard-delete below cascades
       // the tools and nulls each tombstone's catalog_id via FK.
-      // REVIEW(test-coverage): this cascade is the one delete path with no
-      // test pinning the new semantics — nothing asserts that after a catalog
-      // delete its installs survive as tombstones with catalog_id nulled
-      // (vs. the old hard delete). One test in internal-mcp-catalog.test.ts
-      // would pin it. Also note a throw from McpServerModel.delete here
-      // aborts the remaining installs and the catalog delete itself — see the
-      // REVIEW comment on the unguarded deleteSecret in models/mcp-server.ts.
       for (const server of servers) {
         await McpServerModel.delete(server.id);
       }

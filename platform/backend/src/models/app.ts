@@ -416,7 +416,9 @@ class AppModel {
             catalogSet.environmentId = patch.environmentId;
           // Mirror the name so the catalog's per-scope name-uniqueness index tracks it.
           if (patch.name !== undefined) catalogSet.name = patch.name;
-          if (Object.keys(catalogSet).length > 0) {
+          // catalogId narrow is for the type system: backings never become
+          // tombstones (they are purged outright), so it is never null here.
+          if (Object.keys(catalogSet).length > 0 && server.catalogId) {
             try {
               await tx
                 .update(schema.internalMcpCatalogTable)
@@ -432,7 +434,7 @@ class AppModel {
               throw error;
             }
           }
-          if (params.teamIds !== undefined) {
+          if (params.teamIds !== undefined && server.catalogId) {
             await McpCatalogTeamModel.syncCatalogTeams(
               server.catalogId,
               params.teamIds,

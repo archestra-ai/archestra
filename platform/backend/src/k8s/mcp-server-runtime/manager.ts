@@ -28,6 +28,7 @@ import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
 } from "./k8s-deployment";
+import { constructManagedNetworkPolicyName } from "./network-policy";
 import type {
   AvailableTool,
   K8sRuntimeStatus,
@@ -1679,18 +1680,6 @@ export class McpServerRuntimeManager {
           const server = serverById.get(serverId);
           if (!server) {
             if (tombstonedIds.has(serverId)) {
-              // REVIEW(non-blocking): the failure this sweep exists for — the
-              // whole delete-time removeMcpServer failing — strands five
-              // resource kinds (deployment, service, K8s env secret, docker
-              // registry secrets, network policy), but only two are reclaimed
-              // here. For a tombstone this sweep is the LAST cleaner (no DB
-              // row will ever trigger a full teardown again), so the env
-              // secret — which holds credential material — and the network
-              // policy leak forever. Both are derivable without the catalog
-              // for the single-tenant case: `mcp-server-${serverId}-secrets`
-              // and constructManagedNetworkPolicyName(deploymentName)
-              // (multitenant secrets are per-catalog and must be left alone).
-              // Either delete those two here as well, or document the gap.
               logger.info(
                 { deploymentName, serverId, deploymentNamespace },
                 "Deleting MCP deployment for a soft-deleted install",
@@ -1716,6 +1705,57 @@ export class McpServerRuntimeManager {
                   { err, deploymentName, deploymentNamespace },
                   "No service to delete for soft-deleted install (or already gone)",
                 );
+              }
+              // A failed delete-time teardown also strands the env secret,
+              // docker registry pull secrets, and network policy — and for a
+              // tombstone this sweep is the last cleaner, so reclaim them
+              // here. The single-tenant secret name derives from the server
+              // id alone; a multitenant install's shared per-catalog secret
+              // has a different name and is left alone. CNI-flavor network
+              // policies (Cilium/GKE/AWS) are not swept — they carry no
+              // secret material and their cleanup needs the CRD clients'
+              // per-provider logic in K8sDeployment.
+              try {
+                await this.k8sApi.deleteNamespacedSecret({
+                  name: K8sDeployment.constructK8sSecretName(serverId),
+                  namespace: deploymentNamespace,
+                });
+              } catch (err) {
+                logger.debug(
+                  { err, serverId, deploymentNamespace },
+                  "No env secret to delete for soft-deleted install (or already gone)",
+                );
+              }
+              try {
+                const regcreds = await this.k8sApi.listNamespacedSecret({
+                  namespace: deploymentNamespace,
+                  labelSelector: `mcp-server-id=${sanitizeLabelValue(serverId)},type=regcred`,
+                });
+                for (const regcred of regcreds.items) {
+                  if (!regcred.metadata?.name) continue;
+                  await this.k8sApi.deleteNamespacedSecret({
+                    name: regcred.metadata.name,
+                    namespace: deploymentNamespace,
+                  });
+                }
+              } catch (err) {
+                logger.warn(
+                  { err, serverId, deploymentNamespace },
+                  "Failed to delete registry secrets for soft-deleted install",
+                );
+              }
+              if (this.k8sNetworkingApi) {
+                try {
+                  await this.k8sNetworkingApi.deleteNamespacedNetworkPolicy({
+                    name: constructManagedNetworkPolicyName(deploymentName),
+                    namespace: deploymentNamespace,
+                  });
+                } catch (err) {
+                  logger.debug(
+                    { err, deploymentName, deploymentNamespace },
+                    "No network policy to delete for soft-deleted install (or already gone)",
+                  );
+                }
               }
             }
             continue;

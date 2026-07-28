@@ -887,6 +887,9 @@ class McpServerModel {
         scopeRank(a.scope) - scopeRank(b.scope) || a.name.localeCompare(b.name),
     );
     for (const r of rows) {
+      // The inArray(catalogId, ...) filter excludes NULLs (tombstones nulled
+      // by a catalog delete) — this narrow is for the type system only.
+      if (!r.catalogId) continue;
       const list = map.get(r.catalogId) ?? [];
       list.push({ mcpServerId: r.mcpServerId, scope: r.scope });
       map.set(r.catalogId, list);
@@ -1346,21 +1349,20 @@ class McpServerModel {
     // OAuth tokens here — a tombstone (or rolled-back row) must not keep
     // live credentials around. Deleting the secrets row auto-nulls the
     // tombstone's secret_id via its ON DELETE SET NULL FK.
-    //
-    // REVIEW(blocking): this await is unguarded, and by this point the soft
-    // delete has already committed. If deleteSecret throws: (a) the uninstall
-    // route 500s even though the server is actually gone; (b) a retry can
-    // never reach the secret again — delete() re-resolves through findById,
-    // which now filters the tombstone out, so the OAuth/credential bundle
-    // leaks until someone spots it in the secrets UI, violating the
-    // "tombstone must not retain live credentials" invariant stated above;
-    // (c) in InternalMcpCatalogModel.delete's cascade loop the throw aborts
-    // the remaining installs AND the catalog hard-delete, leaving the catalog
-    // half-deleted. The old route path caught secret-deletion failures for
-    // local servers and continued; this rework made the unguarded model call
-    // the only path. Wrap in try/catch + logger.error and return `deleted`.
     if (deleted && mcpServer.secretId) {
-      await secretManager().deleteSecret(mcpServer.secretId);
+      try {
+        await secretManager().deleteSecret(mcpServer.secretId);
+      } catch (err) {
+        // The row transition is already committed — throwing here would fail
+        // the request for a server that IS gone and abort the remaining
+        // installs in the catalog-delete cascade. The tombstone keeps its
+        // secret_id (the FK only nulls on a successful secrets-row delete),
+        // so the leaked bundle stays discoverable in the secrets UI.
+        logger.error(
+          { err, mcpServerId: id, secretId: mcpServer.secretId },
+          "Failed to delete secret for removed MCP server",
+        );
+      }
     }
 
     return deleted;

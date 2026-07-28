@@ -72,10 +72,14 @@ describe("MCP backing for apps", () => {
     expect(server.serverType).toBe("app");
     expect(server.catalogId).toBeTruthy();
 
-    const catalog = await InternalMcpCatalogModel.findById(server.catalogId);
+    const catalog = await InternalMcpCatalogModel.findById(
+      mustExist(server.catalogId),
+    );
     expect(catalog?.serverType).toBe("app");
 
-    const tools = await ToolModel.findByCatalogIdWithMeta(server.catalogId);
+    const tools = await ToolModel.findByCatalogIdWithMeta(
+      mustExist(server.catalogId),
+    );
     // The launch tool is slugified per the discovered-tool convention
     // (`<server>__open`) so apps don't collide in the gateway's
     // dedupe-by-name; it is the only tool on the app's catalog.
@@ -150,7 +154,9 @@ describe("MCP backing for apps", () => {
       (await AppModel.findById(sourceAppId))!.mcpServerId!,
     );
     const launchTool = (
-      await ToolModel.findByCatalogIdWithMeta(sourceServer!.catalogId)
+      await ToolModel.findByCatalogIdWithMeta(
+        mustExist(sourceServer!.catalogId),
+      )
     )[0];
 
     // A second, unrelated app has the source app's launch tool assigned to it
@@ -195,7 +201,9 @@ describe("MCP backing for apps", () => {
       const s = mustExist(
         await McpServerModel.findById(mustExist(a.mcpServerId)),
       );
-      const [t] = await ToolModel.findByCatalogIdWithMeta(s.catalogId);
+      const [t] = await ToolModel.findByCatalogIdWithMeta(
+        mustExist(s.catalogId),
+      );
       return t.name;
     };
     const nameA = await nameFor(appAId);
@@ -226,7 +234,9 @@ describe("MCP backing for apps", () => {
       const s = mustExist(
         await McpServerModel.findById(mustExist(a.mcpServerId)),
       );
-      const [t] = await ToolModel.findByCatalogIdWithMeta(s.catalogId);
+      const [t] = await ToolModel.findByCatalogIdWithMeta(
+        mustExist(s.catalogId),
+      );
       return t.name;
     };
     const nameA = await nameFor(first.id);
@@ -293,7 +303,7 @@ describe("MCP backing for apps", () => {
     const server = mustExist(
       await McpServerModel.findById(mustExist(created.mcpServerId)),
     );
-    const catalogId = server.catalogId;
+    const catalogId = mustExist(server.catalogId);
 
     const catalogApp = createFastifyInstance();
     catalogApp.addHook("onRequest", async (request) => {
@@ -326,7 +336,7 @@ describe("MCP backing for apps", () => {
     const server = mustExist(
       await McpServerModel.findById(mustExist(created.mcpServerId)),
     );
-    const catalogId = server.catalogId;
+    const catalogId = mustExist(server.catalogId);
 
     const catalogApp = createFastifyInstance();
     catalogApp.addHook("onRequest", async (request) => {
@@ -356,8 +366,8 @@ describe("MCP backing for apps", () => {
     const created = mustExist(await AppModel.findById(appId));
     const mcpServerId = mustExist(created.mcpServerId);
     const catalogId = mustExist(
-      await McpServerModel.findById(mcpServerId),
-    ).catalogId;
+      mustExist(await McpServerModel.findById(mcpServerId)).catalogId,
+    );
     const [toolBefore] = await ToolModel.findByCatalogIdWithMeta(catalogId);
 
     const res = await app.inject({
@@ -389,7 +399,7 @@ describe("MCP backing for apps", () => {
     const created = mustExist(await AppModel.findById(appId));
     const mcpServerId = mustExist(created.mcpServerId);
     const server = mustExist(await McpServerModel.findById(mcpServerId));
-    const catalogId = server.catalogId;
+    const catalogId = mustExist(server.catalogId);
 
     const del = await app.inject({
       method: "DELETE",

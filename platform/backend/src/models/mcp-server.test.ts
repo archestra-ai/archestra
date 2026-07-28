@@ -1,5 +1,6 @@
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { eq } from "drizzle-orm";
+import { vi } from "vitest";
 import db, { schema } from "@/database";
 import { secretManager } from "@/secrets-manager";
 import { describe, expect, mustExist, test } from "@/test";
@@ -1120,6 +1121,39 @@ describe("McpServerModel", () => {
         .from(schema.mcpServersTable)
         .where(eq(schema.mcpServersTable.id, server.id));
       expect(raw.secretId).toBeNull();
+    });
+
+    test("a failed secret deletion does not fail the uninstall", async ({
+      makeInternalMcpCatalog,
+      makeSecret,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+      const secret = await makeSecret();
+      const server = await makeRemoteServer({
+        catalogId: catalog.id,
+        secretId: secret.id,
+      });
+
+      const deleteSpy = vi
+        .spyOn(secretManager(), "deleteSecret")
+        .mockRejectedValueOnce(new Error("vault unreachable"));
+      try {
+        await expect(McpServerModel.delete(server.id)).resolves.toBe(true);
+      } finally {
+        deleteSpy.mockRestore();
+      }
+
+      // Tombstoned anyway; the secret survives and stays referenced by the
+      // tombstone so the leak is discoverable and removable later.
+      const [raw] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+      expect(raw.deletedAt).not.toBeNull();
+      expect(raw.secretId).toBe(secret.id);
+      await expect(
+        secretManager().getSecret(secret.id),
+      ).resolves.not.toBeNull();
     });
 
     test("delete clears tool pins and per-install junction rows", async ({

@@ -95,6 +95,9 @@ export const SelectMcpServerSchema = createSelectSchema(
 export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
   .extend({
     serverType: InternalMcpCatalogServerTypeSchema,
+    // The column is nullable only so catalog deletion can SET NULL on
+    // tombstones — every install is created from a catalog item.
+    catalogId: z.uuid(),
     scope: ResourceVisibilityScopeSchema.optional(),
     userId: z.string().optional(), // For personal auth
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),
@@ -127,6 +130,8 @@ export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
   .omit({
     serverType: true, // serverType should not be updated after creation
     scope: true, // scope is install-time only; to change scope, uninstall + reinstall
+    // Install identity — never updatable; only the catalog-delete FK nulls it.
+    catalogId: true,
     // Lifecycle-owned: only McpServerModel.delete stamps the tombstone.
     deletedAt: true,
     // Frozen at creation/adopt time — renames must never touch it

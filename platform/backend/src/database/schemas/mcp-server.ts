@@ -45,11 +45,13 @@ const mcpServerTable = softDeletablePgTable(
      * that haven't been adopted yet.
      */
     deploymentName: text("deployment_name"),
-    catalogId: uuid("catalog_id")
-      .references(() => mcpCatalogTable.id, {
-        onDelete: "set null",
-      })
-      .notNull(),
+    // Nullable only for tombstones: deleting a catalog soft-deletes its
+    // installs first, so the hard-deleted catalog's SET NULL lands on rows
+    // that survive it. Install input still requires a catalog id — see
+    // InsertMcpServerSchema.
+    catalogId: uuid("catalog_id").references(() => mcpCatalogTable.id, {
+      onDelete: "set null",
+    }),
     serverType: text("server_type")
       .$type<InternalMcpCatalogServerType>()
       .notNull(),

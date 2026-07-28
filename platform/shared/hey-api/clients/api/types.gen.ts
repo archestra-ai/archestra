@@ -59291,7 +59291,7 @@ export type GetMcpServersResponses = {
         id: string;
         name: string;
         deploymentName: string | null;
-        catalogId: string;
+        catalogId: string | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
@@ -59439,7 +59439,7 @@ export type InstallMcpServerResponses = {
         id: string;
         name: string;
         deploymentName: string | null;
-        catalogId: string;
+        catalogId: string | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
@@ -59653,7 +59653,7 @@ export type GetMcpServerResponses = {
         id: string;
         name: string;
         deploymentName: string | null;
-        catalogId: string;
+        catalogId: string | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
@@ -59792,7 +59792,7 @@ export type ReauthenticateMcpServerResponses = {
         id: string;
         name: string;
         deploymentName: string | null;
-        catalogId: string;
+        catalogId: string | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {
@@ -60204,7 +60204,7 @@ export type ReinstallMcpServerResponses = {
         id: string;
         name: string;
         deploymentName: string | null;
-        catalogId: string;
+        catalogId: string | null;
         serverType: 'local' | 'remote' | 'builtin' | 'app';
         secretId: string | null;
         environmentValues: string | number | boolean | null | {

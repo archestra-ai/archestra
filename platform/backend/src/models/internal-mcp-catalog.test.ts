@@ -826,6 +826,53 @@ describe("InternalMcpCatalogModel", () => {
     });
   });
 
+  describe("delete cascade", () => {
+    test("deleting a catalog tombstones its installs and cascades their tools", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+      // Remote install: the cascade tears it down without the K8s runtime.
+      const [server] = await db
+        .insert(schema.mcpServersTable)
+        .values({
+          name: "cascade-install",
+          serverType: "remote",
+          catalogId: catalog.id,
+        })
+        .returning();
+      const tool = await ToolModel.create({
+        catalogId: catalog.id,
+        name: ToolModel.slugifyName(catalog.name, "search"),
+        parameters: {},
+        description: null,
+      });
+
+      await expect(InternalMcpCatalogModel.delete(catalog.id)).resolves.toBe(
+        true,
+      );
+
+      // The install survives as a tombstone with its catalog pointer nulled
+      // by the catalog FK — not hard-deleted like before.
+      const [raw] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+      expect(raw.deletedAt).not.toBeNull();
+      expect(raw.catalogId).toBeNull();
+
+      // The catalog row and its tools are really gone.
+      await expect(
+        InternalMcpCatalogModel.findById(catalog.id, { expandSecrets: false }),
+      ).resolves.toBeNull();
+      await expect(
+        db
+          .select()
+          .from(schema.toolsTable)
+          .where(eq(schema.toolsTable.id, tool.id)),
+      ).resolves.toEqual([]);
+    });
+  });
+
   describe("excludes app backing catalogs from registry surfaces", () => {
     test("findAll and searchByQuery omit serverType:'app' catalogs", async () => {
       const remote = await InternalMcpCatalogModel.create({

@@ -167,6 +167,18 @@ vi.mock("./k8s-deployment", () => {
       static collectImagePullSecretNames(): string[] {
         return [];
       }
+      // Mirrors the real naming: shared per-catalog secret for multitenant,
+      // per-install secret otherwise.
+      static constructK8sSecretName(
+        mcpServerId: string,
+        catalogItem?: { multitenant?: boolean } | null,
+        catalogId?: string | null,
+      ): string {
+        if (catalogItem?.multitenant && catalogId) {
+          return `mcp-server-mt-${catalogId.slice(0, 8)}-secrets`;
+        }
+        return `mcp-server-${mcpServerId}-secrets`;
+      }
       // Mirrors the real frozen-first logic: the stored deploymentName wins;
       // the name-derived recompute is only the NULL fallback.
       static constructDeploymentName(
@@ -2128,12 +2140,17 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
   async function createManagerWithMockK8s(params: {
     mockK8sApi: Record<string, unknown>;
     mockK8sAppsApi: Record<string, unknown>;
+    mockK8sNetworkingApi?: Record<string, unknown>;
   }) {
     const { McpServerRuntimeManager } = await import("./manager");
     const manager = new McpServerRuntimeManager();
     (manager as unknown as { k8sApi: unknown }).k8sApi = params.mockK8sApi;
     (manager as unknown as { k8sAppsApi: unknown }).k8sAppsApi =
       params.mockK8sAppsApi;
+    if (params.mockK8sNetworkingApi) {
+      (manager as unknown as { k8sNetworkingApi: unknown }).k8sNetworkingApi =
+        params.mockK8sNetworkingApi;
+    }
     return manager;
   }
 
@@ -2225,8 +2242,17 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
 
     const mockDeleteDeployment = vi.fn().mockResolvedValue({});
     const mockDeleteService = vi.fn().mockResolvedValue({});
+    const mockDeleteSecret = vi.fn().mockResolvedValue({});
+    const mockListSecrets = vi.fn().mockResolvedValue({
+      items: [{ metadata: { name: "regcred-tombstoned" } }],
+    });
+    const mockDeletePolicy = vi.fn().mockResolvedValue({});
     const manager = await createManagerWithMockK8s({
-      mockK8sApi: { deleteNamespacedService: mockDeleteService },
+      mockK8sApi: {
+        deleteNamespacedService: mockDeleteService,
+        deleteNamespacedSecret: mockDeleteSecret,
+        listNamespacedSecret: mockListSecrets,
+      },
       mockK8sAppsApi: {
         listNamespacedDeployment: vi.fn().mockResolvedValue({
           items: [
@@ -2254,6 +2280,9 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
         }),
         deleteNamespacedDeployment: mockDeleteDeployment,
       },
+      mockK8sNetworkingApi: {
+        deleteNamespacedNetworkPolicy: mockDeletePolicy,
+      },
     });
 
     await callCleanup(manager, []);
@@ -2264,6 +2293,32 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
     );
     expect(mockDeleteService).toHaveBeenCalledWith(
       expect.objectContaining({ name: "mcp-tombstoned-service" }),
+    );
+
+    // The whole delete-time teardown failed, so the sweep also reclaims the
+    // env secret, registry pull secrets, and the vanilla network policy.
+    expect(mockDeleteSecret).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: `mcp-server-${TOMBSTONED_ID}-secrets`,
+      }),
+    );
+    expect(mockListSecrets).toHaveBeenCalledWith(
+      expect.objectContaining({
+        labelSelector: `mcp-server-id=${TOMBSTONED_ID},type=regcred`,
+      }),
+    );
+    expect(mockDeleteSecret).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "regcred-tombstoned" }),
+    );
+    expect(mockDeletePolicy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-egress-mcp-tombstoned" }),
+    );
+
+    // Nothing of the fully-unknown install was touched.
+    expect(mockDeleteSecret).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: `mcp-server-${UNKNOWN_ID}-secrets`,
+      }),
     );
   });
 

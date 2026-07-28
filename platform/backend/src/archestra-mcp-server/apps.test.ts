@@ -1872,7 +1872,7 @@ describe("app data store tools", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toMatch(
-      /user context|authenticated viewer/i,
+      /acting user|authenticated viewer/i,
     );
   });
 });

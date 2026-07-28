@@ -140,16 +140,19 @@ const MetricsSchema = z.object({
   latencyMs: z.number().optional(),
 });
 
-// Stop reason
-const StopReasonSchema = z.enum([
-  "end_turn",
-  "tool_use",
-  "max_tokens",
-  "stop_sequence",
-  "guardrail_intervened",
-  "content_filtered",
-  "model_context_window_exceeded",
-]);
+// Stop reason — tolerate unknown values so new Bedrock reasons don't 500
+// Fastify response serialization / interaction read-back.
+const StopReasonSchema = z
+  .enum([
+    "end_turn",
+    "tool_use",
+    "max_tokens",
+    "stop_sequence",
+    "guardrail_intervened",
+    "content_filtered",
+    "model_context_window_exceeded",
+  ])
+  .or(z.string());
 
 // Output message
 const OutputMessageSchema = z.object({

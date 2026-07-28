@@ -115,7 +115,9 @@ export const ChatRequestSchema = z
 
 const ResponseMessageSchema = z.looseObject({
   role: z.string(),
-  content: z.string(),
+  // Tool-call-only replies often omit `content`; the adapter already treats it
+  // as optional (`content ?? ""`). Requiring the key 500s response serialization.
+  content: z.string().optional(),
   thinking: z.string().optional(),
   tool_calls: z.array(ToolCallSchema).nullable().optional(),
 });

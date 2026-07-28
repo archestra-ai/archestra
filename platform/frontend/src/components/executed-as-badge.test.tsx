@@ -1,9 +1,17 @@
 import type { McpExecutedAs } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { ExecutedAsBadge } from "./executed-as-badge";
 
+vi.mock("@/lib/hooks/use-app-name");
+
 describe("ExecutedAsBadge", () => {
+  beforeEach(() => {
+    vi.mocked(useAppName).mockReturnValue("Acme AI");
+  });
+
   it("names the owner of the connection the call ran through", () => {
     render(
       <ExecutedAsBadge
@@ -83,6 +91,26 @@ describe("ExecutedAsBadge", () => {
     );
 
     expect(screen.getByText("Ran as Grace Hopper")).toBeInTheDocument();
+  });
+
+  it("describes a platform-served call with the deployment's own name", async () => {
+    const user = userEvent.setup();
+    render(
+      <ExecutedAsBadge
+        executedAs={{ kind: "platform", callerUserId: "user-1" }}
+        meUserId="user-1"
+      />,
+    );
+
+    await user.hover(screen.getByText("Ran as me"));
+
+    // White-labeled deployments must not read "Archestra" here. Radix renders
+    // the copy twice (visible plus a screen-reader node).
+    expect(
+      await screen.findAllByText(
+        "This call used your own connection to the Acme AI",
+      ),
+    ).not.toHaveLength(0);
   });
 
   it("renders nothing for a call that resolved no upstream credential", () => {

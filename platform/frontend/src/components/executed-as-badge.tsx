@@ -2,7 +2,7 @@
 
 import type { McpExecutedAs, McpExecutedAsKind } from "@archestra/shared";
 import type { LucideIcon } from "lucide-react";
-import { Cpu, Globe, KeyRound, User, Users } from "lucide-react";
+import { Globe, KeyRound, User, Users } from "lucide-react";
 import { scopeStyles } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,6 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils";
 
 /**
@@ -34,12 +35,14 @@ export function ExecutedAsBadge({
    */
   meUserId?: string | null;
   /**
-   * Display name of the user who made the call, for the calls Archestra ran
+   * Display name of the user who made the call, for the calls the platform ran
    * itself (they carry only the caller's id). Omit where it is unknown; the
    * badge then says "the caller".
    */
   callerName?: string | null;
 }) {
+  const appName = useAppName();
+
   if (!executedAs) {
     return null;
   }
@@ -49,7 +52,7 @@ export function ExecutedAsBadge({
     style,
     label,
     tooltip,
-  } = describeExecutedAs(executedAs, meUserId, callerName);
+  } = describeExecutedAs(executedAs, { meUserId, callerName, appName });
 
   return (
     <TooltipProvider>
@@ -83,14 +86,19 @@ const RAN_AS_PREFIX = "Ran as";
 
 // One entry per identity kind. `meUserId` decides only whether a personal
 // connection reads as the viewer's own.
+type ExecutedAsContext = {
+  meUserId: string | null | undefined;
+  callerName: string | null | undefined;
+  appName: string;
+};
+
 const executedAsDescriptors: {
   [K in McpExecutedAsKind]: (
     executedAs: Extract<McpExecutedAs, { kind: K }>,
-    meUserId: string | null | undefined,
-    callerName: string | null | undefined,
+    context: ExecutedAsContext,
   ) => ExecutedAsDisplay;
 } = {
-  personal: (executedAs, meUserId) => {
+  personal: (executedAs, { meUserId }) => {
     const isMe = !!meUserId && executedAs.ownerUserId === meUserId;
     if (isMe) {
       return {
@@ -148,29 +156,29 @@ const executedAsDescriptors: {
     tooltip:
       "The calling client supplied the credential the MCP server was called with.",
   }),
-  platform: (executedAs, meUserId, callerName) => {
+  platform: (executedAs, { meUserId, callerName, appName }) => {
     const isMe = !!meUserId && executedAs.callerUserId === meUserId;
     const who = isMe ? "me" : (callerName ?? "the caller");
     return {
-      icon: Cpu,
+      icon: User,
       style: scopeStyles.personal,
       label: `${RAN_AS_PREFIX} ${who}`,
-      tooltip: `Archestra ran this tool itself, with ${isMe ? "your" : "the caller's"} permissions. No MCP server connection was used.`,
+      tooltip: isMe
+        ? `This call used your own connection to the ${appName}`
+        : `This call used ${who}'s own connection to the ${appName}`,
     };
   },
 };
 
 function describeExecutedAs(
   executedAs: McpExecutedAs,
-  meUserId: string | null | undefined,
-  callerName: string | null | undefined,
+  context: ExecutedAsContext,
 ): ExecutedAsDisplay {
   // Narrowed per kind by the descriptor table's mapped type; the lookup itself
   // needs the cast because TypeScript cannot correlate key and value here.
   const describe = executedAsDescriptors[executedAs.kind] as (
     executedAs: McpExecutedAs,
-    meUserId: string | null | undefined,
-    callerName: string | null | undefined,
+    context: ExecutedAsContext,
   ) => ExecutedAsDisplay;
-  return describe(executedAs, meUserId, callerName);
+  return describe(executedAs, context);
 }

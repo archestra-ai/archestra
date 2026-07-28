@@ -35,6 +35,7 @@ import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
 import { captureRawProviderErrorInSentry } from "@/observability/sentry";
 import { MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE } from "@/routes/proxy/adapters/microsoft-365-copilot-graph-translator";
+import { SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { ContextWindowExceededError } from "./normalization/enforce-context-window-limit";
 import { RequestTooLargeError } from "./normalization/enforce-request-size-limit";
@@ -1891,6 +1892,29 @@ export function mapProviderError(
     errorCode = ChatErrorCode.ServerError;
   }
 
+  // A secrets-backend outage surfaces through the provider call as our own
+  // secrets-unavailable message (relayed by the proxy), often with no status
+  // code, landing on the dead-end Unknown card. The underlying incident is
+  // already captured and grouped at its source — classify it as a retryable
+  // ServerError here so the user gets a retry and the relay isn't re-captured.
+  if (
+    errorCode === ChatErrorCode.Unknown &&
+    isSecretsUnavailableMessage(errorMessage)
+  ) {
+    errorCode = ChatErrorCode.ServerError;
+  }
+
+  // Bedrock's InternalServerException arrives mid-stream as the bare message
+  // "Bedrock is unable to process your request." with no status code or typed
+  // body, so the per-provider mapper can't classify it. It's a transient
+  // provider-side failure — retryable ServerError, like any provider 5xx.
+  if (
+    errorCode === ChatErrorCode.Unknown &&
+    isProviderInternalFailureMessage(errorMessage)
+  ) {
+    errorCode = ChatErrorCode.ServerError;
+  }
+
   // Determine error type from parsed error
   const errorType =
     (parsedError as ParsedOpenAIError)?.type ||
@@ -1987,6 +2011,20 @@ function isToolApprovalPolicyBlockError(message: string): boolean {
 
 function isUpstreamProviderError(message: string): boolean {
   return /^upstream error from /i.test(message);
+}
+
+// `includes` rather than equality: the message may pick up envelope prefixes
+// on its way through the proxy, but the secrets-manager text and internal code
+// slug are stable constants.
+function isSecretsUnavailableMessage(message: string): boolean {
+  return (
+    message.includes("An error occurred while accessing secrets") ||
+    message.includes(SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE)
+  );
+}
+
+function isProviderInternalFailureMessage(message: string): boolean {
+  return message.includes("unable to process your request");
 }
 
 /**

@@ -115,6 +115,19 @@ export class McpServerConnectionTimeoutError extends Error {
 }
 
 /**
+ * Thrown when connecting to (or discovering tools from) a user's MCP server
+ * fails — the server is unreachable, rejects the connection, or errors during
+ * the handshake. An operational/config condition on the caller's side, not a
+ * bug of ours: error tracking drops it by name, and routes map it to a 502.
+ */
+class McpServerUnreachableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "McpServerUnreachableError";
+  }
+}
+
+/**
  * Thrown when a stored HTTP session ID is no longer valid (e.g. pod restarted).
  * Caught by executeToolCallForOwner to trigger a transparent retry with a fresh session.
  */
@@ -3126,14 +3139,14 @@ class McpClient {
         }
 
         // Last attempt failed, throw error
-        throw new Error(
+        throw new McpServerUnreachableError(
           `Failed to connect to MCP server ${catalogItem.name}: ${lastError.message}`,
         );
       }
     }
 
     // Should never reach here, but TypeScript needs it
-    throw new Error(
+    throw new McpServerUnreachableError(
       `Failed to connect to MCP server ${catalogItem.name}: ${
         lastError?.message || "Unknown error"
       }`,

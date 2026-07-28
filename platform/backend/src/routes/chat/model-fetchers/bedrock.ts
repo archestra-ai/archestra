@@ -11,7 +11,7 @@ import {
 } from "@/knowledge-base/embedding-clients/bedrock-models";
 import logger from "@/logging";
 import { joinBaseUrl } from "@/utils/base-url";
-import type { ModelInfo } from "./types";
+import { type ModelInfo, modelFetchError } from "./types";
 
 export async function fetchBedrockModels(
   apiKey: string,
@@ -440,7 +440,7 @@ async function bedrockControlPlaneGet(params: {
       { status: response.status, error: errorText },
       `Failed to fetch Bedrock ${resource} via ${authType}`,
     );
-    throw new Error(`Failed to fetch Bedrock ${resource}: ${response.status}`);
+    throw modelFetchError(`Bedrock ${resource}`, response.status);
   }
 
   return response.json();

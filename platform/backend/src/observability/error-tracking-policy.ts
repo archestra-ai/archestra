@@ -96,6 +96,8 @@ export function classifyErrorForTracking(
 const MCP_UNREACHABLE_ERROR_NAMES = new Set([
   "McpServerNotReadyError",
   "McpServerConnectionTimeoutError",
+  "McpServerUnreachableError",
+  "McpServerDeploymentFailedError",
 ]);
 
 function isNonActionableError(error: unknown): boolean {

@@ -2167,6 +2167,7 @@
         "type": "object",
         "properties": {
           "candidates": {
+            "description": "Candidate responses from the model",
             "type": "array",
             "items": {
               "type": "object",
@@ -2592,26 +2593,33 @@
                 },
                 "finishReason": {
                   "description": "\n  The reason why the model stopped generating tokens.\n\n  If empty, the model has not stopped generating tokens.\n\n  https://ai.google.dev/api/generate-content#FinishReason\n",
-                  "type": "string",
-                  "enum": [
-                    "FINISH_REASON_UNSPECIFIED",
-                    "STOP",
-                    "MAX_TOKENS",
-                    "SAFETY",
-                    "RECITATION",
-                    "LANGUAGE",
-                    "OTHER",
-                    "BLOCKLIST",
-                    "PROHIBITED_CONTENT",
-                    "SPII",
-                    "MALFORMED_FUNCTION_CALL",
-                    "IMAGE_SAFETY",
-                    "IMAGE_PROHIBITED_CONTENT",
-                    "IMAGE_OTHER",
-                    "NO_IMAGE",
-                    "IMAGE_RECITATION",
-                    "UNEXPECTED_TOOL_CALL",
-                    "TOO_MANY_TOOL_CALLS"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "FINISH_REASON_UNSPECIFIED",
+                        "STOP",
+                        "MAX_TOKENS",
+                        "SAFETY",
+                        "RECITATION",
+                        "LANGUAGE",
+                        "OTHER",
+                        "BLOCKLIST",
+                        "PROHIBITED_CONTENT",
+                        "SPII",
+                        "MALFORMED_FUNCTION_CALL",
+                        "IMAGE_SAFETY",
+                        "IMAGE_PROHIBITED_CONTENT",
+                        "IMAGE_OTHER",
+                        "NO_IMAGE",
+                        "IMAGE_RECITATION",
+                        "UNEXPECTED_TOOL_CALL",
+                        "TOO_MANY_TOOL_CALLS"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "safetyRatings": {
@@ -2704,21 +2712,16 @@
                 "logprobsResult": {},
                 "urlContextMetadata": {},
                 "index": {
-                  "type": "number",
-                  "description": "Index of the candidate in the list of response candidates."
+                  "description": "Index of the candidate in the list of response candidates.",
+                  "type": "number"
                 },
                 "finishMessage": {
                   "description": "Details the reason why the model stopped generating tokens. This is populated only when finishReason is set.",
                   "type": "string"
                 }
               },
-              "required": [
-                "content",
-                "index"
-              ],
               "description": "https://ai.google.dev/api/generate-content#candidate"
-            },
-            "description": "Candidate responses from the model"
+            }
           },
           "promptFeedback": {
             "description": "Returns the prompt's feedback related to the content filters",
@@ -2726,14 +2729,21 @@
             "properties": {
               "blockReason": {
                 "description": "Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason",
-                "type": "string",
-                "enum": [
-                  "BLOCK_REASON_UNSPECIFIED",
-                  "SAFETY",
-                  "OTHER",
-                  "BLOCKLIST",
-                  "PROHIBITED_CONTENT",
-                  "IMAGE_SAFETY"
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "BLOCK_REASON_UNSPECIFIED",
+                      "SAFETY",
+                      "OTHER",
+                      "BLOCKLIST",
+                      "PROHIBITED_CONTENT",
+                      "IMAGE_SAFETY"
+                    ]
+                  },
+                  {
+                    "type": "string"
+                  }
                 ]
               },
               "safetyRatings": {
@@ -2782,10 +2792,7 @@
                   "description": "https://ai.google.dev/api/generate-content#v1beta.SafetyRating"
                 }
               }
-            },
-            "required": [
-              "safetyRatings"
-            ]
+            }
           },
           "usageMetadata": {
             "description": "Metadata on the generation requests' token usage",
@@ -2927,10 +2934,7 @@
             "description": "The unique response ID.",
             "type": "string"
           }
-        },
-        "required": [
-          "candidates"
-        ]
+        }
       },
       "AnthropicMessagesRequestInput": {
         "type": "object",
@@ -21324,6 +21328,7 @@
         "type": "object",
         "properties": {
           "candidates": {
+            "description": "Candidate responses from the model",
             "type": "array",
             "items": {
               "type": "object",
@@ -21770,26 +21775,33 @@
                 },
                 "finishReason": {
                   "description": "\n  The reason why the model stopped generating tokens.\n\n  If empty, the model has not stopped generating tokens.\n\n  https://ai.google.dev/api/generate-content#FinishReason\n",
-                  "type": "string",
-                  "enum": [
-                    "FINISH_REASON_UNSPECIFIED",
-                    "STOP",
-                    "MAX_TOKENS",
-                    "SAFETY",
-                    "RECITATION",
-                    "LANGUAGE",
-                    "OTHER",
-                    "BLOCKLIST",
-                    "PROHIBITED_CONTENT",
-                    "SPII",
-                    "MALFORMED_FUNCTION_CALL",
-                    "IMAGE_SAFETY",
-                    "IMAGE_PROHIBITED_CONTENT",
-                    "IMAGE_OTHER",
-                    "NO_IMAGE",
-                    "IMAGE_RECITATION",
-                    "UNEXPECTED_TOOL_CALL",
-                    "TOO_MANY_TOOL_CALLS"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "FINISH_REASON_UNSPECIFIED",
+                        "STOP",
+                        "MAX_TOKENS",
+                        "SAFETY",
+                        "RECITATION",
+                        "LANGUAGE",
+                        "OTHER",
+                        "BLOCKLIST",
+                        "PROHIBITED_CONTENT",
+                        "SPII",
+                        "MALFORMED_FUNCTION_CALL",
+                        "IMAGE_SAFETY",
+                        "IMAGE_PROHIBITED_CONTENT",
+                        "IMAGE_OTHER",
+                        "NO_IMAGE",
+                        "IMAGE_RECITATION",
+                        "UNEXPECTED_TOOL_CALL",
+                        "TOO_MANY_TOOL_CALLS"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "safetyRatings": {
@@ -21885,22 +21897,17 @@
                 "logprobsResult": {},
                 "urlContextMetadata": {},
                 "index": {
-                  "type": "number",
-                  "description": "Index of the candidate in the list of response candidates."
+                  "description": "Index of the candidate in the list of response candidates.",
+                  "type": "number"
                 },
                 "finishMessage": {
                   "description": "Details the reason why the model stopped generating tokens. This is populated only when finishReason is set.",
                   "type": "string"
                 }
               },
-              "required": [
-                "content",
-                "index"
-              ],
               "additionalProperties": false,
               "description": "https://ai.google.dev/api/generate-content#candidate"
-            },
-            "description": "Candidate responses from the model"
+            }
           },
           "promptFeedback": {
             "description": "Returns the prompt's feedback related to the content filters",
@@ -21908,14 +21915,21 @@
             "properties": {
               "blockReason": {
                 "description": "Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason",
-                "type": "string",
-                "enum": [
-                  "BLOCK_REASON_UNSPECIFIED",
-                  "SAFETY",
-                  "OTHER",
-                  "BLOCKLIST",
-                  "PROHIBITED_CONTENT",
-                  "IMAGE_SAFETY"
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "BLOCK_REASON_UNSPECIFIED",
+                      "SAFETY",
+                      "OTHER",
+                      "BLOCKLIST",
+                      "PROHIBITED_CONTENT",
+                      "IMAGE_SAFETY"
+                    ]
+                  },
+                  {
+                    "type": "string"
+                  }
                 ]
               },
               "safetyRatings": {
@@ -21966,9 +21980,6 @@
                 }
               }
             },
-            "required": [
-              "safetyRatings"
-            ],
             "additionalProperties": false
           },
           "usageMetadata": {
@@ -22117,9 +22128,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "candidates"
-        ],
         "additionalProperties": false
       },
       "AnthropicMessagesRequest": {

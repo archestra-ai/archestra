@@ -55,8 +55,7 @@ export function extractCitations(
     }> = [];
 
     try {
-      const parsed =
-        typeof part.output === "string" ? JSON.parse(part.output) : part.output;
+      const parsed = parseToolOutput(part.output);
       if (Array.isArray(parsed?.results)) {
         results = parsed.results;
       } else if (typeof parsed?.tool_result === "string") {
@@ -189,4 +188,23 @@ export function KnowledgeGraphCitations({
       </div>
     </div>
   );
+}
+
+// A tool result reaches the UI either as the raw JSON string a platform tool
+// returned, or wrapped in the MCP output object (which carries that same JSON
+// as `content`, alongside metadata such as the identity the call ran as).
+function parseToolOutput(
+  output: unknown,
+): { results?: unknown; tool_result?: unknown } | null {
+  if (typeof output === "string") {
+    return JSON.parse(output);
+  }
+  if (output && typeof output === "object") {
+    const content = (output as { content?: unknown }).content;
+    if (typeof content === "string") {
+      return JSON.parse(content);
+    }
+    return output as { results?: unknown; tool_result?: unknown };
+  }
+  return null;
 }

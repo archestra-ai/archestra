@@ -250,6 +250,14 @@ flowchart TD
     style J fill:#f8d7da,stroke:#dc3545
 ```
 
+#### Called As
+
+Every tool call records the identity whose credential served it. Chat shows it on the tool call card. The MCP Gateway logs show it in the **Called as** column, next to the user who made the call. A call through a shared service account reads as that account, on behalf of the caller.
+
+The identity is a person, a team, or the organization. Calls that use a token minted for the caller — Identity Provider Token Exchange, or a forwarded JWKS token — run as that caller. A call made with a gateway token runs as the team or the organization that issued the token.
+
+MCP clients see the same identity on the tool result, under the `_meta.archestraExecutedAs` key.
+
 #### Missing Credentials
 
 When no credential can be resolved for a caller, the gateway returns an actionable error message that includes a direct link to install the MCP server with their own credentials:

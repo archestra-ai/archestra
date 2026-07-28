@@ -2,14 +2,17 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  extractMcpExecutedAs,
   hasArchestraTokenPrefix,
   isAgentTool,
   isAlwaysExposedArchestraToolShortName,
   isSkillTool,
+  MCP_EXECUTED_AS_META_KEY,
   MCP_GATEWAY_OAUTH_SCOPE,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
+  platformExecutedAs,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -796,6 +799,20 @@ export async function createAgentServer(
               : "Archestra MCP tool call completed",
           );
 
+          // `run_tool` dispatches reach a real server, and that call already
+          // named the connection that served it — keep it. Anything else here
+          // Archestra ran itself, with the caller's permissions, so the log and
+          // the client still learn who it ran for.
+          const archestraResult = {
+            ...response,
+            _meta: {
+              ...(response._meta as Record<string, unknown> | undefined),
+              [MCP_EXECUTED_AS_META_KEY]:
+                extractMcpExecutedAs(response) ??
+                platformExecutedAs(tokenAuth?.userId),
+            },
+          };
+
           // Persist archestra/agent delegation tool call to database
           try {
             await McpToolCallModel.create({
@@ -807,7 +824,7 @@ export async function createAgentServer(
                 name,
                 arguments: args || {},
               },
-              toolResult: response,
+              toolResult: archestraResult,
               userId: tokenAuth?.userId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
             });
@@ -818,7 +835,7 @@ export async function createAgentServer(
             );
           }
 
-          return response;
+          return archestraResult;
         }
 
         logger.info(

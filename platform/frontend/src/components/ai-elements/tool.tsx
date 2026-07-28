@@ -61,6 +61,8 @@ export type ToolHeaderProps = {
   isCollapsible?: boolean;
   /** Optional action button to display in the header (e.g., View Logs) */
   actionButton?: React.ReactNode;
+  /** Names the identity the call ran as upstream (e.g. whose connection served it) */
+  identityBadge?: React.ReactNode;
 };
 
 const getStatusBadge = (
@@ -104,6 +106,7 @@ export const ToolHeader = ({
   icon,
   isCollapsible = true,
   actionButton,
+  identityBadge,
   ...props
 }: ToolHeaderProps) => (
   <CollapsibleTrigger
@@ -121,6 +124,7 @@ export const ToolHeader = ({
       </span>
     </div>
     <div className="flex items-center gap-3">
+      {identityBadge}
       {getStatusBadge(state)}
       {actionButton && (
         // biome-ignore lint/a11y/noStaticElementInteractions: Wrapper needs to stop event propagation

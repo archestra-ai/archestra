@@ -1,9 +1,14 @@
 "use client";
 
-import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  extractMcpExecutedAs,
+  parseFullToolName,
+} from "@archestra/shared";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { JsonCodeBlock } from "@/components/json-code-block";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { MetadataCard, MetadataItem } from "@/components/metadata-card";
@@ -19,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { useProfiles } from "@/lib/agent.query";
 import {
   formatAuthMethod,
+  formatCallerIdentity,
   useMcpToolCall,
 } from "@/lib/mcp/mcp-tool-call.query";
 import { formatDate } from "@/lib/utils";
@@ -96,6 +102,9 @@ function McpToolCallDetail({
     error?: string;
     content?: unknown;
   } | null;
+
+  // Whose credential served the call upstream, recorded with the result.
+  const executedAs = extractMcpExecutedAs(mcpToolCall.toolResult);
 
   const isError =
     method === "tools/call" &&
@@ -183,6 +192,14 @@ function McpToolCallDetail({
               <Badge variant="secondary" className="text-xs">
                 {formatAuthMethod(mcpToolCall.authMethod)}
               </Badge>
+            </MetadataItem>
+          )}
+          {executedAs && (
+            <MetadataItem label="Called as">
+              <ExecutedAsBadge
+                executedAs={executedAs}
+                caller={formatCallerIdentity(mcpToolCall)}
+              />
             </MetadataItem>
           )}
         </MetadataCard>

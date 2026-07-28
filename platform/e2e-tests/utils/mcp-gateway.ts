@@ -274,7 +274,10 @@ export async function callMcpTool(
     arguments?: Record<string, unknown>;
     timeoutMs?: number;
   },
-): Promise<{ content: Array<{ type: string; text?: string }> }> {
+): Promise<{
+  content: Array<{ type: string; text?: string }>;
+  _meta?: Record<string, unknown>;
+}> {
   const callToolResponse = await makeApiRequest({
     request,
     method: "post",
@@ -302,7 +305,7 @@ export async function callMcpTool(
   return callResult.result;
 }
 
-async function getTeamTokenForProfile(
+export async function getTeamTokenForProfile(
   request: APIRequestContext,
   teamName: string,
 ): Promise<string> {

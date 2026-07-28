@@ -1,10 +1,15 @@
 "use client";
 
-import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  extractMcpExecutedAs,
+  parseFullToolName,
+} from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { ProfileFilterOption } from "@/components/log-filter-option";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
@@ -26,6 +31,7 @@ import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import {
   formatAuthMethod,
+  formatCallerIdentity,
   useMcpToolCalls,
 } from "@/lib/mcp/mcp-tool-call.query";
 import { formatDate } from "@/lib/utils";
@@ -287,6 +293,28 @@ function McpToolCallsTable({
               </Badge>
             )}
           </div>
+        );
+      },
+    },
+    {
+      id: "executedAs",
+      header: "Called as",
+      cell: ({ row }) => {
+        // Whose credential served the call upstream. The User column above is
+        // who asked for it, so the two together read "ran as X on behalf of Y".
+        // Blank for calls the platform served in process and for rows recorded
+        // before the identity was captured.
+        const executedAs = extractMcpExecutedAs(row.original.toolResult);
+        if (!executedAs) {
+          return <div className="text-xs text-muted-foreground">—</div>;
+        }
+        // An auditor needs the person, never "Me" — the reader is rarely the
+        // caller here, so no identity is ever written from their perspective.
+        return (
+          <ExecutedAsBadge
+            executedAs={executedAs}
+            caller={formatCallerIdentity(row.original)}
+          />
         );
       },
     },

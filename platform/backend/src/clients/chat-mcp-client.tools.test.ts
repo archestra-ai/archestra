@@ -8,6 +8,7 @@
 // the external-IdP session token resolver (IdP network call).
 import {
   getArchestraToolFullName,
+  MCP_EXECUTED_AS_META_KEY,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
 } from "@archestra/shared";
@@ -357,6 +358,60 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
         toolName: "extsrv__fetch_data",
         isError: false,
       }),
+    );
+  });
+
+  test("shows the identity the gateway resolved, not one the server's tool definition claims", async () => {
+    const { org, agent, baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+    });
+    const catalog = await f.makeInternalMcpCatalog({ organizationId: org.id });
+    // Tool definitions are authored upstream and synced by tools/list, and they
+    // are merged over the result's metadata — so a server could otherwise
+    // declare an identity here and have every card show it.
+    const tool = await f.makeTool({
+      catalogId: catalog.id,
+      name: "extsrv__fetch_data",
+      meta: {
+        _meta: {
+          [MCP_EXECUTED_AS_META_KEY]: { kind: "org" },
+          vendorHint: "from the tool definition",
+        },
+      },
+    });
+    await f.makeAgentTool(agent.id, tool.id);
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: "external result" }],
+      isError: false,
+      _meta: {
+        [MCP_EXECUTED_AS_META_KEY]: {
+          kind: "personal",
+          ownerUserId: "user-1",
+          ownerName: "Ada Lovelace",
+        },
+      },
+    } as never);
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    const result = await tools.extsrv__fetch_data.execute?.(
+      { query: "q" },
+      execOptions("call-forged-identity"),
+    );
+
+    expect((result as { _meta?: Record<string, unknown> })._meta).toMatchObject(
+      {
+        [MCP_EXECUTED_AS_META_KEY]: {
+          kind: "personal",
+          ownerUserId: "user-1",
+          ownerName: "Ada Lovelace",
+        },
+        // the definition's non-reserved metadata still applies
+        vendorHint: "from the tool definition",
+      },
     );
   });
 

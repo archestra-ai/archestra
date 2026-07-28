@@ -1028,8 +1028,8 @@ async function stageConversationAttachments(
   });
   for (const skip of oversized) {
     // debug, not warn: an oversize attachment is expected and recoverable (the
-    // model gets a notice + download URL), and staging re-runs every op — a warn
-    // here would repeat for the whole conversation.
+    // model gets a notice and the file stays in the Files panel), and staging
+    // re-runs every op — a warn here would repeat for the whole conversation.
     logger.debug(
       {
         sandboxId: sandbox.id,
@@ -1091,7 +1091,7 @@ function planAttachmentStaging(params: {
     if (stagedIds.has(attachment.id)) continue;
     if (attachment.fileSize > limit) {
       notices.push(
-        `attachment ${JSON.stringify(attachment.originalName ?? attachment.id)} (${attachment.fileSize} bytes) was not auto-staged into the sandbox: it exceeds the ${limit}-byte file limit. Reference it via its download URL instead.`,
+        `attachment ${JSON.stringify(attachment.originalName ?? attachment.id)} (${attachment.fileSize} bytes) was not auto-staged into the sandbox: it exceeds the ${limit}-byte file limit. It stays in the conversation's Files panel, where the user can download it.`,
       );
       oversized.push({
         attachmentId: attachment.id,

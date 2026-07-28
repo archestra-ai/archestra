@@ -2316,9 +2316,15 @@ const config = {
       process.env.ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT,
       256 * 1024,
     ),
+    /**
+     * Per-file byte cap at the sandbox boundary: attachment staging, uploads,
+     * saves/edits, inline reads, and artifact export. Defaults to the chat
+     * attachment storage cap so any stored attachment can be staged for the
+     * agent; tune independently via env.
+     */
     artifactBytesLimit: parsePositiveInt(
       process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
-      16 * 1024 * 1024,
+      DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
     ),
   },
   /**

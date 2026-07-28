@@ -33,7 +33,7 @@ export function makeConfig(
       betaEnabled: false,
       orchestratorK8sRuntime: false,
       sandbox: false,
-      sandboxArtifactBytesLimit: 16 * 1024 * 1024,
+      sandboxArtifactBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       chatAttachmentStorageBytesLimit: DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
       apiBodyLimitBytes: 70 * 1024 * 1024,
       byosEnabled: false,

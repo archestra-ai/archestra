@@ -104,6 +104,128 @@ describe("buildPlayback", () => {
     expect(gap).toBeLessThanOrEqual(900);
   });
 
+  // A reply inside a cut used to buy its own reveal time, so the cut spanned
+  // real playback seconds: resuming inside one crawled through the removed
+  // stretch instead of stepping over it, and a minute of kept material
+  // reported as longer than a minute.
+  const reply = (id: string, atMs: number) => ({
+    id,
+    role: "assistant" as const,
+    atMs,
+    parts: [
+      { type: "text" as const, text: "a fairly long reply. ".repeat(40) },
+    ],
+  });
+
+  it("a cut costs zero playback time, however much was said inside it", () => {
+    const base = {
+      durationMs: 80_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        { kind: "pointer", t: 10_000, type: "click", x: 1, y: 1 },
+        { kind: "pointer", t: 40_000, type: "click", x: 2, y: 2 },
+        { kind: "pointer", t: 70_000, type: "click", x: 3, y: 3 },
+      ] as Recording["events"],
+      transcript: [
+        reply("a1", 30_000),
+        reply("a2", 45_000),
+      ] as Recording["transcript"],
+      edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+    };
+    const playback = buildPlayback(recording(base));
+
+    // The whole cut is one instant — both edges land on the same moment.
+    expect(playback.toPlaybackMs(60_000)).toBe(playback.toPlaybackMs(20_000));
+    // And nothing inside it sits anywhere else.
+    expect(playback.toPlaybackMs(40_000)).toBe(playback.toPlaybackMs(20_000));
+
+    // Removing the two replies entirely cannot make the cut any cheaper —
+    // which is the point: what was said in a removed stretch costs nothing.
+    const withoutReplies = buildPlayback(
+      recording({ ...base, transcript: [] }),
+    );
+    expect(playback.duration).toBe(withoutReplies.duration);
+  });
+
+  it("resuming inside a cut steps to the next kept moment, not through the cut", () => {
+    const playback = buildPlayback(
+      recording({
+        durationMs: 80_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 10_000, type: "click", x: 1, y: 1 },
+          { kind: "pointer", t: 70_000, type: "click", x: 2, y: 2 },
+        ] as Recording["events"],
+        transcript: [reply("a1", 30_000)] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+      }),
+    );
+
+    // The playhead sat at 40s when the cut was made. Its clock lands on the
+    // collapse instant, and the very next moment of playback is the cut's far
+    // edge — there is no span of removed material to sit through first.
+    const clock = playback.toPlaybackMs(40_000);
+    expect(playback.toRawMs(clock)).toBe(60_000);
+    expect(playback.toRawMs(clock + 1)).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it("still holds a reply that was mid-reveal when the cut began", () => {
+    // The defended case: trimming the pause AFTER a long answer cannot
+    // un-draw the answer — it is on screen, still typing, when the cut starts.
+    const withReply = buildPlayback(
+      recording({
+        durationMs: 80_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 10_000, type: "click", x: 1, y: 1 },
+          { kind: "pointer", t: 70_000, type: "click", x: 2, y: 2 },
+        ] as Recording["events"],
+        transcript: [reply("a1", 19_000)] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+      }),
+    );
+    const withoutReply = buildPlayback(
+      recording({
+        durationMs: 80_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 10_000, type: "click", x: 1, y: 1 },
+          { kind: "pointer", t: 70_000, type: "click", x: 2, y: 2 },
+        ] as Recording["events"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+      }),
+    );
+    expect(withReply.duration).toBeGreaterThan(withoutReply.duration);
+  });
+
+  it("marks a collapsed reply as already sent so it never types over the app", () => {
+    const playback = buildPlayback(
+      recording({
+        durationMs: 80_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 70_000, type: "click", x: 1, y: 1 },
+        ] as Recording["events"],
+        transcript: [
+          reply("kept", 10_000),
+          reply("cut", 30_000),
+        ] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+      }),
+    );
+    expect(playback.transcript.map((m) => m.settled)).toEqual([
+      undefined,
+      true,
+    ]);
+    // And the schedule gives it no typing time at all, so it renders complete
+    // the moment the playhead reaches it.
+    const { schedule } = revealSchedule(playback.transcript, playback.duration);
+    const slot = schedule.get("cut");
+    expect(slot?.end).toBe(slot?.start);
+    const keptSlot = schedule.get("kept");
+    expect(keptSlot?.end).toBeGreaterThan(keptSlot?.start ?? 0);
+  });
+
   it("collapses a cut range to zero time without dropping its events", () => {
     const base = {
       durationMs: 10_000,

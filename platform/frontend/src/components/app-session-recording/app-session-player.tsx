@@ -122,6 +122,12 @@ type RecordingEnhancement = NonNullable<AppRecordingBundle["enhancement"]>;
 type TimelineEvent = PlaybackRecording["events"][number];
 type McpTimelineEvent = Extract<TimelineEvent, { kind: "mcp" }>;
 type TranscriptMessage = PlaybackRecording["transcript"][number];
+/**
+ * A transcript message as PLAYBACK sees it. `settled` marks one a cut
+ * collapsed: it is shown in full the instant it is reached, because the
+ * stretch it was said in was removed and there is no time left to type it in.
+ */
+type PlaybackTranscriptMessage = TranscriptMessage & { settled?: boolean };
 type PlayerAudioStatus =
   | { status: "loading" }
   | { status: "ready" }
@@ -230,7 +236,7 @@ export function backfilledEnhancement(
 }
 
 export function revealSchedule(
-  transcript: TranscriptMessage[],
+  transcript: PlaybackTranscriptMessage[],
   durationMs: number,
 ): {
   schedule: Map<string, { start: number; end: number }>;
@@ -241,9 +247,11 @@ export function revealSchedule(
     let previousEnd = Number.NEGATIVE_INFINITY;
     for (const message of transcript) {
       const start = Math.max(message.atMs, previousEnd);
+      // A settled message takes no time: a cut removed the stretch it was said
+      // in, so it is already on screen in full when the playhead arrives.
       const end =
         start +
-        (message.role === "assistant"
+        (message.role === "assistant" && !message.settled
           ? messageRevealMs(message.parts) * scale
           : 0);
       slots.set(message.id, { start, end });
@@ -4341,7 +4349,7 @@ function ReplayChatPane({
   preview,
   onEnterEdit,
 }: {
-  transcript: TranscriptMessage[];
+  transcript: PlaybackTranscriptMessage[];
   clockMs: number;
   /** The playback's end. The reveal schedule must fit inside it — see below. */
   durationMs: number;
@@ -4539,7 +4547,7 @@ export function ReplayChatEditPane({
   onRestore,
   onDone,
 }: {
-  transcript: TranscriptMessage[];
+  transcript: PlaybackTranscriptMessage[];
   enhancement: RecordingEnhancement | null;
   chat: RecordingChatEdits | undefined;
   saving: boolean;
@@ -5405,7 +5413,7 @@ function ReplayAppStage({
 export function buildPlayback(recording: PlaybackRecording): {
   events: TimelineEvent[];
   segments: PlaybackRecording["segments"];
-  transcript: TranscriptMessage[];
+  transcript: PlaybackTranscriptMessage[];
   duration: number;
   /** Map a playback-timeline time back to raw recording time — the coordinate
    * space cuts are stored in, stable across player versions. */
@@ -5415,6 +5423,14 @@ export function buildPlayback(recording: PlaybackRecording): {
 } {
   const source = finalVersionOnly(recording);
   const cuts = normalizeCuts(source.edits?.cuts ?? []);
+  /**
+   * A moment a cut removes — one that collapses onto the cut's instant rather
+   * than playing. The cut's own START still plays (it is the last kept
+   * moment); its END does not, matching how the bundle pruner and the
+   * trailing-trim filter read the same boundaries.
+   */
+  const insideCut = (t: number) =>
+    cuts.some((cut) => cut.fromMs < t && t <= cut.toMs);
   const anchors = new Set<number>([0, Math.max(0, source.durationMs)]);
   // When the author was actually USING the app, bounded by their first and last
   // input to it. Time inside that stretch is never compressed: it is the app
@@ -5508,6 +5524,16 @@ export function buildPlayback(recording: PlaybackRecording): {
   const revealAt = new Map<number, number>();
   for (const message of source.transcript) {
     if (message.role !== "assistant") continue;
+    // A reply the cut REMOVED buys no time. It still replays — collapsed onto
+    // the cut's instant, arriving already sent (see `settled` below) — but a
+    // cut that costs a second and a half per reply inside it is not a cut: the
+    // playhead crawls through a removed stretch instead of stepping over it,
+    // and a minute of kept material reports as longer than a minute.
+    //
+    // A reply said BEFORE the cut still holds (that clamp is further down),
+    // because trimming the pause after a long answer cannot un-draw the
+    // answer — it is still on screen, mid-reveal, when the cut begins.
+    if (insideCut(message.atMs)) continue;
     revealAt.set(
       message.atMs,
       (revealAt.get(message.atMs) ?? 0) + messageRevealMs(message.parts),
@@ -5632,12 +5658,17 @@ export function buildPlayback(recording: PlaybackRecording): {
     // A cut removes ONLY the app replay in its range (events, frames, segments
     // — filtered/collapsed above); the chat is never trimmed. Every captured
     // message still replays: one inside a removed stretch collapses onto the
-    // cut's instant the same way the app events there do, and the reveal
-    // cascade streams that collapsed run in quickly — so the conversation plays
-    // in full, only sped up across the cut rather than losing what was said.
+    // cut's instant the same way the app events there do, so the conversation
+    // plays in full rather than losing what was said.
+    //
+    // It arrives ALREADY SENT, though (`settled`). The stretch it was said in
+    // is gone, so there is no time left to type it in — and typing it anyway
+    // is the thing that made a cut cost real seconds and put the chat pane's
+    // animation back on top of an app replay that had already moved on.
     transcript: source.transcript.map((message) => ({
       ...message,
       atMs: map(message.atMs),
+      ...(insideCut(message.atMs) ? { settled: true as const } : {}),
     })),
     // The full compressed span — the last anchor, which may be a message that
     // lands just after the app interaction ends.

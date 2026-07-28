@@ -36,7 +36,11 @@ overrides:
   protobufjs: '>=8.6.0'
   '@protobufjs/utf8': '>=1.1.1'
   vite: 7.3.5
-  shell-quote: '>=1.8.4'
+  # CVE / GHSA-395f-4hp3-45gv (HIGH, CVSS 8.7): quadratic-complexity DoS in
+  # shell-quote's parse() on plain space-separated input. Vulnerable range is
+  # <= 1.8.4, fixed in 1.9.0 — the floor must be >=1.9.0, since a >=1.8.4 floor
+  # still resolves the vulnerable 1.8.4.
+  shell-quote: '>=1.9.0'
   ws@>=8: '>=8.21.0'
   # botframework-streaming pins ws 8.20.1, which the range selector above doesn't
   # catch; force that edge to the CVE-2026-48779 fix too.

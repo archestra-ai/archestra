@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  extractMcpExecutedAs,
   hasArchestraTokenPrefix,
   isAgentTool,
   isAlwaysExposedArchestraToolShortName,
@@ -12,7 +13,6 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   platformExecutedAs,
-  stripReservedPlatformMeta,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -799,16 +799,17 @@ export async function createAgentServer(
               : "Archestra MCP tool call completed",
           );
 
-          // Archestra ran this tool itself, with the caller's permissions —
-          // record that as the identity so the log answers "as who" for
-          // in-process tools too, not only for calls that reached a server.
+          // `run_tool` dispatches reach a real server, and that call already
+          // named the connection that served it — keep it. Anything else here
+          // Archestra ran itself, with the caller's permissions, so the log and
+          // the client still learn who it ran for.
           const archestraResult = {
             ...response,
             _meta: {
-              ...stripReservedPlatformMeta(
-                response._meta as Record<string, unknown> | undefined,
-              ),
-              [MCP_EXECUTED_AS_META_KEY]: platformExecutedAs(tokenAuth?.userId),
+              ...(response._meta as Record<string, unknown> | undefined),
+              [MCP_EXECUTED_AS_META_KEY]:
+                extractMcpExecutedAs(response) ??
+                platformExecutedAs(tokenAuth?.userId),
             },
           };
 

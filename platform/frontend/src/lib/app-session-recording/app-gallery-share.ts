@@ -340,12 +340,14 @@ export async function submitRecordingToAppGallery(params: {
     // blob sha; on a fresh branch the lookup 404s and the PUT creates it.
     const path = `${forkPath}/contents/${dir}/${file.name}`;
     const priorSha = await fetchExistingFileSha({ gh, path, branch });
-    await gh("PUT", path, {
-      message: `Add ${file.name} for: ${bundle.app.name}`,
-      content: toBase64(file.bytes),
-      branch,
-      ...(priorSha ? { sha: priorSha } : {}),
-    });
+    await githubWithRetry(() =>
+      gh("PUT", path, {
+        message: `Add ${file.name} for: ${bundle.app.name}`,
+        content: toBase64(file.bytes),
+        branch,
+        ...(priorSha ? { sha: priorSha } : {}),
+      }),
+    );
   }
 
   onProgress({
@@ -522,18 +524,18 @@ function thumbnailFile(thumbnail: {
 }
 
 /**
- * The one size rule a submission must meet — GitHub's own per-file limit on
- * its contents API, NOT a product quota. Returns the refusal message when a
- * file is over it, null when everything fits. The dialog calls this at the
- * Share click so nobody signs in to GitHub only to learn the recording
- * can't be uploaded.
+ * The one size rule a submission must meet — GitHub's own strictest ceiling,
+ * NOT a product quota, and never tighter than GitHub's. Returns the refusal
+ * message when a file is over it, null when everything fits. The dialog calls
+ * this at the Share click so nobody signs in to GitHub only to learn the
+ * recording can't be uploaded.
  */
 export function oversizedGallerySubmissionFile(
   bundle: AppRecordingBundle,
 ): string | null {
   const { bytes } = recordingFile(bundle);
   if (bytes.byteLength > GITHUB_MAX_FILE_BYTES) {
-    return `This recording is ${mb(bytes.byteLength)}MB — GitHub refuses files over ${mb(GITHUB_MAX_FILE_BYTES)}MB. Re-record a shorter session.`;
+    return `This recording is ${mb(bytes.byteLength)}MB — GitHub refuses uploads over ${mb(GITHUB_MAX_FILE_BYTES)}MB. Trim it, or re-record a shorter session.`;
   }
   return null;
 }
@@ -729,6 +731,52 @@ async function toGithubRequestError(
     `GitHub refused the request.${detail ? ` ${detail}` : ""}`,
     status,
   );
+}
+
+/**
+ * Re-run a write that failed for a reason GitHub itself calls temporary.
+ *
+ * Large submissions draw transient refusals from the commit path — "Timed out
+ * validating rule" is the one seen in practice, a ruleset check giving up
+ * rather than a verdict on the request. Clicking the dialog's Try again does
+ * clear it, so this is not rescuing an unrecoverable state; it spends the
+ * retry on the participant's behalf instead of making them notice, read a
+ * scary error, and click through it.
+ *
+ * Only transient shapes retry. A refusal that is a VERDICT — too large, no
+ * permission, a bad token — must surface immediately: retrying it wastes the
+ * participant's time and buries the one message that tells them what to fix.
+ */
+async function githubWithRetry<T>(call: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < GITHUB_WRITE_ATTEMPTS; attempt++) {
+    try {
+      return await call();
+    } catch (error) {
+      if (!isTransientGithubRefusal(error)) throw error;
+      lastError = error;
+      // Linear, not exponential: two short waits inside one click, not a
+      // backoff schedule the participant sits through.
+      await new Promise((resolve) =>
+        setTimeout(resolve, GITHUB_RETRY_DELAY_MS * (attempt + 1)),
+      );
+    }
+  }
+  throw lastError;
+}
+
+/** Three tries total — enough for a blip, short enough to stay one click. */
+const GITHUB_WRITE_ATTEMPTS = 3;
+const GITHUB_RETRY_DELAY_MS = 1_500;
+
+/**
+ * A refusal GitHub is likely to answer differently a moment later: its own
+ * 5xx weather, and the ruleset-validation timeout that large commits provoke.
+ */
+function isTransientGithubRefusal(error: unknown): boolean {
+  if (!(error instanceof GithubRequestError)) return false;
+  if (error.status >= 500) return true;
+  return /timed out validating rule/i.test(error.message);
 }
 
 /** An api.github.com refusal, keeping the status for retry decisions. */
@@ -1293,8 +1341,23 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-/** GitHub's ceiling for a file created through its contents API. */
-const GITHUB_MAX_FILE_BYTES = 100 * 1024 * 1024;
+/**
+ * The strictest ceiling api.github.com imposes on any endpoint this upload
+ * could use. GitHub's number, not a product quota, and deliberately not a
+ * millimetre under it: a submission GitHub would have taken must never be
+ * refused here.
+ *
+ * The one measurement we have is a 57MB bundle refused by BOTH upload paths —
+ * the contents API answered "the file is too large to be processed", the Git
+ * Data API's blob endpoint "your input was too large to process". That is
+ * consistent with this ceiling and says nothing about which endpoint to use,
+ * which is why the upload stays on the plain contents API.
+ *
+ * Capture is what keeps real bundles far below it rather than this check: a
+ * minute at the SDK's governor lands around 10MB, so the gate exists for
+ * recordings made before those bounds, not for new ones.
+ */
+const GITHUB_MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 function mb(bytes: number): number {
   return Math.round(bytes / (1024 * 1024));

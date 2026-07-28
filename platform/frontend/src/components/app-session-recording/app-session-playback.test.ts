@@ -1,6 +1,7 @@
 import {
   type AppRecordingBundle,
-  pruneTrailingTrimEvents,
+  exceedsFinalCutLimit,
+  pruneCutEvents,
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
@@ -105,6 +106,128 @@ describe("buildPlayback", () => {
     // An hour of dead air between the two turns collapses to a brief beat.
     const gap = playback.transcript[1].atMs - playback.transcript[0].atMs;
     expect(gap).toBeLessThanOrEqual(900);
+  });
+
+  // A reply inside a cut used to buy its own reveal time, so the cut spanned
+  // real playback seconds: resuming inside one crawled through the removed
+  // stretch instead of stepping over it, and a minute of kept material
+  // reported as longer than a minute.
+  const reply = (id: string, atMs: number) => ({
+    id,
+    role: "assistant" as const,
+    atMs,
+    parts: [
+      { type: "text" as const, text: "a fairly long reply. ".repeat(40) },
+    ],
+  });
+
+  it("a cut costs zero playback time, however much was said inside it", () => {
+    const base = {
+      durationMs: 80_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        { kind: "pointer", t: 10_000, type: "click", x: 1, y: 1 },
+        { kind: "pointer", t: 40_000, type: "click", x: 2, y: 2 },
+        { kind: "pointer", t: 70_000, type: "click", x: 3, y: 3 },
+      ] as Recording["events"],
+      transcript: [
+        reply("a1", 30_000),
+        reply("a2", 45_000),
+      ] as Recording["transcript"],
+      edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+    };
+    const playback = buildPlayback(recording(base));
+
+    // The whole cut is one instant — both edges land on the same moment.
+    expect(playback.toPlaybackMs(60_000)).toBe(playback.toPlaybackMs(20_000));
+    // And nothing inside it sits anywhere else.
+    expect(playback.toPlaybackMs(40_000)).toBe(playback.toPlaybackMs(20_000));
+
+    // Removing the two replies entirely cannot make the cut any cheaper —
+    // which is the point: what was said in a removed stretch costs nothing.
+    const withoutReplies = buildPlayback(
+      recording({ ...base, transcript: [] }),
+    );
+    expect(playback.duration).toBe(withoutReplies.duration);
+  });
+
+  it("resuming inside a cut steps to the next kept moment, not through the cut", () => {
+    const playback = buildPlayback(
+      recording({
+        durationMs: 80_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 10_000, type: "click", x: 1, y: 1 },
+          { kind: "pointer", t: 70_000, type: "click", x: 2, y: 2 },
+        ] as Recording["events"],
+        transcript: [reply("a1", 30_000)] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+      }),
+    );
+
+    // The playhead sat at 40s when the cut was made. Its clock lands on the
+    // collapse instant, and the very next moment of playback is the cut's far
+    // edge — there is no span of removed material to sit through first.
+    const clock = playback.toPlaybackMs(40_000);
+    expect(playback.toRawMs(clock)).toBe(60_000);
+    expect(playback.toRawMs(clock + 1)).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it("still holds a reply that was mid-reveal when the cut began", () => {
+    // The defended case: trimming the pause AFTER a long answer cannot
+    // un-draw the answer — it is on screen, still typing, when the cut starts.
+    const withReply = buildPlayback(
+      recording({
+        durationMs: 80_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 10_000, type: "click", x: 1, y: 1 },
+          { kind: "pointer", t: 70_000, type: "click", x: 2, y: 2 },
+        ] as Recording["events"],
+        transcript: [reply("a1", 19_000)] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+      }),
+    );
+    const withoutReply = buildPlayback(
+      recording({
+        durationMs: 80_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 10_000, type: "click", x: 1, y: 1 },
+          { kind: "pointer", t: 70_000, type: "click", x: 2, y: 2 },
+        ] as Recording["events"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+      }),
+    );
+    expect(withReply.duration).toBeGreaterThan(withoutReply.duration);
+  });
+
+  it("marks a collapsed reply as already sent so it never types over the app", () => {
+    const playback = buildPlayback(
+      recording({
+        durationMs: 80_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 70_000, type: "click", x: 1, y: 1 },
+        ] as Recording["events"],
+        transcript: [
+          reply("kept", 10_000),
+          reply("cut", 30_000),
+        ] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+      }),
+    );
+    expect(playback.transcript.map((m) => m.settled)).toEqual([
+      undefined,
+      true,
+    ]);
+    // And the schedule gives it no typing time at all, so it renders complete
+    // the moment the playhead reaches it.
+    const { schedule } = revealSchedule(playback.transcript, playback.duration);
+    const slot = schedule.get("cut");
+    expect(slot?.end).toBe(slot?.start);
+    const keptSlot = schedule.get("kept");
+    expect(keptSlot?.end).toBeGreaterThan(keptSlot?.start ?? 0);
   });
 
   it("collapses a cut range to zero time without dropping its events", () => {
@@ -627,7 +750,9 @@ describe("trimCutsToExportLimit", () => {
     const next = trimCutsToExportLimit(rec, 30_000);
     expect(next).not.toBeNull();
     const after = durationWith(rec, next ?? []);
-    expect(after).toBeLessThanOrEqual(30_000);
+    // Judged the way the gate judges it — a fraction of a second over is not
+    // something an author can trim, and is not refused (exceedsFinalCutLimit).
+    expect(exceedsFinalCutLimit(after, 30_000)).toBe(false);
     expect(after).toBeGreaterThan(29_900);
   });
 
@@ -639,7 +764,9 @@ describe("trimCutsToExportLimit", () => {
     expect(next).toContainEqual(mid);
     expect(next).toHaveLength(2);
     const after = durationWith(rec, next ?? []);
-    expect(after).toBeLessThanOrEqual(30_000);
+    // Judged the way the gate judges it — a fraction of a second over is not
+    // something an author can trim, and is not refused (exceedsFinalCutLimit).
+    expect(exceedsFinalCutLimit(after, 30_000)).toBe(false);
     expect(after).toBeGreaterThan(29_900);
   });
 
@@ -651,14 +778,18 @@ describe("trimCutsToExportLimit", () => {
     expect(next).not.toBeNull();
     expect(next).toHaveLength(1);
     const after = durationWith(rec, next ?? []);
-    expect(after).toBeLessThanOrEqual(30_000);
+    // Judged the way the gate judges it — a fraction of a second over is not
+    // something an author can trim, and is not refused (exceedsFinalCutLimit).
+    expect(exceedsFinalCutLimit(after, 30_000)).toBe(false);
     expect(after).toBeGreaterThan(29_900);
   });
 
   it("never lands a hair over the limit when it falls inside an idle-compressed gap", () => {
     // Activity to 28s, dead air to 120s (compressed to a beat), activity
     // again: the limit instant maps deep into the raw gap, where a naive
-    // rounded boundary re-expands to MORE than the limit.
+    // rounded boundary re-expands past the limit. It may now land a fraction
+    // of a second over — deliberate, and invisible at m:ss — but never past
+    // what the gate accepts, which is what "hair over" always meant.
     const rec = withEvents(125_000, [
       ...activity(0, 28_000),
       ...activity(120_000, 125_000),
@@ -666,7 +797,9 @@ describe("trimCutsToExportLimit", () => {
     const next = trimCutsToExportLimit(rec, 30_000);
     expect(next).not.toBeNull();
     const after = durationWith(rec, next ?? []);
-    expect(after).toBeLessThanOrEqual(30_000);
+    // Judged the way the gate judges it — a fraction of a second over is not
+    // something an author can trim, and is not refused (exceedsFinalCutLimit).
+    expect(exceedsFinalCutLimit(after, 30_000)).toBe(false);
     expect(after).toBeGreaterThan(29_900);
   });
 });
@@ -1318,7 +1451,92 @@ describe("planPaintFlush", () => {
   });
 });
 
-describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
+describe("trimCutsToExportLimit finds a boundary instead of giving up", () => {
+  /**
+   * The dead-pill case. A closing reply's reveal is charged against however
+   * many raw milliseconds are left after it, so the final raw span can carry
+   * seconds of playback in ONE millisecond of recording. The limit instant
+   * then rounds onto the raw end, and the old guard read that as a degenerate
+   * recording and returned null — so "Trim to 1:00" did nothing while the
+   * tooltip demanded a trim, with a fitting boundary sitting right there.
+   */
+  function reveaClampedTail() {
+    const events: Recording["events"] = [{ kind: "segment", t: 0, version: 1 }];
+    for (let t = 0; t <= 40_000; t += 400) {
+      events.push({ kind: "pointer", t, type: "click", x: 1, y: 1 });
+    }
+    const long = "a fairly long assistant reply. ".repeat(60);
+    return recording({
+      durationMs: 40_001,
+      events,
+      // TWO replies on the same instant: their reveals SUM there, so the last
+      // raw millisecond carries more playback than the whole slack the limit
+      // check allows — which is what makes this reachable at all.
+      transcript: [
+        {
+          id: "r1",
+          role: "assistant",
+          atMs: 40_000,
+          parts: [{ type: "text", text: long }],
+        },
+        {
+          id: "r2",
+          role: "assistant",
+          atMs: 40_000,
+          parts: [{ type: "text", text: long }],
+        },
+      ] as Recording["transcript"],
+    });
+  }
+
+  it("trims a cut whose limit instant rounds onto the raw end", () => {
+    const rec = reveaClampedTail();
+    const playback = buildPlayback(rec);
+    const tailStart = playback.toPlaybackMs(40_000);
+    // A limit landing in the upper half of that one-millisecond span, so the
+    // mapped-and-rounded boundary lands ON the raw end.
+    const limit = Math.round(
+      tailStart + (playback.duration - tailStart) * 0.55,
+    );
+
+    // The geometry the old guard bailed on, asserted rather than assumed.
+    expect(Math.round(playback.toRawMs(limit))).toBe(40_001);
+    // …while the cut really is over the limit, by more than the second of
+    // slack the check allows — so a trim is genuinely owed.
+    expect(exceedsFinalCutLimit(playback.duration, limit)).toBe(true);
+
+    const next = trimCutsToExportLimit(rec, limit);
+    // The fix: a boundary, not null. Null here is the dead pill.
+    expect(next).not.toBeNull();
+    const after = buildPlayback({
+      ...rec,
+      edits: { ...rec.edits, cuts: next ?? [] },
+    }).duration;
+    expect(exceedsFinalCutLimit(after, limit)).toBe(false);
+  });
+
+  it("still returns null when the cut already fits", () => {
+    const rec = recording({
+      durationMs: 5_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        { kind: "pointer", t: 1_000, type: "click", x: 1, y: 1 },
+      ] as Recording["events"],
+    });
+    expect(trimCutsToExportLimit(rec, 60_000)).toBeNull();
+  });
+
+  it("does not refuse a cut that is over only by a fraction of a second", () => {
+    // The paradox at the player level: a hair over the limit displays as the
+    // limit, so there is nothing an author could trim. It must simply fit.
+    expect(exceedsFinalCutLimit(60_000.75, 60_000)).toBe(false);
+    expect(
+      trimCutsToExportLimit(recording({ durationMs: 60_000 }), 60_000),
+    ).toBeNull();
+  });
+});
+
+describe("pruneCutEvents keeps buildPlayback identical", () => {
   // The offline renderer drives buildPlayback frame by frame, so the prune is
   // lossless iff buildPlayback's output — events, segments, transcript, duration
   // and the time mapping — is byte-for-byte the same on the pruned bundle.
@@ -1349,7 +1567,7 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
   }
 
   function pruned(rec: Recording): Recording {
-    const out = pruneTrailingTrimEvents(recToBundle(rec));
+    const out = pruneCutEvents(recToBundle(rec));
     return {
       ...rec,
       events: out.recording.events as unknown as Recording["events"],
@@ -1422,7 +1640,7 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
     expectSamePlayback(rec);
   });
 
-  it("leaves a mid cut alone and keeps playback identical", () => {
+  it("leaves a mid cut's non-video events alone and keeps playback identical", () => {
     const rec = recording({
       durationMs: 5_000,
       events: [
@@ -1434,6 +1652,64 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
     });
     expect(pruned(rec).events.length).toBe(rec.events.length);
     expectSamePlayback(rec);
+  });
+
+  it("drops a mid cut's hidden video without moving playback, and leaves a decodable stream", () => {
+    const vchunk = (t: number, type: "key" | "delta") => ({
+      kind: "video-chunk" as const,
+      t,
+      sel: "#v",
+      type,
+      tsUs: t * 1_000,
+      bytes: new Uint8Array([t % 256]),
+    });
+    const rec = recording({
+      durationMs: 7_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        vchunk(1_000, "key"),
+        vchunk(1_500, "delta"),
+        vchunk(2_500, "delta"), // hidden, and nothing visible decodes through it
+        vchunk(3_000, "key"), // hidden, but what the resume decodes FROM
+        vchunk(3_500, "delta"),
+        vchunk(4_500, "delta"), // in view
+        { kind: "canvas", t: 6_000, sel: "#c", blob: new Blob(["end"]) },
+      ],
+      edits: { cuts: [{ fromMs: 2_000, toMs: 4_000 }] },
+    });
+
+    const before = buildPlayback(rec);
+    const after = buildPlayback(pruned(rec));
+    // The timing contract: a hidden chunk sits where playback collapses to
+    // zero time, so removing it cannot move the clock or anything on it.
+    expect(after.duration).toBe(before.duration);
+    expect(after.segments).toEqual(before.segments);
+    expect(after.transcript).toEqual(before.transcript);
+    for (const ms of [0, before.duration / 2, before.duration]) {
+      expect(after.toPlaybackMs(ms)).toBeCloseTo(before.toPlaybackMs(ms), 6);
+      expect(after.toRawMs(ms)).toBe(before.toRawMs(ms));
+    }
+    // Exactly one chunk left, and it is the one no visible frame needed.
+    // Tagged by the ENCODER timestamp, not `t`: playback collapses the cut, so
+    // every chunk inside it comes back mapped to the same instant.
+    const tag = (event: { kind: string; t: number; tsUs?: number }) =>
+      `${event.kind}@${event.tsUs ?? event.t}`;
+    expect(after.events.map(tag)).toEqual(
+      before.events.map(tag).filter((it) => it !== "video-chunk@2500000"),
+    );
+    // And what remains still decodes: the stream re-opens on a KEYFRAME after
+    // the gap, which is the whole reason 3000 and 3500 were kept.
+    const kept = after.events.filter(
+      (event): event is Extract<typeof event, { kind: "video-chunk" }> =>
+        event.kind === "video-chunk",
+    );
+    expect(kept.map((event) => [event.tsUs / 1_000, event.type])).toEqual([
+      [1_000, "key"],
+      [1_500, "delta"],
+      [3_000, "key"],
+      [3_500, "delta"],
+      [4_500, "delta"],
+    ]);
   });
 
   it("merges overlapping cuts that together reach the end", () => {

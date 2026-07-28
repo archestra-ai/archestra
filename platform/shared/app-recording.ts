@@ -473,29 +473,95 @@ export const APP_RECORDING_RENDER_ROUTE = "/app-recording-render";
 export const APP_RECORDING_RENDER_FPS = 24;
 
 /**
- * The longest final cut that can be exported to video.
+ * The DEFAULT longest final cut a recording may be submitted or exported at.
  *
- * Every frame costs about the same to render, so the export's cost is its
- * length: half a minute of video is already a minute of rendering. The limit is
- * as much editorial as technical — a session demo that runs longer than this
- * stops being a demo — so the editor asks for it up front and the export button
- * holds the line rather than starting a render that outlives anyone's patience.
+ * A deployment overrides it with `ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS`
+ * — this constant is the fallback and the shape of the bound, never the
+ * authority. Read the resolved value from the config (`hackathonMaxFinalCutMs`
+ * on the frontend, `config.hackathonRecorder.maxFinalCutMs` on the backend), so
+ * every surface that quotes a number to the author quotes the SAME number the
+ * checks enforce.
+ *
+ * The limit is as much editorial as technical: a session demo that runs long
+ * stops being a demo, and every frame costs about the same to render, so an
+ * export's cost is its length. The editor asks for a short cut up front and the
+ * submit/export buttons hold the line rather than starting work that outlives
+ * anyone's patience.
+ *
+ * A minute is also the length that makes a full-motion canvas app submittable
+ * at all. The bundle stores video base64 inside its JSON and the upload
+ * base64-encodes that JSON again, so a byte of recorded video costs ~1.78
+ * bytes by the time api.github.com sees it: at the SDK's 1 Mbit/s governor
+ * ceiling a minute lands near 13MB on the wire, comfortably under the largest
+ * submission the gallery has actually accepted. Two minutes at the old
+ * 3 Mbit/s ceiling reached ~76MB and was refused outright.
  */
-export const APP_RECORDING_MAX_EXPORT_MS = 30_000;
+export const APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS = 60_000;
 
 /**
- * The largest recording bundle (its serialized JSON) the export surfaces
- * accept, shared by the video renderer and the gallery submission.
+ * A duration as every length surface says it out loud: `m:ss`, floored to the
+ * second. One implementation, because the limit is JUDGED at this precision
+ * too (see {@link exceedsFinalCutLimit}) and a formatter that disagreed with
+ * the check is exactly how a cut came to be refused for running "1:00" when
+ * the limit was "1:00".
+ */
+export function formatDurationMs(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Whether a final cut is over the limit — judged at the precision the limit is
+ * SPOKEN at, whole seconds, not raw float milliseconds.
  *
- * The number is GitHub's: the gallery submits the bundle as one file through
- * the contents API, which refuses files over 100MB — and refuses them as
- * opaque 5xx weather, not as a limit anyone can read. The renderer could
- * technically chew somewhat past this, but a bundle too big to share is
- * already broken for its purpose, and one ceiling with one honest message
- * beats two. Capture keeps real bundles far below it: the recording SDK's
- * byte-rate governor bounds video at ~4 Mbit/s across all streams, so even a
- * three-minute all-motion raw take stays around 90MB serialized, and a
- * typical 30s cut is ~20MB.
+ * This is the whole of the fix for a paradox that reached participants: the
+ * gates compared floats while every message rendered `m:ss`, so the entire
+ * second above the limit was refused AND printed as exactly the limit. The
+ * tooltip read "This cut runs 1:00. Trim it to 1:00 or less to submit." — a
+ * demand with nothing to do — and the trim button beside it could be a no-op,
+ * because a fraction of a second is not something an author can edit away.
+ *
+ * Compared floored rather than rounded so the rule reads the way the number
+ * does: if it says 1:00 it is a minute, and a minute is allowed. The slack is
+ * at most one second of render, which costs ~24 frames.
+ *
+ * Every gate must use THIS — player, submission backstop, and the server's
+ * render route — or a cut passes one and is refused by the next.
+ */
+export function exceedsFinalCutLimit(
+  durationMs: number,
+  limitMs: number,
+): boolean {
+  return Math.floor(durationMs / 1000) > Math.floor(limitMs / 1000);
+}
+
+/**
+ * How much longer than the final cut a capture may RUN, as a multiple of the
+ * configured limit.
+ *
+ * Capture needs room the final cut does not: a participant records loosely and
+ * edits down, and a take that stops dead at the submittable length leaves them
+ * nothing to cut. It is bounded rather than open-ended because everything
+ * captured sits in the browser until it is edited.
+ *
+ * What makes the headroom safe is that cutting now shrinks the bundle:
+ * {@link pruneCutEvents} drops the video a cut removes, so a loose take edited
+ * to a minute ships like a minute — not like the take. Before that, headroom
+ * would only have produced recordings that could be edited but never uploaded.
+ */
+export const APP_RECORDING_CAPTURE_HEADROOM = 3;
+
+/**
+ * The largest recording bundle (its serialized JSON) the VIDEO RENDERER
+ * accepts — a backstop on what may be posted to our own render route, not a
+ * statement about what GitHub takes.
+ *
+ * The gallery submission is bounded separately and far more tightly, by what
+ * api.github.com accepts as a request body once base64 has had its way with
+ * the bundle. This one only has to keep a renderer from being handed
+ * something absurd: capture keeps real bundles orders of magnitude below it —
+ * the SDK's governor bounds video at 1 Mbit/s across all streams, so even a
+ * three-minute all-motion raw take stays near 30MB serialized.
  */
 export const APP_RECORDING_MAX_BUNDLE_BYTES = 100 * 1024 * 1024;
 
@@ -828,7 +894,7 @@ export function validateRecordingBundle(
 }
 
 // =============================================================================
-// Trailing-trim pruning — drop a cut-away tail from the bundle
+// Cut pruning — drop what an edit puts permanently out of view
 // =============================================================================
 
 type RecordingCut = NonNullable<AppRecordingBundle["edits"]>["cuts"][number];
@@ -865,6 +931,22 @@ export function normalizeCuts(cuts: RecordingCut[]): RecordingCut[] {
 }
 
 /**
+ * Drop what the recording's cuts put permanently out of view, so an edited
+ * recording ships — and renders — at the size of what it actually shows.
+ *
+ * A size optimization only: the result replays and renders identically to the
+ * original. Two passes, each lossless for its own reason — a trailing trim
+ * takes everything past it, and a mid cut takes the encoded video it hides
+ * (and only that). Neither touches timing, cuts, segments or transcript.
+ *
+ * Cutting really removing bytes is what lets capture run longer than the final
+ * cut may be: a loose take edited down to a minute ships like a minute.
+ */
+export function pruneCutEvents(bundle: AppRecordingBundle): AppRecordingBundle {
+  return pruneCutVideoChunks(pruneTrailingTrimEvents(bundle));
+}
+
+/**
  * Drop captured events that a trailing END trim removes, so a trimmed recording
  * ships — and renders — without its cut-away tail. A size optimization only: the
  * result replays and renders byte-for-byte the same as the original.
@@ -893,27 +975,14 @@ export function normalizeCuts(cuts: RecordingCut[]): RecordingCut[] {
  * case where data runs past the recorded duration and removal would move the
  * trim boundary itself.
  */
-export function pruneTrailingTrimEvents(
+function pruneTrailingTrimEvents(
   bundle: AppRecordingBundle,
 ): AppRecordingBundle {
   const cuts = bundle.edits?.cuts;
   if (!cuts || cuts.length === 0) return bundle;
 
-  const { events, segments, transcript, durationMs } = bundle.recording;
-
-  // The last moment of real data — mirrors buildPlayback's rawDataEnd, which
-  // starts at the recorded duration and grows to the furthest event, segment or
-  // message. A trailing trim is a cut that reaches this end.
-  const dataEndOf = (
-    keptEvents: AppRecordingBundle["recording"]["events"],
-  ): number => {
-    let end = Math.max(0, durationMs);
-    for (const event of keptEvents) end = Math.max(end, event.t);
-    for (const segment of segments) end = Math.max(end, segment.atMs);
-    for (const message of transcript) end = Math.max(end, message.atMs);
-    return end;
-  };
-  const rawDataEnd = dataEndOf(events);
+  const { events } = bundle.recording;
+  const rawDataEnd = dataEndOf(bundle.recording, events);
 
   const tail = normalizeCuts(cuts).find(
     (cut) =>
@@ -944,7 +1013,105 @@ export function pruneTrailingTrimEvents(
   // Never let the pruned data end fall short of the original: that would move
   // the tail-trim boundary and change the replay. Holds whenever the recorded
   // duration already covers all the data (the normal case).
-  if (dataEndOf(kept) !== rawDataEnd) return bundle;
+  if (dataEndOf(bundle.recording, kept) !== rawDataEnd) return bundle;
 
   return { ...bundle, recording: { ...bundle.recording, events: kept } };
+}
+
+/**
+ * Drop the encoded video a MID cut hides — the one payload a cut can throw
+ * away without changing a single rendered frame.
+ *
+ * Mid cuts otherwise stay whole (see {@link pruneTrailingTrimEvents}): the
+ * player collapses a cut to one instant but still APPLIES the events inside
+ * it, because a DOM mutation or an input in there is what leaves the app in
+ * the state everything AFTER the cut plays from. Video is the exception. A
+ * stream's state lives in its decoder, and a decoder is rebuilt from a
+ * keyframe alone — so the frames a cut hides need not ship for the frames
+ * after it to decode to the same pixels.
+ *
+ * KEYFRAME-AWARE, which is the whole of the correctness argument: every kept
+ * run of chunks BEGINS with a keyframe. Per stream, the chunks in view are
+ * kept, then each run is extended backwards to the last keyframe at or before
+ * it, taking the deltas in between — usually chunks the cut hides, which is
+ * the point. Hand a decoder a keyframe and the deltas that follow and it
+ * produces exactly what the whole stream would have; hand it a delta whose
+ * predecessors were dropped and it produces nothing or garbage. Keyframes land
+ * on a fixed cadence, so that preamble costs at most one cadence per cut.
+ *
+ * Timing is untouched: only chunks strictly inside a cut are candidates, and
+ * playback collapses a cut to zero time, so nothing in there carries a
+ * timeline anchor — the same reason the trailing pass gives. `video-config`
+ * events are never candidates; they are a few hundred bytes and they are what
+ * opens the stream.
+ */
+function pruneCutVideoChunks(bundle: AppRecordingBundle): AppRecordingBundle {
+  const cuts = normalizeCuts(bundle.edits?.cuts ?? []);
+  if (cuts.length === 0) return bundle;
+
+  const { events } = bundle.recording;
+  // The trailing pass's boundary treatment exactly: a chunk sitting ON a cut's
+  // start still plays, one sitting on its end does not.
+  const hidden = (t: number) =>
+    cuts.some((cut) => cut.fromMs < t && t <= cut.toMs);
+
+  // Per stream, because chunk dependencies run within one canvas's stream and
+  // a keyframe in one says nothing about another.
+  const streams = new Map<string, { at: number; t: number; key: boolean }[]>();
+  events.forEach((event, at) => {
+    if (event.kind !== "video-chunk") return;
+    const chunk = { at, t: event.t, key: event.type === "key" };
+    const stream = streams.get(event.sel);
+    if (stream) stream.push(chunk);
+    else streams.set(event.sel, [chunk]);
+  });
+
+  const dropped = new Set<number>();
+  for (const chunks of streams.values()) {
+    const keep = new Set<number>();
+    chunks.forEach((chunk, i) => {
+      if (!hidden(chunk.t)) keep.add(i);
+    });
+    for (let i = 0; i < chunks.length; i++) {
+      // Only the FIRST chunk of each kept run needs a preamble — every later
+      // chunk in the run already has its predecessors in front of it.
+      if (!keep.has(i) || keep.has(i - 1)) continue;
+      let key = i;
+      while (key >= 0 && !chunks[key].key) key--;
+      // A run with no keyframe anywhere before it belongs to a stream that
+      // cannot be decoded from the middle at all — keep it whole rather than
+      // gamble on which of its chunks matter.
+      if (key < 0) key = 0;
+      for (let back = key; back < i; back++) keep.add(back);
+    }
+    chunks.forEach((chunk, i) => {
+      if (!keep.has(i)) dropped.add(chunk.at);
+    });
+  }
+  if (dropped.size === 0) return bundle;
+
+  const kept = events.filter((_, at) => !dropped.has(at));
+  // The same self-guard the trailing pass carries: a bundle whose data runs
+  // past its recorded duration could otherwise have its end moved by this,
+  // which would move the cut boundaries with it.
+  if (dataEndOf(bundle.recording, kept) !== dataEndOf(bundle.recording, events))
+    return bundle;
+
+  return { ...bundle, recording: { ...bundle.recording, events: kept } };
+}
+
+/**
+ * The last moment of real data — mirrors buildPlayback's rawDataEnd, which
+ * starts at the recorded duration and grows to the furthest event, segment or
+ * message. A trailing trim is a cut that reaches this end.
+ */
+function dataEndOf(
+  recording: AppRecordingBundle["recording"],
+  events: AppRecordingBundle["recording"]["events"],
+): number {
+  let end = Math.max(0, recording.durationMs);
+  for (const event of events) end = Math.max(end, event.t);
+  for (const segment of recording.segments) end = Math.max(end, segment.atMs);
+  for (const message of recording.transcript) end = Math.max(end, message.atMs);
+  return end;
 }

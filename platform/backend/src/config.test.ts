@@ -1,4 +1,5 @@
 import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
 } from "@archestra/shared";
@@ -43,6 +44,7 @@ import config, {
   parseFileStorageS3Config,
   parseHackathonGalleryRepo,
   parseHackathonRecorderEnabled,
+  parseHackathonRecorderMaxFinalCutMs,
   parseK8sResourceQuantity,
   parseLogFormat,
   parseMetricsPort,
@@ -2758,5 +2760,37 @@ describe("deriveOllamaNativeBaseUrl", () => {
         ollamaBaseUrl: undefined,
       }),
     ).toBe("http://proxy.internal/v1/ollama");
+  });
+});
+
+describe("parseHackathonRecorderMaxFinalCutMs", () => {
+  test("defaults to the shared limit when unset", () => {
+    expect(parseHackathonRecorderMaxFinalCutMs(undefined)).toBe(60_000);
+    expect(parseHackathonRecorderMaxFinalCutMs("")).toBe(
+      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+    );
+    expect(parseHackathonRecorderMaxFinalCutMs("   ")).toBe(
+      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+    );
+  });
+
+  test("takes a deployment's own limit", () => {
+    expect(parseHackathonRecorderMaxFinalCutMs("30000")).toBe(30_000);
+    expect(parseHackathonRecorderMaxFinalCutMs(" 600000 ")).toBe(600_000);
+  });
+
+  test("refuses a value it cannot honour rather than silently defaulting", () => {
+    // Falling back would read as the platform ignoring the operator's limit —
+    // the one failure mode a length cap must not have.
+    expect(() => parseHackathonRecorderMaxFinalCutMs("abc")).toThrow(
+      /whole number of milliseconds/,
+    );
+    expect(() => parseHackathonRecorderMaxFinalCutMs("60.5")).toThrow();
+    expect(() => parseHackathonRecorderMaxFinalCutMs("-1000")).toThrow();
+  });
+
+  test("refuses a limit so small nothing could ever be submitted", () => {
+    expect(() => parseHackathonRecorderMaxFinalCutMs("10")).toThrow();
+    expect(parseHackathonRecorderMaxFinalCutMs("5000")).toBe(5_000);
   });
 });

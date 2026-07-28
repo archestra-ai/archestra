@@ -51,3 +51,21 @@ export async function assertAppsHackathonAvailable(
     );
   }
 }
+
+/**
+ * 403 unless this deployment offers the offline VIDEO export.
+ *
+ * A separate opt-in on top of the recorder itself: a render drives a headless
+ * browser for as long as the cut runs, so it stays off unless an operator asks
+ * for it. Enforced on the render routes and not only in the UI — hiding the
+ * download button is a presentation choice, and an endpoint that still answers
+ * would let anyone spend that budget by calling it directly.
+ */
+export function assertAppRecordingVideoDownloadAvailable(): void {
+  if (!config.hackathonRecorder.videoDownloadEnabled) {
+    throw new ApiError(
+      403,
+      "Video download is not available on this deployment.",
+    );
+  }
+}

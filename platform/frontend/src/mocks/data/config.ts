@@ -1,4 +1,7 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+  type archestraApiTypes,
+} from "@archestra/shared";
 
 type Config = archestraApiTypes.GetConfigResponses["200"];
 
@@ -50,6 +53,9 @@ export function makeConfig(
       kbAutoSyncPermissionsEnabled: false,
       hackathonRecorderEnabled: true,
       hackathonRecorderOverrideActive: false,
+      // Off by default, exactly as a real deployment has it.
+      hackathonVideoDownloadEnabled: false,
+      hackathonMaxFinalCutMs: APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
       hackathonGalleryRepo: null,
       ...overrides.features,
       maintenanceMode: overrides.features?.maintenanceMode ?? null,

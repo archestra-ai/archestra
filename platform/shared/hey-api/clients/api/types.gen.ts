@@ -30981,6 +30981,8 @@ export type GetConfigResponses = {
             kbAutoSyncPermissionsEnabled: boolean;
             hackathonRecorderEnabled: boolean;
             hackathonRecorderOverrideActive: boolean;
+            hackathonVideoDownloadEnabled: boolean;
+            hackathonMaxFinalCutMs: number;
             hackathonGalleryRepo: {
                 owner: string;
                 name: string;

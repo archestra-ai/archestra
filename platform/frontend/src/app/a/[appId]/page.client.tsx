@@ -34,7 +34,8 @@ export default function AppRunPage({ appId }: { appId: string }) {
   if (!app) {
     return isPending ? null : (
       <output className="flex h-app-viewport items-center justify-center p-8 text-center text-sm text-muted-foreground">
-        This app does not exist or you do not have access to it.
+        This app does not exist, or it is not shared with you. If you expected
+        to see it, ask its owner to share it with your team or organization.
       </output>
     );
   }

@@ -217,8 +217,7 @@ export function McpAppEntryPill({
   } = useApps();
   // Owned apps can be renamed from settings; read the live app so the label
   // stays in sync after an edit (the appName prop is captured at render time).
-  const { data: ownedApp, isSuccess: ownedAppResolved } = useApp(appId ?? null);
-  const ownedAppUnavailable = !!appId && ownedAppResolved && ownedApp === null;
+  const { data: ownedApp } = useApp(appId ?? null);
   const headerName = ownedApp?.name || appName || mcpToolLabel(toolName);
 
   const standalone = !toolCallId;
@@ -238,13 +237,16 @@ export function McpAppEntryPill({
     ? (diagnosticCounts.get(appId)?.errors ?? 0) > 0
     : false;
 
+  // Note the dot tracks runtime errors only. An app that won't mount is most
+  // often one the viewer simply holds no grant for — a permission state, not a
+  // fault — and the expanded render says so, so it earns no red dot here.
   return (
     <McpAppPill
       label={headerName}
       icon={icon}
       state={state}
       pressed={pressed}
-      hasError={hasRuntimeError || ownedAppUnavailable}
+      hasError={hasRuntimeError}
       onClick={() => {
         onClick?.();
         if (!toolCallId) return;
@@ -324,9 +326,12 @@ export function McpAppEntryContent({
   // render time) and to seed the settings dialog.
   const inlineHeightCap = useInlineHeightCap();
   const { data: ownedApp, isSuccess: ownedAppResolved } = useApp(appId ?? null);
-  // A deleted (or no-longer-accessible) owned app: the fetch settled but
-  // `allowNotFound` turned the 404 into a successful `null`. Render a graceful
-  // placeholder instead of mounting the runtime, which would 404 again.
+  // An owned app this viewer cannot mount, which happens for two very different
+  // reasons the API deliberately does not tell apart: the app was deleted, or it
+  // is perfectly healthy and simply not theirs to open (the ordinary case for a
+  // personal app inside a conversation someone shared with them). Both arrive as
+  // a 404 that `allowNotFound` turns into a successful `null`. Render the
+  // placeholder rather than mounting the runtime, which would only fail alike.
   const ownedAppUnavailable = !!appId && ownedAppResolved && ownedApp === null;
 
   const headerName = ownedApp?.name || appName || mcpToolLabel(toolName);
@@ -338,6 +343,12 @@ export function McpAppEntryContent({
     !isPanelSurface &&
     !portalTarget &&
     (standalone || (!!toolCallId && isAppOpen(toolCallId)));
+  // The unavailable placeholder does not defer to the panel the way a live
+  // render does. An app that won't mount is dropped from the panel's list, so
+  // deferring would render it nowhere at all — leaving a pill that explains
+  // nothing, which is worse than the wrong message this replaced.
+  const showUnavailableInline =
+    !isPanelSurface && (standalone || (!!toolCallId && isAppOpen(toolCallId)));
 
   // Reconstruct McpCallToolResult for AppFrame. Owned apps get none — the
   // management tool's result is not app data.
@@ -392,16 +403,28 @@ export function McpAppEntryContent({
     ) : null;
   }
 
-  // A deleted (or no-longer-accessible) owned app: it's already dropped from the
-  // panel, so this only shows in the chat stream. Its pill carries a red error
-  // dot; while expanded, show the unavailable message styled as an error instead
-  // of mounting the runtime (which would 404).
+  // An owned app that cannot be mounted: it's already dropped from the panel, so
+  // this only shows in the chat stream. The message must not claim the app was
+  // deleted — the far more common cause is a viewer with no grant for it, since
+  // apps built in chat are personal by default and sharing a chat never shares
+  // the apps inside it. Saying "no longer available" about a healthy app sent
+  // people hunting for a fault that isn't there, so name both possibilities and
+  // give the one action that resolves the likely one. Styled neutrally for the
+  // same reason: not knowing which case this is, it should not look like a fault.
   if (ownedAppUnavailable) {
-    if (!expandedInline) return null;
+    if (!showUnavailableInline) return null;
     return (
       <div className="mt-2 flex w-full flex-col items-start gap-2">
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-          {headerName} app is no longer available
+        <div className="rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">
+            {headerName} isn&apos;t available to you
+          </p>
+          <p className="mt-1">
+            It may have been deleted, or it may not be shared with you. Sharing
+            a chat doesn&apos;t share the apps inside it — if you expected to
+            see this one, ask its owner to share it with your team or
+            organization.
+          </p>
         </div>
       </div>
     );

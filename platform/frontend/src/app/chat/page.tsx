@@ -1287,6 +1287,15 @@ export function ChatPageContent({
     earlyToolUiStarts: chatSession?.earlyToolUiStarts ?? {},
     filterDeleted: true,
   });
+  // The owned apps this conversation renders. Sharing a chat does not share
+  // them, so the share dialog uses this to warn when recipients won't be able
+  // to open one.
+  const conversationOwnedAppIds = useMemo(
+    () => [
+      ...new Set(mcpApps.flatMap((app) => (app.appId ? [app.appId] : []))),
+    ],
+    [mcpApps],
+  );
   // The app currently open in the chat, reported to the backend on each user
   // message so it can restate that app's context in the turn's system prompt.
   // The backend re-resolves the id under the caller's own access, so this is a
@@ -3427,6 +3436,7 @@ export function ChatPageContent({
         {canManageShare && conversationId && (
           <ShareConversationDialog
             conversationId={conversationId}
+            appIds={conversationOwnedAppIds}
             open={isShareDialogOpen}
             onOpenChange={setIsShareDialogOpen}
           />

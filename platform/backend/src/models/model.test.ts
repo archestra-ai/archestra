@@ -1286,6 +1286,7 @@ describe("ModelModel", () => {
     test.each([
       "ollama",
       "ollama-native",
+      "vllm",
     ] as const)("prices an unpriced %s model at zero rather than the generic estimate", async (provider) => {
       const model = await ModelModel.create({
         externalId: `${provider}/qwen3:8b`,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Interaction } from "./common";
 import AnthropicMessagesInteraction from "./anthropic";
+import type { Interaction } from "./common";
 
 describe("AnthropicMessagesInteraction.getLastToolCallId", () => {
   it("returns the last tool_use_id when a user message has multiple tool_results", () => {

@@ -2,6 +2,7 @@ import type * as archestraApiTypes from "../../hey-api/clients/api/types.gen";
 import { parseArchestraToolRefusal } from "../../tool-refusal";
 import type { PartialUIMessage } from "../types";
 import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
+import { tryParseJson } from "./json";
 
 class OpenAiChatCompletionInteraction implements InteractionUtils {
   private request: archestraApiTypes.OpenAiChatCompletionRequest;
@@ -367,11 +368,3 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
 }
 
 export default OpenAiChatCompletionInteraction;
-
-function tryParseJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}

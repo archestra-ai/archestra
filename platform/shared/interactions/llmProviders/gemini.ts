@@ -1,8 +1,8 @@
+import type * as archestraApiTypes from "../../hey-api/clients/api/types.gen";
 import {
   ARCHESTRA_TOOL_NAME_TAG,
-  type archestraApiTypes,
   parseArchestraToolRefusal,
-} from "../../index";
+} from "../../tool-refusal";
 import type { PartialUIMessage } from "../types";
 import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 

@@ -15,10 +15,17 @@ import { closeOpenDialogs } from "../utils";
  * expectations are opposites, so a mirror that stops distinguishing it fails
  * one of them whichever way it drifts.
  *
- * Deliberately no wait on pod health: what's under test is the save decision,
- * which the route makes from the catalog row and the existence of an install.
- * Tying these to a pod coming up would import that flakiness for no added
- * assertion.
+ * Scope is the bar itself, not what the save then does. The backend half is
+ * already pinned deterministically and without a cluster by
+ * `backend/src/routes/internal-mcp-catalog.multitenant-rollout.test.ts`.
+ *
+ * The multi-tenant case therefore cancels rather than confirms. Confirming
+ * starts a background shared-pod recreate; cleanup then deletes the install,
+ * the recreate puts the deployment back, and it is orphaned — the row that
+ * owned it is gone, so nothing reaps it. Every run leaked one, and enough of
+ * them saturate the cluster. Cancelling asserts the same decision and leaves
+ * nothing behind. Single-tenant confirms safely: its path writes its flags
+ * inside the request and starts no background work.
  */
 
 const BASE_IMAGE = "alpine:3.20";
@@ -140,11 +147,6 @@ async function readInstall(page: Page, serverId: string) {
   return apiJson(page, "get", `/api/mcp_server/${serverId}`);
 }
 
-async function readCatalog(page: Page, catalogId: string) {
-  const items = await apiJson(page, "get", "/api/internal_mcp_catalog");
-  return items.find((i: { id: string }) => i.id === catalogId);
-}
-
 test.describe("MCP catalog edit — reinstall confirm bar", () => {
   test.describe.configure({ timeout: 240_000 });
 
@@ -183,17 +185,9 @@ test.describe("MCP catalog edit — reinstall confirm bar", () => {
     await expect(adminPage.getByText(/will need a Reinstall/)).toBeHidden();
     await expect(adminPage.getByText(/needs a new value/)).toBeHidden();
 
-    await confirm.click();
-    await expect(confirm).toBeHidden({ timeout: 60_000 });
-
-    // Backend agreement, read the moment the save settles. The deferring path
-    // writes `catalogReinstallRequired` inside the request, before responding,
-    // so a `true` here means the backend parked the rollout while the bar
-    // above promised to run it. The recreate this edit does trigger runs in
-    // the background and only touches the flag if it fails, which takes longer
-    // than this read.
-    const catalog = await readCatalog(adminPage, fixture.catalogId);
-    expect(catalog.catalogReinstallRequired).toBe(false);
+    // Dismiss rather than commit — see the file docstring.
+    await adminPage.getByRole("button", { name: "Cancel" }).click();
+    await expect(confirm).toBeHidden({ timeout: 30_000 });
   });
 
   test("single-tenant image bump still defers to a per-install reinstall", async ({

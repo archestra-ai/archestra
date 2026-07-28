@@ -41,7 +41,9 @@ const ChoiceSchema = z
     logprobs: z.any().nullable(),
     message: z
       .object({
-        content: z.string().nullable(),
+        // Tool-call-only replies often omit `content` entirely; requiring the
+        // key fails Fastify response serialization (500). Match Cerebras.
+        content: z.string().nullable().optional(),
         refusal: z.string().nullable().optional(),
         role: z.enum(["assistant"]),
         // Some OpenAI-compatible upstreams return `annotations: null` instead of

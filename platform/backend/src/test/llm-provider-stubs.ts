@@ -6,6 +6,12 @@ export interface OpenAiStubOptions {
   interruptAtChunk?: number;
   /** Reject streaming requests with this error message before any chunk arrives (e.g. a provider 400). */
   failStreamWithError?: string;
+  /**
+   * Throw from the stream iterator at this chunk index, after earlier chunks have
+   * already been yielded — a mid-stream failure once SSE headers and content are
+   * on the wire, but before the usage-bearing final chunk arrives.
+   */
+  throwAtChunk?: number;
 }
 
 export interface AnthropicStubOptions {
@@ -247,6 +253,13 @@ function createOpenAiStream(options: OpenAiStubOptions) {
 
       return {
         async next() {
+          if (
+            options.throwAtChunk !== undefined &&
+            index === options.throwAtChunk
+          ) {
+            throw new Error("Simulated OpenAI stream failure before usage");
+          }
+
           if (
             options.interruptAtChunk !== undefined &&
             index === options.interruptAtChunk

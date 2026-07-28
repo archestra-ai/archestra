@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import config, { type AnthropicWifConfig } from "@/config";
+import { ApiError } from "@/types";
 import { fetchAnthropicModels } from "./anthropic";
 
 // No module mocks: drive the real WIF client + fetcher through the fetch
@@ -123,5 +124,37 @@ describe("fetchAnthropicModels", () => {
       "x-api-key": "",
       "anthropic-version": "2023-06-01",
     });
+  });
+
+  test("relays an upstream client error with its real status", async () => {
+    // An invalid provider key is the caller's 401, not a crash of ours.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("unauthorized", { status: 401 })),
+    );
+
+    const error = await fetchAnthropicModels(
+      "sk-ant-bad",
+      "https://api.anthropic.com",
+    ).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.statusCode).toBe(401);
+    expect(error.message).toBe("Failed to fetch Anthropic models: 401");
+  });
+
+  test("maps an upstream 5xx to a 502 upstream failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("provider down", { status: 500 })),
+    );
+
+    const error = await fetchAnthropicModels(
+      "sk-ant-key",
+      "https://api.anthropic.com",
+    ).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.statusCode).toBe(502);
   });
 });

@@ -904,7 +904,9 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
 
     const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
     expect(systemPrompt).toContain(PROJECT_FILES_PREFIX);
-    expect(systemPrompt).toContain("`index.html`");
+    // Filenames are chosen by whoever uploaded the file, so the manifest
+    // renders them as quoted data rather than inline code.
+    expect(systemPrompt).toContain('"index.html"');
   });
 
   test("lists no project files for a project chat whose project has none", async () => {

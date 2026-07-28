@@ -1698,6 +1698,29 @@ describe("mapProviderError - Fallback behavior", () => {
     expect(result.isRetryable).toBe(false);
   });
 
+  it("should map a relayed secrets-backend outage to a retryable server error without capturing", () => {
+    // The proxy relays the secrets-manager-unavailable message; the incident
+    // is already captured and grouped at its source.
+    const error = new Error(
+      "An error occurred while accessing secrets. Please try again later or contact your administrator.",
+    );
+    const result = mapProviderError(error, "anthropic");
+
+    expect(result.code).toBe(ChatErrorCode.ServerError);
+    expect(result.isRetryable).toBe(true);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
+  it("should map Bedrock's bare internal failure message to a retryable server error without capturing", () => {
+    // Mid-stream delivery: no status code and no typed body — just the message.
+    const error = new Error("Bedrock is unable to process your request.");
+    const result = mapProviderError(error, "bedrock");
+
+    expect(result.code).toBe(ChatErrorCode.ServerError);
+    expect(result.isRetryable).toBe(true);
+    expect(mockSentryCaptureException).not.toHaveBeenCalled();
+  });
+
   it("should handle string errors", () => {
     const result = mapProviderError("Simple string error", "openai");
 

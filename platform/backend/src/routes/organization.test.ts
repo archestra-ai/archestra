@@ -21,10 +21,14 @@ describe("organization routes", () => {
   let user: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     user = await makeUser();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    // The default-role field decides what future accounts are provisioned as,
+    // so the route holds the caller to the roles they could grant themselves.
+    // That reads the caller's role off their member record.
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -157,6 +161,30 @@ describe("organization routes", () => {
       });
 
       expect(response.statusCode).toBe(400);
+    });
+
+    test("rejects a default role more privileged than the caller", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      // An editor holds organizationSettings:update, which is what gates this
+      // route — but not the member/invitation/access-control permissions that
+      // make up admin. Naming admin here would provision every future account
+      // as an administrator, so it has to be refused.
+      const editor = await makeUser();
+      await makeMember(editor.id, organizationId, { role: "editor" });
+      user = editor;
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { defaultMemberRole: "admin" },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(
+        await OrganizationModel.getDefaultMemberRole(organizationId),
+      ).not.toBe("admin");
     });
   });
 

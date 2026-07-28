@@ -3,7 +3,7 @@ import logger from "@/logging";
 import { createGithubCopilotFetch } from "@/services/github-copilot-token";
 import { ApiError } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
-import type { ModelInfo } from "./types";
+import { type ModelInfo, modelFetchError } from "./types";
 
 /**
  * Fetches the models available to the Copilot subscription behind the given
@@ -43,9 +43,7 @@ export async function fetchGithubCopilotModels(
     if (response.status === 401) {
       throw new ApiError(401, extractErrorMessage(errorText));
     }
-    throw new Error(
-      `Failed to fetch GitHub Copilot models: ${response.status}`,
-    );
+    throw modelFetchError("GitHub Copilot models", response.status);
   }
 
   const payload = (await response.json()) as {

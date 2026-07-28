@@ -1118,12 +1118,19 @@ describe("team routes", () => {
 
       expect(response.statusCode).toBe(403);
       expect(response.json().error.message).toContain("team admin");
+      // Org-wide team management is read off team:update. team:create is only
+      // the right to make a new team, which says nothing about administering
+      // teams the caller does not belong to; team:admin is not a real action.
       expect(vi.mocked(hasPermission)).toHaveBeenCalledWith(
-        { team: ["create"] },
+        { team: ["update"] },
         expect.any(Object),
       );
       expect(vi.mocked(hasPermission)).not.toHaveBeenCalledWith(
         { team: ["admin"] },
+        expect.any(Object),
+      );
+      expect(vi.mocked(hasPermission)).not.toHaveBeenCalledWith(
+        { team: ["create"] },
         expect.any(Object),
       );
 

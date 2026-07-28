@@ -3,6 +3,11 @@
     "commit": "",
     "pr": ""
   },
+  "permissions": {
+    "deny": [
+      "Read(/docs/openapi.json)"
+    ]
+  },
   "hooks": {
     "PostToolUse": [
       {

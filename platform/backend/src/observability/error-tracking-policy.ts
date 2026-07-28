@@ -4,6 +4,11 @@ import {
   isDbStatementTimeoutError,
 } from "@/database/retry";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
+import {
+  collectErrorCodes,
+  isConnectionErrno,
+  isTimeoutErrno,
+} from "@/utils/network-errors";
 
 /**
  * Sink-agnostic policy for what backend errors reach our exception trackers,
@@ -78,6 +83,22 @@ export function classifyErrorForTracking(
     };
   }
 
+  // Chat's own MCP gateway being unreachable (pod churn, a missing gateway
+  // token) fails every conversation the same way — an availability incident
+  // of our deployment, kept but grouped into a single issue. The internal
+  // code is set by McpToolsUnavailableError (clients/chat-mcp-client.ts);
+  // matched by string so this layer doesn't import the client module.
+  if (
+    error instanceof ApiError &&
+    error.internalCode === "mcp_tools_unavailable"
+  ) {
+    return {
+      report: true,
+      fingerprint: ["mcp_tools_unavailable"],
+      tags: { error_type: "mcp_tools_unavailable" },
+    };
+  }
+
   if (isNonActionableError(error)) {
     return { report: false };
   }
@@ -102,6 +123,17 @@ const MCP_UNREACHABLE_ERROR_NAMES = new Set([
 
 function isNonActionableError(error: unknown): boolean {
   if (error instanceof Error && MCP_UNREACHABLE_ERROR_NAMES.has(error.name)) {
+    return true;
+  }
+
+  // Low-level connectivity failures that reach the handler unmapped: an
+  // undici connect/headers/body timeout or a dropped connection from an
+  // outbound fetch, or @fastify/reply-from's upstream-failure errors
+  // (502/503/504) from the provider passthrough routes. The other end — an
+  // LLM provider, a user-configured server — was unreachable; a network
+  // condition, not a bug of ours. Database connectivity never lands here:
+  // classifyErrorForTracking classifies it first (kept and grouped).
+  if (isUpstreamConnectivityError(error)) {
     return true;
   }
 
@@ -145,4 +177,28 @@ function isNonActionableError(error: unknown): boolean {
   }
 
   return false;
+}
+
+/**
+ * Whether the error (or its cause chain) is a low-level connectivity failure
+ * to an outbound dependency: a libuv/undici network errno, or one of
+ * @fastify/reply-from's upstream-failure errors (`FST_REPLY_FROM_*` with a
+ * 502/503/504 status) raised when a passthrough proxy cannot reach its
+ * upstream.
+ */
+function isUpstreamConnectivityError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const codes = collectErrorCodes(error);
+  if (codes.some((code) => isConnectionErrno(code) || isTimeoutErrno(code))) {
+    return true;
+  }
+
+  const statusCode = (error as { statusCode?: unknown }).statusCode;
+  return (
+    codes.some((code) => code.startsWith("FST_REPLY_FROM_")) &&
+    typeof statusCode === "number" &&
+    statusCode >= 502 &&
+    statusCode <= 504
+  );
 }

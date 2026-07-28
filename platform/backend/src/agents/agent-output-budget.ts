@@ -21,6 +21,22 @@ function isOllamaProvider(provider: SupportedProvider | undefined): boolean {
 }
 
 /**
+ * Providers whose rate limiter charges a request's `max_tokens` reservation
+ * against a per-minute token bucket, rather than only the tokens actually
+ * generated.
+ *
+ * Groq bills prompt + reservation up front, so asking for a model's real output
+ * ceiling can exceed the whole per-minute allowance on its entry tiers: a
+ * one-word message is rejected with a 413 before generating a token, and
+ * starting a new chat changes nothing because the reservation is constant. The
+ * budget is therefore additionally clamped to `rateMeteredCeiling` for these
+ * providers — the same shape as the shared-window cap below, one level up (a
+ * rate limit rather than a context window).
+ */
+const RATE_METERED_OUTPUT_RESERVATION_PROVIDERS: ReadonlySet<SupportedProvider> =
+  new Set<SupportedProvider>(["groq"]);
+
+/**
  * Resolve `maxOutputTokens` for an agent turn: the model's real output ceiling
  * (or a fallback when it is unknown/invalid), clamped by the operator ceiling.
  * The result never exceeds the model's real cap, so a small model never receives
@@ -38,11 +54,21 @@ function isOllamaProvider(provider: SupportedProvider | undefined): boolean {
  * models (output far below context) the cap never binds. This applies to the
  * Ollama context fallback too — `num_predict` is drawn from the same `num_ctx`
  * window as the prompt, so the full window would leave nothing to prompt with.
+ *
+ * Rate-metered providers (see {@link RATE_METERED_OUTPUT_RESERVATION_PROVIDERS})
+ * charge the reservation against a per-minute token bucket, so the budget is
+ * additionally clamped to `rateMeteredCeiling` for them.
  */
 export function resolveAgentMaxOutputTokens(params: {
   outputLength: number | null;
   contextLength?: number | null;
   ceiling: number;
+  /**
+   * Operator ceiling applied only to rate-metered providers. Optional so
+   * callers outside the agent-turn path keep the plain model/context clamping;
+   * omitting it leaves those providers uncapped.
+   */
+  rateMeteredCeiling?: number;
   provider?: SupportedProvider;
 }): number {
   const contextLength = sanitizeOutputLimit(params.contextLength ?? null);
@@ -55,5 +81,11 @@ export function resolveAgentMaxOutputTokens(params: {
     contextLength !== null
       ? Math.max(1, Math.floor(contextLength / 2))
       : Number.POSITIVE_INFINITY;
-  return Math.min(params.ceiling, base, sharedWindowCap);
+  const rateMeteredCap =
+    params.rateMeteredCeiling !== undefined &&
+    params.provider !== undefined &&
+    RATE_METERED_OUTPUT_RESERVATION_PROVIDERS.has(params.provider)
+      ? params.rateMeteredCeiling
+      : Number.POSITIVE_INFINITY;
+  return Math.min(params.ceiling, base, sharedWindowCap, rateMeteredCap);
 }

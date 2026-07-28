@@ -49,6 +49,14 @@ describe("classifyErrorForTracking", () => {
     }
   });
 
+  test("drops ApiErrors marked as relayed upstream provider failures", () => {
+    for (const statusCode of [500, 503]) {
+      const relay = new ApiError(statusCode, "provider is unavailable");
+      relay.upstream = true;
+      expect(classifyErrorForTracking(relay).report).toBe(false);
+    }
+  });
+
   test("drops the handled upstream-empty-response condition", () => {
     const error = new ApiError(
       500,

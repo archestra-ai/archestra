@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-07-24
+lastUpdated: 2026-07-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -81,7 +81,7 @@ Set the disable variable to turn the guard off without uninstalling. The Disconn
 
 ## Supported Clients
 
-Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop, n8n, and Any Client get copy-paste instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the connection's virtual key on the Virtual API Keys page and revoke any skills share link on the Skills page.
+Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop, n8n, and Any Client get copy-paste instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key from the LLM Proxy's **Connect** dialog and revoke any skills share link on the Skills page.
 
 ### Claude Code
 

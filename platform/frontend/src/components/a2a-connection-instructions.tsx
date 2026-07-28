@@ -21,6 +21,7 @@ import {
 import { CodeText } from "@/components/code-text";
 import { CopyableCode } from "@/components/copyable-code";
 import { CurlExampleSection } from "@/components/curl-example-section";
+import { McpOauthManagement } from "@/components/mcp-oauth-management";
 import { getManageTokenLink } from "@/components/tokens/manage-token-link";
 import {
   Collapsible,
@@ -76,11 +77,6 @@ export function A2AConnectionInstructions({
   const { data: userToken } = useUserToken();
   const { data: hasAdminPermission } = useHasPermissions({
     agent: ["admin"],
-  });
-  // The link opens the create dialog on the OAuth clients page, so it needs
-  // create (to submit) on top of read (to see the page at all).
-  const { data: canCreateOauthClients } = useHasPermissions({
-    mcpOauthClient: ["read", "create"],
   });
   // The Messaging Channels pages are gated on agentTrigger:read.
   const { data: canReadAgentTriggers } = useHasPermissions({
@@ -474,9 +470,9 @@ curl -X POST "${a2aEndpoint}" \\
       <WizardStep n={2} title="Authentication">
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            A2A agents accept your platform tokens — the same tokens the MCP
-            Gateway uses — or OAuth clients. LLM API keys and virtual keys will
-            not work here.
+            Use a platform token for direct A2A calls. OAuth access tokens and
+            configured identity-provider JWTs are also accepted. LLM API keys
+            and virtual keys will not work here.
           </p>
           <Select
             value={effectiveTokenId}
@@ -491,10 +487,10 @@ curl -X POST "${a2aEndpoint}" \\
                     <div>{getTokenDisplayName()}</div>
                     <div className="text-xs text-muted-foreground">
                       {isPersonalTokenSelected
-                        ? "The most secure option."
+                        ? "For your own integrations"
                         : selectedTeamToken?.isOrganizationToken
-                          ? "To share org-wide"
-                          : "To share with your teammates"}
+                          ? "Shared across the organization"
+                          : "Shared with this team"}
                     </div>
                   </div>
                 )}
@@ -506,7 +502,7 @@ curl -X POST "${a2aEndpoint}" \\
                   <div className="flex flex-col gap-0.5 items-start">
                     <div>Personal Token</div>
                     <div className="text-xs text-muted-foreground">
-                      The most secure option.
+                      For your own integrations
                     </div>
                   </div>
                 </SelectItem>
@@ -531,7 +527,7 @@ curl -X POST "${a2aEndpoint}" \\
                         <div className="text-xs text-muted-foreground">
                           {unusable
                             ? unusableTokenReason
-                            : "To share with your teammates"}
+                            : "Shared with this team"}
                         </div>
                       </div>
                     </SelectItem>
@@ -545,7 +541,7 @@ curl -X POST "${a2aEndpoint}" \\
                     <div className="flex flex-col gap-0.5 items-start">
                       <div>Organization Token</div>
                       <div className="text-xs text-muted-foreground">
-                        To share org-wide
+                        Shared across the organization
                       </div>
                     </div>
                   </SelectItem>
@@ -559,20 +555,6 @@ curl -X POST "${a2aEndpoint}" \\
             >
               {manageTokenLink.label}
             </Link>
-            {canCreateOauthClients && (
-              <>
-                {" "}
-                · For machine-to-machine or user-delegated OAuth,{" "}
-                <Link
-                  // Deep link: opens the create dialog with the client type
-                  // and this agent pre-selected.
-                  href={`/credentials/oauth-clients?create=true&clientType=mcp&gatewayId=${agent.id}`}
-                  className="underline hover:text-foreground"
-                >
-                  create an OAuth client for this agent
-                </Link>
-              </>
-            )}
           </p>
           {agent.identityProviderId && (
             <p className="text-xs text-muted-foreground">
@@ -674,6 +656,20 @@ curl -X POST "${a2aEndpoint}" \\
         {chatDeepLinkBlock}
         {layout === "dialog" && dialogOnlyChannels}
       </div>
+      {layout === "dialog" && (
+        <div className="mt-6 space-y-3 border-t pt-6">
+          <div className="space-y-1">
+            <h3 className="text-[17px] font-bold tracking-tight text-foreground">
+              OAuth clients
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Register applications that call this agent as themselves or on
+              behalf of signed-in users.
+            </p>
+          </div>
+          <McpOauthManagement resourceId={agent.id} resourceKind="agent" />
+        </div>
+      )}
     </div>
   );
 }

@@ -23,6 +23,7 @@ import {
 } from "@/clients/azure-openai-credentials";
 import {
   buildAzureDeploymentBaseUrl,
+  isAzureThinkingModelName,
   normalizeAzureApiKey,
   shouldUseAzureOpenAiApiVersion,
 } from "@/clients/azure-url";
@@ -37,6 +38,7 @@ import type {
   LLMStreamAdapter,
 } from "@/types";
 import { ApiError } from "@/types";
+import type { ReasoningEffort } from "@/types/model";
 import {
   OpenAIRequestAdapter,
   OpenAIResponseAdapter,
@@ -296,6 +298,7 @@ export const azureAdapterFactory: LLMProvider<
     const azureClient = getAzureClientForRequest(client, request.model);
     const azureRequest = {
       ...request,
+      ...defaultAzureReasoningEffort(request),
       stream: false,
     } as unknown as ChatCompletionCreateParamsNonStreaming;
 
@@ -311,6 +314,7 @@ export const azureAdapterFactory: LLMProvider<
     const azureClient = getAzureClientForRequest(client, request.model);
     const azureRequest = {
       ...request,
+      ...defaultAzureReasoningEffort(request),
       stream: true,
       stream_options: { include_usage: true },
     } as unknown as ChatCompletionCreateParamsStreaming;
@@ -346,6 +350,32 @@ export const azureAdapterFactory: LLMProvider<
     return "Internal server error";
   },
 };
+
+/**
+ * Reasoning models on Foundry only split their thinking into
+ * `reasoning_content` when the request asks for it; with no `reasoning_effort`
+ * they narrate it inline in `content`, where nothing can tell thinking from
+ * answer. Default the parameter for deployments known to accept it, and never
+ * override a value the caller set — an explicit `"none"` must keep meaning
+ * "no thinking".
+ */
+function defaultAzureReasoningEffort(request: AzureRequest): {
+  reasoning_effort?: ReasoningEffort;
+} {
+  const existing = (request as { reasoning_effort?: unknown }).reasoning_effort;
+  if (existing !== undefined) {
+    return {};
+  }
+
+  const model = typeof request.model === "string" ? request.model : "";
+  if (!isAzureThinkingModelName(model)) {
+    return {};
+  }
+
+  return { reasoning_effort: DEFAULT_AZURE_REASONING_EFFORT };
+}
+
+const DEFAULT_AZURE_REASONING_EFFORT: ReasoningEffort = "medium";
 
 function getAzureDefaultQuery(
   baseUrl: string | undefined,

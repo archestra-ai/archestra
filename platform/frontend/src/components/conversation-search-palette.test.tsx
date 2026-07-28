@@ -390,11 +390,10 @@ describe("ConversationSearchPalette", () => {
     expect(mockRouterPush).toHaveBeenCalledWith("/chat");
   });
 
-  it("navigates to the Client Credentials landing page when selecting it", () => {
+  it("does not offer the removed Client Credentials destination", () => {
     render(<ConversationSearchPalette {...defaultProps} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Client Credentials" }));
-
-    expect(mockRouterPush).toHaveBeenCalledWith("/credentials");
+    expect(
+      screen.queryByRole("button", { name: "Client Credentials" }),
+    ).not.toBeInTheDocument();
   });
 });

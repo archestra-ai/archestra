@@ -429,6 +429,7 @@ export async function executeA2AMessage(
     const maxOutputTokens = resolveAgentMaxOutputTokens({
       outputLength: modelRow?.outputLength ?? null,
       ceiling: config.chat.maxOutputTokensCeiling,
+      rateMeteredCeiling: config.chat.rateMeteredMaxOutputTokensCeiling,
       provider,
       contextLength: modelRow
         ? ModelModel.resolveEffectiveContextLength(modelRow)

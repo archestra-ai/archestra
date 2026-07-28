@@ -7,7 +7,10 @@ import {
   ilike,
   inArray,
   isNotNull,
+  isNull,
   like,
+  ne,
+  notInArray,
   or,
   sql,
 } from "drizzle-orm";
@@ -47,6 +50,18 @@ class SkillModel {
      * Omit for management surfaces that list every environment.
      */
     environmentId?: string | null;
+    scope?: ResourceVisibilityScope;
+    /** Restrict team-scoped results to skills assigned to these teams. */
+    teamIds?: string[];
+    /** Restrict personal-scoped results to these authors. */
+    authorIds?: string[];
+    /** Hide skills authored by these users (authorless rows are kept). */
+    excludeAuthorIds?: string[];
+    /**
+     * When set, hides personal skills owned by other users (the admin
+     * default view; mirrors the agents list).
+     */
+    excludeOtherPersonalForUserId?: string;
     sorting?: { sortBy?: SkillSortBy; sortDirection?: SortDirection };
   }): Promise<Skill[]> {
     let query = db
@@ -73,6 +88,11 @@ class SkillModel {
     accessibleSkillIds?: string[];
     /** Same environment-visibility filter as `findByOrganization`. */
     environmentId?: string | null;
+    scope?: ResourceVisibilityScope;
+    teamIds?: string[];
+    authorIds?: string[];
+    excludeAuthorIds?: string[];
+    excludeOtherPersonalForUserId?: string;
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -635,6 +655,11 @@ function buildOrgFilters(params: {
   sourceRepo?: string;
   accessibleSkillIds?: string[];
   environmentId?: string | null;
+  scope?: ResourceVisibilityScope;
+  teamIds?: string[];
+  authorIds?: string[];
+  excludeAuthorIds?: string[];
+  excludeOtherPersonalForUserId?: string;
 }) {
   const normalizedSearch = params.search?.trim();
   const normalizedSourceRepo = params.sourceRepo?.trim();
@@ -645,6 +670,40 @@ function buildOrgFilters(params: {
       : []),
     ...(params.environmentId !== undefined
       ? [skillInEnvironmentPredicate(params.environmentId)]
+      : []),
+    ...(params.scope ? [eq(schema.skillsTable.scope, params.scope)] : []),
+    ...(params.teamIds?.length
+      ? [
+          inArray(
+            schema.skillsTable.id,
+            db
+              .select({ skillId: schema.skillTeamsTable.skillId })
+              .from(schema.skillTeamsTable)
+              .where(inArray(schema.skillTeamsTable.teamId, params.teamIds)),
+          ),
+        ]
+      : []),
+    ...(params.authorIds?.length
+      ? [inArray(schema.skillsTable.authorId, params.authorIds)]
+      : []),
+    ...(params.excludeAuthorIds?.length
+      ? [
+          or(
+            isNull(schema.skillsTable.authorId),
+            notInArray(schema.skillsTable.authorId, params.excludeAuthorIds),
+          ),
+        ]
+      : []),
+    ...(params.excludeOtherPersonalForUserId
+      ? [
+          or(
+            ne(schema.skillsTable.scope, "personal"),
+            eq(
+              schema.skillsTable.authorId,
+              params.excludeOtherPersonalForUserId,
+            ),
+          ),
+        ]
       : []),
     ...(normalizedSearch
       ? [

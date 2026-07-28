@@ -3,14 +3,14 @@
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import { Globe, Key, Loader2, User, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  OwnerSelectField,
-  shouldShowOwnerField,
-} from "@/app/credentials/virtual-keys/owner-select-field";
 import { CopyableCode } from "@/components/copyable-code";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
+import {
+  OwnerSelectField,
+  shouldShowOwnerField,
+} from "@/components/owner-select-field";
 import {
   type ProviderApiKeyMap,
   providerApiKeyMapToArray,
@@ -25,19 +25,21 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
-import { useCreateVirtualApiKey } from "@/lib/virtual-api-keys.query";
+import {
+  useAllVirtualApiKeys,
+  useCreateVirtualApiKey,
+} from "@/lib/virtual-api-keys.query";
 
 export type VirtualKeyScope = NonNullable<
   archestraApiTypes.CreateVirtualApiKeyData["body"]["scope"]
@@ -45,21 +47,31 @@ export type VirtualKeyScope = NonNullable<
 export type VirtualKeyType = NonNullable<
   archestraApiTypes.CreateVirtualApiKeyData["body"]["keyType"]
 >;
+type VirtualKeySummary =
+  archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
 
 /**
- * Self-contained variant for surfaces outside the Client Credentials page
- * (e.g. the proxy connect dialog): gathers the option data the form needs.
+ * Self-contained variant for resource connection surfaces: gathers the option
+ * data the form needs.
  */
 export function CreateVirtualKeyDialogWithData({
   open,
   onOpenChange,
-  initialKeyType,
+  keyType,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialKeyType?: VirtualKeyType;
+  keyType: VirtualKeyType;
 }) {
   const { data: apiKeys = [] } = useLlmProviderApiKeys({ enabled: open });
+  const { data: session } = useSession();
+  const { data: existingKeys } = useAllVirtualApiKeys({
+    keyType,
+    limit: 100,
+    offset: 0,
+    enabled: open && keyType === "standard",
+    toastOnError: false,
+  });
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
   const { data: isVirtualKeyAdmin } = useHasPermissions({
     llmVirtualKey: ["admin"],
@@ -83,63 +95,58 @@ export function CreateVirtualKeyDialogWithData({
     <CreateVirtualKeyDialog
       open={open}
       onOpenChange={onOpenChange}
-      initialKeyType={initialKeyType}
+      keyType={keyType}
       parentableKeys={apiKeys}
       defaultExpirationSeconds={defaultExpirationSeconds ?? null}
       visibilityOptions={visibilityOptions}
       teams={teams}
       canReadTeams={!!canReadTeams}
       isVirtualKeyAdmin={!!isVirtualKeyAdmin}
+      currentUser={
+        session?.user
+          ? {
+              id: session.user.id,
+              name: session.user.name ?? session.user.email ?? null,
+            }
+          : null
+      }
+      existingKeys={existingKeys?.data ?? []}
     />
   );
 }
 
-const KEY_TYPE_OPTIONS: {
-  value: VirtualKeyType;
-  label: string;
-  description: string;
-}[] = [
-  {
-    value: "standard",
-    label: "Standard",
-    description:
-      "Maps to provider API keys and is sent in the Authorization header as a provider key replacement.",
-  },
-  {
-    value: "passthrough",
-    label: "Passthrough",
-    description:
-      "Carries no provider key. Sent in the X-Archestra-Virtual-Key header to attribute a request to a user when the provider credential is passed through (e.g. a Claude Code subscription token).",
-  },
-];
-
 export function CreateVirtualKeyDialog({
   open,
   onOpenChange,
-  initialKeyType = "standard",
+  keyType,
   parentableKeys,
   defaultExpirationSeconds,
   visibilityOptions,
   teams,
   canReadTeams,
   isVirtualKeyAdmin,
+  currentUser,
+  existingKeys,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Key type preselected when the dialog opens (deep links). */
-  initialKeyType?: VirtualKeyType;
+  keyType: VirtualKeyType;
   parentableKeys: LlmProviderApiKeyResponse[];
   defaultExpirationSeconds: number | null;
   visibilityOptions: VisibilityOption<VirtualKeyScope>[];
   teams: Array<{ id: string; name: string }>;
   canReadTeams: boolean;
   isVirtualKeyAdmin: boolean;
+  currentUser: { id: string; name: string | null } | null;
+  existingKeys: VirtualKeySummary[];
 }) {
   const createMutation = useCreateVirtualApiKey();
 
-  const [keyType, setKeyType] = useState<VirtualKeyType>("standard");
   const [newKeyName, setNewKeyName] = useState("");
   const [ownerId, setOwnerId] = useState("");
+  const [selectedOwnerName, setSelectedOwnerName] = useState<string | null>(
+    null,
+  );
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [scope, setScope] = useState<VirtualKeyScope>(
     getDefaultVirtualKeyScope(visibilityOptions),
@@ -155,6 +162,30 @@ export function CreateVirtualKeyDialog({
 
   const prevOpenRef = useRef(open);
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
+  const generatedNameRef = useRef("");
+
+  const isPassthrough = keyType === "passthrough";
+  // Passthrough keys are always personal. Admins can mint a key on behalf of
+  // another org member; left unset, the key belongs to the creator.
+  const showOwnerField = shouldShowOwnerField(
+    isVirtualKeyAdmin,
+    isPassthrough ? "personal" : scope,
+  );
+  const effectiveOwnerId =
+    showOwnerField && ownerId ? ownerId : currentUser?.id;
+  const effectiveOwnerName =
+    showOwnerField && ownerId ? selectedOwnerName : currentUser?.name;
+  const generatedName = useMemo(
+    () =>
+      isPassthrough
+        ? ""
+        : getGeneratedVirtualKeyName({
+            ownerId: effectiveOwnerId,
+            ownerName: effectiveOwnerName,
+            existingKeys,
+          }),
+    [effectiveOwnerId, effectiveOwnerName, existingKeys, isPassthrough],
+  );
 
   useEffect(() => {
     const wasOpen = prevOpenRef.current;
@@ -166,16 +197,17 @@ export function CreateVirtualKeyDialog({
         defaultExpirationSeconds,
       );
       const initialScope = getDefaultVirtualKeyScope(visibilityOptions);
-      setKeyType(initialKeyType);
-      setNewKeyName("");
+      setNewKeyName(generatedName);
+      generatedNameRef.current = generatedName;
       setExpiresAt(initialExpiresAt);
       setScope(initialScope);
       setTeamIds([]);
       setProviderApiKeyIds({});
       setOwnerId("");
+      setSelectedOwnerName(null);
       initialSnapshotRef.current = {
-        keyType: initialKeyType,
-        newKeyName: "",
+        keyType,
+        newKeyName: generatedName,
         ownerId: "",
         expiresAt: initialExpiresAt,
         scope: initialScope,
@@ -183,15 +215,30 @@ export function CreateVirtualKeyDialog({
         providerApiKeyIds: {},
       };
     }
-  }, [open, defaultExpirationSeconds, visibilityOptions, initialKeyType]);
+  }, [
+    open,
+    defaultExpirationSeconds,
+    visibilityOptions,
+    keyType,
+    generatedName,
+  ]);
 
-  const isPassthrough = keyType === "passthrough";
-  // Passthrough keys are always personal. Admins can mint a key on behalf of
-  // another org member; left unset, the key belongs to the creator.
-  const showOwnerField = shouldShowOwnerField(
-    isVirtualKeyAdmin,
-    isPassthrough ? "personal" : scope,
-  );
+  useEffect(() => {
+    if (!open || createdKeyValue) return;
+    setNewKeyName((currentName) => {
+      const shouldUpdate =
+        currentName.length === 0 || currentName === generatedNameRef.current;
+      generatedNameRef.current = generatedName;
+      if (!shouldUpdate) return currentName;
+      if (initialSnapshotRef.current) {
+        initialSnapshotRef.current = {
+          ...initialSnapshotRef.current,
+          newKeyName: generatedName,
+        };
+      }
+      return generatedName;
+    });
+  }, [createdKeyValue, generatedName, open]);
   const standardReady =
     (scope !== "team" || teamIds.length > 0) &&
     providerApiKeyMapToArray(providerApiKeyIds).length > 0;
@@ -262,12 +309,20 @@ export function CreateVirtualKeyDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={
-        createdKeyValue ? "Virtual API Key Created" : "Create Virtual API Key"
+        createdKeyValue
+          ? isPassthrough
+            ? "Passthrough Key Created"
+            : "Virtual API Key Created"
+          : isPassthrough
+            ? "Create Passthrough Key"
+            : "Create Virtual API Key"
       }
       description={
         createdKeyValue
           ? undefined
-          : "Map provider API keys, or create a passthrough key to attribute requests to a user."
+          : isPassthrough
+            ? "Create an attribution key for requests that pass a provider credential through."
+            : "Map this virtual key to provider API keys."
       }
       size="medium"
       isDirty={isDirty}
@@ -299,16 +354,34 @@ export function CreateVirtualKeyDialog({
                   id="virtual-key-name"
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
-                  placeholder="My virtual key"
+                  placeholder={
+                    isPassthrough ? "My passthrough key" : "My virtual key"
+                  }
                 />
               </div>
 
-              <KeyTypeField value={keyType} onChange={setKeyType} />
+              {!isPassthrough && (
+                <ProviderKeyAccessFields
+                  providerApiKeyIds={providerApiKeyIds}
+                  onProviderApiKeyIdsChange={setProviderApiKeyIds}
+                  providerApiKeys={parentableKeys}
+                />
+              )}
 
               {isPassthrough ? (
                 <>
                   {showOwnerField && (
-                    <OwnerSelectField value={ownerId} onChange={setOwnerId} />
+                    <OwnerSelectField
+                      value={ownerId}
+                      onChange={setOwnerId}
+                      onSelectedOwnerChange={(owner) =>
+                        setSelectedOwnerName(
+                          owner.userId === currentUser?.id
+                            ? null
+                            : (owner.name ?? owner.email ?? null),
+                        )
+                      }
+                    />
                   )}
 
                   <div className="space-y-2">
@@ -338,7 +411,17 @@ export function CreateVirtualKeyDialog({
                   />
 
                   {showOwnerField && (
-                    <OwnerSelectField value={ownerId} onChange={setOwnerId} />
+                    <OwnerSelectField
+                      value={ownerId}
+                      onChange={setOwnerId}
+                      onSelectedOwnerChange={(owner) =>
+                        setSelectedOwnerName(
+                          owner.userId === currentUser?.id
+                            ? null
+                            : (owner.name ?? owner.email ?? null),
+                        )
+                      }
+                    />
                   )}
 
                   <div className="space-y-2">
@@ -349,12 +432,6 @@ export function CreateVirtualKeyDialog({
                       formatExpiration={formatExpiration}
                     />
                   </div>
-
-                  <ProviderKeyAccessFields
-                    providerApiKeyIds={providerApiKeyIds}
-                    onProviderApiKeyIdsChange={setProviderApiKeyIds}
-                    providerApiKeys={parentableKeys}
-                  />
                 </>
               )}
             </>
@@ -422,47 +499,28 @@ export function VirtualKeyVisibilityField({
   );
 }
 
-function KeyTypeField({
-  value,
-  onChange,
-}: {
-  value: VirtualKeyType;
-  onChange: (value: VirtualKeyType) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>Key type</Label>
-      <RadioGroup
-        value={value}
-        onValueChange={(next) => onChange(next as VirtualKeyType)}
-        className="gap-2"
-      >
-        {KEY_TYPE_OPTIONS.map((option) => (
-          <Label
-            key={option.value}
-            htmlFor={`virtual-key-type-${option.value}`}
-            className="flex cursor-pointer items-start gap-3 rounded-md border p-3 font-normal has-[:checked]:border-primary"
-          >
-            <RadioGroupItem
-              id={`virtual-key-type-${option.value}`}
-              value={option.value}
-              className="mt-0.5"
-            />
-            <div className="space-y-1">
-              <div className="font-medium">{option.label}</div>
-              <p className="text-sm text-muted-foreground">
-                {option.description}
-              </p>
-            </div>
-          </Label>
-        ))}
-      </RadioGroup>
-    </div>
-  );
-}
-
 export function formatExpiration(date: Date | string | null): string {
   return formatRelativeTime(date);
+}
+
+function getGeneratedVirtualKeyName({
+  ownerId,
+  ownerName,
+  existingKeys,
+}: {
+  ownerId: string | undefined;
+  ownerName: string | null | undefined;
+  existingKeys: VirtualKeySummary[];
+}): string {
+  const ownerLabel = ownerName?.trim();
+  const baseName = ownerLabel
+    ? `${ownerLabel.endsWith("s") ? `${ownerLabel}'` : `${ownerLabel}'s`} virtual key`
+    : "My virtual key";
+  const sequence =
+    existingKeys.filter(
+      (key) => key.authorId === ownerId && key.keyType === "standard",
+    ).length + 1;
+  return `${baseName} (${sequence})`;
 }
 
 function computeDefaultExpiresAt(defaultSeconds: number | null): Date | null {

@@ -28,18 +28,46 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
 
-type ScopeValue = "personal" | "team" | "org" | "built_in";
+const SHARED_SCOPES = ["personal", "team", "org"] as const;
+
+type SharedScopeValue = (typeof SHARED_SCOPES)[number];
+type ScopeValue = SharedScopeValue | "built_in";
 type OwnerValue = "mine" | "others";
 type StatusValue = "active" | "deleted";
 
-export function AgentScopeFilter({
-  showBuiltIn = false,
-  ownerLabelPlural = "agents",
+/**
+ * Shared Personal / Team / Organization visibility filter for resource list
+ * pages (agents, MCP gateways, LLM proxies, skills, projects, apps). Scope is
+ * the resource's share visibility; state lives entirely in URL search params
+ * (`scope`, `teamIds`, `authorIds`, `excludeAuthorIds`). A resource admin
+ * additionally gets a "My … / Other users" sub-filter under Personal and can
+ * narrow to specific owners. Read the params back with
+ * {@link useScopeFilterParams} when passing them to a list API hook.
+ */
+export function ResourceScopeFilter({
   adminPermission,
+  ownerLabelPlural,
+  allLabel = "All types",
+  showBuiltIn = false,
+  showLabels = false,
+  showTeamSelect = true,
 }: {
-  showBuiltIn?: boolean;
-  ownerLabelPlural?: string;
+  /** Admin permission unlocking the owner sub-filter, e.g. `{ skill: ["admin"] }`. */
   adminPermission: Permissions;
+  /** Plural resource name for the "My …" owner option, e.g. "skills". */
+  ownerLabelPlural: string;
+  /** Label of the unfiltered option, e.g. "All projects". */
+  allLabel?: string;
+  /** Offer a "Built-in" scope to admins (agents page only). */
+  showBuiltIn?: boolean;
+  /** Render the agent-label filter (agent-family pages only). */
+  showLabels?: boolean;
+  /**
+   * Offer the per-team multi-select under the Team scope and gate the Team
+   * option on `team:read`. Off for resources whose list API cannot filter by
+   * specific teams (apps).
+   */
+  showTeamSelect?: boolean;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -62,10 +90,11 @@ export function AgentScopeFilter({
     [authorIdsParam],
   );
 
-  const { data: labelKeys } = useLabelKeys();
   const { data: isAdmin } = useHasPermissions(adminPermission);
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: teams } = useTeams({ enabled: !!canReadTeams });
+  const { data: teams } = useTeams({
+    enabled: !!canReadTeams && showTeamSelect,
+  });
 
   const ownerFilter: OwnerValue = useMemo(() => {
     if (scope !== "personal" || !isAdmin) return "mine";
@@ -93,7 +122,8 @@ export function AgentScopeFilter({
           params.set(key, value);
         }
       }
-      params.set("page", "1");
+      // reset server-side pagination (a no-op on pages without a page param)
+      params.delete("page");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [searchParams, router, pathname],
@@ -102,6 +132,7 @@ export function AgentScopeFilter({
   const handleScopeChange = useCallback(
     (value: string) => {
       if (value === "personal") {
+        // Default the owner sub-filter to "My …".
         updateUrlParams({
           scope: "personal",
           teamIds: null,
@@ -128,6 +159,7 @@ export function AgentScopeFilter({
           excludeAuthorIds: null,
         });
       } else {
+        // "Other users" with no specific pick = everyone except me.
         updateUrlParams({
           authorIds: null,
           excludeAuthorIds: currentUserId ?? null,
@@ -180,9 +212,9 @@ export function AgentScopeFilter({
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper" side="bottom" align="start">
-          <SelectItem value="all">All types</SelectItem>
+          <SelectItem value="all">{allLabel}</SelectItem>
           <SelectItem value="personal">Personal</SelectItem>
-          <SelectItem value="team" disabled={!canReadTeams}>
+          <SelectItem value="team" disabled={showTeamSelect && !canReadTeams}>
             Team
           </SelectItem>
           <SelectItem value="org">Organization</SelectItem>
@@ -205,18 +237,21 @@ export function AgentScopeFilter({
           </SelectContent>
         </Select>
       )}
-      {scope === "team" && canReadTeams && teamItems.length > 0 && (
-        <MultiSelect
-          value={selectedTeamIds}
-          onValueChange={handleTeamIdsChange}
-          items={teamItems}
-          placeholder="All teams"
-          className="w-[220px]"
-          showSelectedBadges={false}
-          selectedSuffix={(n) => `${n === 1 ? "team" : "teams"} selected`}
-        />
-      )}
-      {scope === "team" && !canReadTeams && (
+      {showTeamSelect &&
+        scope === "team" &&
+        canReadTeams &&
+        teamItems.length > 0 && (
+          <MultiSelect
+            value={selectedTeamIds}
+            onValueChange={handleTeamIdsChange}
+            items={teamItems}
+            placeholder="All teams"
+            className="w-[220px]"
+            showSelectedBadges={false}
+            selectedSuffix={(n) => `${n === 1 ? "team" : "teams"} selected`}
+          />
+        )}
+      {showTeamSelect && scope === "team" && !canReadTeams && (
         <PermissionRequirementHint
           message="Team filters are unavailable without"
           permissions={[{ resource: "team", action: "read" }]}
@@ -234,15 +269,70 @@ export function AgentScopeFilter({
           selectedSuffix={(n) => `${n === 1 ? "user" : "users"} selected`}
         />
       )}
-      <LabelSelect
-        labelKeys={labelKeys}
-        LabelKeyRowComponent={AgentLabelKeyRow}
-      />
+      {showLabels && <AgentLabelFilter />}
     </div>
   );
 }
 
-export function AgentDeletedStatusFilter({
+interface ScopeFilterParams<Scope extends string> {
+  scope: Scope | undefined;
+  teamIds: string[] | undefined;
+  authorIds: string[] | undefined;
+  excludeAuthorIds: string[] | undefined;
+  /**
+   * Set when no personal/owner filter is active: tells the list API to hide
+   * other users' personal resources from the admin default view.
+   */
+  excludeOtherPersonal: true | undefined;
+  hasActiveScopeFilters: boolean;
+}
+
+/**
+ * Read the URL params owned by {@link ResourceScopeFilter} in the shape list
+ * API hooks expect. Unknown scope values are treated as unset.
+ */
+export function useScopeFilterParams(options: {
+  includeBuiltIn: true;
+}): ScopeFilterParams<ScopeValue>;
+export function useScopeFilterParams(): ScopeFilterParams<SharedScopeValue>;
+export function useScopeFilterParams(options?: {
+  includeBuiltIn?: boolean;
+}): ScopeFilterParams<ScopeValue> {
+  const searchParams = useSearchParams();
+
+  const rawScope = searchParams.get("scope");
+  const allowedScopes: readonly string[] = options?.includeBuiltIn
+    ? [...SHARED_SCOPES, "built_in"]
+    : SHARED_SCOPES;
+  const scope =
+    rawScope && allowedScopes.includes(rawScope)
+      ? (rawScope as ScopeValue)
+      : undefined;
+  const teamIdsParam = searchParams.get("teamIds");
+  const authorIdsParam = searchParams.get("authorIds");
+  const excludeAuthorIdsParam = searchParams.get("excludeAuthorIds");
+
+  return {
+    scope,
+    teamIds: teamIdsParam ? teamIdsParam.split(",") : undefined,
+    authorIds: authorIdsParam ? authorIdsParam.split(",") : undefined,
+    excludeAuthorIds: excludeAuthorIdsParam
+      ? excludeAuthorIdsParam.split(",")
+      : undefined,
+    excludeOtherPersonal:
+      scope !== "personal" && !authorIdsParam && !excludeAuthorIdsParam
+        ? true
+        : undefined,
+    hasActiveScopeFilters: !!(
+      rawScope ||
+      teamIdsParam ||
+      authorIdsParam ||
+      excludeAuthorIdsParam
+    ),
+  };
+}
+
+export function ResourceDeletedStatusFilter({
   deletePermission,
 }: {
   deletePermission: Permissions;
@@ -262,7 +352,7 @@ export function AgentDeletedStatusFilter({
       } else {
         params.delete("status");
       }
-      params.set("page", "1");
+      params.delete("page");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [searchParams, router, pathname],
@@ -343,7 +433,7 @@ export function ActiveFilterBadges({
       } else {
         params.delete("teamIds");
       }
-      params.set("page", "1");
+      params.delete("page");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [teamIdsParam, searchParams, router, pathname],
@@ -364,7 +454,7 @@ export function ActiveFilterBadges({
           params.set("excludeAuthorIds", currentUserId);
         }
       }
-      params.set("page", "1");
+      params.delete("page");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [authorIdsParam, searchParams, router, pathname, currentUserId],
@@ -385,7 +475,7 @@ export function ActiveFilterBadges({
       } else {
         params.delete("labels");
       }
-      params.set("page", "1");
+      params.delete("page");
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [parsedLabels, searchParams, router, pathname],
@@ -455,6 +545,18 @@ export function ActiveFilterBadges({
       )}
       {hasLabels && <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />}
     </div>
+  );
+}
+
+// The label filter is agent-specific (labels only exist on agents); keeping it
+// in a child component keeps its queries out of pages that don't render it.
+function AgentLabelFilter() {
+  const { data: labelKeys } = useLabelKeys();
+  return (
+    <LabelSelect
+      labelKeys={labelKeys}
+      LabelKeyRowComponent={AgentLabelKeyRow}
+    />
   );
 }
 

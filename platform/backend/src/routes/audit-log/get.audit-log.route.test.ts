@@ -114,6 +114,26 @@ describe("GET /api/audit-logs", () => {
     expect(body.data.some((r: AuditLog) => r.id === row.id)).toBe(true);
   });
 
+  test("returns rows whose action is not in this build's registered set", async () => {
+    // Rows persisted by other releases can carry actions this build doesn't
+    // register; read-back must not fail response serialization on them.
+    const row = await seedRow(organizationId, {
+      action: "futureFeature.created" as Parameters<
+        typeof AuditLogModel.create
+      >[0]["action"],
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/audit-logs",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    const returned = body.data.find((r: AuditLog) => r.id === row.id);
+    expect(returned?.action).toBe("futureFeature.created");
+  });
+
   test("returns 403 when hasPermission denies the request (member role equivalent)", async () => {
     hasPermissionMock.mockResolvedValue({
       success: false,

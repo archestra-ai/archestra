@@ -49,6 +49,7 @@ import {
   UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
+import { isForeignKeyConstraintError } from "@/utils/db";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -1561,12 +1562,24 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      await MemberModel.setDefaultModelSelection({
-        userId: user.id,
-        organizationId,
-        modelId: body.modelId,
-        apiKeyId: body.chatApiKeyId,
-      });
+      try {
+        await MemberModel.setDefaultModelSelection({
+          userId: user.id,
+          organizationId,
+          modelId: body.modelId,
+          apiKeyId: body.chatApiKeyId,
+        });
+      } catch (error) {
+        // The referenced model or API key can be deleted between the client
+        // loading its options and saving the selection.
+        if (isForeignKeyConstraintError(error)) {
+          throw new ApiError(
+            400,
+            "The selected model or API key no longer exists",
+          );
+        }
+        throw error;
+      }
 
       return reply.send({
         modelId: body.modelId,

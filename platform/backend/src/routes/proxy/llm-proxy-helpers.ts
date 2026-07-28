@@ -364,12 +364,18 @@ export function handleError(
     const errorObj = error as Error & {
       status?: number;
       statusCode?: number;
+      $metadata?: { httpStatusCode?: number };
     };
     if (typeof errorObj.status === "number") {
       statusCode = errorObj.status;
       hasExplicitStatus = true;
     } else if (typeof errorObj.statusCode === "number") {
       statusCode = errorObj.statusCode;
+      hasExplicitStatus = true;
+    } else if (typeof errorObj.$metadata?.httpStatusCode === "number") {
+      // AWS SDK errors (Bedrock) carry the HTTP status on $metadata, so
+      // without this a throttling 429 or provider 503 surfaced as a 500.
+      statusCode = errorObj.$metadata.httpStatusCode;
       hasExplicitStatus = true;
     }
   }
@@ -383,11 +389,21 @@ export function handleError(
   }
 
   // The internal code preserves overload semantics after streaming starts.
+  // Any non-ApiError 503 in the proxy's catch is the provider saying it is
+  // unavailable — whether stated explicitly (e.g. Google's UNAVAILABLE "high
+  // demand" errors) or classified from a status-less SDK failure — our own
+  // service-unavailable paths always throw ApiError.
   const isUpstreamOverload =
-    statusCode === 529 ||
-    (statusCode === 503 &&
-      !(error instanceof ApiError) &&
-      classifyUpstreamOverload(error) !== undefined);
+    statusCode === 529 || (statusCode === 503 && !(error instanceof ApiError));
+
+  // Provider-returned 5xx relays (an SDK error carrying the provider's own
+  // HTTP failure) are upstream faults, not crashes of ours — marked so error
+  // tracking drops the relay as noise while clients still get the status.
+  const isUpstreamProviderFailure =
+    hasExplicitStatus &&
+    statusCode >= 500 &&
+    !(error instanceof ApiError) &&
+    hasProviderHttpErrorShape(error);
 
   const errorMessage = extractErrorMessage(error);
   const adapterInternalCode = extractInternalCode(error);
@@ -472,7 +488,19 @@ export function handleError(
 
   // Headers not sent yet - throw ApiError to let central handler return proper status code
   // This matches V1 handler behavior and ensures clients receive correct HTTP status
-  throw new ApiError(statusCode, errorMessage, internalCode);
+  const apiError = new ApiError(statusCode, errorMessage, internalCode);
+  apiError.upstream = isUpstreamProviderFailure || isUpstreamOverload;
+  throw apiError;
+}
+
+/**
+ * Whether the error looks like a provider SDK's HTTP error (a parsed error
+ * body, response headers, or the AWS SDK's response metadata) rather than an
+ * internal error that merely carries a status code.
+ */
+function hasProviderHttpErrorShape(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return "error" in error || "headers" in error || "$metadata" in error;
 }
 
 /**

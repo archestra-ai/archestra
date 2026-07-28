@@ -1646,5 +1646,21 @@ describe("agent routes", () => {
 
       expect(response.statusCode).toBe(400);
     });
+
+    test("returns 400 when the referenced model or API key no longer exists", async () => {
+      // The model/key can be deleted between the client loading its options
+      // and saving — the foreign-key violation must surface as a 400, not 500.
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/members/default-model",
+        payload: {
+          modelId: crypto.randomUUID(),
+          chatApiKeyId: crypto.randomUUID(),
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain("no longer exists");
+    });
   });
 });

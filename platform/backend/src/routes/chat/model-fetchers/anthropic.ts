@@ -7,7 +7,7 @@ import config from "@/config";
 import logger from "@/logging";
 import type { Anthropic } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
-import type { ModelInfo } from "./types";
+import { type ModelInfo, modelFetchError } from "./types";
 
 export async function fetchAnthropicModels(
   apiKey: string,
@@ -31,7 +31,7 @@ export async function fetchAnthropicModels(
       { status: response.status, error: errorText },
       "Failed to fetch Anthropic models",
     );
-    throw new Error(`Failed to fetch Anthropic models: ${response.status}`);
+    throw modelFetchError("Anthropic models", response.status);
   }
 
   const data = (await response.json()) as {

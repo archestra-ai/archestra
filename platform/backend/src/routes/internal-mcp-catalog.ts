@@ -453,16 +453,20 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         environmentId: restBody.environmentId ?? null,
         organizationId: request.organizationId,
       });
-      // Clone source must resolve within the caller's org — `create` copies
-      // the source's tools + guardrail policies, so an unscoped `clonedFrom`
-      // would let a caller pull another org's catalog config into their own.
+      // Clone source must resolve under the CALLER's own access. `create` copies
+      // the source's tools, guardrail policies, and secret bags (OAuth client
+      // secret, local-config env, presets) onto the new item — which the caller
+      // owns and can therefore read back expanded. Resolving the source with a
+      // hardcoded admin flag would skip the personal/team scope checks and let
+      // any member clone someone else's item to harvest those values, so pass
+      // the caller's real privilege instead.
       if (restBody.clonedFrom) {
         const cloneSource = await InternalMcpCatalogModel.findById(
           restBody.clonedFrom,
           {
             expandSecrets: false,
             userId: request.user.id,
-            isAdmin: true,
+            isAdmin: checker.isAdmin,
             organizationId: request.organizationId,
           },
         );
@@ -1298,9 +1302,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       try {
         await reinstallMultitenantCatalog(catalogItem);
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        throw new ApiError(500, errorMessage);
+        throw toMcpOperationApiError(error);
       }
 
       return reply.send({ success: true });
@@ -1369,7 +1371,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           result.status === "rejected",
       );
       if (failures.length === restartResults.length) {
-        throw new ApiError(500, getSettledErrorMessage(failures[0]));
+        throw toMcpOperationApiError(failures[0].reason);
       }
 
       return reply.send({ success: true });
@@ -2249,14 +2251,57 @@ async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
     (result): result is PromiseRejectedResult => result.status === "rejected",
   );
   if (failures.length > 0 && failures.length === restartResults.length) {
-    throw new Error(getSettledErrorMessage(failures[0]));
+    // Rethrow the original reason (not a rewrapped Error) so the route can
+    // classify it by error name in toMcpOperationApiError.
+    throw failures[0].reason;
   }
 }
 
-function getSettledErrorMessage(result: PromiseRejectedResult): string {
-  return result.reason instanceof Error
-    ? result.reason.message
-    : "Unknown error";
+/**
+ * Error names thrown by the MCP client/runtime for a user's server being
+ * unreachable, not ready, or failing to deploy. Matched by name so this route
+ * module doesn't import the runtime's error classes.
+ */
+const MCP_RUNTIME_FAILURE_ERROR_NAMES = new Set([
+  "McpServerNotReadyError",
+  "McpServerConnectionTimeoutError",
+  "McpServerUnreachableError",
+  "McpServerDeploymentFailedError",
+]);
+
+/**
+ * Map a failed install/restart operation to the ApiError surfaced to the
+ * caller. MCP-runtime failures (the user's server unreachable, its container
+ * crashing) are upstream faults → 502; Kubernetes control-plane throttling is
+ * transient → retryable 503 with a readable message (instead of the raw
+ * "HTTP-Code: 429" client error); anything else stays a 500.
+ */
+function toMcpOperationApiError(reason: unknown): ApiError {
+  const message = reason instanceof Error ? reason.message : "Unknown error";
+  if (
+    reason instanceof Error &&
+    MCP_RUNTIME_FAILURE_ERROR_NAMES.has(reason.name)
+  ) {
+    return new ApiError(502, message);
+  }
+  if (isK8sApiThrottlingError(reason)) {
+    return new ApiError(
+      503,
+      "The Kubernetes API is temporarily throttling requests. Please retry in a moment.",
+    );
+  }
+  return new ApiError(500, message);
+}
+
+/**
+ * The Kubernetes client reports API-server throttling as an ApiException with
+ * `code: 429` and an "HTTP-Code: 429" message (e.g. while etcd/storage is
+ * re-initializing during control-plane churn).
+ */
+function isK8sApiThrottlingError(reason: unknown): boolean {
+  if (!(reason instanceof Error)) return false;
+  const code = (reason as { code?: unknown }).code;
+  return code === 429 || /^HTTP-Code: 429\b/.test(reason.message);
 }
 
 /**

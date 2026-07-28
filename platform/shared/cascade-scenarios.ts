@@ -18,7 +18,7 @@
  *      form with the fixture's shape, apply the scenario edit via
  *      simulated user input, and assert the inline confirm bar's
  *      presence/mode matches `expected`.
- *   4. `e2e-tests/.../mcp-edit-cascade.spec.ts` — end-to-end check
+ *   4. `e2e-tests/tests/mcp-edit.spec.ts` — end-to-end check
  *      that backend + frontend agree against a live install.
  *
  * **Adding a scenario**

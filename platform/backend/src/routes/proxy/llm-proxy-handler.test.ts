@@ -462,6 +462,76 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(rows[0].inputTokens).toBe(0);
       expect(rows[0].outputTokens).toBe(0);
     });
+
+    test("streaming failure after SSE headers and content persists an error interaction", async () => {
+      // The provider fails mid-stream: SSE headers and content chunks are already
+      // on the wire, but the usage-bearing final chunk never arrives. The
+      // finally-block persist is gated on usage, so this must be covered by the
+      // catch path or the failure leaves no trace in LLM logs / session history.
+      openAiStubOptions.throwAtChunk = 2;
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: true,
+        },
+      });
+
+      // Headers were already committed, so the failure surfaces as an SSE error
+      // event on a 200 response rather than an HTTP error status.
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain("event: error");
+
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].response).toMatchObject({
+        error: expect.stringContaining("Simulated OpenAI stream failure"),
+      });
+      expect(rows[0].inputTokens).toBe(0);
+      expect(rows[0].outputTokens).toBe(0);
+    });
+
+    test("stream ending early without usage persists a partial interaction", async () => {
+      // The provider closes the stream cleanly mid-way (no throw) before the
+      // usage chunk. Nothing raises, so the catch path never runs and the
+      // finally-block persist is gated on usage — the call must still be
+      // recorded rather than vanishing from interaction history.
+      openAiStubOptions.interruptAtChunk = 2;
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+    });
   });
 
   describe("Anthropic", () => {

@@ -245,4 +245,76 @@ describe("POST /api/internal_mcp_catalog/:id/refresh-image", () => {
     expect(response.json()).toEqual({ success: true });
     expect(mockAutoReinstallServer).toHaveBeenCalledTimes(2);
   });
+
+  test("surfaces an MCP runtime failure as a 502 upstream error", async () => {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "single-tenant-crashing-server",
+        serverType: "local",
+        scope: "org",
+        multitenant: false,
+        localConfig: {
+          dockerImage: "registry.example.com/mcp:latest",
+        },
+      },
+      { organizationId, authorId: user.id },
+    );
+    await McpServerModel.create({
+      name: "single-tenant-crashing-server-a",
+      catalogId: catalog.id,
+      serverType: "local",
+      scope: "org",
+    });
+    // The user's container crashing on start is their server's fault, not a
+    // crash of ours — surfaced as an upstream failure.
+    const deploymentFailure = new Error(
+      "Deployment mcp-crashing failed: CrashLoopBackOff - back-off restarting failed container",
+    );
+    deploymentFailure.name = "McpServerDeploymentFailedError";
+    mockAutoReinstallServer.mockRejectedValueOnce(deploymentFailure);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${catalog.id}/refresh-image`,
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error.message).toContain("CrashLoopBackOff");
+  });
+
+  test("maps Kubernetes API throttling to a retryable 503 with a readable message", async () => {
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "single-tenant-throttled-server",
+        serverType: "local",
+        scope: "org",
+        multitenant: false,
+        localConfig: {
+          dockerImage: "registry.example.com/mcp:latest",
+        },
+      },
+      { organizationId, authorId: user.id },
+    );
+    await McpServerModel.create({
+      name: "single-tenant-throttled-server-a",
+      catalogId: catalog.id,
+      serverType: "local",
+      scope: "org",
+    });
+    // Shape of the Kubernetes client's ApiException during control-plane
+    // throttling: code 429 and an "HTTP-Code: 429" message.
+    const throttled = Object.assign(
+      new Error("HTTP-Code: 429\nMessage: Unknown API Status Code!\nBody: ..."),
+      { code: 429 },
+    );
+    mockAutoReinstallServer.mockRejectedValueOnce(throttled);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${catalog.id}/refresh-image`,
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.message).toContain("throttling");
+  });
 });

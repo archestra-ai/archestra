@@ -321,6 +321,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
+        access: "read",
       });
 
       return reply.send(trigger);
@@ -345,6 +346,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
+        access: "mutate",
       });
       const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
         userId: user.id,
@@ -445,6 +447,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
+        access: "mutate",
       });
 
       const success = await ScheduleTriggerModel.delete(id);
@@ -473,6 +476,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
+        access: "mutate",
       });
 
       const updated = await ScheduleTriggerModel.update(id, {
@@ -504,6 +508,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
+        access: "mutate",
       });
 
       const updated = await ScheduleTriggerModel.update(id, {
@@ -535,6 +540,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
+        access: "mutate",
       });
 
       const run = await ScheduleTriggerRunModel.createManualRun({
@@ -587,6 +593,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
+        access: "read",
       });
 
       const [data, total] = await Promise.all([
@@ -632,6 +639,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
+        access: "read",
       });
 
       return reply.send(run);
@@ -664,6 +672,7 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         headers,
+        access: "mutate",
       });
 
       const conversation = await ensureRunConversation({
@@ -679,18 +688,34 @@ const scheduleTriggerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
 export default scheduleTriggerRoutes;
 
+/**
+ * How much authority an operation needs over a trigger.
+ *
+ * `read` — viewing the trigger and its runs. Project members qualify, so a
+ * project's schedules are visible to everyone who can see the project.
+ *
+ * `mutate` — anything that changes the trigger or causes it to execute (update,
+ * delete, enable/disable, run-now, minting a run conversation). Project
+ * membership is NOT enough: a scheduled run executes as `trigger.actorUserId`
+ * against that actor's agent and credentials, so letting a project member
+ * rewrite or fire another member's schedule would let them act as that actor.
+ * Restricted to the actor themselves or a `scheduledTask:admin`.
+ */
+type ScheduleTriggerAccess = "read" | "mutate";
+
 async function findAccessibleTriggerOrThrow(params: {
   id: string;
   userId: string;
   organizationId: string;
   headers: IncomingHttpHeaders;
+  access: ScheduleTriggerAccess;
 }): Promise<z.infer<typeof SelectScheduleTriggerSchema>> {
   const trigger = await ScheduleTriggerModel.findById(params.id);
   if (!trigger || trigger.organizationId !== params.organizationId) {
     throw new ApiError(404, "Schedule trigger not found");
   }
 
-  // Owner always has access
+  // The actor the trigger runs as always has access
   if (trigger.actorUserId === params.userId) {
     return trigger;
   }
@@ -706,10 +731,11 @@ async function findAccessibleTriggerOrThrow(params: {
     return trigger;
   }
 
-  // Project members may read the runs of a schedule that belongs to a project
-  // they can access. Reuses the same ProjectShareModel.userCanAccessProject
-  // check that backs GET /api/projects/:id (via projectService.requireViewable).
-  if (trigger.projectId) {
+  // Project members may READ the schedules of a project they can access (and
+  // their runs). Reuses the same ProjectShareModel.userCanAccessProject check
+  // that backs GET /api/projects/:id (via projectService.requireViewable).
+  // Deliberately read-only — see ScheduleTriggerAccess.
+  if (params.access === "read" && trigger.projectId) {
     const project = await ProjectModel.findById(trigger.projectId);
     if (
       project &&
@@ -732,12 +758,14 @@ async function findAccessibleRunOrThrow(params: {
   userId: string;
   organizationId: string;
   headers: IncomingHttpHeaders;
+  access: ScheduleTriggerAccess;
 }): Promise<z.infer<typeof SelectScheduleTriggerRunSchema>> {
   await findAccessibleTriggerOrThrow({
     id: params.triggerId,
     userId: params.userId,
     organizationId: params.organizationId,
     headers: params.headers,
+    access: params.access,
   });
 
   const run = await ScheduleTriggerRunModel.findById(params.runId);

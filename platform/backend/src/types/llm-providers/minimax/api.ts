@@ -22,12 +22,10 @@ export const ChatCompletionUsageSchema = z
     `https://platform.minimax.io/docs/api-reference/text-openai-api#usage`,
   );
 
-export const FinishReasonSchema = z.enum([
-  "stop",
-  "length",
-  "tool_calls",
-  "content_filter",
-]);
+// Persist/read-back must tolerate nonconforming finish_reasons (same as OpenAI).
+export const FinishReasonSchema = z
+  .enum(["stop", "length", "tool_calls", "content_filter"])
+  .or(z.string());
 
 const ChoiceSchema = z
   .object({
@@ -38,7 +36,8 @@ const ChoiceSchema = z
     logprobs: z.any().nullable().optional(),
     message: z
       .object({
-        content: z.string().nullable(),
+        // Tool-call-only replies often omit `content` entirely.
+        content: z.string().nullable().optional(),
         role: z.enum(["assistant"]),
         /**
          * Array of reasoning details (thinking content)

@@ -122,31 +122,15 @@ describe("submitRecordingToAppGallery", () => {
         if (method === "GET" && url.includes("/git/ref/heads/main")) {
           return Response.json({ object: { sha: "base-sha" } });
         }
-        if (method === "GET" && url.includes("/git/ref/heads/")) {
-          // The submission branch's own head, read before committing onto it.
-          return Response.json({ object: { sha: "branch-sha" } });
-        }
         if (method === "POST" && url.includes("/git/refs")) {
           return Response.json({}, { status: 201 });
         }
-        if (method === "GET" && url.includes("/git/commits/")) {
-          return Response.json({ tree: { sha: "base-tree-sha" } });
-        }
-        if (method === "POST" && url.includes("/git/blobs")) {
-          return Response.json({ sha: "blob-sha" }, { status: 201 });
-        }
-        if (method === "POST" && url.includes("/git/trees")) {
-          return Response.json({ sha: "tree-sha" }, { status: 201 });
-        }
-        if (method === "POST" && url.includes("/git/commits")) {
-          return Response.json({ sha: "commit-sha" }, { status: 201 });
-        }
-        if (method === "PATCH" && url.includes("/git/refs/heads/")) {
-          return Response.json({}, { status: 200 });
-        }
         if (method === "GET" && url.includes("/contents/")) {
-          // The gallery presence probe: the app isn't published yet.
+          // Fresh branch: the file isn't there yet.
           return Response.json({ message: "Not Found" }, { status: 404 });
+        }
+        if (method === "PUT" && url.includes("/contents/")) {
+          return Response.json({}, { status: 201 });
         }
         if (method === "POST" && url.endsWith("/pulls")) {
           return Response.json({
@@ -204,16 +188,8 @@ describe("submitRecordingToAppGallery", () => {
       "POST /repos/archestra-ai/app-gallery/forks",
       "GET /repos/sam/app-gallery/git/ref/heads/main",
       "POST /repos/sam/app-gallery/git/refs",
-      // The upload is the GIT DATA API, not the contents API: the contents
-      // endpoint gives out well below its advertised ceiling on a recording-
-      // sized file. Blob, tree, commit, then move the ref — ONE commit, so a
-      // half-finished submission can't exist on the branch.
-      "GET /repos/sam/app-gallery/git/ref/heads/submission/pr_review_queue",
-      "GET /repos/sam/app-gallery/git/commits/branch-sha",
-      "POST /repos/sam/app-gallery/git/blobs",
-      "POST /repos/sam/app-gallery/git/trees",
-      "POST /repos/sam/app-gallery/git/commits",
-      "PATCH /repos/sam/app-gallery/git/refs/heads/submission/pr_review_queue",
+      "GET /repos/sam/app-gallery/contents/apps/sam_pr_review_queue/recording.json",
+      "PUT /repos/sam/app-gallery/contents/apps/sam_pr_review_queue/recording.json",
       "POST /repos/archestra-ai/app-gallery/pulls",
     ]);
 
@@ -226,18 +202,18 @@ describe("submitRecordingToAppGallery", () => {
     expect(preflight?.url).toContain("state=all");
 
     // The committed file is the bundle itself, byte for byte, with the
-    // submitter's GitHub identity stamped on (the mocked /user has no public
-    // name, so it lands as null). A blob carries content only — no path, no
-    // prior sha — which is what makes overwriting a leftover file a non-event.
-    const upload = calls.find(
-      (c) => c.method === "POST" && c.url.includes("/git/blobs"),
-    ) as { body: { content: string; encoding: string } };
+    // submitter's GitHub identity stamped on (the mocked /user has no
+    // public name, so it lands as null) — and a fresh branch uploads
+    // without an update sha.
+    const upload = calls.find((c) => c.method === "PUT") as {
+      body: { content: string; branch: string };
+    };
     const expected = makeBundle();
     expect(JSON.parse(atob(upload.body.content))).toEqual({
       ...expected,
       meta: { ...expected.meta, github: { login: "sam", name: null } },
     });
-    expect(upload.body.encoding).toBe("base64");
+    expect(upload.body).not.toHaveProperty("sha");
 
     // The PR names the participant's branch as head and carries the metadata.
     const pr = calls.at(-1)?.body as {
@@ -270,9 +246,9 @@ describe("submitRecordingToAppGallery", () => {
 
     await submit();
 
-    const upload = calls.find(
-      (c) => c.method === "POST" && c.url.includes("/git/blobs"),
-    ) as { body: { content: string } };
+    const upload = calls.find((c) => c.method === "PUT") as {
+      body: { content: string };
+    };
     const uploaded = JSON.parse(atob(upload.body.content));
     expect(uploaded.meta.github).toEqual({
       login: "sam",
@@ -302,18 +278,11 @@ describe("submitRecordingToAppGallery", () => {
 
     await submit({ bundle });
 
-    const uploads = calls.filter(
-      (c) => c.method === "POST" && c.url.includes("/git/blobs"),
-    );
+    const uploads = calls.filter((c) => c.method === "PUT");
     expect(uploads).toHaveLength(2);
-    // Blobs carry no path; the tree is where the files get their names.
-    const tree = calls.find((c) => c.url.includes("/git/trees")) as {
-      body: { tree: { path: string }[] };
-    };
-    expect(tree.body.tree.map((entry) => entry.path)).toEqual([
-      "apps/sam_pr_review_queue/recording.json",
-      "apps/sam_pr_review_queue/thumbnail.webp",
-    ]);
+    expect(uploads[1].url).toContain(
+      "/contents/apps/sam_pr_review_queue/thumbnail.webp",
+    );
     // The committed bytes are the re-encoded (4:5-framed) frame, not the raw
     // canvas capture — the framing runs before upload.
     expect(atob((uploads[1].body as { content: string }).content)).toBe(
@@ -334,9 +303,7 @@ describe("submitRecordingToAppGallery", () => {
 
     await submit({ bundle });
 
-    const uploads = calls.filter(
-      (c) => c.method === "POST" && c.url.includes("/git/blobs"),
-    );
+    const uploads = calls.filter((c) => c.method === "PUT");
     // The automatic path stamps the submitter's GitHub identity onto the
     // bundle before serializing it (the dialog does the same for the manual
     // download) — mirror that here so this compares against what the
@@ -348,13 +315,9 @@ describe("submitRecordingToAppGallery", () => {
     const files = await buildGallerySubmissionFiles(stamped);
     // Same files, same order, same bytes — the manual fallback's downloads
     // must match what the automatic path commits, byte for byte.
-    // Blobs are content-only, so the NAMES come from the tree entries.
-    const tree = calls.find((c) => c.url.includes("/git/trees")) as {
-      body: { tree: { path: string }[] };
-    };
-    expect(tree.body.tree.map((entry) => entry.path.split("/").at(-1))).toEqual(
-      files.map((f) => f.name),
-    );
+    expect(
+      uploads.map((u) => new URL(u.url).pathname.split("/").at(-1)),
+    ).toEqual(files.map((f) => f.name));
     for (const [i, upload] of uploads.entries()) {
       const uploadedBinary = atob((upload.body as { content: string }).content);
       const fileBinary = Array.from(files[i].bytes, (b) =>
@@ -528,18 +491,9 @@ describe("submitRecordingToAppGallery", () => {
     expect(
       calls.filter((c) => c.method === "GET" && c.url.includes("/pulls?")),
     ).toHaveLength(2);
-    // …and the commit replaced the stale file instead of failing on it. No
-    // prior-blob-sha dance is needed any more: the tree writes the path
-    // outright, over whatever was there.
-    const tree = calls.find((c) => c.url.includes("/git/trees")) as {
-      body: { base_tree: string; tree: { path: string }[] };
-    };
-    expect(tree.body.tree.map((entry) => entry.path)).toContain(
-      "apps/sam_pr_review_queue/recording.json",
-    );
-    // Committed onto the branch's CURRENT head, not where it started — the
-    // leftover branch has moved since it was created.
-    expect(tree.body.base_tree).toBe("base-tree-sha");
+    // …and the upload replaced the stale file instead of failing on it.
+    const upload = calls.find((c) => c.method === "PUT");
+    expect((upload?.body as { sha?: string }).sha).toBe("stale-blob-sha");
   });
 
   test("a pull request that appears mid-run stops the flow and names it", async () => {
@@ -687,6 +641,59 @@ describe("submitRecordingToAppGallery", () => {
     await expect(submit()).rejects.toThrow(
       "GitHub refused the request. Validation Failed",
     );
+  });
+
+  test("retries a ruleset-validation timeout on the upload", async () => {
+    let attempts = 0;
+    stubGithub({
+      respond: (method, url) => {
+        if (method !== "PUT" || !url.includes("/contents/")) return null;
+        attempts++;
+        // GitHub's ruleset check giving up rather than judging the request —
+        // the refusal a large submission draws, which a manual "Try again"
+        // clears. Deliberately NOT a 5xx: what marks it retriable is the
+        // message, since a 5xx is already covered by its own rule.
+        return attempts === 1
+          ? Response.json(
+              { message: "Timed out validating rule" },
+              { status: 422 },
+            )
+          : null;
+      },
+    });
+
+    vi.useFakeTimers();
+    try {
+      const submission = submit();
+      // Enough passes for the flow to reach the failed upload, schedule its
+      // wait, and burn it — without the suite paying the delay in real time.
+      for (let i = 0; i < 4; i++) await vi.advanceTimersByTimeAsync(1_500);
+      await expect(submission).resolves.toEqual({
+        prUrl: "https://github.com/archestra-ai/app-gallery/pull/7",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    // Retried once, then it went through — the participant never saw it.
+    expect(attempts).toBe(2);
+  });
+
+  test("a verdict on the upload surfaces immediately instead of retrying", async () => {
+    let attempts = 0;
+    stubGithub({
+      respond: (method, url) => {
+        if (method !== "PUT" || !url.includes("/contents/")) return null;
+        attempts++;
+        return Response.json({ message: "size is too large" }, { status: 422 });
+      },
+    });
+
+    await expect(submit()).rejects.toThrow(
+      "GitHub refused the request. size is too large",
+    );
+    // Retrying a verdict spends the participant's time and buries the one
+    // message that tells them what to fix.
+    expect(attempts).toBe(1);
   });
 });
 

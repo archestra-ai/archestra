@@ -331,79 +331,24 @@ export async function submitRecordingToAppGallery(params: {
   // The same builder backs the manual-submission download, so what a
   // participant hand-uploads is byte-identical to what this commits.
   const dir = gallerySubmissionFolder(viewer.login, appSlug);
-  // Uploaded through the GIT DATA API (blob → tree → commit → ref), not the
-  // contents API.
-  //
-  // The contents API accepts a whole file in one PUT and gives out long before
-  // its advertised ceiling: a 45MB recording came back "Sorry, the file is too
-  // large to be processed. Consider creating/updating the file in a local
-  // clone", and one merely large enough to slow the commit came back "Timed
-  // out validating rule" instead. Neither is a limit the size gate could have
-  // predicted, and both read to a participant as the platform being broken.
-  // The blob endpoint is GitHub's documented path for large files and takes
-  // the whole recording, which is what makes a minutes-long cut submittable at
-  // all.
-  //
-  // It also lands the submission as ONE commit instead of one per file, so a
-  // half-finished submission can't exist on the branch: either the ref moves
-  // or nothing did.
-  const files = await buildGallerySubmissionFiles(bundleWithGithub);
-  onProgress({
-    stage: "upload",
-    label: `Uploading ${files.length === 1 ? files[0].name : `${files.length} files`} to ${forkName}…`,
-  });
-  // Where the branch actually is now — `baseRef` is where it STARTED, and a
-  // reused branch from a rejected submission has moved since. Committing onto
-  // a stale parent would drop whatever is already there.
-  const head = await gh<{ object: { sha: string } }>(
-    "GET",
-    // Not encodeURIComponent: the branch is a ref PATH, and escaping its
-    // slash to %2F asks GitHub for a ref that does not exist.
-    `${forkPath}/git/ref/heads/${branch}`,
-  );
-  const headCommit = await gh<{ tree: { sha: string } }>(
-    "GET",
-    `${forkPath}/git/commits/${head.object.sha}`,
-  );
-  const blobs: { path: string; sha: string }[] = [];
-  for (const file of files) {
-    const blob = await githubWithRetry(() =>
-      gh<{ sha: string }>("POST", `${forkPath}/git/blobs`, {
+  for (const file of await buildGallerySubmissionFiles(bundleWithGithub)) {
+    onProgress({
+      stage: "upload",
+      label: `Uploading ${file.name} to ${forkName}…`,
+    });
+    // Updating a file left by an earlier (rejected) submission needs its
+    // blob sha; on a fresh branch the lookup 404s and the PUT creates it.
+    const path = `${forkPath}/contents/${dir}/${file.name}`;
+    const priorSha = await fetchExistingFileSha({ gh, path, branch });
+    await githubWithRetry(() =>
+      gh("PUT", path, {
+        message: `Add ${file.name} for: ${bundle.app.name}`,
         content: toBase64(file.bytes),
-        encoding: "base64",
+        branch,
+        ...(priorSha ? { sha: priorSha } : {}),
       }),
     );
-    blobs.push({ path: `${dir}/${file.name}`, sha: blob.sha });
   }
-  // `base_tree` carries the rest of the repository forward, so the commit
-  // touches only these paths — and an existing file at one of them is
-  // overwritten without needing its prior blob sha first.
-  const tree = await githubWithRetry(() =>
-    gh<{ sha: string }>("POST", `${forkPath}/git/trees`, {
-      base_tree: headCommit.tree.sha,
-      tree: blobs.map((blob) => ({
-        path: blob.path,
-        mode: "100644",
-        type: "blob",
-        sha: blob.sha,
-      })),
-    }),
-  );
-  const commit = await githubWithRetry(() =>
-    gh<{ sha: string }>("POST", `${forkPath}/git/commits`, {
-      message: `Add submission for: ${bundle.app.name}`,
-      tree: tree.sha,
-      parents: [head.object.sha],
-    }),
-  );
-  // Not forced: the parent above is this branch's real head, so a fast-forward
-  // is the only correct outcome. A refusal means something else moved the
-  // branch mid-run, which must surface rather than be overwritten.
-  await githubWithRetry(() =>
-    gh("PATCH", `${forkPath}/git/refs/heads/${branch}`, {
-      sha: commit.sha,
-    }),
-  );
 
   onProgress({
     stage: "pr",
@@ -579,8 +524,9 @@ function thumbnailFile(thumbnail: {
 }
 
 /**
- * The one size rule a submission must meet — GitHub's own per-file limit on
- * its contents API, NOT a product quota. Returns the refusal message when a
+ * The one size rule a submission must meet — GitHub's own ceiling on what a
+ * single API request may carry, NOT a product quota. Returns the refusal
+ * message when a
  * file is over it, null when everything fits. The dialog calls this at the
  * Share click so nobody signs in to GitHub only to learn the recording
  * can't be uploaded.
@@ -1406,7 +1352,7 @@ function base64ToBytes(base64: string): Uint8Array {
  * despite GitHub documenting 100MB blobs. The common factor is the request
  * itself — 57MB base64-encodes to ~76MB on the wire, and no REST endpoint
  * takes that. Changing endpoints cannot raise this ceiling; only a smaller
- * bundle can.
+ * bundle can, which is why the upload stays on the plain contents API.
  */
 const GITHUB_MAX_REQUEST_BODY_BYTES = 45 * 1024 * 1024;
 

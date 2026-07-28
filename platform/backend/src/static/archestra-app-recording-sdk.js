@@ -271,9 +271,10 @@
    * must not cost three times a one-canvas app. Content that outruns even the
    * maximum quantizer settles at the frame shed's line — this ceiling times
    * its headroom — so the ceiling is sized from there: a worst-case
-   * all-motion 30s cut stays ~14MB of video (~19MB as a shared bundle), and
-   * a minutes-long raw take stays under the ~100MB ceilings of the render
-   * and gallery-upload paths. Content below the ceiling never feels it.
+   * all-motion minute stays ~7.5MB of video (~10MB as a bundle, ~13MB once
+   * the upload base64s that bundle again), so what governs the number is what
+   * the gallery upload can carry. Content below the ceiling never feels it —
+   * a static UI encodes to skip blocks whatever the ceiling says.
    */
   // Sized by what GitHub will accept, not by what looks best. The bundle
   // stores video base64 in JSON and the upload base64-encodes that JSON again,

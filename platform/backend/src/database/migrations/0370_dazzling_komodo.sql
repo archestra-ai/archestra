@@ -1,1 +1,0 @@
-ALTER TABLE "mcp_server" ALTER COLUMN "catalog_id" DROP NOT NULL;

@@ -1,5 +1,5 @@
 {
-  "id": "75a429ef-904d-4c53-b4b2-f81cc96d2376",
+  "id": "a4a49a36-1e08-434d-a6cd-09cfbeb0fee5",
   "prevId": "3075114d-d5de-4c31-8cf5-5b8519c101a4",
   "version": "7",
   "dialect": "postgresql",
@@ -10135,7 +10135,7 @@
           "name": "catalog_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "server_type": {
           "name": "server_type",

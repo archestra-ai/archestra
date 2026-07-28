@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { AgentConnectorAssignment } from "@/types";
+import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 
 class AgentConnectorAssignmentModel {
   static async findByAgent(
@@ -28,6 +29,7 @@ class AgentConnectorAssignmentModel {
       .insert(schema.agentConnectorAssignmentsTable)
       .values({ agentId, connectorId })
       .onConflictDoNothing();
+    agentKnowledgeSourcesCache.invalidate(agentId);
   }
 
   static async unassign(
@@ -46,6 +48,7 @@ class AgentConnectorAssignmentModel {
         agentId: schema.agentConnectorAssignmentsTable.agentId,
       });
 
+    agentKnowledgeSourcesCache.invalidate(agentId);
     return rows.length > 0;
   }
 
@@ -57,6 +60,7 @@ class AgentConnectorAssignmentModel {
         agentId: schema.agentConnectorAssignmentsTable.agentId,
       });
 
+    agentKnowledgeSourcesCache.invalidate(agentId);
     return rows.length;
   }
 
@@ -79,43 +83,56 @@ class AgentConnectorAssignmentModel {
       .delete(schema.agentConnectorAssignmentsTable)
       .where(eq(schema.agentConnectorAssignmentsTable.agentId, agentId));
 
-    if (connectorIds.length === 0) return;
-
-    await db
-      .insert(schema.agentConnectorAssignmentsTable)
-      .values(
-        connectorIds.map((connectorId) => ({
-          agentId,
-          connectorId,
-        })),
-      )
-      .onConflictDoNothing();
+    if (connectorIds.length > 0) {
+      await db
+        .insert(schema.agentConnectorAssignmentsTable)
+        .values(
+          connectorIds.map((connectorId) => ({
+            agentId,
+            connectorId,
+          })),
+        )
+        .onConflictDoNothing();
+    }
+    agentKnowledgeSourcesCache.invalidate(agentId);
   }
 
   static async syncForAgentAssignments(params: {
     connectorId: string;
     agentIds: string[];
   }): Promise<void> {
-    await db
+    // Returning the previously-assigned agents so their cached
+    // knowledge-source presence is invalidated along with the new set's.
+    const removed = await db
       .delete(schema.agentConnectorAssignmentsTable)
       .where(
         eq(
           schema.agentConnectorAssignmentsTable.connectorId,
           params.connectorId,
         ),
-      );
-
-    if (params.agentIds.length === 0) return;
-
-    await db
-      .insert(schema.agentConnectorAssignmentsTable)
-      .values(
-        params.agentIds.map((agentId) => ({
-          agentId,
-          connectorId: params.connectorId,
-        })),
       )
-      .onConflictDoNothing();
+      .returning({
+        agentId: schema.agentConnectorAssignmentsTable.agentId,
+      });
+
+    if (params.agentIds.length > 0) {
+      await db
+        .insert(schema.agentConnectorAssignmentsTable)
+        .values(
+          params.agentIds.map((agentId) => ({
+            agentId,
+            connectorId: params.connectorId,
+          })),
+        )
+        .onConflictDoNothing();
+    }
+
+    for (const agentId of new Set([
+      ...removed.map((r) => r.agentId),
+      ...params.agentIds,
+    ])) {
+      agentKnowledgeSourcesCache.invalidate(agentId);
+    }
   }
 
   /**

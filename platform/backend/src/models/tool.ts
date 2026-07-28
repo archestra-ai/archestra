@@ -70,6 +70,7 @@ import type {
 import { isUniqueConstraintError } from "@/utils/db";
 import AgentModel from "./agent";
 import AgentConnectorAssignmentModel from "./agent-connector-assignment";
+import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -3709,6 +3710,13 @@ class ToolModel {
   private static async getAgentHasKnowledgeSources(
     agentId: string,
   ): Promise<boolean> {
+    // Cached: this runs on every gateway tools listing, and the two
+    // junction-table lookups below were a measurable share of gateway DB
+    // traffic. Assignment writes invalidate (see agentKnowledgeSourcesCache).
+    const cached = agentKnowledgeSourcesCache.get(agentId);
+    if (cached !== undefined) {
+      return cached;
+    }
     const [kbRows, connectorIds] = await Promise.all([
       db
         .select({
@@ -3719,7 +3727,9 @@ class ToolModel {
         .limit(1),
       AgentConnectorAssignmentModel.getConnectorIds(agentId),
     ]);
-    return kbRows.length > 0 || connectorIds.length > 0;
+    const hasKnowledgeSources = kbRows.length > 0 || connectorIds.length > 0;
+    agentKnowledgeSourcesCache.set(agentId, hasKnowledgeSources);
+    return hasKnowledgeSources;
   }
 
   /**

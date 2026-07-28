@@ -34,6 +34,7 @@ vi.mock("@/lib/app.query", () => ({
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/teams/team.query");
+vi.mock("@/lib/organization.query");
 
 // Both children have their own behavior-focused suites (app-tools-editor.test
 // covers the editor; the environment selector fetches environments). The stub
@@ -74,7 +75,8 @@ vi.mock("@/components/environment-selector", () => ({
   EnvironmentSelector: () => null,
 }));
 
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useOrganizationMembers } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { AppSettingsForm } from "./app-settings-form";
 
@@ -85,6 +87,7 @@ const APP = {
   scope: "personal",
   enabled: true,
   teams: [],
+  users: [],
   environmentId: null,
 } as unknown as Parameters<typeof AppSettingsForm>[0]["app"];
 
@@ -123,6 +126,12 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "author-id" } },
+  } as unknown as ReturnType<typeof useSession>);
+  vi.mocked(useOrganizationMembers).mockReturnValue({
+    data: [],
+  } as unknown as ReturnType<typeof useOrganizationMembers>);
   vi.mocked(useAssignableTeams).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useAssignableTeams>);
@@ -147,6 +156,9 @@ describe("AppSettingsForm save", () => {
       body: {
         scope: "personal",
         teamIds: [],
+        // Both share lists are always sent, so switching away from Teams or
+        // Users revokes what it left behind instead of stranding it.
+        userIds: [],
         name: "Budget v2",
         description: "Team budget tracker",
         environmentId: null,

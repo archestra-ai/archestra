@@ -272,6 +272,7 @@ export function ShareConversationDialog({
           appIds={appIds}
           visibility={visibility}
           teamIds={teamIds}
+          userIds={userIds}
         />
 
         {hasVisibleShareLink && shareLink && (

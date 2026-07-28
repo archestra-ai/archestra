@@ -1,5 +1,6 @@
 "use client";
 
+import { TOOL_SEARCH_MAX_LENGTH } from "@archestra/shared";
 import { ToolCallPolicies } from "@/app/mcp/tool-guardrails/_parts/tool-call-policies";
 import { ToolResultPolicies } from "@/app/mcp/tool-guardrails/_parts/tool-result-policies";
 import { FormDialog } from "@/components/form-dialog";
@@ -41,6 +42,15 @@ export function EditPolicyDialog({
     toolId,
     canUpdateToolPolicy === true,
   );
+  // `toolName` comes from whichever surface opened this dialog — a blocked call
+  // in chat, an app's tool row — and the name-based fallback below sends it to
+  // the API as a query-string filter. Node counts the request line against
+  // `maxHeaderSize`, so a value that is not really a tool name (a malformed
+  // tool call carrying its arguments, say) is refused by the HTTP parser with a
+  // 431 before any route runs: an opaque "API request failed" in the console
+  // and nothing at all in the server logs. Nothing that long can match a tool,
+  // so the lookup is skipped rather than sent and lost.
+  const nameIsSearchable = toolName.length <= TOOL_SEARCH_MAX_LENGTH;
   const { data } = useAllProfileTools({
     filters: {
       search: toolName,
@@ -49,7 +59,11 @@ export function EditPolicyDialog({
     pagination: {
       limit: 50,
     },
-    enabled: canUpdateToolPolicy === true && !toolId && !!profileId,
+    enabled:
+      canUpdateToolPolicy === true &&
+      !toolId &&
+      !!profileId &&
+      nameIsSearchable,
   });
 
   const tool =

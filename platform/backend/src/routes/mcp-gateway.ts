@@ -8,6 +8,13 @@ import config from "@/config";
 import { AgentModel, McpToolCallModel } from "@/models";
 import { UuidOrSlugSchema } from "@/types";
 import {
+  deriveStatePrincipal,
+  extractMrtrParams,
+  readClientCapabilities,
+  supportsInputRequired,
+  verifyRequestState,
+} from "./mcp-gateway.mrtr";
+import {
   buildDiscoverResult,
   isDiscoverRequest,
   MCP_PROTOCOL_VERSION_HEADER,
@@ -126,6 +133,10 @@ async function handleMcpPostRequest(
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
+
+  // Read from the raw body: the SDK's request schemas drop unknown params, so
+  // these are gone by the time a request handler runs.
+  const mrtrParams = extractMrtrParams(body);
   const isInitialize =
     typeof body?.method === "string" && body.method === "initialize";
 
@@ -142,7 +153,17 @@ async function handleMcpPostRequest(
 
   try {
     // Create fresh server and transport for each request (stateless mode)
-    const { server } = await createAgentServer(profileId, tokenAuthContext);
+    const { server } = await createAgentServer({
+      agentId: profileId,
+      tokenAuth: tokenAuthContext,
+      mrtr: {
+        // Only a 2026-07-28 client can act on an InputRequiredResult. A legacy
+        // client keeps the in-band elicitation it has always used.
+        enabled: revision === STATELESS_MCP_PROTOCOL_REVISION,
+        inputResponses: mrtrParams.inputResponses,
+        clientCapabilities: readClientCapabilities(body),
+      },
+    });
     const transport = createStatelessTransport(profileId);
 
     fastify.log.trace({ profileId }, "Connecting server to transport");
@@ -387,6 +408,48 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           error: { code: routingError.code, message: routingError.message },
           id: (request.body as { id?: string | number })?.id ?? null,
         };
+      }
+
+      // An MRTR retry carries state the gateway minted. It travels through the
+      // client, so it is verified — signature, principal, expiry, and the
+      // originating request — before anything acts on it.
+      const retryState = extractMrtrParams(request.body).requestState;
+      if (retryState) {
+        const method = (request.body as { method?: string })?.method;
+        if (!supportsInputRequired(method)) {
+          reply.status(400);
+          return {
+            jsonrpc: "2.0",
+            error: {
+              code: -32602,
+              message: `requestState is not valid on "${method}".`,
+            },
+            id: (request.body as { id?: string | number })?.id ?? null,
+          };
+        }
+
+        const verified = verifyRequestState({
+          state: retryState,
+          principal: deriveStatePrincipal({
+            userId: tokenAuth.userId,
+            tokenId: tokenAuth.tokenId,
+            organizationId: tokenAuth.organizationId,
+          }),
+          method: method as string,
+          requestParams: (request.body as { params?: unknown })?.params,
+        });
+
+        if (!verified.ok) {
+          reply.status(400);
+          return {
+            jsonrpc: "2.0",
+            error: {
+              code: -32602,
+              message: `Invalid requestState (${verified.reason}).`,
+            },
+            id: (request.body as { id?: string | number })?.id ?? null,
+          };
+        }
       }
 
       // `server/discover` replaces the `initialize` handshake under 2026-07-28.

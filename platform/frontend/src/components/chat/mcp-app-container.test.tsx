@@ -1,6 +1,6 @@
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mock heavy dependencies before module import ─────────────────────────────
@@ -1329,6 +1329,39 @@ describe("McpAppSection unavailable owned app", () => {
     expect(
       screen.queryByText(/isn't available to you/i),
     ).not.toBeInTheDocument();
+    expect(document.querySelector("iframe")).not.toBeInTheDocument();
+  });
+
+  it("still shows the message while the right panel is hosting apps", async () => {
+    // A live render defers to the panel whenever there is a portal target. An
+    // unavailable app must not: it is filtered out of the panel's list, so
+    // deferring renders it nowhere and the pill is left explaining nothing.
+    function OpenPanel() {
+      const { setPortalTarget } = useApps();
+      useEffect(() => {
+        setPortalTarget(document.createElement("div"));
+      }, [setPortalTarget]);
+      return null;
+    }
+
+    await act(async () => {
+      render(
+        <AppsProvider apps={[]}>
+          <OpenPanel />
+          <McpAppSection
+            {...defaultProps}
+            appId={APP_ID}
+            appName="Dashboard"
+            toolCallId="tc1"
+            preloadedResource={preloadedResource}
+          />
+        </AppsProvider>,
+      );
+    });
+
+    expect(
+      screen.getByText(/Dashboard isn't available to you/i),
+    ).toBeInTheDocument();
     expect(document.querySelector("iframe")).not.toBeInTheDocument();
   });
 });

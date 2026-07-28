@@ -343,6 +343,12 @@ export function McpAppEntryContent({
     !isPanelSurface &&
     !portalTarget &&
     (standalone || (!!toolCallId && isAppOpen(toolCallId)));
+  // The unavailable placeholder does not defer to the panel the way a live
+  // render does. An app that won't mount is dropped from the panel's list, so
+  // deferring would render it nowhere at all — leaving a pill that explains
+  // nothing, which is worse than the wrong message this replaced.
+  const showUnavailableInline =
+    !isPanelSurface && (standalone || (!!toolCallId && isAppOpen(toolCallId)));
 
   // Reconstruct McpCallToolResult for AppFrame. Owned apps get none — the
   // management tool's result is not app data.
@@ -406,7 +412,7 @@ export function McpAppEntryContent({
   // give the one action that resolves the likely one. Styled neutrally for the
   // same reason: not knowing which case this is, it should not look like a fault.
   if (ownedAppUnavailable) {
-    if (!expandedInline) return null;
+    if (!showUnavailableInline) return null;
     return (
       <div className="mt-2 flex w-full flex-col items-start gap-2">
         <div className="rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground">

@@ -190,7 +190,8 @@ export function geminiResponseToOpenai(
   }> = [];
   let text = "";
 
-  for (const part of candidate?.content.parts ?? []) {
+  // Blocked candidates carry a `finishReason` but no `content`.
+  for (const part of candidate?.content?.parts ?? []) {
     if ("text" in part && part.text) {
       text += part.text;
       continue;
@@ -212,6 +213,22 @@ export function geminiResponseToOpenai(
   const promptTokens = response.usageMetadata?.promptTokenCount ?? 0;
   const completionTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
 
+  // A prompt-blocked reply carries only `promptFeedback` — no candidates, so no
+  // `finishReason` to map. Without this branch it would report a plain "stop"
+  // and the client would see an empty completion with no sign it was filtered.
+  const promptBlockReason = response.promptFeedback?.blockReason;
+  const promptBlocked =
+    candidate === undefined &&
+    promptBlockReason !== undefined &&
+    promptBlockReason !== "BLOCK_REASON_UNSPECIFIED";
+
+  let finishReason = mapGeminiFinishReason(candidate?.finishReason);
+  if (toolCalls.length > 0) {
+    finishReason = "tool_calls";
+  } else if (promptBlocked) {
+    finishReason = "content_filter";
+  }
+
   return {
     id: ctx.chatcmplId,
     object: "chat.completion",
@@ -221,10 +238,7 @@ export function geminiResponseToOpenai(
       {
         index: 0,
         logprobs: null,
-        finish_reason:
-          toolCalls.length > 0
-            ? "tool_calls"
-            : mapGeminiFinishReason(candidate?.finishReason),
+        finish_reason: finishReason,
         message: {
           role: "assistant",
           content: text || null,

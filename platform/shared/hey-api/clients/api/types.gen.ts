@@ -872,7 +872,7 @@ export type GeminiGenerateContentResponseInput = {
     /**
      * Candidate responses from the model
      */
-    candidates: Array<{
+    candidates?: Array<{
         /**
          *
          * The base structured datatype containing multi-part content of a message.
@@ -882,7 +882,7 @@ export type GeminiGenerateContentResponseInput = {
          * https://ai.google.dev/api/caching#Content
          *
          */
-        content: {
+        content?: {
             /**
              * The role of the author of this content.
              */
@@ -1116,7 +1116,7 @@ export type GeminiGenerateContentResponseInput = {
          * https://ai.google.dev/api/generate-content#FinishReason
          *
          */
-        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS';
+        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS' | string;
         safetyRatings?: Array<{
             /**
              *
@@ -1155,7 +1155,7 @@ export type GeminiGenerateContentResponseInput = {
         /**
          * Index of the candidate in the list of response candidates.
          */
-        index: number;
+        index?: number;
         /**
          * Details the reason why the model stopped generating tokens. This is populated only when finishReason is set.
          */
@@ -1168,8 +1168,8 @@ export type GeminiGenerateContentResponseInput = {
         /**
          * Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason
          */
-        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'IMAGE_SAFETY';
-        safetyRatings: Array<{
+        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'IMAGE_SAFETY' | string;
+        safetyRatings?: Array<{
             /**
              *
              * The category for this setting
@@ -6716,7 +6716,7 @@ export type GeminiGenerateContentResponse = {
     /**
      * Candidate responses from the model
      */
-    candidates: Array<{
+    candidates?: Array<{
         /**
          *
          * The base structured datatype containing multi-part content of a message.
@@ -6726,7 +6726,7 @@ export type GeminiGenerateContentResponse = {
          * https://ai.google.dev/api/caching#Content
          *
          */
-        content: {
+        content?: {
             /**
              * The role of the author of this content.
              */
@@ -6960,7 +6960,7 @@ export type GeminiGenerateContentResponse = {
          * https://ai.google.dev/api/generate-content#FinishReason
          *
          */
-        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS';
+        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS' | string;
         safetyRatings?: Array<{
             /**
              *
@@ -6999,7 +6999,7 @@ export type GeminiGenerateContentResponse = {
         /**
          * Index of the candidate in the list of response candidates.
          */
-        index: number;
+        index?: number;
         /**
          * Details the reason why the model stopped generating tokens. This is populated only when finishReason is set.
          */
@@ -7012,8 +7012,8 @@ export type GeminiGenerateContentResponse = {
         /**
          * Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason
          */
-        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'IMAGE_SAFETY';
-        safetyRatings: Array<{
+        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'IMAGE_SAFETY' | string;
+        safetyRatings?: Array<{
             /**
              *
              * The category for this setting

@@ -5,25 +5,27 @@ import { closeOpenDialogs } from "../utils";
 
 /**
  * Saving a catalog edit can restart the servers running it, and the form warns
- * about that with an inline confirm bar. Which bar it shows comes from
+ * about that with an inline confirm bar. Which bar appears comes from
  * `computeCascadeOutcome`, a frontend mirror of the backend gate that decides
- * what the save actually does. The two have drifted before: after the backend stopped treating execution-config
- * drift on a multi-tenant catalog as needing user input, the mirror kept
- * classifying it as "manual", so bumping a docker image told admins the change
- * "needs a new value" and parked the rollout behind a second click — for a
- * value no dialog ever collects.
+ * what the save actually does — two implementations of one rule, which can
+ * disagree without either side erroring.
  *
- * These specs pin the bar against a live install, which is the one place the
- * two layers are observed together. Tenancy is the only difference between the
- * first two cases, so they fail in opposite directions if the mirror regresses.
+ * A live install is the only place they are observed together, so that is what
+ * these pin. Tenancy is the sole difference between the two cases and their
+ * expectations are opposites, so a mirror that stops distinguishing it fails
+ * one of them whichever way it drifts.
  *
- * Deliberately no wait on pod health: what's under test is the save
- * decision, which the route makes from the catalog row and the existence of an
- * install. Tying these to a pod coming up would import that flakiness for no
- * added assertion.
+ * Deliberately no wait on pod health: what's under test is the save decision,
+ * which the route makes from the catalog row and the existence of an install.
+ * Tying these to a pod coming up would import that flakiness for no added
+ * assertion.
  */
 
 const BASE_IMAGE = "alpine:3.20";
+// Real published tags. An invented one (`alpine:3.20-e2e-1`) leaves the shared
+// deployment wedged in ImagePullBackOff long after the test, and enough of
+// those saturate the cluster the next run needs.
+const BUMP_TAGS = ["alpine:3.21", "alpine:3.19", "alpine:3.18"];
 
 type InstalledFixture = { catalogId: string; serverId: string; name: string };
 
@@ -74,21 +76,25 @@ async function createCatalogWithInstall(
   return { catalogId: catalog.id, serverId: server.id, name };
 }
 
+/** Uninstall first, then delete the catalog — the install owns the deployment,
+ *  and a catalog delete alone leaves it running. Failures are reported rather
+ *  than swallowed: silent cleanup leaks accumulate into a cluster that fails
+ *  the next run for unrelated-looking reasons. */
 async function destroyFixture(page: Page, fixture: InstalledFixture | null) {
   if (!fixture) return;
-  await page.request
-    .delete(getE2eRequestUrl(`/api/mcp_server/${fixture.serverId}`), {
-      headers: { Origin: UI_BASE_URL },
-    })
-    .catch(() => undefined);
-  await page.request
-    .delete(
-      getE2eRequestUrl(`/api/internal_mcp_catalog/${fixture.catalogId}`),
-      {
-        headers: { Origin: UI_BASE_URL },
-      },
-    )
-    .catch(() => undefined);
+  for (const suffix of [
+    `/api/mcp_server/${fixture.serverId}`,
+    `/api/internal_mcp_catalog/${fixture.catalogId}`,
+  ]) {
+    const response = await page.request
+      .delete(getE2eRequestUrl(suffix), { headers: { Origin: UI_BASE_URL } })
+      .catch((error: Error) => error);
+    if (response instanceof Error) {
+      console.warn(`cleanup DELETE ${suffix} threw: ${response.message}`);
+    } else if (!response.ok()) {
+      console.warn(`cleanup DELETE ${suffix} -> ${response.status()}`);
+    }
+  }
 }
 
 /**
@@ -123,7 +129,7 @@ async function bumpImageUntilConfirmBar(
     const imageInput = page.getByRole("textbox", { name: "Image (optional)" });
     // The catalog query has resolved once it has populated this field.
     await expect(imageInput).toHaveValue(/^alpine:/, { timeout: 60_000 });
-    await imageInput.fill(`${BASE_IMAGE}-e2e-${attempt}`);
+    await imageInput.fill(BUMP_TAGS[(attempt - 1) % BUMP_TAGS.length]);
 
     await page.getByRole("button", { name: "Save Changes" }).click();
     await expect(page.getByText(barText)).toBeVisible({ timeout: 15_000 });
@@ -132,6 +138,11 @@ async function bumpImageUntilConfirmBar(
 
 async function readInstall(page: Page, serverId: string) {
   return apiJson(page, "get", `/api/mcp_server/${serverId}`);
+}
+
+async function readCatalog(page: Page, catalogId: string) {
+  const items = await apiJson(page, "get", "/api/internal_mcp_catalog");
+  return items.find((i: { id: string }) => i.id === catalogId);
 }
 
 test.describe("MCP catalog edit — reinstall confirm bar", () => {
@@ -175,11 +186,14 @@ test.describe("MCP catalog edit — reinstall confirm bar", () => {
     await confirm.click();
     await expect(confirm).toBeHidden({ timeout: 60_000 });
 
-    // Backend agreement. "new-input" is the reason that makes the reinstall
-    // dialog collect credentials, and the auto path cannot produce it — a
-    // failed recreate downgrades to "restart", never to owed input.
-    const install = await readInstall(adminPage, fixture.serverId);
-    expect(install.reinstallReason).not.toBe("new-input");
+    // Backend agreement, read the moment the save settles. The deferring path
+    // writes `catalogReinstallRequired` inside the request, before responding,
+    // so a `true` here means the backend parked the rollout while the bar
+    // above promised to run it. The recreate this edit does trigger runs in
+    // the background and only touches the flag if it fails, which takes longer
+    // than this read.
+    const catalog = await readCatalog(adminPage, fixture.catalogId);
+    expect(catalog.catalogReinstallRequired).toBe(false);
   });
 
   test("single-tenant image bump still defers to a per-install reinstall", async ({
@@ -208,8 +222,10 @@ test.describe("MCP catalog edit — reinstall confirm bar", () => {
     await confirm.click();
     await expect(confirm).toBeHidden({ timeout: 60_000 });
 
-    // Flagged for an explicit restart, and stored credentials stay valid —
-    // the route writes both fields before the response, so this is settled.
+    // "restart" is the reason that reuses the stored secret bag; "new-input" is
+    // the one that makes the reinstall dialog collect values. Polled rather
+    // than read once: the bar disappearing proves the mutation resolved, not
+    // that this read observes the row it wrote.
     await expect
       .poll(
         async () =>

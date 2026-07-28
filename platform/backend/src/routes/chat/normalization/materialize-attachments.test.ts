@@ -1060,6 +1060,109 @@ test("an inline data: binary document is dropped with a notice on a non-native e
   expect(part.url).toBeUndefined();
 });
 
+test("keeps an attachment over the inline budget out of the request", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  // A file the model reads perfectly well, just too big to send. Storing it and
+  // sending it are separate decisions — it stays in the Files panel instead of
+  // being inlined and refused by the provider.
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.from("%PDF-1.4 pretend this is large", "utf8");
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "manual.pdf",
+    mimeType: "application/pdf",
+    // Declared size drives the decision; the row's bytes stay small so the
+    // test doesn't allocate tens of megabytes.
+    fileSize: 45 * 1024 * 1024,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "application/pdf",
+          filename: "manual.pdf",
+        },
+      ],
+    },
+  ];
+
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    // The model reads PDFs — size is the only reason to divert this one.
+    ingestibleMimeTypes: INGESTIBLE,
+    sandboxAvailable: false,
+    inlineByteLimit: 16 * 1024 * 1024,
+  });
+
+  const part = expectPresent(output[0].parts?.[0]);
+  expect(part.type).toBe("text");
+  expect(part.text).toContain("too large to send to this model");
+  expect(part.text).toContain("Files panel");
+  expect(part.text).toContain(JSON.stringify("manual.pdf"));
+  // Never embedded, so it can't inflate the request past the provider's cap.
+  expect(part.text).not.toContain("data:");
+  expect(part.url).toBeUndefined();
+});
+
+test("inlines a readable attachment that fits the inline budget", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.from("%PDF-1.4 small", "utf8");
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "small.pdf",
+    mimeType: "application/pdf",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const output = await materializeAttachments({
+    messages: [
+      {
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: `/api/chat/attachments/${row.id}/content`,
+            mediaType: "application/pdf",
+            filename: "small.pdf",
+          },
+        ],
+      },
+    ],
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    sandboxAvailable: false,
+    inlineByteLimit: 16 * 1024 * 1024,
+  });
+
+  expect(expectPresent(output[0].parts?.[0]).url).toBe(
+    `data:application/pdf;base64,${bytes.toString("base64")}`,
+  );
+});
+
 test("reads bytes only for attachments that are actually inlined", async ({
   makeAgent,
   makeConversation,

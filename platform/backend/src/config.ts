@@ -8,6 +8,7 @@ import {
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
   DEFAULT_APP_NAME,
+  DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
   DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
   DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
@@ -2136,6 +2137,16 @@ const config = {
     attachmentStorageBytesLimit: parsePositiveInt(
       process.env.ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT,
       DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+    ),
+    /**
+     * Largest attachment that may be embedded in a provider request. Separate
+     * from the storage cap on purpose: a file over this is still stored and
+     * downloadable, it just never reaches the model. Keeps a big upload from
+     * inflating a request past what the provider accepts.
+     */
+    attachmentInlineBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT,
+      DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
     ),
   },
   enterpriseFeatures: {

@@ -50,6 +50,11 @@ export async function materializeAttachments({
   // the sandbox or `run_command`: a file it can't read inline gets a neutral
   // "not processed this turn" notice instead. Fail-closed (defaults off).
   sandboxAvailable = false,
+  // Ceiling on what one attachment may contribute to the provider request.
+  // Storing a file and sending it are separate decisions: a heavier file stays
+  // in the Files panel (and the sandbox, when it fits) instead of inflating the
+  // request past what the provider accepts. Unbounded when omitted.
+  inlineByteLimit = Number.POSITIVE_INFINITY,
 }: {
   messages: ChatMessage[];
   conversationId: string;
@@ -57,6 +62,7 @@ export async function materializeAttachments({
   applyAnthropicCacheControl?: boolean;
   rerouteBinaryDocsToSandbox?: boolean;
   sandboxAvailable?: boolean;
+  inlineByteLimit?: number;
 }): Promise<ChatMessage[]> {
   const refIds = collectRefIds(messages);
   // Even when there are no refs to rehydrate, we still walk every part —
@@ -80,10 +86,16 @@ export async function materializeAttachments({
       .map((a) => [a.id, a]),
   );
 
+  const policy: MaterializePolicy = {
+    ingestibleMimeTypes,
+    applyAnthropicCacheControl,
+    rerouteBinaryDocsToSandbox,
+    sandboxAvailable,
+    inlineByteLimit,
+  };
+
   const inlinedIds = Array.from(byId.values())
-    .filter((attachment) =>
-      willInline(attachment, ingestibleMimeTypes, rerouteBinaryDocsToSandbox),
-    )
+    .filter((attachment) => bypassReason(attachment, policy) === null)
     .map((attachment) => attachment.id);
   const withData =
     await ConversationAttachmentModel.findByIdsWithData(inlinedIds);
@@ -96,40 +108,50 @@ export async function materializeAttachments({
     return {
       ...message,
       parts: message.parts.flatMap((part) =>
-        materializePart(
-          part,
-          byId,
-          bytesById,
-          ingestibleMimeTypes,
-          applyAnthropicCacheControl,
-          rerouteBinaryDocsToSandbox,
-          sandboxAvailable,
-        ),
+        materializePart({ part, byId, bytesById, policy }),
       ),
     };
   });
 }
 
+type MaterializePolicy = {
+  ingestibleMimeTypes: Set<string> | undefined;
+  applyAnthropicCacheControl: boolean;
+  rerouteBinaryDocsToSandbox: boolean;
+  sandboxAvailable: boolean;
+  inlineByteLimit: number;
+};
+
 /**
- * Whether this attachment's bytes end up embedded in the prompt as a `data:`
- * URL. When false it becomes a text notice built from metadata alone, so its
- * bytes are never read. Mirrors the branch in {@link materializePart}.
+ * Why this attachment is kept out of the provider request, or `null` when its
+ * bytes are embedded as a `data:` URL. A bypassed attachment becomes a text
+ * notice built from metadata alone, so its bytes are never read.
+ *
+ * Every reason is a form of "the model can't take this": the wrong type for
+ * its modalities, a content block the endpoint rejects, or simply too many
+ * bytes. None of them is a failure — the file is stored either way, and the
+ * notice points the model and user at it.
  */
-function willInline(
+function bypassReason(
   attachment: Attachment,
-  ingestibleMimeTypes: Set<string> | undefined,
-  rerouteBinaryDocsToSandbox: boolean,
-): boolean {
+  policy: MaterializePolicy,
+): "unreadable" | "too_large_to_send" | null {
+  const { ingestibleMimeTypes, rerouteBinaryDocsToSandbox, inlineByteLimit } =
+    policy;
   const modelCannotRead =
     ingestibleMimeTypes !== undefined &&
     !ingestibleMimeTypes.has(attachment.mimeType);
   const endpointRejectsBinaryDoc =
     rerouteBinaryDocsToSandbox &&
     isNonInlineableBinaryDocMimeType(attachment.mimeType);
-  const textTooLargeToInline =
-    isInlineableTextMimeType(attachment.mimeType) &&
-    attachment.fileSize > INLINE_TEXT_MAX_BYTES;
-  return !(modelCannotRead || endpointRejectsBinaryDoc || textTooLargeToInline);
+  if (modelCannotRead || endpointRejectsBinaryDoc) return "unreadable";
+
+  // Text has a tighter budget than binary: an over-budget text document would
+  // blow the context window even though the provider would accept the bytes.
+  const textBudget = isInlineableTextMimeType(attachment.mimeType)
+    ? Math.min(INLINE_TEXT_MAX_BYTES, inlineByteLimit)
+    : inlineByteLimit;
+  return attachment.fileSize > textBudget ? "too_large_to_send" : null;
 }
 
 function collectRefIds(messages: ChatMessage[]): string[] {
@@ -146,15 +168,22 @@ function collectRefIds(messages: ChatMessage[]): string[] {
   return Array.from(ids);
 }
 
-function materializePart(
-  part: ChatMessagePart,
-  byId: Map<string, Attachment>,
-  bytesById: Map<string, Buffer>,
-  ingestibleMimeTypes: Set<string> | undefined,
-  applyAnthropicCacheControl: boolean,
-  rerouteBinaryDocsToSandbox: boolean,
-  sandboxAvailable: boolean,
-): ChatMessagePart | ChatMessagePart[] {
+function materializePart({
+  part,
+  byId,
+  bytesById,
+  policy,
+}: {
+  part: ChatMessagePart;
+  byId: Map<string, Attachment>;
+  bytesById: Map<string, Buffer>;
+  policy: MaterializePolicy;
+}): ChatMessagePart | ChatMessagePart[] {
+  const {
+    applyAnthropicCacheControl,
+    rerouteBinaryDocsToSandbox,
+    sandboxAvailable,
+  } = policy;
   if (part.type !== "file" || typeof part.url !== "string") {
     return { ...part };
   }
@@ -202,17 +231,13 @@ function materializePart(
     return { ...part };
   }
 
-  // A file the selected model can't read must not be inlined as a document the
-  // provider would reject (which hard-errors the whole turn). Three cases,
-  // spelled out in `willInline`: the model's modalities don't cover this mime;
-  // an Anthropic-compatible third-party endpoint can't accept the binary
-  // `document` block it would become; or it is a text document over the inline
-  // budget. In each the file lives in the Files panel — and in the sandbox when
-  // it fits — so reference it there rather than embedding it.
-  if (
-    !willInline(attachment, ingestibleMimeTypes, rerouteBinaryDocsToSandbox)
-  ) {
-    return referenceSandboxFilePart(attachment, sandboxAvailable);
+  // Anything the model can't take — wrong type, a block the endpoint rejects,
+  // or too many bytes — is kept out of the request rather than sent and
+  // refused, which would hard-error the whole turn. The file is stored either
+  // way, so reference it in the Files panel (and the sandbox when it fits).
+  const bypass = bypassReason(attachment, policy);
+  if (bypass) {
+    return referenceSandboxFilePart(attachment, bypass, sandboxAvailable);
   }
 
   // findByIdsWithData normalizes bytea to Buffer at the model boundary
@@ -354,30 +379,37 @@ function unavailableBinaryDocPart(
  */
 function referenceSandboxFilePart(
   attachment: Attachment,
+  reason: "unreadable" | "too_large_to_send",
   sandboxAvailable: boolean,
 ): ChatMessagePart {
   const sizeBytes = attachment.fileSize;
   const name = JSON.stringify(attachment.originalName ?? "attachment");
   const label = `${name} (${attachment.mimeType}, ${sizeBytes} bytes)`;
   const limit = config.skillsSandbox.artifactBytesLimit;
+  // Say which it is: "can't read this type" and "too big to send" call for
+  // different follow-ups from the model.
+  const why =
+    reason === "too_large_to_send"
+      ? "is too large to send to this model"
+      : "can't be read by this model";
 
   if (!sandboxAvailable) {
     return {
       type: "text",
-      text: `[Attachment ${label} can't be read by this model and no code sandbox is available to process it this turn. It is saved in this conversation's Files panel, where the user can view and download it. Let the user know you can't read its contents.]`,
+      text: `[Attachment ${label} ${why} and no code sandbox is available to process it this turn. It is saved in this conversation's Files panel, where the user can view and download it. Let the user know you can't read its contents.]`,
     };
   }
 
   if (sizeBytes > limit) {
     return {
       type: "text",
-      text: `[Attachment ${label} can't be shown to this model and is too large (limit ${limit} bytes) to use in your sandbox this turn. The user can still download it from this conversation's Files panel.]`,
+      text: `[Attachment ${label} ${why} and is too large (limit ${limit} bytes) to use in your sandbox this turn. The user can still download it from this conversation's Files panel.]`,
     };
   }
 
   return {
     type: "text",
-    text: `[Attachment ${label} can't be shown to this model inline. It has been placed in your sandbox under ${SKILL_SANDBOX_ATTACHMENTS_DIR} — run \`ls ${SKILL_SANDBOX_ATTACHMENTS_DIR}\` to find it (the filename may be sanitized), then read it with run_command.]`,
+    text: `[Attachment ${label} ${why}, so it is not shown inline. It has been placed in your sandbox under ${SKILL_SANDBOX_ATTACHMENTS_DIR} — run \`ls ${SKILL_SANDBOX_ATTACHMENTS_DIR}\` to find it (the filename may be sanitized), then read it with run_command.]`,
   };
 }
 

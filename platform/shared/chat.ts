@@ -591,6 +591,15 @@ export const INLINE_TEXT_MAX_BYTES = 256 * 1024;
 export const DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES = 50 * 1024 * 1024;
 
 /**
+ * Default ceiling on what a single attachment may contribute to a provider
+ * request. Storing a file and sending it to a model are separate questions:
+ * anything heavier than this stays in the Files panel (and the sandbox, when it
+ * fits) rather than being embedded in the prompt, so a large upload can never
+ * inflate a request past what the provider accepts.
+ */
+export const DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES = 16 * 1024 * 1024;
+
+/**
  * Why an upload is not acceptable, or `null` when it is. Single source of truth
  * for the attachment policy shared by the backend ingest gate (authoritative)
  * and the frontend composer (mirrors it for UX). A file is acceptable when the

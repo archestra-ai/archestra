@@ -1214,8 +1214,13 @@ Enable polling compatibility only when your database endpoint cannot keep sessio
 
 - **`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`** - Largest single file a chat upload may store as a conversation attachment.
   - Default: `52428800` (50 MiB)
-  - This is the only size gate on a chat upload. A file above `ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT` is not rejected: it skips sandbox staging and is still stored in the conversation's Files panel, where the user can download it. The agent is told it cannot read the contents.
+  - This is the only size gate on a chat upload. A file the model cannot read, one too big for the sandbox, or one over `ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT` is not rejected: it is stored in the conversation's Files panel, where the user can download it, and the agent is told it is there.
   - Raise `ARCHESTRA_API_BODY_LIMIT` alongside this. Uploads arrive base64-encoded (about 4/3 the byte size) in the same request as the conversation history, so the body limit must exceed this value by a comfortable margin.
+
+- **`ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT`** - Largest single attachment that may be embedded in a request to the LLM provider.
+  - Default: `16777216` (16 MiB)
+  - Storing a file and sending it to a model are separate decisions. A file above this is still stored and downloadable; it just never reaches the model, so a large upload cannot inflate a request past what the provider accepts.
+  - The effective ceiling is the lower of this value and the provider's own documented request limit (Anthropic 32 MiB, Bedrock 20 MiB).
 
 - **`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`** - Upper bound on the output tokens an agent turn (interactive chat and A2A/headless) may generate.
   - Default: `32768`

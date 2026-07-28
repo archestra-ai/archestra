@@ -168,7 +168,10 @@ const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (cachedServer) {
           server = cachedServer;
         } else {
-          ({ server } = await createAgentServer(agentId, sessionTokenAuth));
+          ({ server } = await createAgentServer({
+            agentId: agentId,
+            tokenAuth: sessionTokenAuth,
+          }));
         }
 
         const transport = createStatelessTransport(agentId);
@@ -177,7 +180,10 @@ const mcpProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         } catch {
           // Server still bound to previous transport (rare concurrent request);
           // replace it with a fresh one.
-          ({ server } = await createAgentServer(agentId, sessionTokenAuth));
+          ({ server } = await createAgentServer({
+            agentId: agentId,
+            tokenAuth: sessionTokenAuth,
+          }));
           await server.connect(transport);
         }
         serverHealthy = true;

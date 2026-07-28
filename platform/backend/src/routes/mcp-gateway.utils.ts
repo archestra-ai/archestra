@@ -113,6 +113,7 @@ import {
   InputRequiredSignal,
   type InputResponses,
   isInputRequiredSignal,
+  MAX_INPUT_ROUNDS,
 } from "./mcp-gateway.mrtr";
 import {
   buildGatewayServerCapabilities,
@@ -247,6 +248,8 @@ export async function createAgentServer(params: {
     enabled: boolean;
     inputResponses?: InputResponses;
     clientCapabilities?: unknown;
+    /** Rounds already spent, read from a verified requestState. */
+    round?: number;
   };
 }): Promise<{ server: McpServer; agent: AgentInfo }> {
   const { agentId, tokenAuth, mrtr } = params;
@@ -1008,9 +1011,27 @@ export async function createAgentServer(params: {
             });
           }
 
+          const nextRound = (mrtr?.round ?? 0) + 1;
+          if (nextRound > MAX_INPUT_ROUNDS) {
+            // Each round re-runs the tool from the top, so an upstream that
+            // keeps asking would re-execute its side effects once per round
+            // and prompt the user indefinitely. Stop rather than loop.
+            logger.warn(
+              { agentId, toolName: name, rounds: nextRound },
+              "MCP tool exceeded the input-round cap; refusing to elicit again",
+            );
+            return structuredToolErrorResult({
+              error: {
+                type: "generic",
+                message: `This tool asked for input more than ${MAX_INPUT_ROUNDS} times without completing.`,
+              },
+            });
+          }
+
           return buildInputRequiredResult({
             inputRequests: { [error.key]: error.request },
             requestState: encodeRequestState({
+              round: nextRound,
               principal: deriveStatePrincipal({
                 userId: tokenAuth?.userId,
                 tokenId: tokenAuth?.tokenId,

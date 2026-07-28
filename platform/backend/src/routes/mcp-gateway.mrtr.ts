@@ -39,6 +39,17 @@ export const MRTR_SUPPORTED_METHODS = new Set([
  */
 export const REQUEST_STATE_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * How many times one logical call may bounce back for input.
+ *
+ * Each retry re-runs the tool from the top — the gateway keeps no continuation,
+ * which is the whole point of MRTR — so an upstream that elicits on every
+ * attempt would re-execute whatever it does before eliciting, once per round,
+ * while prompting the user forever. The cap bounds both. It is deliberately
+ * small: a tool needing more than a few rounds is asking the wrong way.
+ */
+export const MAX_INPUT_ROUNDS = 3;
+
 const STATE_VERSION = 1;
 
 /**
@@ -74,6 +85,8 @@ export type RequestStatePayload = {
   exp: number;
   /** Keys issued in the matching `inputRequests`. */
   keys: string[];
+  /** How many rounds of input this call has already taken. */
+  round: number;
 };
 
 export type VerifyFailure =
@@ -161,9 +174,17 @@ export function encodeRequestState(params: {
   method: string;
   requestParams: unknown;
   keys: string[];
+  round?: number;
   now?: number;
 }): string {
-  const { principal, method, requestParams, keys, now = Date.now() } = params;
+  const {
+    principal,
+    method,
+    requestParams,
+    keys,
+    round = 1,
+    now = Date.now(),
+  } = params;
 
   const payload: RequestStatePayload = {
     v: STATE_VERSION,
@@ -172,6 +193,7 @@ export function encodeRequestState(params: {
     paramsDigest: digestRequestParams(method, requestParams),
     exp: now + REQUEST_STATE_TTL_MS,
     keys: [...keys].sort(),
+    round,
   };
 
   const encoded = base64UrlEncode(JSON.stringify(payload));

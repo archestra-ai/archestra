@@ -130,6 +130,8 @@ async function handleMcpPostRequest(
   profileId: string,
   tokenAuthContext: TokenAuthContext | undefined,
   resolution: ProtocolResolution,
+  /** Rounds already spent on this call, from a verified requestState. */
+  mrtrRound: number,
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
@@ -161,6 +163,7 @@ async function handleMcpPostRequest(
         // client keeps the in-band elicitation it has always used.
         enabled: revision === STATELESS_MCP_PROTOCOL_REVISION,
         inputResponses: mrtrParams.inputResponses,
+        round: mrtrRound,
         clientCapabilities: readClientCapabilities(body),
       },
     });
@@ -413,6 +416,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // An MRTR retry carries state the gateway minted. It travels through the
       // client, so it is verified — signature, principal, expiry, and the
       // originating request — before anything acts on it.
+      let mrtrRound = 0;
       const retryState = extractMrtrParams(request.body).requestState;
       if (retryState) {
         const method = (request.body as { method?: string })?.method;
@@ -438,6 +442,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           method: method as string,
           requestParams: (request.body as { params?: unknown })?.params,
         });
+
+        if (verified.ok) {
+          mrtrRound = verified.payload.round;
+        }
 
         if (!verified.ok) {
           reply.status(400);
@@ -515,6 +523,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         profileId,
         tokenAuthContext,
         resolution,
+        mrtrRound,
       );
     },
   );

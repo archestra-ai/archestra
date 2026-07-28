@@ -172,6 +172,43 @@ describe("requestState rejection", () => {
   });
 });
 
+describe("input-round cap", () => {
+  test("state records which round it belongs to", () => {
+    const result = verify(mint({ round: 2 }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected verification to succeed");
+    expect(result.payload.round).toBe(2);
+  });
+
+  test("a first round is recorded when the caller does not say", () => {
+    const result = verify(mint());
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("expected verification to succeed");
+    expect(result.payload.round).toBe(1);
+  });
+
+  test("the round cannot be raised without resigning the state", () => {
+    // Each round re-runs the tool, so a client that could inflate the counter
+    // could drive unbounded re-execution.
+    const state = mint({ round: 1 });
+    const [encoded, signature] = state.split(".");
+    const payload = JSON.parse(
+      Buffer.from(encoded, "base64url").toString("utf8"),
+    );
+    payload.round = 99;
+    const forged = Buffer.from(JSON.stringify(payload), "utf8").toString(
+      "base64url",
+    );
+
+    expect(verify(`${forged}.${signature}`)).toEqual({
+      ok: false,
+      reason: "bad_signature",
+    });
+  });
+});
+
 describe("deriveStatePrincipal", () => {
   test("prefers the individual user", () => {
     expect(

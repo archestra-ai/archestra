@@ -1,5 +1,4 @@
 import {
-  APP_RECORDING_MAX_EXPORT_MS,
   APP_RECORDING_RENDER_FPS,
   APP_RECORDING_RENDER_REGION_SELECTOR,
   APP_RECORDING_RENDER_ROUTE,
@@ -309,10 +308,11 @@ async function renderWithBrowser(params: {
     // already applied. The raw recording is a different and always larger
     // number — refusing a session trimmed to 14s for being 35s long is what
     // measuring that one gets you.
-    if (durationMs > APP_RECORDING_MAX_EXPORT_MS) {
+    const maxFinalCutMs = config.hackathonRecorder.maxFinalCutMs;
+    if (durationMs > maxFinalCutMs) {
       throw new ApiError(
         400,
-        `This cut runs ${Math.round(durationMs / 1000)}s. Trim it to ${Math.round(APP_RECORDING_MAX_EXPORT_MS / 1000)} seconds or less to export a video.`,
+        `This cut runs ${Math.round(durationMs / 1000)}s. Trim it to ${Math.round(maxFinalCutMs / 1000)} seconds or less to export a video.`,
       );
     }
 

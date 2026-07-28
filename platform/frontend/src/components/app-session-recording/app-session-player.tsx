@@ -2,7 +2,6 @@
 
 import {
   APP_RECORDING_DESCRIPTION_MAX_CHARS,
-  APP_RECORDING_MAX_EXPORT_MS,
   APP_RECORDING_RENDER_REGION_ATTR,
   APP_RECORDING_VIEWPORT_ASPECT,
   ARCHESTRA_MCP_CATALOG_ID,
@@ -81,6 +80,7 @@ import {
   useAppRecordingEditor,
   useEnhanceAppRecording,
   useIsRenderingAppRecordingVideo,
+  useMaxFinalCutMs,
   useRenderAppRecordingVideo,
 } from "@/lib/app-session-recording/app-recording.query";
 import {
@@ -96,7 +96,7 @@ import {
 } from "@/lib/app-session-recording/app-recording-binary";
 import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
-import { useMcpSandboxDomain } from "@/lib/config/config.query";
+import { useFeature, useMcpSandboxDomain } from "@/lib/config/config.query";
 import { DEFAULT_APP_LOGO } from "@/lib/hooks/use-app-name";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { cn } from "@/lib/utils";
@@ -565,7 +565,12 @@ export function AppSessionPlayer({
     () => (recording ? buildPlayback(recording).duration : 0),
     [recording],
   );
-  const tooLongToExport = finalCutMs > APP_RECORDING_MAX_EXPORT_MS;
+  const videoDownloadEnabled = useFeature("hackathonVideoDownloadEnabled");
+  const maxFinalCutMs = useMaxFinalCutMs();
+  // The one label every length surface quotes, formatted like the durations
+  // beside it (m:ss) so "runs 4:12 / trim to 3:00" reads as one comparison.
+  const finalCutLimitLabel = formatMs(maxFinalCutMs);
+  const tooLongToExport = finalCutMs > maxFinalCutMs;
   const exportBlocked = descriptionEditing || surfaceEditing || tooLongToExport;
 
   // The quick action behind the tooltip pills (and the timeline's limit
@@ -574,10 +579,10 @@ export function AppSessionPlayer({
   // one undoable step.
   const trimToExportLimit = useCallback(() => {
     if (!recording) return;
-    const next = trimCutsToExportLimit(recording, APP_RECORDING_MAX_EXPORT_MS);
+    const next = trimCutsToExportLimit(recording, maxFinalCutMs);
     if (!next) return;
     editor.applyEdits({ cuts: next, chat: recording.edits?.chat });
-  }, [recording, editor]);
+  }, [recording, editor, maxFinalCutMs]);
   // The over-length tooltips end with the fix, not just the diagnosis.
   // Quietly: an invitation to trim, not an alarm — neutral until hovered.
   const trimPill = (
@@ -593,7 +598,7 @@ export function AppSessionPlayer({
       onPointerDown={trimToExportLimit}
     >
       <Scissors className="size-3" />
-      Trim to {MAX_EXPORT_SECONDS}s
+      Trim to {finalCutLimitLabel}
     </button>
   );
 
@@ -837,78 +842,85 @@ export function AppSessionPlayer({
                     aria-hidden="true"
                   />
 
-                  <Tooltip>
-                    {/* The wrapper is what makes the blocked case explain
+                  {/* The offline video export is off unless the deployment
+                      opts in (a render drives a headless browser for as long as
+                      the cut runs). Absent, not disabled: a greyed button with
+                      no way to enable it is a dead end, and the tour skips any
+                      stop whose element is missing, so its "Video download"
+                      step drops out with it. */}
+                  {videoDownloadEnabled && (
+                    <Tooltip>
+                      {/* The wrapper is what makes the blocked case explain
                         itself: a disabled button fires no pointer events, so
                         the tooltip below — the only thing that says WHY the
                         export is unavailable — never opened on the one button
                         that needed it. Same span the play and replay buttons
                         use. */}
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="group size-7 text-muted-foreground hover:text-foreground"
-                          aria-label={
-                            rendering
-                              ? "Cancel preparing the video"
-                              : "Download a video of this session"
-                          }
-                          data-tour="download"
-                          // Live while rendering — this is the way back out of
-                          // a render started by mistake, and the spinner is
-                          // where the author looks for it.
-                          disabled={!rendering && exportBlocked}
-                          onClick={() => {
-                            if (rendering) {
-                              cancelAppRecordingVideoRender();
-                              return;
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="group size-7 text-muted-foreground hover:text-foreground"
+                            aria-label={
+                              rendering
+                                ? "Cancel preparing the video"
+                                : "Download a video of this session"
                             }
-                            if (!recording) return;
-                            renderVideo.mutate({
-                              conversationId: authoringConversationId,
-                              title,
-                            });
-                          }}
-                        >
-                          {rendering ? (
-                            <>
-                              <Loader
-                                size={14}
-                                className="group-hover:hidden"
-                              />
-                              <X className="hidden size-4 group-hover:block" />
-                            </>
-                          ) : (
-                            <DownloadIcon className="size-4" />
-                          )}
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[260px] text-xs">
-                      {rendering ? (
-                        "Preparing your video — click to cancel."
-                      ) : tooLongToExport ? (
-                        <>
-                          This cut runs {formatMs(finalCutMs)}. Trim it to{" "}
-                          {MAX_EXPORT_SECONDS} seconds or less to export a
-                          video.
-                          {trimPill}
-                        </>
-                      ) : descriptionEditing || surfaceEditing ? (
-                        "Finish editing to export a video."
-                      ) : (
-                        "Downloads a video of this session with your edits applied. Takes up to a minute."
-                      )}
-                    </TooltipContent>
-                  </Tooltip>
+                            data-tour="download"
+                            // Live while rendering — this is the way back out of
+                            // a render started by mistake, and the spinner is
+                            // where the author looks for it.
+                            disabled={!rendering && exportBlocked}
+                            onClick={() => {
+                              if (rendering) {
+                                cancelAppRecordingVideoRender();
+                                return;
+                              }
+                              if (!recording) return;
+                              renderVideo.mutate({
+                                conversationId: authoringConversationId,
+                                title,
+                              });
+                            }}
+                          >
+                            {rendering ? (
+                              <>
+                                <Loader
+                                  size={14}
+                                  className="group-hover:hidden"
+                                />
+                                <X className="hidden size-4 group-hover:block" />
+                              </>
+                            ) : (
+                              <DownloadIcon className="size-4" />
+                            )}
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[260px] text-xs">
+                        {rendering ? (
+                          "Preparing your video — click to cancel."
+                        ) : tooLongToExport ? (
+                          <>
+                            This cut runs {formatMs(finalCutMs)}. Trim it to{" "}
+                            {finalCutLimitLabel} or less to export a video.
+                            {trimPill}
+                          </>
+                        ) : descriptionEditing || surfaceEditing ? (
+                          "Finish editing to export a video."
+                        ) : (
+                          "Downloads a video of this session with your edits applied. Takes up to a minute."
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
 
                   {/* Renders nothing unless the deployment offers the gallery.
                       Blocked exactly like the download — mid-edit AND over the
-                      export length cap: the gallery renders the submitted cut
-                      to video downstream, so the same 30-second bound applies. */}
+                      final-cut length limit: the gallery renders the submitted
+                      cut to video downstream, so the same bound applies. */}
                   <AppGalleryShareButton
                     conversationId={authoringConversationId}
                     disabled={exportBlocked}
@@ -916,7 +928,7 @@ export function AppSessionPlayer({
                       tooLongToExport ? (
                         <>
                           This cut runs {formatMs(finalCutMs)}. Trim it to{" "}
-                          {MAX_EXPORT_SECONDS} seconds or less to submit.
+                          {finalCutLimitLabel} or less to submit.
                           {trimPill}
                         </>
                       ) : (
@@ -1451,16 +1463,18 @@ function PlayerSurface({
   // The timeline's export-limit mark: where played time crosses the allowed
   // length on the FULL strip, and the one-click trim down to it. Committed
   // with the same optimistic-cuts bridge every other timeline edit uses.
+  const maxFinalCutMs = useMaxFinalCutMs();
+  const finalCutLimitLabel = formatMs(maxFinalCutMs);
   const exportLimitBaseMs =
-    duration > APP_RECORDING_MAX_EXPORT_MS
-      ? basePlayback.toPlaybackMs(playback.toRawMs(APP_RECORDING_MAX_EXPORT_MS))
+    duration > maxFinalCutMs
+      ? basePlayback.toPlaybackMs(playback.toRawMs(maxFinalCutMs))
       : null;
   const trimToExportLimit = useCallback(() => {
-    const next = trimCutsToExportLimit(recording, APP_RECORDING_MAX_EXPORT_MS);
+    const next = trimCutsToExportLimit(recording, maxFinalCutMs);
     if (!next) return;
     setPendingCuts(next);
     applyEdits({ cuts: next, chat: chatEdits });
-  }, [recording, applyEdits, chatEdits]);
+  }, [recording, applyEdits, chatEdits, maxFinalCutMs]);
 
   // ── Chat edits: presentation-only operations over the captured transcript
   // (drop a message, override a user message's text, hide the AI-enhanced
@@ -2974,6 +2988,7 @@ function PlayerSurface({
                     : null
             }
             exportLimit={review ? null : exportLimitBaseMs}
+            exportLimitLabel={finalCutLimitLabel}
             onSeek={review ? seekPlayback : seekBase}
             onScrub={review ? scrubPlayback : scrubBase}
             onCut={cutBaseRange}
@@ -3473,6 +3488,7 @@ function ReplayTimeline({
   saving,
   readOnly = false,
   exportLimit,
+  exportLimitLabel,
   onSeek,
   onScrub,
   demo,
@@ -3505,6 +3521,8 @@ function ReplayTimeline({
   /** Where played time crosses the export cap on this strip — the clickable
    * "trim to the limit" mark; null while the cut already fits. */
   exportLimit: number | null;
+  /** The configured limit, formatted — the mark and its tooltip quote it. */
+  exportLimitLabel: string;
   /** Editing anything pauses the replay and locks the play controls. */
   onEditingChange?: (editing: boolean) => void;
   onSeek: (ms: number) => void;
@@ -4060,12 +4078,12 @@ function ReplayTimeline({
               >
                 <span className="flex h-4 items-center gap-0.5 rounded-full border bg-background px-1 font-medium text-[10px] text-muted-foreground shadow-sm transition-colors group-hover:border-destructive/50 group-hover:text-destructive">
                   <Scissors className="size-2.5" />
-                  {MAX_EXPORT_SECONDS}s
+                  {exportLimitLabel}
                 </span>
               </button>
             </TooltipTrigger>
             <TooltipContent className="text-xs">
-              Trim to the max allowed length ({MAX_EXPORT_SECONDS}s)
+              Trim to the max allowed length ({exportLimitLabel})
             </TooltipContent>
           </Tooltip>
         )}
@@ -6218,15 +6236,12 @@ function stableStringify(value: unknown): string {
     .join(",")}}`;
 }
 
-function formatMs(ms: number): string {
+export function formatMs(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
-
-/** The export ceiling in whole seconds, for the copy that quotes it. */
-const MAX_EXPORT_SECONDS = Math.round(APP_RECORDING_MAX_EXPORT_MS / 1000);
 
 /**
  * Point the recorded document's platform assets at the origin that will
@@ -6428,7 +6443,7 @@ const PLAYER_TOUR_STEP_KEY = "app-recording-player-tour-step";
  * elements. Each key matches a `data-tour` attribute on the element it
  * explains; stops whose element isn't on screen are skipped.
  */
-const playerTourSteps = (modKey: "Cmd" | "Ctrl") => [
+const playerTourSteps = (modKey: "Cmd" | "Ctrl", limitLabel: string) => [
   {
     key: "description",
     title: "App description",
@@ -6485,7 +6500,7 @@ const playerTourSteps = (modKey: "Cmd" | "Ctrl") => [
     key: "download",
     title: "Video download",
     text: "Final cut with all your edits applied.",
-    note: `Keep your final cut under ${MAX_EXPORT_SECONDS} seconds.`,
+    note: `Keep your final cut under ${limitLabel}.`,
   },
   // Absent (and skipped) on deployments that don't offer the gallery — the
   // share button renders nothing there.
@@ -6493,7 +6508,7 @@ const playerTourSteps = (modKey: "Cmd" | "Ctrl") => [
     key: "share",
     title: "Submit to Archestra for review!",
     text: "Authorize Archestra to Create a Pull Request to Apps Hackathon repository on GitHub for you.\nFinal cut with all your edits applied.",
-    note: `Keep your final cut under ${MAX_EXPORT_SECONDS} seconds.`,
+    note: `Keep your final cut under ${limitLabel}.`,
   },
   {
     key: "tour",
@@ -6526,7 +6541,11 @@ function PlayerTour({
   // Shortcut copy names the platform's own modifier — Cmd exists only on Mac
   // keyboards; Windows/Linux read Ctrl.
   const { modKey } = usePlatform();
-  const steps = useMemo(() => playerTourSteps(modKey), [modKey]);
+  const limitLabel = formatMs(useMaxFinalCutMs());
+  const steps = useMemo(
+    () => playerTourSteps(modKey, limitLabel),
+    [modKey, limitLabel],
+  );
   // Resume where a mid-tour player close left off (progress persists per
   // browser until the tour finishes or is skipped).
   const [index, setIndex] = useState(() => {
@@ -6536,7 +6555,7 @@ function PlayerTour({
       10,
     );
     return Number.isFinite(stored) && stored > 0
-      ? Math.min(stored, playerTourSteps("Ctrl").length - 1)
+      ? Math.min(stored, playerTourSteps("Ctrl", "").length - 1)
       : 0;
   });
   useEffect(() => {

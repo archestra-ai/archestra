@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
@@ -1452,6 +1453,44 @@ export function parseHackathonRecorderEnabled(params: {
 }
 
 /**
+ * The longest final cut a recording may be submitted or exported at, in ms.
+ *
+ * One bound behind every length surface — the submit button, the submission
+ * flow's own backstop, the video export, the editor's trim-to-limit control and
+ * the tour's "keep it under N" note — so a deployment that raises it raises all
+ * of them together and no surface can quote a number the checks disagree with.
+ *
+ * Rejects a value that is not a positive integer number of milliseconds rather
+ * than silently falling back: a typo here would otherwise read as the platform
+ * ignoring the operator's limit. A hard floor keeps a fat-fingered tiny value
+ * from making every recording unsubmittable.
+ *
+ * Undocumented on purpose, like the rest of the recorder — not in .env.example
+ * or the deployment docs.
+ *
+ * @public — exported for testability
+ */
+export function parseHackathonRecorderMaxFinalCutMs(
+  value: string | undefined,
+): number {
+  const raw = value?.trim();
+  if (!raw) return APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < MIN_HACKATHON_FINAL_CUT_MS) {
+    throw new Error(
+      `ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS must be a whole number of milliseconds >= ${MIN_HACKATHON_FINAL_CUT_MS}, got "${raw}"`,
+    );
+  }
+  return parsed;
+}
+
+/**
+ * Floor for the configurable final-cut limit. Below a few seconds nothing is a
+ * demo and every recording would be born over the line.
+ */
+const MIN_HACKATHON_FINAL_CUT_MS = 5_000;
+
+/**
  * Defaults for the "Archestra App Gallery" sharing surface — the PUBLIC
  * device-flow OAuth client id and the public gallery repository. Baked in so
  * every non-enterprise deployment (local dev and OSS included) offers sharing
@@ -2112,6 +2151,23 @@ const config = {
      */
     overrideActive:
       process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
+    /**
+     * Offering the offline VIDEO export (the player's download button and the
+     * render endpoints behind it). Off unless a deployment opts in: a render
+     * drives a headless Chromium for as long as the cut runs, which is a cost
+     * no deployment should pay by surprise — and the gallery submission, which
+     * is what the hackathon actually needs, does not depend on it.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
+     */
+    videoDownloadEnabled:
+      process.env.ARCHESTRA_HACKATHON_RECORDER_VIDEO_DOWNLOAD_ENABLED ===
+      "true",
+    /** The longest final cut that may be submitted or exported (see the parser). */
+    maxFinalCutMs: parseHackathonRecorderMaxFinalCutMs(
+      process.env.ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS,
+    ),
     /**
      * Sharing a recording to the public App Gallery (a PR filed on the
      * participant's own GitHub account). Both values default to the official

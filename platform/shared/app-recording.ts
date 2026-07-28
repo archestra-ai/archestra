@@ -473,15 +473,22 @@ export const APP_RECORDING_RENDER_ROUTE = "/app-recording-render";
 export const APP_RECORDING_RENDER_FPS = 24;
 
 /**
- * The longest final cut that can be exported to video.
+ * The DEFAULT longest final cut a recording may be submitted or exported at.
  *
- * Every frame costs about the same to render, so the export's cost is its
- * length: half a minute of video is already a minute of rendering. The limit is
- * as much editorial as technical — a session demo that runs longer than this
- * stops being a demo — so the editor asks for it up front and the export button
- * holds the line rather than starting a render that outlives anyone's patience.
+ * A deployment overrides it with `ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS`
+ * — this constant is the fallback and the shape of the bound, never the
+ * authority. Read the resolved value from the config (`hackathonMaxFinalCutMs`
+ * on the frontend, `config.hackathonRecorder.maxFinalCutMs` on the backend), so
+ * every surface that quotes a number to the author quotes the SAME number the
+ * checks enforce.
+ *
+ * The limit is as much editorial as technical: a session demo that runs long
+ * stops being a demo, and every frame costs about the same to render, so an
+ * export's cost is its length. The editor asks for a short cut up front and the
+ * submit/export buttons hold the line rather than starting work that outlives
+ * anyone's patience.
  */
-export const APP_RECORDING_MAX_EXPORT_MS = 30_000;
+export const APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS = 180_000;
 
 /**
  * The largest recording bundle (its serialized JSON) the export surfaces

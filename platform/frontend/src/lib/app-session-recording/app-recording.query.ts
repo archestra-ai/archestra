@@ -1,4 +1,5 @@
 import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   APP_RECORDING_RENDER_FPS,
   archestraApiSdk,
   type archestraApiTypes,
@@ -22,6 +23,7 @@ import {
   recordingStore,
   subscribeToRecordingChanges,
 } from "@/lib/app-session-recording/app-recording-store";
+import { useFeature } from "@/lib/config/config.query";
 import { handleApiError, toApiError } from "@/lib/utils";
 
 const {
@@ -368,6 +370,28 @@ export function useIsRenderingAppRecordingVideo(): boolean {
 const RENDER_VIDEO_MUTATION_KEY = ["app-recording", "render-video"] as const;
 
 /** The description used when AI generation is unavailable or still pending. */
+/**
+ * The longest final cut this deployment accepts, in ms.
+ *
+ * ONE source for every length surface — the submit button and the submission's
+ * own backstop, the video export, the editor's trim-to-limit control, the
+ * timeline's limit mark and the tour's "keep it under" note — so raising the
+ * deployment's limit raises all of them together and no surface can quote a
+ * number the checks disagree with.
+ *
+ * Falls back to the shared default while the config is still loading, and in
+ * the offline renderer, which drives the replay page with no session and so
+ * never resolves the authenticated config. Nothing is gated there (it renders,
+ * it does not offer buttons) and the render route enforces the real configured
+ * limit server-side, so the fallback cannot let an over-length cut through.
+ */
+export function useMaxFinalCutMs(): number {
+  return (
+    useFeature("hackathonMaxFinalCutMs") ??
+    APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS
+  );
+}
+
 export function fallbackRecordingDescription(appName: string): string {
   return `${appName} — an interactive app built in chat.`;
 }

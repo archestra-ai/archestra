@@ -97,6 +97,18 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               /** Staging override active: recorder bypasses the hackathon date window. */
               hackathonRecorderOverrideActive: z.boolean(),
               /**
+               * The offline video export is offered. Off by default: a render
+               * drives a headless browser for as long as the cut runs, and the
+               * gallery submission does not depend on it.
+               */
+              hackathonVideoDownloadEnabled: z.boolean(),
+              /**
+               * The longest final cut this deployment accepts, in ms. Every
+               * length surface reads it from here, so the number the author is
+               * shown is always the number the checks enforce.
+               */
+              hackathonMaxFinalCutMs: z.number().int().positive(),
+              /**
                * The public App Gallery repository shared recordings are
                * submitted to, or null when this deployment does not offer
                * sharing. The frontend files the PR against this repository
@@ -159,6 +171,9 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           hackathonRecorderEnabled: config.hackathonRecorder.enabled,
           hackathonRecorderOverrideActive:
             config.hackathonRecorder.overrideActive,
+          hackathonVideoDownloadEnabled:
+            config.hackathonRecorder.videoDownloadEnabled,
+          hackathonMaxFinalCutMs: config.hackathonRecorder.maxFinalCutMs,
           hackathonGalleryRepo:
             (config.hackathonRecorder.gallery.githubClientId &&
               config.hackathonRecorder.gallery.repo) ||

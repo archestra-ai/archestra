@@ -13,7 +13,10 @@ import {
 } from "@/services/apps/app-recording-enhancement";
 import { renderJobClient } from "@/services/apps/app-recording-render-client";
 import { RENDER_BUNDLE_BODY_LIMIT_BYTES } from "@/services/apps/app-recording-render-protocol";
-import { assertAppsHackathonAvailable } from "@/services/apps/apps-hackathon-gate";
+import {
+  assertAppRecordingVideoDownloadAvailable,
+  assertAppsHackathonAvailable,
+} from "@/services/apps/apps-hackathon-gate";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
 
 /**
@@ -32,6 +35,14 @@ const REVIEW_FETCH_TIMEOUT_MS = 15_000;
  * not buffer an unbounded response an attacker points `src` at.
  */
 const REVIEW_BUNDLE_MAX_BYTES = 15 * 1024 * 1024;
+
+/** The four endpoints that make up one video render's lifecycle. */
+const VIDEO_ROUTE_IDS = new Set<string | undefined>([
+  RouteId.RenderAppRecordingVideo,
+  RouteId.GetAppRecordingRenderStatus,
+  RouteId.DownloadAppRecordingVideo,
+  RouteId.CancelAppRecordingRender,
+]);
 
 /**
  * App session recordings are captured, stored (IndexedDB, one per
@@ -57,6 +68,13 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
     if (request.routeOptions.schema?.operationId === RouteId.ReviewAppRecording)
       return;
     await assertAppsHackathonAvailable(request.organizationId);
+    // The video export is a second, narrower opt-in on top of the recorder.
+    // Gated here rather than per handler for the same reason the hackathon gate
+    // is: four endpoints make up one render's lifecycle, and a fifth added
+    // later would otherwise have to remember.
+    if (VIDEO_ROUTE_IDS.has(request.routeOptions.schema?.operationId)) {
+      assertAppRecordingVideoDownloadAvailable();
+    }
   });
 
   fastify.post(

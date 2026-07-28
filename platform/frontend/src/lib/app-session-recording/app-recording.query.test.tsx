@@ -4,8 +4,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useFeature } from "@/lib/config/config.query";
 import {
   cancelAppRecordingVideoRender,
+  useMaxFinalCutMs,
   useRenderAppRecordingVideo,
 } from "./app-recording.query";
 import { type AppRecordingBundle, recordingStore } from "./app-recording-store";
@@ -25,6 +27,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
   };
 });
 vi.mock("sonner");
+vi.mock("@/lib/config/config.query");
 
 const sdk = vi.mocked(archestraApiSdk);
 
@@ -234,5 +237,28 @@ describe("useRenderAppRecordingVideo", () => {
     expect(sdk.cancelAppRecordingRender).toHaveBeenCalledWith({
       path: { jobId: "job-b" },
     });
+  });
+});
+
+describe("useMaxFinalCutMs", () => {
+  // The number every length surface quotes AND enforces. A surface reading a
+  // different one is the failure this hook exists to prevent, so the fallback
+  // matters as much as the configured value.
+  it("uses the deployment's configured limit", () => {
+    vi.mocked(useFeature).mockReturnValue(
+      30_000 as ReturnType<typeof useFeature>,
+    );
+    expect(renderHook(() => useMaxFinalCutMs()).result.current).toBe(30_000);
+  });
+
+  it("falls back to three minutes before the config resolves", () => {
+    // Undefined here is the offline renderer (no session, so no authenticated
+    // config) and the first paint of any player. The render route enforces the
+    // real configured limit server-side, so this fallback cannot let an
+    // over-length cut through — it only keeps the UI from quoting NaN.
+    vi.mocked(useFeature).mockReturnValue(
+      undefined as ReturnType<typeof useFeature>,
+    );
+    expect(renderHook(() => useMaxFinalCutMs()).result.current).toBe(180_000);
   });
 });

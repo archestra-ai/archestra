@@ -63,12 +63,17 @@ import {
   submitRecordingToAppGallery,
   takeCachedGithubToken,
 } from "@/lib/app-session-recording/app-gallery-share";
+import { useMaxFinalCutMs } from "@/lib/app-session-recording/app-recording.query";
 import { reviveRecordingEvents } from "@/lib/app-session-recording/app-recording-binary";
 import { recordingStore } from "@/lib/app-session-recording/app-recording-store";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
 import { cn } from "@/lib/utils";
-import { buildPlayback, presentedTranscript } from "./app-session-player";
+import {
+  buildPlayback,
+  formatMs,
+  presentedTranscript,
+} from "./app-session-player";
 
 /**
  * The player's "Submit to Archestra for review" action: one click runs GitHub
@@ -89,6 +94,7 @@ export function AppGalleryShareButton(props: {
   disabledReason?: React.ReactNode;
 }) {
   const galleryRepo = useFeature("hackathonGalleryRepo");
+  const maxFinalCutMs = useMaxFinalCutMs();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<ShareState>({ step: "idle" });
   // The pull request this app already has (submitted now or remembered from
@@ -197,6 +203,24 @@ export function AppGalleryShareButton(props: {
           return;
         }
 
+        // The length limit, enforced on the SUBMISSION and not only on the
+        // button that opens it. The button's disabled state is a courtesy the
+        // player computes from the recording it happens to be showing; this is
+        // the check the upload actually clears, so a cut that grew after the
+        // dialog opened (or a path that reached submit some other way) cannot
+        // ship a recording the gallery will refuse to render downstream.
+        // Measured on the final cut — cuts applied — because that is what the
+        // gallery plays; the raw capture is a different and always larger
+        // number.
+        const finalCutMs = finalCutDurationMs(trimmed);
+        if (finalCutMs > maxFinalCutMs) {
+          failedTitle = "Recording too long";
+          fail(
+            `This cut runs ${formatMs(finalCutMs)}. Trim it to ${formatMs(maxFinalCutMs)} or less to submit.`,
+          );
+          return;
+        }
+
         const token = takeCachedGithubToken();
         if (!token) {
           failedTitle = "Sign-in failed";
@@ -300,7 +324,7 @@ export function AppGalleryShareButton(props: {
         );
       }
     },
-    [galleryRepo, props.conversationId, category],
+    [galleryRepo, props.conversationId, category, maxFinalCutMs],
   );
 
   // The fallback when the automatic flow fails: hand the participant the

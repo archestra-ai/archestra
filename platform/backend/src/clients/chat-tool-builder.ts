@@ -4,10 +4,12 @@
 // execution). Must not import chat-mcp-client.ts (cycle).
 import { randomUUID } from "node:crypto";
 import {
+  extractMcpExecutedAs,
   extractMcpToolError,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
   parseFullToolName,
+  stripReservedPlatformMeta,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
@@ -562,7 +564,11 @@ export async function buildArchestraToolOutput(params: {
   // through so the model can see them — toModelOutput turns them into media
   // parts, bounded by size/count there. Image-free results are unaffected.
   if (!response.isError && response.content.some((c) => c.type === "image")) {
-    return { content: text, rawContent: response.content as ContentBlock[] };
+    return {
+      content: text,
+      _meta: response._meta as Record<string, unknown> | undefined,
+      rawContent: response.content as ContentBlock[],
+    };
   }
 
   const targetToolName = resolveRunToolTargetName(toolName, toolArguments);
@@ -632,14 +638,19 @@ export async function buildArchestraToolOutput(params: {
     resourceUri = undefined;
   }
   if (!resourceUri) {
-    // A dispatched third-party tool with no MCP-App UI. If it returned a
-    // structured Archestra error (e.g. the expired-auth re-auth payload),
-    // preserve `_meta`/`structuredContent` so chat renders the same rich card
-    // as a direct call. The bare-text fallback below strips
-    // `_meta.archestraError`/`structuredContent.archestraError`, degrading the
-    // card to a text-parsed one (which loses e.g. the credential scope). Mirrors
-    // the direct path (executeMcpTool), which keeps these fields on error.
-    if (response.isError && extractMcpToolError(response)) {
+    // A dispatched third-party tool with no MCP-App UI. If it carries platform
+    // metadata — a structured Archestra error (e.g. the expired-auth re-auth
+    // payload) or the identity the upstream call ran as — preserve
+    // `_meta`/`structuredContent` so chat renders the same rich card as a
+    // direct call. The bare-text fallback below drops them, degrading the card
+    // to a text-parsed one (losing e.g. the credential scope or the "ran as"
+    // badge). Mirrors the direct path (executeMcpTool), which keeps these
+    // fields. In-process Archestra tools carry neither and stay plain text, so
+    // plain-output parsing (e.g. knowledge-source citations) is unaffected.
+    if (
+      (response.isError && extractMcpToolError(response)) ||
+      extractMcpExecutedAs(response)
+    ) {
       return {
         content: text,
         _meta: response._meta as Record<string, unknown> | undefined,
@@ -1242,8 +1253,14 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     const toolDef = await ToolModel.findByNameForAgent(toolName, agentId);
     if (toolDef?.meta) {
       // Extract _meta from the stored structure: { _meta: {...}, annotations: {...} }
-      toolDefinitionMeta = (toolDef.meta as { _meta?: ToolDefinitionMeta })
-        ?._meta;
+      // A tool definition is authored upstream and synced by tools/list, and it
+      // is merged over the result's own metadata below — so strip the
+      // platform-reserved keys here too, or a hostile server could declare a
+      // forged error, seeded-render marker or executed-as identity in its tool
+      // definition and override the platform's value on every card.
+      toolDefinitionMeta = stripReservedPlatformMeta(
+        (toolDef.meta as { _meta?: ToolDefinitionMeta })?._meta,
+      ) as ToolDefinitionMeta | undefined;
     }
   } catch (error) {
     logger.debug(

@@ -5,6 +5,7 @@ import {
   type archestraApiTypes,
   type ChatMessageFeedback,
   ChatMessageMetadataSchema,
+  extractMcpExecutedAs,
   getArchestraToolFullName,
   HOOK_RUN_PART_TYPE,
   parseArchestraAppResourceUri,
@@ -54,6 +55,7 @@ import {
   HookRunChip,
   type HookRunChipData,
 } from "@/components/chat/hook-run-chip";
+import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
   Tooltip,
@@ -61,7 +63,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
@@ -1631,6 +1633,9 @@ const MessageTool = memo(
       | { resourceUri?: string; mcpServerId?: string }
       | undefined;
     const uiResourceUri = uiMeta?.resourceUri ?? earlyToolUiData?.uiResourceUri;
+    // Whose credential the gateway used against the upstream server. Present
+    // only once the call has run, so the badge appears with the result.
+    const executedAs = extractMcpExecutedAs(mcpOutput);
     // A server-scoped deep link (apps-page open-in-chat) stamps the concrete
     // install so the chat mounts against it instead of the agent gateway.
     const uiMcpServerId = uiMeta?.mcpServerId;
@@ -1685,6 +1690,8 @@ const MessageTool = memo(
     const shouldDefaultOpen = isApprovalRequested;
 
     // Hooks must be called before any early returns
+    const { data: session } = useSession();
+    const viewerUserId = session?.user?.id;
     const [isOpen, setIsOpen] = useState(shouldDefaultOpen);
     const [userDenied, setUserDenied] = useState(false);
     const [userHasInteracted, setUserHasInteracted] = useState(false);
@@ -1807,6 +1814,9 @@ const MessageTool = memo(
           })}
           isCollapsible={isExpandable}
           actionButton={logsButton}
+          identityBadge={
+            <ExecutedAsBadge executedAs={executedAs} meUserId={viewerUserId} />
+          }
         />
         <ToolContent forceMount={uiResourceUri ? true : undefined}>
           {hasInput ? <ToolInput input={displayInput} /> : null}

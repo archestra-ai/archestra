@@ -6,6 +6,7 @@ import {
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
+  MCP_EXECUTED_AS_META_KEY,
   OAUTH_TOKEN_TYPE,
   SEEDED_APP_RENDER_META_KEY,
 } from "@archestra/shared";
@@ -90,6 +91,15 @@ vi.mock("@/k8s/mcp-server-runtime", () => ({
     getOrLoadDeployment: mockGetOrLoadDeployment,
   },
 }));
+
+// The shared fixture connection below is personal-scope with no owner (as a
+// connection looks once its owning user is deleted), so calls through it run
+// as an unattributed personal connection.
+const OWNERLESS_PERSONAL_CONNECTION = {
+  kind: "personal",
+  ownerUserId: null,
+  ownerName: null,
+};
 
 describe("McpClient", () => {
   let agentId: string;
@@ -1829,6 +1839,10 @@ describe("McpClient", () => {
             content: [{ type: "text", text: "Limiter http" }],
             isError: false,
             name: "github-mcp-server__limiter_http",
+            structuredContent: undefined,
+            _meta: {
+              [MCP_EXECUTED_AS_META_KEY]: OWNERLESS_PERSONAL_CONNECTION,
+            },
           });
         } finally {
           runWithLimitSpy.mockRestore();
@@ -1936,6 +1950,10 @@ describe("McpClient", () => {
           content: [{ type: "text", text: "Success from HTTP transport" }],
           isError: false,
           name: "local-streamable-http-server__test_tool",
+          structuredContent: undefined,
+          _meta: {
+            [MCP_EXECUTED_AS_META_KEY]: OWNERLESS_PERSONAL_CONNECTION,
+          },
         });
       });
 
@@ -1985,6 +2003,7 @@ describe("McpClient", () => {
               type: "generic",
               message: expect.stringContaining("No HTTP endpoint URL found"),
             },
+            [MCP_EXECUTED_AS_META_KEY]: OWNERLESS_PERSONAL_CONNECTION,
           },
           structuredContent: {
             archestraError: {
@@ -3417,6 +3436,11 @@ describe("McpClient", () => {
         );
 
         expect(result.isError).toBe(false);
+        // The credential was minted for this caller, so the call ran as them —
+        // not as the owner of the installation it was routed through.
+        expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+          kind: "idp_exchange",
+        });
 
         const { StreamableHTTPClientTransport } = await import(
           "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -7665,7 +7689,12 @@ describe("McpClient", () => {
         );
 
         expect(result.isError).toBe(false);
-        expect(result._meta).toEqual(toolMeta);
+        // The upstream tool's own metadata passes through, alongside the
+        // identity the platform resolved for the call.
+        expect(result._meta).toEqual({
+          ...toolMeta,
+          [MCP_EXECUTED_AS_META_KEY]: OWNERLESS_PERSONAL_CONNECTION,
+        });
       });
 
       test("passes structuredContent from callTool result into CommonToolResult", async () => {
@@ -8197,5 +8226,458 @@ describe("readResource (assignment + all-tools dynamic access, end to end)", () 
       ),
     ).rejects.toThrow(/Resource not found/);
     expect(mockReadResource).not.toHaveBeenCalled();
+  });
+});
+
+// Every upstream call runs under some credential the gateway resolves — the
+// caller's own connection, a team or organization connection, a connection an
+// admin pinned as a service account, or a token minted for the caller. The
+// result and its log row name that identity so a tool call can answer "on
+// whose behalf did this run?".
+describe("executed-as identity", () => {
+  beforeEach(() => {
+    // This block sits outside the main describe, so it owns its mock state:
+    // a queued result left over from an earlier test would otherwise be handed
+    // to the next call instead of the one that test set up.
+    mockCallTool.mockReset();
+    mockConnect.mockReset();
+    mockListTools.mockReset();
+  });
+
+  const userToken = (
+    userId: string,
+    organizationId: string,
+    overrides: Partial<TokenAuthContext> = {},
+  ): TokenAuthContext => ({
+    tokenId: randomUUID(),
+    teamId: null,
+    isOrganizationToken: false,
+    isUserToken: true,
+    userId,
+    organizationId,
+    ...overrides,
+  });
+
+  async function makeRemoteCatalogTool(agentId: string) {
+    const catalogItem = await InternalMcpCatalogModel.create({
+      name: `executed-as-${randomUUID().slice(0, 8)}`,
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+    });
+    const tool = await ToolModel.createToolIfNotExists({
+      name: `${catalogItem.name}__do_thing`,
+      description: "Executed-as tool",
+      parameters: {},
+      catalogId: catalogItem.id,
+    });
+    await AgentToolModel.create(agentId, tool.id, {
+      credentialResolutionMode: "dynamic",
+    });
+    return { catalogItem, tool };
+  }
+
+  async function makeConnection(params: {
+    catalogId: string;
+    ownerId?: string;
+    teamId?: string;
+    scope?: "personal" | "team" | "org";
+    withStoredCredential?: boolean;
+  }) {
+    const secret = params.withStoredCredential
+      ? await secretManager().createSecret(
+          { access_token: "stored-upstream-token" },
+          `executed-as-${randomUUID().slice(0, 8)}`,
+        )
+      : null;
+    return await McpServerModel.create({
+      name: `connection-${randomUUID().slice(0, 8)}`,
+      catalogId: params.catalogId,
+      serverType: "remote",
+      secretId: secret?.id,
+      ownerId: params.ownerId,
+      teamId: params.teamId,
+      scope: params.scope,
+    });
+  }
+
+  async function callTool(params: {
+    agentId: string;
+    toolName: string;
+    tokenAuth: TokenAuthContext;
+    upstreamResult?: Record<string, unknown>;
+  }) {
+    mockConnect.mockResolvedValue(undefined);
+    mockListTools.mockResolvedValue({ tools: [] });
+    mockCallTool.mockResolvedValueOnce(
+      params.upstreamResult ?? {
+        content: [{ type: "text", text: "upstream ok" }],
+        isError: false,
+      },
+    );
+    return await mcpClient.executeToolCallForOwner(
+      {
+        id: `call_${randomUUID().slice(0, 8)}`,
+        name: params.toolName,
+        arguments: {},
+      },
+      agentOwner(params.agentId),
+      params.tokenAuth,
+    );
+  }
+
+  test("names the caller's own connection", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      ownerId: caller.id,
+      withStoredCredential: true,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+      kind: "personal",
+      ownerUserId: caller.id,
+      ownerName: "Ada Lovelace",
+    });
+  });
+
+  test("names the owner of a connection pinned as the catalog's service account", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser({ name: "Grace Hopper" });
+    const caller = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(owner.id, org.id, { role: "admin" });
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    // The caller has their own connection, but the catalog pins everyone to the
+    // owner's — so the call runs as the owner, not as the caller.
+    await makeConnection({
+      catalogId: catalogItem.id,
+      ownerId: caller.id,
+      withStoredCredential: true,
+    });
+    const serviceAccount = await makeConnection({
+      catalogId: catalogItem.id,
+      ownerId: owner.id,
+      withStoredCredential: true,
+    });
+    await InternalMcpCatalogModel.update(catalogItem.id, {
+      dynamicConnectionMcpServerId: serviceAccount.id,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+    });
+
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+      kind: "personal",
+      ownerUserId: owner.id,
+      ownerName: "Grace Hopper",
+    });
+  });
+
+  test("names the owning team for a team connection", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, caller.id, { name: "Platform Team" });
+    const { TeamModel } = await import("@/models");
+    await TeamModel.addMember(team.id, caller.id, "member");
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      teamId: team.id,
+      scope: "team",
+      withStoredCredential: true,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+    });
+
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+      kind: "team",
+      teamId: team.id,
+      teamName: "Platform Team",
+    });
+  });
+
+  test("reports an organization connection", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      scope: "org",
+      withStoredCredential: true,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+    });
+
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({ kind: "org" });
+  });
+
+  test("reports the caller's own token when the connection stores no credential of its own", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    // No stored credential, so the transport forwards the caller's own JWT and
+    // the upstream server sees the caller, not the connection's owner.
+    await makeConnection({ catalogId: catalogItem.id, scope: "org" });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id, {
+        isExternalIdp: true,
+        rawToken: "caller-jwt",
+      }),
+    });
+
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+      kind: "idp_passthrough",
+    });
+  });
+
+  test("reports the connection's identity when it has a stored credential the caller's token cannot displace", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      scope: "org",
+      withStoredCredential: true,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id, {
+        isExternalIdp: true,
+        rawToken: "caller-jwt",
+      }),
+    });
+
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({ kind: "org" });
+  });
+
+  test("reports an authorization header the caller supplied", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({ catalogId: catalogItem.id, scope: "org" });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id, {
+        passthroughHeaders: { Authorization: "Bearer caller-supplied" },
+      }),
+    });
+
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+      kind: "caller_headers",
+    });
+  });
+
+  test("replaces an identity the upstream server tried to forge", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      ownerId: caller.id,
+      withStoredCredential: true,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+      upstreamResult: {
+        content: [{ type: "text", text: "upstream ok" }],
+        isError: false,
+        _meta: {
+          [MCP_EXECUTED_AS_META_KEY]: { kind: "org" },
+          upstreamOwn: "kept",
+        },
+      },
+    });
+
+    expect(result._meta).toMatchObject({
+      upstreamOwn: "kept",
+      [MCP_EXECUTED_AS_META_KEY]: {
+        kind: "personal",
+        ownerUserId: caller.id,
+        ownerName: "Ada Lovelace",
+      },
+    });
+  });
+
+  test("records the identity on the tool call log row", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      ownerId: caller.id,
+      withStoredCredential: true,
+    });
+
+    await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+    });
+
+    const [logRow] = await db
+      .select()
+      .from(schema.mcpToolCallsTable)
+      .where(eq(schema.mcpToolCallsTable.agentId, agent.id));
+
+    // The caller is recorded alongside the identity the call ran as, so the log
+    // reads "ran as X on behalf of Y".
+    expect(logRow?.userId).toBe(caller.id);
+    expect(
+      (logRow?.toolResult as { _meta?: Record<string, unknown> })?._meta?.[
+        MCP_EXECUTED_AS_META_KEY
+      ],
+    ).toEqual({
+      kind: "personal",
+      ownerUserId: caller.id,
+      ownerName: "Ada Lovelace",
+    });
+  });
+
+  test("keeps the identity on a result the upstream server flagged as an error", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    await makeConnection({
+      catalogId: catalogItem.id,
+      scope: "org",
+      withStoredCredential: true,
+    });
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+      upstreamResult: {
+        content: [{ type: "text", text: "rate limited" }],
+        isError: true,
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({ kind: "org" });
+  });
+
+  test("omits the identity when the call never resolved a credential", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: "member" });
+    const agent = await makeAgent({ organizationId: org.id });
+    const { tool } = await makeRemoteCatalogTool(agent.id);
+    // No connection exists for the catalog, so resolution fails before any
+    // upstream credential is chosen.
+
+    const result = await callTool({
+      agentId: agent.id,
+      toolName: tool.name,
+      tokenAuth: userToken(caller.id, org.id),
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toBeUndefined();
   });
 });

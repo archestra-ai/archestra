@@ -250,6 +250,14 @@ flowchart TD
     style J fill:#f8d7da,stroke:#dc3545
 ```
 
+#### Ran As
+
+Every tool call records which connection served it. Chat shows it on the tool call card — "Ran as me", "Ran as Grace Hopper", "Ran as Platform Team", or "Ran as the organization". The same identity appears in the **Ran As** column of the MCP Gateway logs, next to the user who made the call. So a call through a shared service account reads as "ran as that account, on behalf of the caller".
+
+Calls that use a token minted for the caller — Identity Provider Token Exchange, or a forwarded JWKS token — are shown as running as the caller.
+
+MCP clients see the same identity on the tool result, under the `_meta.archestraExecutedAs` key.
+
 #### Missing Credentials
 
 When no credential can be resolved for a caller, the gateway returns an actionable error message that includes a direct link to install the MCP server with their own credentials:

@@ -1,5 +1,6 @@
 import {
   getArchestraToolFullName,
+  MCP_EXECUTED_AS_META_KEY,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -2206,6 +2207,78 @@ describe("buildArchestraToolOutput", () => {
       },
       structuredContent: { checkpoint: "abc" },
     });
+  });
+
+  test("keeps the identity a dispatched tool ran as, which chat shows on the card", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    // A plain dispatched tool with no MCP App UI — the case the bare-text
+    // fallback used to flatten, dropping the identity from the card.
+    const targetTool = await makeTool({
+      name: "grain__list_meetings",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+
+    const result = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: "2 meetings" }],
+        isError: false,
+        _meta: {
+          [MCP_EXECUTED_AS_META_KEY]: {
+            kind: "personal",
+            ownerUserId: "user-1",
+            ownerName: "Ada Lovelace",
+          },
+        },
+      },
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "grain__list_meetings", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      content: "2 meetings",
+      _meta: {
+        [MCP_EXECUTED_AS_META_KEY]: {
+          kind: "personal",
+          ownerUserId: "user-1",
+          ownerName: "Ada Lovelace",
+        },
+      },
+    });
+  });
+
+  test("stays plain text for a dispatched tool that carries no platform metadata", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "grain__list_meetings",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+
+    const result = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: "2 meetings" }],
+        isError: false,
+      },
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "grain__list_meetings", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    expect(result).toBe("2 meetings");
   });
 
   test("does not attach the UI resource when its upstream resource can't be read", async ({

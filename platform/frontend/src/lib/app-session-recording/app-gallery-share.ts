@@ -331,22 +331,79 @@ export async function submitRecordingToAppGallery(params: {
   // The same builder backs the manual-submission download, so what a
   // participant hand-uploads is byte-identical to what this commits.
   const dir = gallerySubmissionFolder(viewer.login, appSlug);
-  for (const file of await buildGallerySubmissionFiles(bundleWithGithub)) {
-    onProgress({
-      stage: "upload",
-      label: `Uploading ${file.name} to ${forkName}…`,
-    });
-    // Updating a file left by an earlier (rejected) submission needs its
-    // blob sha; on a fresh branch the lookup 404s and the PUT creates it.
-    const path = `${forkPath}/contents/${dir}/${file.name}`;
-    const priorSha = await fetchExistingFileSha({ gh, path, branch });
-    await gh("PUT", path, {
-      message: `Add ${file.name} for: ${bundle.app.name}`,
-      content: toBase64(file.bytes),
-      branch,
-      ...(priorSha ? { sha: priorSha } : {}),
-    });
+  // Uploaded through the GIT DATA API (blob → tree → commit → ref), not the
+  // contents API.
+  //
+  // The contents API accepts a whole file in one PUT and gives out long before
+  // its advertised ceiling: a 45MB recording came back "Sorry, the file is too
+  // large to be processed. Consider creating/updating the file in a local
+  // clone", and one merely large enough to slow the commit came back "Timed
+  // out validating rule" instead. Neither is a limit the size gate could have
+  // predicted, and both read to a participant as the platform being broken.
+  // The blob endpoint is GitHub's documented path for large files and takes
+  // the whole recording, which is what makes a minutes-long cut submittable at
+  // all.
+  //
+  // It also lands the submission as ONE commit instead of one per file, so a
+  // half-finished submission can't exist on the branch: either the ref moves
+  // or nothing did.
+  const files = await buildGallerySubmissionFiles(bundleWithGithub);
+  onProgress({
+    stage: "upload",
+    label: `Uploading ${files.length === 1 ? files[0].name : `${files.length} files`} to ${forkName}…`,
+  });
+  // Where the branch actually is now — `baseRef` is where it STARTED, and a
+  // reused branch from a rejected submission has moved since. Committing onto
+  // a stale parent would drop whatever is already there.
+  const head = await gh<{ object: { sha: string } }>(
+    "GET",
+    // Not encodeURIComponent: the branch is a ref PATH, and escaping its
+    // slash to %2F asks GitHub for a ref that does not exist.
+    `${forkPath}/git/ref/heads/${branch}`,
+  );
+  const headCommit = await gh<{ tree: { sha: string } }>(
+    "GET",
+    `${forkPath}/git/commits/${head.object.sha}`,
+  );
+  const blobs: { path: string; sha: string }[] = [];
+  for (const file of files) {
+    const blob = await githubWithRetry(() =>
+      gh<{ sha: string }>("POST", `${forkPath}/git/blobs`, {
+        content: toBase64(file.bytes),
+        encoding: "base64",
+      }),
+    );
+    blobs.push({ path: `${dir}/${file.name}`, sha: blob.sha });
   }
+  // `base_tree` carries the rest of the repository forward, so the commit
+  // touches only these paths — and an existing file at one of them is
+  // overwritten without needing its prior blob sha first.
+  const tree = await githubWithRetry(() =>
+    gh<{ sha: string }>("POST", `${forkPath}/git/trees`, {
+      base_tree: headCommit.tree.sha,
+      tree: blobs.map((blob) => ({
+        path: blob.path,
+        mode: "100644",
+        type: "blob",
+        sha: blob.sha,
+      })),
+    }),
+  );
+  const commit = await githubWithRetry(() =>
+    gh<{ sha: string }>("POST", `${forkPath}/git/commits`, {
+      message: `Add submission for: ${bundle.app.name}`,
+      tree: tree.sha,
+      parents: [head.object.sha],
+    }),
+  );
+  // Not forced: the parent above is this branch's real head, so a fast-forward
+  // is the only correct outcome. A refusal means something else moved the
+  // branch mid-run, which must surface rather than be overwritten.
+  await githubWithRetry(() =>
+    gh("PATCH", `${forkPath}/git/refs/heads/${branch}`, {
+      sha: commit.sha,
+    }),
+  );
 
   onProgress({
     stage: "pr",
@@ -533,7 +590,7 @@ export function oversizedGallerySubmissionFile(
 ): string | null {
   const { bytes } = recordingFile(bundle);
   if (bytes.byteLength > GITHUB_MAX_FILE_BYTES) {
-    return `This recording is ${mb(bytes.byteLength)}MB — GitHub refuses files over ${mb(GITHUB_MAX_FILE_BYTES)}MB. Re-record a shorter session.`;
+    return `This recording is ${mb(bytes.byteLength)}MB — GitHub refuses files over ${mb(GITHUB_MAX_FILE_BYTES)}MB. Trim it, or re-record a shorter session.`;
   }
   return null;
 }
@@ -729,6 +786,52 @@ async function toGithubRequestError(
     `GitHub refused the request.${detail ? ` ${detail}` : ""}`,
     status,
   );
+}
+
+/**
+ * Re-run a write that failed for a reason GitHub itself calls temporary.
+ *
+ * Large submissions draw transient refusals from the commit path — "Timed out
+ * validating rule" is the one seen in practice, a ruleset check giving up
+ * rather than a verdict on the request. Clicking the dialog's Try again does
+ * clear it, so this is not rescuing an unrecoverable state; it spends the
+ * retry on the participant's behalf instead of making them notice, read a
+ * scary error, and click through it.
+ *
+ * Only transient shapes retry. A refusal that is a VERDICT — too large, no
+ * permission, a bad token — must surface immediately: retrying it wastes the
+ * participant's time and buries the one message that tells them what to fix.
+ */
+async function githubWithRetry<T>(call: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < GITHUB_WRITE_ATTEMPTS; attempt++) {
+    try {
+      return await call();
+    } catch (error) {
+      if (!isTransientGithubRefusal(error)) throw error;
+      lastError = error;
+      // Linear, not exponential: two short waits inside one click, not a
+      // backoff schedule the participant sits through.
+      await new Promise((resolve) =>
+        setTimeout(resolve, GITHUB_RETRY_DELAY_MS * (attempt + 1)),
+      );
+    }
+  }
+  throw lastError;
+}
+
+/** Three tries total — enough for a blip, short enough to stay one click. */
+const GITHUB_WRITE_ATTEMPTS = 3;
+const GITHUB_RETRY_DELAY_MS = 1_500;
+
+/**
+ * A refusal GitHub is likely to answer differently a moment later: its own
+ * 5xx weather, and the ruleset-validation timeout that large commits provoke.
+ */
+function isTransientGithubRefusal(error: unknown): boolean {
+  if (!(error instanceof GithubRequestError)) return false;
+  if (error.status >= 500) return true;
+  return /timed out validating rule/i.test(error.message);
 }
 
 /** An api.github.com refusal, keeping the status for retry decisions. */
@@ -1293,7 +1396,12 @@ function base64ToBytes(base64: string): Uint8Array {
   return bytes;
 }
 
-/** GitHub's ceiling for a file created through its contents API. */
+/**
+ * GitHub's ceiling for a blob created through the Git Data API — the endpoint
+ * the submission uploads through. Measured on the RAW bytes, which is what the
+ * limit is about: the request carries them base64-encoded (~4/3 the size), but
+ * the blob GitHub stores and bounds is the decoded file.
+ */
 const GITHUB_MAX_FILE_BYTES = 100 * 1024 * 1024;
 
 function mb(bytes: number): number {

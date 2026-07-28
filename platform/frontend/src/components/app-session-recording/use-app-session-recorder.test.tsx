@@ -28,6 +28,8 @@ vi.mock("@/lib/organization.query", () => ({
 }));
 vi.mock("@/lib/app-session-recording/app-recording.query", () => ({
   useInvalidateAppRecording: () => vi.fn(),
+  // Capture stops at the same length the final cut may be submitted at.
+  useMaxFinalCutMs: () => 180_000,
 }));
 // The recorder is off on small screens; stubbed to a desktop viewport by
 // default (jsdom has no real matchMedia), flipped per test where it matters.

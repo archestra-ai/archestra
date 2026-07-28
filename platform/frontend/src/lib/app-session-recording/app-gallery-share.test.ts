@@ -122,15 +122,31 @@ describe("submitRecordingToAppGallery", () => {
         if (method === "GET" && url.includes("/git/ref/heads/main")) {
           return Response.json({ object: { sha: "base-sha" } });
         }
+        if (method === "GET" && url.includes("/git/ref/heads/")) {
+          // The submission branch's own head, read before committing onto it.
+          return Response.json({ object: { sha: "branch-sha" } });
+        }
         if (method === "POST" && url.includes("/git/refs")) {
           return Response.json({}, { status: 201 });
         }
-        if (method === "GET" && url.includes("/contents/")) {
-          // Fresh branch: the file isn't there yet.
-          return Response.json({ message: "Not Found" }, { status: 404 });
+        if (method === "GET" && url.includes("/git/commits/")) {
+          return Response.json({ tree: { sha: "base-tree-sha" } });
         }
-        if (method === "PUT" && url.includes("/contents/")) {
-          return Response.json({}, { status: 201 });
+        if (method === "POST" && url.includes("/git/blobs")) {
+          return Response.json({ sha: "blob-sha" }, { status: 201 });
+        }
+        if (method === "POST" && url.includes("/git/trees")) {
+          return Response.json({ sha: "tree-sha" }, { status: 201 });
+        }
+        if (method === "POST" && url.includes("/git/commits")) {
+          return Response.json({ sha: "commit-sha" }, { status: 201 });
+        }
+        if (method === "PATCH" && url.includes("/git/refs/heads/")) {
+          return Response.json({}, { status: 200 });
+        }
+        if (method === "GET" && url.includes("/contents/")) {
+          // The gallery presence probe: the app isn't published yet.
+          return Response.json({ message: "Not Found" }, { status: 404 });
         }
         if (method === "POST" && url.endsWith("/pulls")) {
           return Response.json({
@@ -188,8 +204,16 @@ describe("submitRecordingToAppGallery", () => {
       "POST /repos/archestra-ai/app-gallery/forks",
       "GET /repos/sam/app-gallery/git/ref/heads/main",
       "POST /repos/sam/app-gallery/git/refs",
-      "GET /repos/sam/app-gallery/contents/apps/sam_pr_review_queue/recording.json",
-      "PUT /repos/sam/app-gallery/contents/apps/sam_pr_review_queue/recording.json",
+      // The upload is the GIT DATA API, not the contents API: the contents
+      // endpoint gives out well below its advertised ceiling on a recording-
+      // sized file. Blob, tree, commit, then move the ref — ONE commit, so a
+      // half-finished submission can't exist on the branch.
+      "GET /repos/sam/app-gallery/git/ref/heads/submission/pr_review_queue",
+      "GET /repos/sam/app-gallery/git/commits/branch-sha",
+      "POST /repos/sam/app-gallery/git/blobs",
+      "POST /repos/sam/app-gallery/git/trees",
+      "POST /repos/sam/app-gallery/git/commits",
+      "PATCH /repos/sam/app-gallery/git/refs/heads/submission/pr_review_queue",
       "POST /repos/archestra-ai/app-gallery/pulls",
     ]);
 
@@ -202,18 +226,18 @@ describe("submitRecordingToAppGallery", () => {
     expect(preflight?.url).toContain("state=all");
 
     // The committed file is the bundle itself, byte for byte, with the
-    // submitter's GitHub identity stamped on (the mocked /user has no
-    // public name, so it lands as null) — and a fresh branch uploads
-    // without an update sha.
-    const upload = calls.find((c) => c.method === "PUT") as {
-      body: { content: string; branch: string };
-    };
+    // submitter's GitHub identity stamped on (the mocked /user has no public
+    // name, so it lands as null). A blob carries content only — no path, no
+    // prior sha — which is what makes overwriting a leftover file a non-event.
+    const upload = calls.find(
+      (c) => c.method === "POST" && c.url.includes("/git/blobs"),
+    ) as { body: { content: string; encoding: string } };
     const expected = makeBundle();
     expect(JSON.parse(atob(upload.body.content))).toEqual({
       ...expected,
       meta: { ...expected.meta, github: { login: "sam", name: null } },
     });
-    expect(upload.body).not.toHaveProperty("sha");
+    expect(upload.body.encoding).toBe("base64");
 
     // The PR names the participant's branch as head and carries the metadata.
     const pr = calls.at(-1)?.body as {
@@ -246,9 +270,9 @@ describe("submitRecordingToAppGallery", () => {
 
     await submit();
 
-    const upload = calls.find((c) => c.method === "PUT") as {
-      body: { content: string };
-    };
+    const upload = calls.find(
+      (c) => c.method === "POST" && c.url.includes("/git/blobs"),
+    ) as { body: { content: string } };
     const uploaded = JSON.parse(atob(upload.body.content));
     expect(uploaded.meta.github).toEqual({
       login: "sam",
@@ -278,11 +302,18 @@ describe("submitRecordingToAppGallery", () => {
 
     await submit({ bundle });
 
-    const uploads = calls.filter((c) => c.method === "PUT");
-    expect(uploads).toHaveLength(2);
-    expect(uploads[1].url).toContain(
-      "/contents/apps/sam_pr_review_queue/thumbnail.webp",
+    const uploads = calls.filter(
+      (c) => c.method === "POST" && c.url.includes("/git/blobs"),
     );
+    expect(uploads).toHaveLength(2);
+    // Blobs carry no path; the tree is where the files get their names.
+    const tree = calls.find((c) => c.url.includes("/git/trees")) as {
+      body: { tree: { path: string }[] };
+    };
+    expect(tree.body.tree.map((entry) => entry.path)).toEqual([
+      "apps/sam_pr_review_queue/recording.json",
+      "apps/sam_pr_review_queue/thumbnail.webp",
+    ]);
     // The committed bytes are the re-encoded (4:5-framed) frame, not the raw
     // canvas capture — the framing runs before upload.
     expect(atob((uploads[1].body as { content: string }).content)).toBe(
@@ -303,7 +334,9 @@ describe("submitRecordingToAppGallery", () => {
 
     await submit({ bundle });
 
-    const uploads = calls.filter((c) => c.method === "PUT");
+    const uploads = calls.filter(
+      (c) => c.method === "POST" && c.url.includes("/git/blobs"),
+    );
     // The automatic path stamps the submitter's GitHub identity onto the
     // bundle before serializing it (the dialog does the same for the manual
     // download) — mirror that here so this compares against what the
@@ -315,9 +348,13 @@ describe("submitRecordingToAppGallery", () => {
     const files = await buildGallerySubmissionFiles(stamped);
     // Same files, same order, same bytes — the manual fallback's downloads
     // must match what the automatic path commits, byte for byte.
-    expect(
-      uploads.map((u) => new URL(u.url).pathname.split("/").at(-1)),
-    ).toEqual(files.map((f) => f.name));
+    // Blobs are content-only, so the NAMES come from the tree entries.
+    const tree = calls.find((c) => c.url.includes("/git/trees")) as {
+      body: { tree: { path: string }[] };
+    };
+    expect(tree.body.tree.map((entry) => entry.path.split("/").at(-1))).toEqual(
+      files.map((f) => f.name),
+    );
     for (const [i, upload] of uploads.entries()) {
       const uploadedBinary = atob((upload.body as { content: string }).content);
       const fileBinary = Array.from(files[i].bytes, (b) =>
@@ -489,9 +526,18 @@ describe("submitRecordingToAppGallery", () => {
     expect(
       calls.filter((c) => c.method === "GET" && c.url.includes("/pulls?")),
     ).toHaveLength(2);
-    // …and the upload replaced the stale file instead of failing on it.
-    const upload = calls.find((c) => c.method === "PUT");
-    expect((upload?.body as { sha?: string }).sha).toBe("stale-blob-sha");
+    // …and the commit replaced the stale file instead of failing on it. No
+    // prior-blob-sha dance is needed any more: the tree writes the path
+    // outright, over whatever was there.
+    const tree = calls.find((c) => c.url.includes("/git/trees")) as {
+      body: { base_tree: string; tree: { path: string }[] };
+    };
+    expect(tree.body.tree.map((entry) => entry.path)).toContain(
+      "apps/sam_pr_review_queue/recording.json",
+    );
+    // Committed onto the branch's CURRENT head, not where it started — the
+    // leftover branch has moved since it was created.
+    expect(tree.body.base_tree).toBe("base-tree-sha");
   });
 
   test("a pull request that appears mid-run stops the flow and names it", async () => {

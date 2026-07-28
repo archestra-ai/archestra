@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   APP_RECORDING_LIMITS,
   archestraApiSdk,
   connectedMcpServerNames,
@@ -23,6 +24,7 @@ import { useApp, useAppTools } from "@/lib/app.query";
 import {
   fallbackRecordingDescription,
   useInvalidateAppRecording,
+  useMaxFinalCutMs,
 } from "@/lib/app-session-recording/app-recording.query";
 import { serializeRecordingEvents } from "@/lib/app-session-recording/app-recording-binary";
 import {
@@ -98,7 +100,18 @@ export interface AppSessionRecorder {
  */
 const MAX_EVENTS = APP_RECORDING_LIMITS.maxEvents - 5_000;
 const MAX_SEGMENTS = APP_RECORDING_LIMITS.maxSegments - 5;
-const MAX_DURATION_MS = 10 * 60_000;
+/**
+ * How long a capture may run before it stops itself.
+ *
+ * The SAME bound as the final cut, and deliberately so. The stored bundle
+ * carries the whole CAPTURE — cuts are presentation, not deletion — so a long
+ * recording trimmed to a short final cut still ships at the capture's size.
+ * Letting capture run far past what may be submitted was how a participant
+ * ended up with a recording they could edit but never upload. Following the
+ * configured limit keeps the two from drifting: raise the deployment's limit
+ * and both move together.
+ */
+const DEFAULT_MAX_DURATION_MS = APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS;
 /**
  * The SDK flushes its buffer on stop; give that final batch time to arrive —
  * including the video-encoder drain, which flushes each canvas's encoder and
@@ -148,6 +161,12 @@ type RecorderStatus = AppSessionRecorder["status"];
  */
 class AppRecorderCore {
   status: RecorderStatus = "idle";
+  /**
+   * The capture ceiling this deployment configured. Settable rather than
+   * constructor-fixed: the core outlives any one render, and the value arrives
+   * with the config, which resolves after the first paint.
+   */
+  maxDurationMs = DEFAULT_MAX_DURATION_MS;
 
   private readonly listeners = new Set<() => void>();
   private startEpoch = 0;
@@ -331,7 +350,7 @@ class AppRecorderCore {
     this.rebroadcastTimer = setInterval(() => {
       this.postControl("start");
       // Hard stop at the ceiling so a forgotten recording can't grow unbounded.
-      if (Date.now() - this.startEpoch >= MAX_DURATION_MS) void this.stop();
+      if (Date.now() - this.startEpoch >= this.maxDurationMs) void this.stop();
     }, START_REBROADCAST_MS);
   }
 
@@ -518,6 +537,10 @@ export function useOwnAppSessionRecorder(params: {
   const coreRef = useRef<AppRecorderCore | null>(null);
   if (enabled && !coreRef.current) coreRef.current = new AppRecorderCore();
   const core = enabled ? coreRef.current : null;
+  // Capture stops at the same length the final cut may be submitted at, so a
+  // participant can never record more than they are allowed to ship.
+  const maxFinalCutMs = useMaxFinalCutMs();
+  if (core) core.maxDurationMs = maxFinalCutMs;
 
   const { data: app } = useApp(appId, { toastOnError: false });
   const { data: session } = useSession();

@@ -1280,6 +1280,48 @@ describe("ModelModel", () => {
       expect(pricing.pricePerMillionCacheRead).toBe("5");
       expect(pricing.cacheSource).toBe("derived_multiplier");
     });
+
+    // Ollama charges no per-token rate on either transport, so the generic
+    // estimate would bill local inference at $50/M against a real rate of zero.
+    test.each([
+      "ollama",
+      "ollama-native",
+    ] as const)("prices an unpriced %s model at zero rather than the generic estimate", async (provider) => {
+      const model = await ModelModel.create({
+        externalId: `${provider}/qwen3:8b`,
+        provider,
+        modelId: "qwen3:8b",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      const pricing = ModelModel.getEffectivePricing(model);
+
+      expect(pricing.pricePerMillionInput).toBe("0.00");
+      expect(pricing.pricePerMillionOutput).toBe("0.00");
+    });
+
+    test("prices an unknown Ollama model at zero from the provider hint alone", () => {
+      const pricing = ModelModel.getEffectivePricing(
+        null,
+        "some-local-model",
+        "ollama",
+      );
+
+      expect(pricing.pricePerMillionInput).toBe("0.00");
+      expect(pricing.pricePerMillionOutput).toBe("0.00");
+    });
+
+    test("leaves the generic estimate in place for other providers", () => {
+      const pricing = ModelModel.getEffectivePricing(
+        null,
+        "some-unknown-model",
+        "openai",
+      );
+
+      expect(pricing.pricePerMillionInput).toBe("50.00");
+    });
   });
 
   describe("configuredParameters (native Ollama)", () => {

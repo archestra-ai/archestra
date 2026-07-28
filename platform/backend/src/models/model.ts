@@ -666,7 +666,7 @@ class ModelModel {
     provider?: SupportedProvider,
   ): EffectivePricing {
     const { pricePerMillionInput, pricePerMillionOutput, source } =
-      ModelModel.getEffectiveBasePricing(model, modelId);
+      ModelModel.getEffectiveBasePricing(model, modelId, provider);
     const cache = ModelModel.getEffectiveCachePricing(
       model,
       pricePerMillionInput,
@@ -687,6 +687,7 @@ class ModelModel {
   private static getEffectiveBasePricing(
     model: Model | null,
     modelId?: string,
+    provider?: SupportedProvider,
   ): {
     pricePerMillionInput: string;
     pricePerMillionOutput: string;
@@ -720,7 +721,21 @@ class ModelModel {
       };
     }
 
-    // Tier 3: Default fallback
+    // Tier 3: Default fallback. Ollama bills no per-token rate on either
+    // transport — a self-hosted server charges nothing, and Ollama's cloud
+    // offering is a flat monthly subscription metered on GPU time rather than
+    // tokens. The generic estimate below would otherwise price local inference
+    // at $50/M, inflating recorded spend and burning cost limits against tokens
+    // nobody is billed for.
+    const resolvedProvider = model?.provider ?? provider;
+    if (resolvedProvider === "ollama" || resolvedProvider === "ollama-native") {
+      return {
+        pricePerMillionInput: "0.00",
+        pricePerMillionOutput: "0.00",
+        source: "default",
+      };
+    }
+
     const nameForDefault = model?.modelId ?? modelId ?? "";
     return {
       ...getDefaultModelPrice(nameForDefault),

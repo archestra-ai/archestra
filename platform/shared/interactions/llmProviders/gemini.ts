@@ -321,7 +321,11 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
       | archestraApiTypes.GeminiGenerateContentRequest["contents"][number]
       | {
           role: "model";
-          content: archestraApiTypes.GeminiGenerateContentResponse["candidates"][number]["content"];
+          // `candidates` is optional — prompt-blocked replies carry only
+          // `promptFeedback` — so unwrap before indexing.
+          content: NonNullable<
+            archestraApiTypes.GeminiGenerateContentResponse["candidates"]
+          >[number]["content"];
         },
     _dualLlmAnalyses?: DualLlmAnalysis[],
   ): PartialUIMessage {

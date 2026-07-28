@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-07-27
+lastUpdated: 2026-07-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -81,7 +81,7 @@ Model pricing is configured on the provider model settings pages. Pricing is the
 - optimization reports use it to calculate savings
 - TOON compression savings are reported in dollars using the configured model price
 
-When you add a provider, Archestra syncs known input, output, and cache prices from a public model registry. You can override any of these per model, including cache read and write prices. A model the registry does not recognize falls back to an estimated flat price, shown as "estimated" in the model editor — set a custom price so cost reporting stays accurate. Amazon Bedrock and Azure model ids do not match the registry directly, so Archestra maps them back to the underlying vendor model to recover real prices (including cache prices) where possible.
+When you add a provider, Archestra syncs known input, output, and cache prices from a public model registry. You can override any of these per model, including cache read and write prices. A model the registry does not recognize falls back to an estimated flat price, shown as "estimated" in the model editor — set a custom price so cost reporting stays accurate. Amazon Bedrock and Azure model ids do not match the registry directly. Archestra maps them back to the underlying vendor model to recover real prices — cache prices included — and the context window.
 
 If you use custom or self-hosted models, add pricing explicitly so cost reporting stays meaningful.
 

@@ -2167,6 +2167,7 @@
         "type": "object",
         "properties": {
           "candidates": {
+            "description": "Candidate responses from the model",
             "type": "array",
             "items": {
               "type": "object",
@@ -2592,26 +2593,33 @@
                 },
                 "finishReason": {
                   "description": "\n  The reason why the model stopped generating tokens.\n\n  If empty, the model has not stopped generating tokens.\n\n  https://ai.google.dev/api/generate-content#FinishReason\n",
-                  "type": "string",
-                  "enum": [
-                    "FINISH_REASON_UNSPECIFIED",
-                    "STOP",
-                    "MAX_TOKENS",
-                    "SAFETY",
-                    "RECITATION",
-                    "LANGUAGE",
-                    "OTHER",
-                    "BLOCKLIST",
-                    "PROHIBITED_CONTENT",
-                    "SPII",
-                    "MALFORMED_FUNCTION_CALL",
-                    "IMAGE_SAFETY",
-                    "IMAGE_PROHIBITED_CONTENT",
-                    "IMAGE_OTHER",
-                    "NO_IMAGE",
-                    "IMAGE_RECITATION",
-                    "UNEXPECTED_TOOL_CALL",
-                    "TOO_MANY_TOOL_CALLS"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "FINISH_REASON_UNSPECIFIED",
+                        "STOP",
+                        "MAX_TOKENS",
+                        "SAFETY",
+                        "RECITATION",
+                        "LANGUAGE",
+                        "OTHER",
+                        "BLOCKLIST",
+                        "PROHIBITED_CONTENT",
+                        "SPII",
+                        "MALFORMED_FUNCTION_CALL",
+                        "IMAGE_SAFETY",
+                        "IMAGE_PROHIBITED_CONTENT",
+                        "IMAGE_OTHER",
+                        "NO_IMAGE",
+                        "IMAGE_RECITATION",
+                        "UNEXPECTED_TOOL_CALL",
+                        "TOO_MANY_TOOL_CALLS"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "safetyRatings": {
@@ -2704,21 +2712,16 @@
                 "logprobsResult": {},
                 "urlContextMetadata": {},
                 "index": {
-                  "type": "number",
-                  "description": "Index of the candidate in the list of response candidates."
+                  "description": "Index of the candidate in the list of response candidates.",
+                  "type": "number"
                 },
                 "finishMessage": {
                   "description": "Details the reason why the model stopped generating tokens. This is populated only when finishReason is set.",
                   "type": "string"
                 }
               },
-              "required": [
-                "content",
-                "index"
-              ],
               "description": "https://ai.google.dev/api/generate-content#candidate"
-            },
-            "description": "Candidate responses from the model"
+            }
           },
           "promptFeedback": {
             "description": "Returns the prompt's feedback related to the content filters",
@@ -2726,14 +2729,21 @@
             "properties": {
               "blockReason": {
                 "description": "Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason",
-                "type": "string",
-                "enum": [
-                  "BLOCK_REASON_UNSPECIFIED",
-                  "SAFETY",
-                  "OTHER",
-                  "BLOCKLIST",
-                  "PROHIBITED_CONTENT",
-                  "IMAGE_SAFETY"
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "BLOCK_REASON_UNSPECIFIED",
+                      "SAFETY",
+                      "OTHER",
+                      "BLOCKLIST",
+                      "PROHIBITED_CONTENT",
+                      "IMAGE_SAFETY"
+                    ]
+                  },
+                  {
+                    "type": "string"
+                  }
                 ]
               },
               "safetyRatings": {
@@ -2782,10 +2792,7 @@
                   "description": "https://ai.google.dev/api/generate-content#v1beta.SafetyRating"
                 }
               }
-            },
-            "required": [
-              "safetyRatings"
-            ]
+            }
           },
           "usageMetadata": {
             "description": "Metadata on the generation requests' token usage",
@@ -2927,10 +2934,7 @@
             "description": "The unique response ID.",
             "type": "string"
           }
-        },
-        "required": [
-          "candidates"
-        ]
+        }
       },
       "AnthropicMessagesRequestInput": {
         "type": "object",
@@ -13413,8 +13417,7 @@
               }
             },
             "required": [
-              "role",
-              "content"
+              "role"
             ],
             "additionalProperties": {}
           },
@@ -21324,6 +21327,7 @@
         "type": "object",
         "properties": {
           "candidates": {
+            "description": "Candidate responses from the model",
             "type": "array",
             "items": {
               "type": "object",
@@ -21770,26 +21774,33 @@
                 },
                 "finishReason": {
                   "description": "\n  The reason why the model stopped generating tokens.\n\n  If empty, the model has not stopped generating tokens.\n\n  https://ai.google.dev/api/generate-content#FinishReason\n",
-                  "type": "string",
-                  "enum": [
-                    "FINISH_REASON_UNSPECIFIED",
-                    "STOP",
-                    "MAX_TOKENS",
-                    "SAFETY",
-                    "RECITATION",
-                    "LANGUAGE",
-                    "OTHER",
-                    "BLOCKLIST",
-                    "PROHIBITED_CONTENT",
-                    "SPII",
-                    "MALFORMED_FUNCTION_CALL",
-                    "IMAGE_SAFETY",
-                    "IMAGE_PROHIBITED_CONTENT",
-                    "IMAGE_OTHER",
-                    "NO_IMAGE",
-                    "IMAGE_RECITATION",
-                    "UNEXPECTED_TOOL_CALL",
-                    "TOO_MANY_TOOL_CALLS"
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "FINISH_REASON_UNSPECIFIED",
+                        "STOP",
+                        "MAX_TOKENS",
+                        "SAFETY",
+                        "RECITATION",
+                        "LANGUAGE",
+                        "OTHER",
+                        "BLOCKLIST",
+                        "PROHIBITED_CONTENT",
+                        "SPII",
+                        "MALFORMED_FUNCTION_CALL",
+                        "IMAGE_SAFETY",
+                        "IMAGE_PROHIBITED_CONTENT",
+                        "IMAGE_OTHER",
+                        "NO_IMAGE",
+                        "IMAGE_RECITATION",
+                        "UNEXPECTED_TOOL_CALL",
+                        "TOO_MANY_TOOL_CALLS"
+                      ]
+                    },
+                    {
+                      "type": "string"
+                    }
                   ]
                 },
                 "safetyRatings": {
@@ -21885,22 +21896,17 @@
                 "logprobsResult": {},
                 "urlContextMetadata": {},
                 "index": {
-                  "type": "number",
-                  "description": "Index of the candidate in the list of response candidates."
+                  "description": "Index of the candidate in the list of response candidates.",
+                  "type": "number"
                 },
                 "finishMessage": {
                   "description": "Details the reason why the model stopped generating tokens. This is populated only when finishReason is set.",
                   "type": "string"
                 }
               },
-              "required": [
-                "content",
-                "index"
-              ],
               "additionalProperties": false,
               "description": "https://ai.google.dev/api/generate-content#candidate"
-            },
-            "description": "Candidate responses from the model"
+            }
           },
           "promptFeedback": {
             "description": "Returns the prompt's feedback related to the content filters",
@@ -21908,14 +21914,21 @@
             "properties": {
               "blockReason": {
                 "description": "Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason",
-                "type": "string",
-                "enum": [
-                  "BLOCK_REASON_UNSPECIFIED",
-                  "SAFETY",
-                  "OTHER",
-                  "BLOCKLIST",
-                  "PROHIBITED_CONTENT",
-                  "IMAGE_SAFETY"
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "BLOCK_REASON_UNSPECIFIED",
+                      "SAFETY",
+                      "OTHER",
+                      "BLOCKLIST",
+                      "PROHIBITED_CONTENT",
+                      "IMAGE_SAFETY"
+                    ]
+                  },
+                  {
+                    "type": "string"
+                  }
                 ]
               },
               "safetyRatings": {
@@ -21966,9 +21979,6 @@
                 }
               }
             },
-            "required": [
-              "safetyRatings"
-            ],
             "additionalProperties": false
           },
           "usageMetadata": {
@@ -22117,9 +22127,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "candidates"
-        ],
         "additionalProperties": false
       },
       "AnthropicMessagesRequest": {
@@ -33052,8 +33059,7 @@
               }
             },
             "required": [
-              "role",
-              "content"
+              "role"
             ],
             "additionalProperties": {}
           },
@@ -52435,7 +52441,8 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 512
             },
             "in": "query",
             "name": "search",
@@ -59348,7 +59355,7 @@
         "tags": [
           "App Recordings"
         ],
-        "description": "Draft the AI enhancement for a recorded app-building session: a one-sentence app description, one consolidated build prompt, one closing agent response, and a gallery category, all generated from the full chat. All are drafts the builder edits before applying; nulls mean generation was unavailable and the client falls back.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "description": "Draft the AI enhancement for a recorded app-building session: a one-sentence app description, one consolidated build prompt, one closing agent response, and a gallery category, all generated from the full chat. All are drafts the builder edits before applying; nulls mean generation was unavailable and the client falls back, with `reason` naming why the build prompt is missing so the client can say so instead of degrading silently.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -59398,13 +59405,22 @@
                     "category": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "reason": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "empty_transcript",
+                        "generation_failed"
+                      ]
                     }
                   },
                   "required": [
                     "description",
                     "prompt",
                     "response",
-                    "category"
+                    "category",
+                    "reason"
                   ],
                   "additionalProperties": false
                 }
@@ -80027,15 +80043,24 @@
                       "additionalProperties": false
                     },
                     "stopReason": {
-                      "type": "string",
-                      "enum": [
-                        "end_turn",
-                        "tool_use",
-                        "max_tokens",
-                        "stop_sequence",
-                        "guardrail_intervened",
-                        "content_filtered",
-                        "model_context_window_exceeded"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "end_turn",
+                            "tool_use",
+                            "max_tokens",
+                            "stop_sequence",
+                            "guardrail_intervened",
+                            "content_filtered",
+                            "malformed_model_output",
+                            "malformed_tool_use",
+                            "model_context_window_exceeded"
+                          ]
+                        },
+                        {
+                          "type": "string"
+                        }
                       ]
                     },
                     "usage": {
@@ -81366,15 +81391,24 @@
                       "additionalProperties": false
                     },
                     "stopReason": {
-                      "type": "string",
-                      "enum": [
-                        "end_turn",
-                        "tool_use",
-                        "max_tokens",
-                        "stop_sequence",
-                        "guardrail_intervened",
-                        "content_filtered",
-                        "model_context_window_exceeded"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "end_turn",
+                            "tool_use",
+                            "max_tokens",
+                            "stop_sequence",
+                            "guardrail_intervened",
+                            "content_filtered",
+                            "malformed_model_output",
+                            "malformed_tool_use",
+                            "model_context_window_exceeded"
+                          ]
+                        },
+                        {
+                          "type": "string"
+                        }
                       ]
                     },
                     "usage": {
@@ -84458,15 +84492,24 @@
                       "additionalProperties": false
                     },
                     "stopReason": {
-                      "type": "string",
-                      "enum": [
-                        "end_turn",
-                        "tool_use",
-                        "max_tokens",
-                        "stop_sequence",
-                        "guardrail_intervened",
-                        "content_filtered",
-                        "model_context_window_exceeded"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "end_turn",
+                            "tool_use",
+                            "max_tokens",
+                            "stop_sequence",
+                            "guardrail_intervened",
+                            "content_filtered",
+                            "malformed_model_output",
+                            "malformed_tool_use",
+                            "model_context_window_exceeded"
+                          ]
+                        },
+                        {
+                          "type": "string"
+                        }
                       ]
                     },
                     "usage": {
@@ -135756,15 +135799,24 @@
                                         "additionalProperties": false
                                       },
                                       "stopReason": {
-                                        "type": "string",
-                                        "enum": [
-                                          "end_turn",
-                                          "tool_use",
-                                          "max_tokens",
-                                          "stop_sequence",
-                                          "guardrail_intervened",
-                                          "content_filtered",
-                                          "model_context_window_exceeded"
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "enum": [
+                                              "end_turn",
+                                              "tool_use",
+                                              "max_tokens",
+                                              "stop_sequence",
+                                              "guardrail_intervened",
+                                              "content_filtered",
+                                              "malformed_model_output",
+                                              "malformed_tool_use",
+                                              "model_context_window_exceeded"
+                                            ]
+                                          },
+                                          {
+                                            "type": "string"
+                                          }
                                         ]
                                       },
                                       "usage": {
@@ -165409,15 +165461,24 @@
                                   "additionalProperties": false
                                 },
                                 "stopReason": {
-                                  "type": "string",
-                                  "enum": [
-                                    "end_turn",
-                                    "tool_use",
-                                    "max_tokens",
-                                    "stop_sequence",
-                                    "guardrail_intervened",
-                                    "content_filtered",
-                                    "model_context_window_exceeded"
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "end_turn",
+                                        "tool_use",
+                                        "max_tokens",
+                                        "stop_sequence",
+                                        "guardrail_intervened",
+                                        "content_filtered",
+                                        "malformed_model_output",
+                                        "malformed_tool_use",
+                                        "model_context_window_exceeded"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string"
+                                    }
                                   ]
                                 },
                                 "usage": {
@@ -303846,7 +303907,8 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 512
             },
             "in": "query",
             "name": "search",

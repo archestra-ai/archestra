@@ -808,12 +808,24 @@ async function draftEnhancement(params: {
   appName: string;
 }): Promise<AppRecordingBundle["enhancement"]> {
   try {
-    const { data } = await archestraApiSdk.enhanceAppRecording({
+    const { data, error } = await archestraApiSdk.enhanceAppRecording({
       body: { conversationId: params.conversationId, appName: params.appName },
     });
+    // A failed REQUEST (the hackathon gate, a 500) and a model that produced
+    // nothing both ended here as a bundle with no enhancement, which made them
+    // indistinguishable from the console outward — and this runs at stop, where
+    // nothing else reports. Not fatal either way: the recording still saves and
+    // the player's readiness notice asks for the missing fields by hand.
+    if (error) {
+      console.error("Recording enhancement request failed:", error);
+      return undefined;
+    }
     const prompt = data?.prompt ?? null;
     const description = data?.description ?? null;
     if (!prompt) {
+      console.warn(
+        `Recording enhancement drafted no build prompt (${data?.reason ?? "unknown reason"})`,
+      );
       // The build prompt didn't generate. Keep a partial ONLY when the model
       // still produced a real description — so a good description isn't thrown
       // away with the missing prompt (the recorder's readiness notice then
@@ -837,7 +849,8 @@ async function draftEnhancement(params: {
       // The gallery category for this app.
       ...(data?.category ? { category: data.category } : {}),
     };
-  } catch {
+  } catch (error) {
+    console.error("Recording enhancement request threw:", error);
     return undefined;
   }
 }

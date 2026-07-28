@@ -872,7 +872,7 @@ export type GeminiGenerateContentResponseInput = {
     /**
      * Candidate responses from the model
      */
-    candidates: Array<{
+    candidates?: Array<{
         /**
          *
          * The base structured datatype containing multi-part content of a message.
@@ -882,7 +882,7 @@ export type GeminiGenerateContentResponseInput = {
          * https://ai.google.dev/api/caching#Content
          *
          */
-        content: {
+        content?: {
             /**
              * The role of the author of this content.
              */
@@ -1116,7 +1116,7 @@ export type GeminiGenerateContentResponseInput = {
          * https://ai.google.dev/api/generate-content#FinishReason
          *
          */
-        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS';
+        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS' | string;
         safetyRatings?: Array<{
             /**
              *
@@ -1155,7 +1155,7 @@ export type GeminiGenerateContentResponseInput = {
         /**
          * Index of the candidate in the list of response candidates.
          */
-        index: number;
+        index?: number;
         /**
          * Details the reason why the model stopped generating tokens. This is populated only when finishReason is set.
          */
@@ -1168,8 +1168,8 @@ export type GeminiGenerateContentResponseInput = {
         /**
          * Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason
          */
-        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'IMAGE_SAFETY';
-        safetyRatings: Array<{
+        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'IMAGE_SAFETY' | string;
+        safetyRatings?: Array<{
             /**
              *
              * The category for this setting
@@ -4150,7 +4150,7 @@ export type OllamaNativeChatResponseInput = {
     created_at?: string;
     message: {
         role: string;
-        content: string;
+        content?: string;
         thinking?: string;
         tool_calls?: Array<{
             id?: string;
@@ -6716,7 +6716,7 @@ export type GeminiGenerateContentResponse = {
     /**
      * Candidate responses from the model
      */
-    candidates: Array<{
+    candidates?: Array<{
         /**
          *
          * The base structured datatype containing multi-part content of a message.
@@ -6726,7 +6726,7 @@ export type GeminiGenerateContentResponse = {
          * https://ai.google.dev/api/caching#Content
          *
          */
-        content: {
+        content?: {
             /**
              * The role of the author of this content.
              */
@@ -6960,7 +6960,7 @@ export type GeminiGenerateContentResponse = {
          * https://ai.google.dev/api/generate-content#FinishReason
          *
          */
-        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS';
+        finishReason?: 'FINISH_REASON_UNSPECIFIED' | 'STOP' | 'MAX_TOKENS' | 'SAFETY' | 'RECITATION' | 'LANGUAGE' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'SPII' | 'MALFORMED_FUNCTION_CALL' | 'IMAGE_SAFETY' | 'IMAGE_PROHIBITED_CONTENT' | 'IMAGE_OTHER' | 'NO_IMAGE' | 'IMAGE_RECITATION' | 'UNEXPECTED_TOOL_CALL' | 'TOO_MANY_TOOL_CALLS' | string;
         safetyRatings?: Array<{
             /**
              *
@@ -6999,7 +6999,7 @@ export type GeminiGenerateContentResponse = {
         /**
          * Index of the candidate in the list of response candidates.
          */
-        index: number;
+        index?: number;
         /**
          * Details the reason why the model stopped generating tokens. This is populated only when finishReason is set.
          */
@@ -7012,8 +7012,8 @@ export type GeminiGenerateContentResponse = {
         /**
          * Specifies the reason why the prompt was blocked. https://ai.google.dev/api/generate-content#BlockReason
          */
-        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'IMAGE_SAFETY';
-        safetyRatings: Array<{
+        blockReason?: 'BLOCK_REASON_UNSPECIFIED' | 'SAFETY' | 'OTHER' | 'BLOCKLIST' | 'PROHIBITED_CONTENT' | 'IMAGE_SAFETY' | string;
+        safetyRatings?: Array<{
             /**
              *
              * The category for this setting
@@ -9994,7 +9994,7 @@ export type OllamaNativeChatResponse = {
     created_at?: string;
     message: {
         role: string;
-        content: string;
+        content?: string;
         thinking?: string;
         tool_calls?: Array<{
             id?: string;
@@ -17128,6 +17128,7 @@ export type EnhanceAppRecordingResponses = {
         prompt: string | null;
         response: string | null;
         category: string | null;
+        reason: 'empty_transcript' | 'generation_failed';
     };
 };
 
@@ -23136,7 +23137,7 @@ export type BedrockConverseWithDefaultAgentResponses = {
                 }>;
             };
         };
-        stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'model_context_window_exceeded';
+        stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'malformed_model_output' | 'malformed_tool_use' | 'model_context_window_exceeded' | string;
         usage: {
             inputTokens: number;
             outputTokens: number;
@@ -23475,7 +23476,7 @@ export type BedrockConverseWithAgentResponses = {
                 }>;
             };
         };
-        stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'model_context_window_exceeded';
+        stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'malformed_model_output' | 'malformed_tool_use' | 'model_context_window_exceeded' | string;
         usage: {
             inputTokens: number;
             outputTokens: number;
@@ -24233,7 +24234,7 @@ export type BedrockConverseWithAgentAndModelResponses = {
                 }>;
             };
         };
-        stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'model_context_window_exceeded';
+        stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'malformed_model_output' | 'malformed_tool_use' | 'model_context_window_exceeded' | string;
         usage: {
             inputTokens: number;
             outputTokens: number;
@@ -37423,7 +37424,7 @@ export type GetInteractionsResponses = {
                         }>;
                     };
                 };
-                stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'model_context_window_exceeded';
+                stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'malformed_model_output' | 'malformed_tool_use' | 'model_context_window_exceeded' | string;
                 usage: {
                     inputTokens: number;
                     outputTokens: number;
@@ -43441,7 +43442,7 @@ export type GetInteractionResponses = {
                     }>;
                 };
             };
-            stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'model_context_window_exceeded';
+            stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | 'guardrail_intervened' | 'content_filtered' | 'malformed_model_output' | 'malformed_tool_use' | 'model_context_window_exceeded' | string;
             usage: {
                 inputTokens: number;
                 outputTokens: number;

@@ -74,6 +74,8 @@ import {
 } from "@/components/ui/tooltip";
 import {
   cancelAppRecordingVideoRender,
+  type EnhancementFailureReason,
+  enhancementFailureMessage,
   fallbackRecordingDescription,
   useAppRecording,
   useAppRecordingEditor,
@@ -192,6 +194,8 @@ export interface RecordingEnhancementDraft {
   prompt: string | null;
   response: string | null;
   category: string | null;
+  /** Why the build prompt is missing, when it is. Null once one was drafted. */
+  reason?: EnhancementFailureReason | null;
 }
 
 /**
@@ -2204,9 +2208,7 @@ function PlayerSurface({
               setPromptDraft("");
             }
             if (result) {
-              toast.info(
-                "Couldn't draft a build prompt automatically — write one here. (Your first chat message is used for the submission if you skip it.)",
-              );
+              toast.info(enhancementFailureMessage(result.reason));
             }
             return;
           }

@@ -130,6 +130,68 @@ describe("app llm completion", () => {
     expect(archestraError(result).type).toBe("llm_unavailable");
   });
 
+  // Every non-quota failure used to read "The LLM completion could not be
+  // produced.", so an app author could not tell a prompt too long for the model
+  // from a revoked credential from an outage — the cause reached only a server
+  // log they cannot read.
+  test("a rejected request tells the app what the provider rejected", async () => {
+    vi.mocked(generateText).mockRejectedValue(
+      new APICallError({
+        message: "Bad Request",
+        url: "http://proxy/v1/messages",
+        requestBodyValues: { prompt: "x" },
+        statusCode: 400,
+        responseBody: "input length exceeds the context window",
+      }),
+    );
+
+    const result = await executeArchestraTool(
+      llmTool,
+      { prompt: "x" },
+      context,
+    );
+    const { type, message } = archestraError(result);
+    expect(type).toBe("llm_unavailable");
+    expect(message).toContain("prompt may be too long");
+    expect(message).toContain("input length exceeds the context window");
+    // The platform's own routing is not the app's business.
+    expect(message).not.toContain("http://proxy");
+  });
+
+  test("a provider outage reads as one, not as a generic failure", async () => {
+    vi.mocked(generateText).mockRejectedValue(
+      new APICallError({
+        message: "Service Unavailable",
+        url: "http://proxy/v1/messages",
+        requestBodyValues: {},
+        statusCode: 503,
+      }),
+    );
+
+    const result = await executeArchestraTool(
+      llmTool,
+      { prompt: "x" },
+      context,
+    );
+    expect(archestraError(result).message).toContain("unavailable right now");
+  });
+
+  test("a failure that describes itself no better keeps the generic message", async () => {
+    vi.mocked(generateText).mockRejectedValue(new Error("boom"));
+
+    const result = await executeArchestraTool(
+      llmTool,
+      { prompt: "x" },
+      context,
+    );
+    expect(archestraError(result).message).toBe(
+      "The LLM completion could not be produced.",
+    );
+    // The thrown error's own text is not passed through: it is not shaped for
+    // an app author and can carry the platform's internals.
+    expect(archestraError(result).message).not.toContain("boom");
+  });
+
   test("reports llm_unavailable when no provider key is configured", async () => {
     vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue({
       provider: "anthropic",

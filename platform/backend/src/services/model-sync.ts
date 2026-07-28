@@ -20,8 +20,11 @@ import {
 import { modelFetchers } from "@/routes/chat/model-fetchers";
 import type { FetchedModelCapabilities } from "@/routes/chat/model-fetchers/types";
 import {
+  type CrossProviderMetadata,
   type CrossProviderPrices,
+  resolveCrossProviderMetadata,
   resolveCrossProviderPrices,
+  stripModelDateSuffix,
 } from "@/services/cross-provider-pricing";
 import type {
   CreateModel,
@@ -276,24 +279,30 @@ export function buildModelsToUpsert(params: {
   }
 
   return [...uniqueModels.values()].map((model) => {
-    // Bedrock/Azure model ids don't match models.dev keys, so derive pricing
-    // from the underlying vendor entry (which also carries cache prices).
-    const crossProviderPrices =
-      provider === "bedrock" || provider === "azure"
-        ? resolveCrossProviderPrices({
-            provider,
-            modelId: model.id,
-            underlyingModelName: model.underlyingModelName,
-            modelsDevData,
-          })
-        : null;
+    // Bedrock/Azure model ids don't match models.dev keys, so derive pricing and
+    // capabilities from the underlying vendor entry.
+    const isReseller = provider === "bedrock" || provider === "azure";
+    const crossProviderArgs = {
+      provider,
+      modelId: model.id,
+      underlyingModelName: model.underlyingModelName,
+      modelsDevData,
+    };
+    const crossProviderPrices = isReseller
+      ? resolveCrossProviderPrices(crossProviderArgs)
+      : null;
+    const crossProviderMetadata = isReseller
+      ? resolveCrossProviderMetadata(crossProviderArgs)
+      : null;
 
     const capabilities = resolveModelCapabilities({
       provider,
       modelId: model.id,
-      capabilities: capabilitiesMap.get(model.id),
+      capabilities: lookupModelsDevCapabilities(capabilitiesMap, model.id),
       fetched: model.capabilities,
       crossProviderPrices,
+      crossProviderMetadata,
+      underlyingModelName: model.underlyingModelName,
     });
 
     return {
@@ -415,18 +424,35 @@ export function resolveModelCapabilities(params: {
   fetched?: FetchedModelCapabilities;
   /** Prices derived from the underlying vendor entry for Bedrock/Azure. */
   crossProviderPrices?: CrossProviderPrices | null;
+  /** Capabilities derived from the underlying vendor entry for Bedrock/Azure. */
+  crossProviderMetadata?: CrossProviderMetadata | null;
+  /** Underlying vendor model name, when the fetcher can determine it (Azure). */
+  underlyingModelName?: string | null;
 }): ProviderModelCapabilities {
-  const { provider, modelId, capabilities, fetched, crossProviderPrices } =
-    params;
+  const {
+    provider,
+    modelId,
+    capabilities,
+    fetched,
+    crossProviderPrices,
+    crossProviderMetadata,
+    underlyingModelName,
+  } = params;
   const inferredCapabilities = inferModelCapabilities({
     provider,
     modelId,
     fetched,
+    underlyingModelName,
   });
 
-  // Priority per field: fetcher -> models.dev -> hardcoded inference.
+  // Priority per field: fetcher -> models.dev -> hardcoded inference ->
+  // cross-provider (Bedrock/Azure underlying vendor). Inference outranks the
+  // cross-provider tier because it describes the model's shape on *this*
+  // provider, which the resold vendor entry cannot: an Azure embedding
+  // deployment emits no output modality even though the OpenAI entry it
+  // resolves to lists "text".
   // Price priority: fetcher -> models.dev (same provider) -> cross-provider
-  // (Bedrock/Azure underlying vendor) -> null.
+  // -> null.
   return normalizeKnownModelCapabilities({
     provider,
     modelId,
@@ -435,17 +461,34 @@ export function resolveModelCapabilities(params: {
       contextLength:
         fetched?.contextLength ??
         capabilities?.contextLength ??
-        inferredCapabilities.contextLength,
+        inferredCapabilities.contextLength ??
+        crossProviderMetadata?.contextLength ??
+        null,
       outputLength:
-        capabilities?.outputLength ?? inferredCapabilities.outputLength,
+        capabilities?.outputLength ??
+        inferredCapabilities.outputLength ??
+        crossProviderMetadata?.outputLength ??
+        null,
       inputModalities:
-        capabilities?.inputModalities ?? inferredCapabilities.inputModalities,
+        capabilities?.inputModalities ??
+        inferredCapabilities.inputModalities ??
+        parseModalities(
+          crossProviderMetadata?.inputModalities,
+          ModelInputModalitySchema,
+        ),
       outputModalities:
-        capabilities?.outputModalities ?? inferredCapabilities.outputModalities,
+        capabilities?.outputModalities ??
+        inferredCapabilities.outputModalities ??
+        parseModalities(
+          crossProviderMetadata?.outputModalities,
+          ModelOutputModalitySchema,
+        ),
       supportsToolCalling:
         fetched?.supportsToolCalling ??
         capabilities?.supportsToolCalling ??
-        inferredCapabilities.supportsToolCalling,
+        inferredCapabilities.supportsToolCalling ??
+        crossProviderMetadata?.supportsToolCalling ??
+        null,
       promptPricePerToken:
         fetched?.promptPricePerToken ??
         capabilities?.promptPricePerToken ??
@@ -468,6 +511,27 @@ export function resolveModelCapabilities(params: {
         null,
     },
   });
+}
+
+/**
+ * Look a model up in the models.dev map, falling back to its date-stripped id.
+ *
+ * Providers hand out date-pinned snapshot ids (`gpt-4o-mini-2024-07-18`) that
+ * the registry keys without the date, so an exact-only lookup misses them and
+ * the model falls all the way through to the flat default price. The exact key
+ * still wins, making the fallback purely additive, and the fallback is itself an
+ * exact lookup, so it can only match a key the registry really has.
+ */
+function lookupModelsDevCapabilities(
+  capabilitiesMap: Map<string, ProviderModelCapabilities>,
+  modelId: string,
+): ProviderModelCapabilities | undefined {
+  const exact = capabilitiesMap.get(modelId);
+  if (exact) {
+    return exact;
+  }
+  const dateless = stripModelDateSuffix(modelId);
+  return dateless === modelId ? undefined : capabilitiesMap.get(dateless);
 }
 
 /**
@@ -523,7 +587,7 @@ function buildCapabilitiesMap(
  * Returns null if input is undefined/empty, otherwise returns validated modalities.
  */
 function parseModalities<T>(
-  modalities: string[] | undefined,
+  modalities: string[] | null | undefined,
   schema: { safeParse: (value: unknown) => { success: boolean; data?: T } },
 ): T[] | null {
   if (!modalities || modalities.length === 0) {
@@ -545,11 +609,12 @@ function inferModelCapabilities(params: {
   provider: SupportedProvider;
   modelId: string;
   fetched?: FetchedModelCapabilities;
+  underlyingModelName?: string | null;
 }): ProviderModelCapabilities {
-  const { provider, modelId, fetched } = params;
+  const { provider, modelId, fetched, underlyingModelName } = params;
 
   if (provider === "azure") {
-    return inferAzureCapabilities(modelId);
+    return inferAzureCapabilities(modelId, underlyingModelName);
   }
 
   if (provider === "gemini") {
@@ -585,8 +650,21 @@ function inferOllamaCapabilities(
   };
 }
 
-function inferAzureCapabilities(modelId: string): ProviderModelCapabilities {
-  if (!modelId.toLowerCase().includes("embedding")) {
+/**
+ * Azure deployment names are chosen by the customer, so the id alone often says
+ * nothing about the model behind it. The underlying model name settles it: an
+ * opaquely-named embedding deployment must still be classified as one, or the
+ * vendor entry it resolves to — which lists a "text" output — would make it look
+ * generative.
+ */
+function inferAzureCapabilities(
+  modelId: string,
+  underlyingModelName?: string | null,
+): ProviderModelCapabilities {
+  const isEmbedding = [modelId, underlyingModelName].some((name) =>
+    name?.toLowerCase().includes("embedding"),
+  );
+  if (!isEmbedding) {
     return emptyCapabilities();
   }
 

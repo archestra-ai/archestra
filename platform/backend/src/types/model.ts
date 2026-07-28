@@ -156,6 +156,7 @@ export type CreateModel = z.infer<typeof CreateModelSchema>;
 export const PriceSourceSchema = z.enum([
   "custom",
   "models_dev",
+  "aws",
   "derived_multiplier",
   "default",
 ]);

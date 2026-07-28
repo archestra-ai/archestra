@@ -55521,10 +55521,10 @@ export type GetLlmModelsResponses = {
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
             isCustomPrice: boolean;
-            priceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
+            priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
             pricePerMillionCacheRead: string | null;
             pricePerMillionCacheWrite: string | null;
-            cachePriceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
+            cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
         };
         isBest?: boolean;
         isFree: boolean;
@@ -55749,10 +55749,10 @@ export type GetModelsWithApiKeysResponses = {
         pricePerMillionInput: string | null;
         pricePerMillionOutput: string | null;
         isCustomPrice: boolean;
-        priceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
+        priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
         pricePerMillionCacheRead: string | null;
         pricePerMillionCacheWrite: string | null;
-        cachePriceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
+        cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
         isFree: boolean;
         effectiveContextLength: number | null;
     }>;

@@ -449,7 +449,7 @@ describe("buildAgentSystemPrompt", () => {
 
     expect(prompt).toContain(PROJECT_FILES_PREFIX);
     // Sorted for a byte-stable block, regardless of input (newest-first) order.
-    expect(prompt).toContain("`app4.js`, `index.html`, `styles.css`");
+    expect(prompt).toContain('"app4.js", "index.html", "styles.css"');
     // The core behavioral fix: the model must not deny files that exist.
     expect(prompt).toContain(
       "never claim no files were attached while this list is non-empty",
@@ -540,7 +540,7 @@ describe("buildAgentSystemPrompt", () => {
       },
     });
 
-    expect(prompt).toContain(`${OPENED_APP_PREFIX} **Archestra HR**.`);
+    expect(prompt).toContain(`${OPENED_APP_PREFIX} "Archestra HR".`);
     expect(prompt).toContain("Applicant tracking.");
     // The namespace is what makes the app reachable: the model must be told the
     // dispatchable prefix, not just the display name.
@@ -608,7 +608,7 @@ describe("buildAgentSystemPrompt", () => {
 
     // Still framed as the open app, but with no prefix invented for it — a
     // wrong namespace sends the model hunting for tools that do not exist.
-    expect(prompt).toContain(`${OPENED_APP_PREFIX} **Archestra HR**.`);
+    expect(prompt).toContain(`${OPENED_APP_PREFIX} "Archestra HR".`);
     expect(prompt).not.toContain("__*");
     expect(prompt).not.toContain('mode: "regex"');
   });
@@ -639,7 +639,7 @@ describe("buildAgentSystemPrompt", () => {
       },
     });
 
-    expect(prompt).toContain(`${OPENED_APP_PREFIX} **Expense Tracker**.`);
+    expect(prompt).toContain(`${OPENED_APP_PREFIX} "Expense Tracker".`);
     expect(prompt).toContain("change this app rather than building a new one");
     // The owned block must not leak the external block's tool guidance.
     expect(prompt).not.toContain("__*");

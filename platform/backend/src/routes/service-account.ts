@@ -1,5 +1,6 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { getPermissionsForUserContext } from "@/auth/utils";
 import OrganizationRoleModel from "@/models/organization-role";
 import ServiceAccountModel from "@/models/service-account";
 import {
@@ -73,7 +74,11 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      await validateRoleOrThrow(request.body.role, request.organizationId);
+      await validateRoleOrThrow({
+        role: request.body.role,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
       const serviceAccount = await ServiceAccountModel.create({
         organizationId: request.organizationId,
         name: request.body.name,
@@ -98,7 +103,11 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       if (request.body.role) {
-        await validateRoleOrThrow(request.body.role, request.organizationId);
+        await validateRoleOrThrow({
+          role: request.body.role,
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        });
       }
 
       const serviceAccount = await ServiceAccountModel.update(
@@ -237,12 +246,43 @@ export default serviceAccountRoutes;
 
 // === Internal helpers
 
-async function validateRoleOrThrow(role: string, organizationId: string) {
+/**
+ * A service-account token authenticates with the full permission set of the
+ * role stored on the account, so assigning a role is granting those
+ * permissions to anyone holding a token. Existence alone is therefore not
+ * enough to check: predefined roles resolve here too, so without the subset
+ * rule below `serviceAccount:create` / `serviceAccount:update` would be enough
+ * to mint a token that outranks the caller. The comparison uses the same
+ * `validateRolePermissions` rule custom-role authoring uses, and resolves the
+ * caller through `getPermissionsForUserContext` so a service-account caller is
+ * measured against its own role rather than a synthetic user.
+ */
+async function validateRoleOrThrow(params: {
+  role: string;
+  organizationId: string;
+  userId: string;
+}) {
   const resolvedRole = await OrganizationRoleModel.getByIdentifier(
-    role,
-    organizationId,
+    params.role,
+    params.organizationId,
   );
   if (!resolvedRole) {
     throw new ApiError(400, "Role not found");
+  }
+
+  const callerPermissions = await getPermissionsForUserContext({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  const { valid, missingPermissions } =
+    OrganizationRoleModel.validateRolePermissions(
+      callerPermissions,
+      resolvedRole.permission,
+    );
+  if (!valid) {
+    throw new ApiError(
+      403,
+      `You cannot grant permissions you don't have: ${missingPermissions.join(", ")}`,
+    );
   }
 }

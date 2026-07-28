@@ -27,6 +27,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { LRUCacheManager } from "@/cache-manager";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -589,12 +590,14 @@ export async function handleLLMProxy<
   // 5. Enforce authentication for keyless providers on external requests.
   // A passthrough key authenticates the user but carries no provider credential,
   // so it intentionally does not satisfy the keyless-provider requirement.
-  assertAuthenticatedForKeylessProvider(
+  assertAuthenticatedForKeylessProvider({
     apiKey,
-    wasVirtualKeyResolved || wasOAuthAuthenticated,
+    wasVirtualKeyResolved: wasVirtualKeyResolved || wasOAuthAuthenticated,
     wasJwksAuthenticated,
-    request.ip,
-  );
+    requestIp: request.ip,
+    providerSuppliesServerCredential:
+      providerSuppliesServerCredential(providerName),
+  });
 
   // All authenticated user-scoped credentials must resolve to the same user.
   assertConsistentUserCredentials([
@@ -603,6 +606,19 @@ export async function handleLLMProxy<
     oauthUserId,
     regularVirtualKeyUserId,
   ]);
+
+  // The acting user as proven by a credential, as opposed to `userId`, which
+  // starts from the unauthenticated X-Archestra-User-Id / OpenWebUI-email
+  // headers. Those headers are attribution hints — good enough for logging and
+  // usage records, never sufficient to unlock access — so authorization checks
+  // must read this instead. Undefined for org-scoped virtual keys, OAuth client
+  // credentials, and raw provider-key calls, none of which identify a user.
+  const authenticatedUserId =
+    authOverride?.userId ??
+    passthroughUserId ??
+    jwksUserId ??
+    oauthUserId ??
+    regularVirtualKeyUserId;
 
   // Fall back to the personal standard virtual key's owner for user attribution.
   // Higher-precedence sources — the passthrough key, JWKS, OAuth, and the
@@ -784,19 +800,34 @@ export async function handleLLMProxy<
       : [];
 
     // Enforce per-team model restrictions before any upstream call. Checked on
-    // the model actually being invoked (post cost-optimization rewrite).
+    // the model actually being invoked (post cost-optimization rewrite), and
+    // against the AUTHENTICATED identity only — `userTeams` above is derived
+    // from `userId`, which a caller can seed with the X-Archestra-User-Id
+    // header, so it must not decide access.
+    const authenticatedUserTeamIds = !authenticatedUserId
+      ? []
+      : authenticatedUserId === userId
+        ? userTeams.map((team) => team.id)
+        : (
+            await TeamModel.getTeamLabelInfoForUser({
+              userId: authenticatedUserId,
+              organizationId: resolvedAgent.organizationId,
+            })
+          ).map((team) => team.id);
+
     const modelTeamAccess = await utils.checkModelTeamAccess({
       provider: providerName,
       modelId: actualModel,
       organizationId: resolvedAgent.organizationId,
-      userId,
-      userTeamIds: userTeams.map((team) => team.id),
+      authenticatedUserId,
+      userTeamIds: authenticatedUserTeamIds,
     });
     if (!modelTeamAccess.allowed) {
       logger.info(
         {
           resolvedAgentId,
           userId,
+          authenticatedUserId,
           actualModel,
           reason: "model_team_restricted",
         },
@@ -2152,6 +2183,23 @@ function createDownstreamAbortSignal(params: {
   }
 
   return controller.signal;
+}
+
+/**
+ * Whether the backend authenticates upstream with its OWN credentials for this
+ * provider and discards whatever the caller sent.
+ *
+ * Gemini in Vertex AI mode builds its client from the server's project and
+ * ADC/service-account credentials, never reading the caller's key — so a
+ * caller-supplied Authorization value is not a credential and cannot stand in
+ * for authentication.
+ *
+ * Azure (Entra ID) and Anthropic (workload identity) are deliberately absent:
+ * both fall back to server credentials only when no caller key is present, so a
+ * key supplied there is a genuine provider secret that the upstream validates.
+ */
+function providerSuppliesServerCredential(providerName: string): boolean {
+  return providerName === "gemini" && isVertexAiEnabled();
 }
 
 function shouldUseKeylessProviderApiKey(params: {

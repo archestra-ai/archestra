@@ -11,10 +11,15 @@ describe("service account routes", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     const organization = await makeOrganization();
     user = await makeUser();
     organizationId = organization.id;
+    // Assigning a role to a service account grants that role's permissions to
+    // any token holder, so the route only lets a caller grant permissions they
+    // hold themselves. That check reads the caller's role off their member
+    // record, so the acting user needs one.
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {

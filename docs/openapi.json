@@ -259351,7 +259351,9 @@
                   "appName": {
                     "nullable": true,
                     "type": "string",
-                    "maxLength": 100
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[\\p{L}\\p{N}][\\p{L}\\p{N} .,'’\\-&()+:!?_/]*$"
                   },
                   "ogDescription": {
                     "nullable": true,

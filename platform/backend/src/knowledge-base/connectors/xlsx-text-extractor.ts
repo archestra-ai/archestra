@@ -56,9 +56,11 @@ export async function extractTextFromXlsx(buffer: Buffer): Promise<string> {
 
         // Place the value at its real column (from the "A1"-style ref) so columns
         // line up across rows even when empty cells are omitted from the XML.
-        // Refs without column letters fall back to append order.
+        // Refs without column letters fall back to append order; refs naming a
+        // column past the sheet's addressable range are dropped.
         const col = columnIndex($cell.attr("r"));
-        if (col < 0) {
+        if (col === COLUMN_INDEX_OUT_OF_RANGE) return;
+        if (col === COLUMN_INDEX_UNKNOWN) {
           if (value) columns.push(value);
           return;
         }
@@ -93,19 +95,42 @@ async function readSharedStrings(zip: JSZip): Promise<string[]> {
     .get();
 }
 
+/** The reference carried no column letters — append in encounter order. */
+const COLUMN_INDEX_UNKNOWN = -1;
+/** The reference names a column no worksheet can address — drop the cell. */
+const COLUMN_INDEX_OUT_OF_RANGE = -2;
+
+/**
+ * Highest column a worksheet can address, 0-based: OOXML stops at "XFD" (16384).
+ * The index drives `while (columns.length <= col) columns.push("")`, so without
+ * a ceiling a single crafted reference decides how much memory a row costs —
+ * "ZZZZZZ1" asks for ~321 million entries, and each extra letter multiplies that
+ * by 26. Connector input is whatever the upstream file happens to contain, so
+ * the bound is enforced here rather than trusted to the producer.
+ */
+const MAX_COLUMN_INDEX = 16_384 - 1;
+
+/** Letters in the widest addressable reference ("XFD"). */
+const MAX_COLUMN_LETTERS = 3;
+
 /**
  * 0-based column index from an "A1"-style cell reference ("B7" → 1, "AA1" → 26).
- * Returns -1 when the reference has no column letters, so the caller appends the
- * value in encounter order instead.
+ * Returns `COLUMN_INDEX_UNKNOWN` when the reference has no column letters (the
+ * caller appends the value in encounter order) and `COLUMN_INDEX_OUT_OF_RANGE`
+ * when it names a column beyond `MAX_COLUMN_INDEX`.
  */
 function columnIndex(cellRef: string | undefined): number {
   const letters = cellRef ? /^[A-Za-z]+/.exec(cellRef)?.[0] : undefined;
-  if (!letters) return -1;
+  if (!letters) return COLUMN_INDEX_UNKNOWN;
+  // Checked before accumulating: four or more letters is always out of range,
+  // and the running index would overflow well before a long run finished.
+  if (letters.length > MAX_COLUMN_LETTERS) return COLUMN_INDEX_OUT_OF_RANGE;
   let index = 0;
   for (const ch of letters.toUpperCase()) {
     index = index * 26 + (ch.charCodeAt(0) - 64);
   }
-  return index - 1;
+  index -= 1;
+  return index > MAX_COLUMN_INDEX ? COLUMN_INDEX_OUT_OF_RANGE : index;
 }
 
 /**

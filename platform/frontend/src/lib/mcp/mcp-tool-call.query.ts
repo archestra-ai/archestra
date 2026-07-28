@@ -25,6 +25,20 @@ export function formatAuthMethod(authMethod: MCPGatewayAuthMethod): string {
   }
 }
 
+/**
+ * Who a tool call ran on behalf of, for the calls the platform served itself.
+ * A call made with a gateway token carries no user, and an auditor still needs
+ * a name for it — that identity is the token itself.
+ */
+export function formatCallerIdentity(row: {
+  userName: string | null;
+  authMethod: MCPGatewayAuthMethod | null;
+}): string | null {
+  return (
+    row.userName ?? (row.authMethod ? formatAuthMethod(row.authMethod) : null)
+  );
+}
+
 const { getMcpToolCall, getMcpToolCalls } = archestraApiSdk;
 
 export function useMcpToolCalls({

@@ -31,6 +31,7 @@ import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import {
   formatAuthMethod,
+  formatCallerIdentity,
   useMcpToolCalls,
 } from "@/lib/mcp/mcp-tool-call.query";
 import { formatDate } from "@/lib/utils";
@@ -307,13 +308,12 @@ function McpToolCallsTable({
         if (!executedAs) {
           return <div className="text-xs text-muted-foreground">—</div>;
         }
-        // Named from the caller's perspective, not the reader's: "me" here
-        // means the call ran on the caller's own connection.
+        // An auditor needs the person, never "Me" — the reader is rarely the
+        // caller here, so no identity is ever written from their perspective.
         return (
           <ExecutedAsBadge
             executedAs={executedAs}
-            meUserId={row.original.userId}
-            callerName={row.original.userName}
+            callerName={formatCallerIdentity(row.original)}
           />
         );
       },

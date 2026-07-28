@@ -30,8 +30,9 @@ export function ExecutedAsBadge({
 }: {
   executedAs: McpExecutedAs | null | undefined;
   /**
-   * Whose perspective "Me" is written from: the viewer in chat, the recorded
-   * caller in the tool-call log. Omit to always name the owner.
+   * The reader, so their own identity reads as "Me". Chat passes the viewer;
+   * the tool-call log passes nobody, because an auditor reading someone else's
+   * call needs the person's name, never "Me".
    */
   meUserId?: string | null;
   /**

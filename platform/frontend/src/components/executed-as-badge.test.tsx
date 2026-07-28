@@ -113,6 +113,19 @@ describe("ExecutedAsBadge", () => {
     ).not.toHaveLength(0);
   });
 
+  it("names the caller for an auditor, who is not the caller", () => {
+    render(
+      <ExecutedAsBadge
+        executedAs={{ kind: "platform", callerUserId: "user-2" }}
+        callerName="Grace Hopper"
+      />,
+    );
+
+    // The tool-call log passes no viewer, so nothing ever reads as "Me" there.
+    expect(screen.getByText("Grace Hopper")).toBeInTheDocument();
+    expect(screen.queryByText("Me")).not.toBeInTheDocument();
+  });
+
   it("renders nothing for a call that resolved no upstream credential", () => {
     const { container } = render(<ExecutedAsBadge executedAs={null} />);
 

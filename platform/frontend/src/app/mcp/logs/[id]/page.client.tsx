@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { useProfiles } from "@/lib/agent.query";
 import {
   formatAuthMethod,
+  formatCallerIdentity,
   useMcpToolCall,
 } from "@/lib/mcp/mcp-tool-call.query";
 import { formatDate } from "@/lib/utils";
@@ -197,8 +198,7 @@ function McpToolCallDetail({
             <MetadataItem label="Called as">
               <ExecutedAsBadge
                 executedAs={executedAs}
-                meUserId={mcpToolCall.userId}
-                callerName={mcpToolCall.userName}
+                callerName={formatCallerIdentity(mcpToolCall)}
               />
             </MetadataItem>
           )}

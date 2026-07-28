@@ -106,7 +106,10 @@ export class BedrockClient {
     }
 
     const result = await response.json();
-    logger.info({ response: result }, "[BedrockClient] converse response");
+    logger.debug(
+      { stopReason: (result as ConverseResponse).stopReason },
+      "[BedrockClient] converse response received",
+    );
     return result as ConverseResponse;
   }
 

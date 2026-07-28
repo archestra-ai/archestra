@@ -143,6 +143,8 @@ When enabled, traces include:
 - **LLM spans** - `gen_ai.content.prompt` event with the request messages, and `gen_ai.content.completion` event with the response text
 - **MCP spans** - `gen_ai.content.input` event with tool call arguments, and `gen_ai.content.output` event with tool call results
 
+When disabled, these events are omitted from spans entirely — they are not emitted with empty values. The rest of the span (model, tokens, durations, identity attributes) is unaffected.
+
 Content is truncated to 10,000 characters per event by default to avoid oversized spans. This limit is configurable via the `ARCHESTRA_OTEL_CONTENT_MAX_LENGTH` [environment variable](/docs/platform-deployment#observability--metrics).
 
 ### Metric-to-Trace Exemplars
@@ -214,6 +216,11 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `archestra.cost` - Estimated cost in USD (requires [model pricing](/docs/platform-costs-and-limits#model-pricing) configuration)
 - `gen_ai.response.finish_reasons` - Why the model stopped generating (e.g., `["stop"]`, `["tool_calls"]`, `["end_turn"]`)
 
+**Span Events:**
+
+- `gen_ai.content.prompt` - Carries the `gen_ai.prompt` attribute with the request messages. Not present when [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/platform-deployment#observability--metrics) is `false`.
+- `gen_ai.content.completion` - Carries the `gen_ai.completion` attribute with the response text. Not present when [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/platform-deployment#observability--metrics) is `false`.
+
 **Error Attributes:**
 
 - `error.type` - The error class name when an exception occurs during the LLM call
@@ -255,6 +262,11 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 - `mcp.blocked_reason` - Human-readable reason why the tool call was blocked (only present when `mcp.blocked=true`). Possible values include policy-specific reasons (e.g., "Tool invocation blocked: policy is configured to always block tool call"), untrusted context reasons, or custom reasons configured on individual policies.
 - `mcp.is_error_result` - Whether the tool returned an error result (`true`/`false`). This is distinct from span status ERROR, which indicates an exception during execution. Only present on executed (non-blocked) tool calls.
 - `error.type` - The error class name when an exception occurs during tool execution
+
+**Span Events:**
+
+- `gen_ai.content.input` - Carries the tool call arguments. Not present when [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/platform-deployment#observability--metrics) is `false`.
+- `gen_ai.content.output` - Carries the tool call result. Not present when [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/platform-deployment#observability--metrics) is `false`.
 
 **Span Names:**
 

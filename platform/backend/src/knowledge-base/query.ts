@@ -148,6 +148,13 @@ class QueryService {
         preRerankCount,
         postRerankCount: topResults.length,
         expandedQueryCount: expandedQueries.length,
+        resultIds: topResults.map((r) => r.id),
+      },
+      "[QueryService] Final results (after rerank)",
+    );
+    // Titles and content previews are indexed corpus content — debug only.
+    logger.debug(
+      {
         results: topResults.map((r) => ({
           id: r.id,
           score: r.score,
@@ -155,7 +162,7 @@ class QueryService {
           contentPreview: r.content.slice(0, 80),
         })),
       },
-      "[QueryService] Final results (after rerank)",
+      "[QueryService] Final result previews (after rerank)",
     );
 
     const searchType = hybridEnabled ? "hybrid" : "vector";
@@ -194,7 +201,8 @@ class QueryService {
       hybridEnabled,
     } = params;
 
-    logger.info(
+    // queryText is user content — payloads only at debug.
+    logger.debug(
       { queryText, type, hybridEnabled },
       "[QueryService] Searching expanded query",
     );
@@ -244,7 +252,7 @@ class QueryService {
 
     if (!embeddingResponse.data[0]?.embedding) {
       logger.warn(
-        { queryText },
+        { queryLength: queryText.length },
         "[QueryService] Embedding API returned no embedding for query",
       );
       return [];
@@ -277,7 +285,6 @@ class QueryService {
 
     logger.info(
       {
-        queryText,
         type,
         vectorCount: vectorRows.length,
         fullTextCount: fullTextRows.length,

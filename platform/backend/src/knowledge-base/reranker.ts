@@ -74,7 +74,6 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
       provider: rerankerConfig.provider,
       model: rerankerConfig.modelName,
       chunkCount: chunks.length,
-      queryText,
     },
     "[Reranker] Calling LLM for reranking",
   );
@@ -112,18 +111,25 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
 
     logger.info(
       {
-        queryText,
         chunkCount: chunks.length,
         filteredOut: reranked.length - filtered.length,
         minRelevanceScore: RERANKER_MIN_RELEVANCE_SCORE,
-        scores: reranked.map(({ chunk, score }) => ({
+        scores: reranked.map(({ score }) => score),
+      },
+      "[Reranker] LLM scores received",
+    );
+    // Query text, titles, and previews are user/corpus content — debug only.
+    logger.debug(
+      {
+        queryText,
+        scoredChunks: reranked.map(({ chunk, score }) => ({
           score,
           kept: score >= RERANKER_MIN_RELEVANCE_SCORE,
           title: chunk.title,
           contentPreview: chunk.content.slice(0, 80),
         })),
       },
-      "[Reranker] LLM scores received",
+      "[Reranker] LLM score previews",
     );
 
     return filtered.map((r) => r.chunk);

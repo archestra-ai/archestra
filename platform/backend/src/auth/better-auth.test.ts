@@ -1,3 +1,4 @@
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
@@ -344,6 +345,87 @@ describe("handleBeforeHook", () => {
           callbackURL: "/chat",
           invitationId: invitation.id,
         },
+      });
+
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+  });
+
+  describe("impersonation permission gate", () => {
+    const impersonateCtx = (user: { id: string; email: string }) =>
+      createMockContext({
+        path: "/admin/impersonate-user",
+        method: "POST",
+        body: { userId: "some-target-user" },
+        context: {
+          session: {
+            user,
+            session: { id: "session-id" },
+          },
+        },
+      });
+
+    test("allows callers whose role grants member:impersonate", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const adminUser = await makeUser({ role: "admin" });
+      await makeMember(adminUser.id, org.id, { role: ADMIN_ROLE_NAME });
+
+      const ctx = impersonateCtx(adminUser);
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+
+    test("throws FORBIDDEN when the caller's role lacks member:impersonate", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      // System-level admin (passes better-auth's own gate) whose org role
+      // has broad member management but not member:impersonate.
+      const restrictedAdmin = await makeUser({ role: "admin" });
+      const customRole = await makeCustomRole(org.id, {
+        permission: { member: ["read", "create", "update", "delete"] },
+      });
+      await makeMember(restrictedAdmin.id, org.id, { role: customRole.role });
+
+      const ctx = impersonateCtx(restrictedAdmin);
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+        body: { message: "You do not have permission to impersonate users" },
+      });
+    });
+
+    test("throws FORBIDDEN when the caller has no organization membership", async ({
+      makeUser,
+    }) => {
+      const orphanUser = await makeUser({ role: "admin" });
+
+      const ctx = impersonateCtx(orphanUser);
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+    });
+
+    test("leaves unauthenticated calls for better-auth to reject", async () => {
+      const ctx = createMockContext({
+        path: "/admin/impersonate-user",
+        method: "POST",
+        body: { userId: "some-target-user" },
+      });
+
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+
+    test("does not gate stop-impersonating", async () => {
+      const ctx = createMockContext({
+        path: "/admin/stop-impersonating",
+        method: "POST",
       });
 
       const result = await handleBeforeHook(ctx);

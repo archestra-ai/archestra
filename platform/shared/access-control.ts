@@ -140,7 +140,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpSettings: ["read", "update"],
   skillsSettings: ["read", "update"],
   knowledgeSettings: ["read", "update"],
-  member: ["read", "create", "update", "delete"],
+  member: ["read", "create", "update", "delete", "impersonate"],
   invitation: ["create", "cancel"],
   ac: ["read", "create", "update", "delete"],
   team: ["read", "create", "update", "delete"],
@@ -548,6 +548,8 @@ export const permissionDescriptions: Record<string, string> = {
   "member:create": "Add new members to the organization",
   "member:update": "Change member roles and settings",
   "member:delete": "Remove members from the organization",
+  "member:impersonate":
+    "Temporarily sign in as another member to see the app with their access (role debugging)",
   "ac:read": "View custom roles and their permissions",
   "ac:create": "Create new custom roles",
   "ac:update": "Modify custom role permissions",
@@ -1418,7 +1420,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
-  [RouteId.GetImpersonableUsers]: { member: ["update"] }, // Role debugger picker — admin-only (better-auth still gates the actual impersonate-user call)
+  [RouteId.GetImpersonableUsers]: { member: ["impersonate"] }, // Role debugger picker (the impersonate-user call itself is also gated on member:impersonate in the auth before-hook)
 
   // Member default routes - available to all authenticated users (manages their own defaults)
   [RouteId.GetMemberDefaultAgent]: {},

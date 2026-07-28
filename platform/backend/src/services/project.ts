@@ -13,6 +13,7 @@ import {
   ProjectNameExistsError,
   ProjectPinModel,
   ProjectShareModel,
+  TeamModel,
   UserModel,
 } from "@/models";
 import { fileStore } from "@/skills-sandbox/file-store";
@@ -435,6 +436,9 @@ class ProjectService {
       await ProjectShareModel.remove(params.id);
       return;
     }
+    if (params.visibility === "team") {
+      await this.assertShareTeams(params);
+    }
     await ProjectShareModel.upsert({
       projectId: params.id,
       organizationId: params.organizationId,
@@ -704,6 +708,50 @@ class ProjectService {
       return project;
     }
     throw new ApiError(404, "Project not found");
+  }
+
+  /**
+   * Validate the teams a project is being shared with. A team share needs at
+   * least one team (otherwise it reaches nobody), every team must exist within
+   * the caller's organization — a stale, bogus, or foreign-org id fails with a
+   * clean 400 instead of an FK violation mid-write — and a caller without
+   * `project:admin` may only share with teams they belong to. A `project:admin`
+   * may share with any team in the organization, which is how a project is set
+   * up on a team's behalf. Mirrors the agent, skill, and catalog write paths.
+   */
+  private async assertShareTeams(params: {
+    teamIds: string[];
+    organizationId: string;
+    userId: string;
+  }): Promise<void> {
+    if (params.teamIds.length === 0) {
+      throw new ApiError(
+        400,
+        "A team-shared project must be shared with at least one team",
+      );
+    }
+
+    const teams = await TeamModel.findByIds(params.teamIds);
+    const validIds = new Set(
+      teams
+        .filter((team) => team.organizationId === params.organizationId)
+        .map((team) => team.id),
+    );
+    const missing = params.teamIds.filter((id) => !validIds.has(id));
+    if (missing.length > 0) {
+      throw new ApiError(400, `Unknown team id(s): ${missing.join(", ")}`);
+    }
+
+    if (await this.callerIsProjectAdmin(params)) return;
+
+    const userTeamIds = new Set(await TeamModel.getUserTeamIds(params.userId));
+    const invalid = params.teamIds.filter((id) => !userTeamIds.has(id));
+    if (invalid.length > 0) {
+      throw new ApiError(
+        403,
+        "You can only share projects with teams you are a member of",
+      );
+    }
   }
 
   private async callerIsProjectAdmin(params: {

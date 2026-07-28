@@ -574,6 +574,177 @@ describe("agent RBAC visibility", () => {
   });
 });
 
+describe("edit_agent team assignment", () => {
+  const editAgent = (
+    args: Record<string, unknown>,
+    context: ArchestraContext,
+  ) =>
+    executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_agent`,
+      args,
+      context,
+    );
+
+  test("team-admin cannot move an agent to a team they do not belong to", async ({
+    makeAgent,
+    makeCustomRole,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const teamAdmin = await makeUser();
+    await makeCustomRole(org.id, {
+      role: "team_admin_role",
+      permission: { agent: ["read", "create", "update", "team-admin"] },
+    });
+    await makeMember(teamAdmin.id, org.id, { role: "team_admin_role" });
+
+    const ownTeam = await makeTeam(org.id, teamAdmin.id);
+    await makeTeamMember(ownTeam.id, teamAdmin.id);
+    const otherTeam = await makeTeam(org.id, teamAdmin.id);
+
+    const agent = await makeAgent({
+      name: "Team Scoped Agent",
+      agentType: "agent",
+      organizationId: org.id,
+      scope: "team",
+      teams: [ownTeam.id],
+    });
+
+    const result = await editAgent(
+      { id: agent.id, teams: [otherTeam.id] },
+      {
+        agent: { id: agent.id, name: agent.name },
+        userId: teamAdmin.id,
+        organizationId: org.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "teams you are a member of",
+    );
+
+    // The assignment must be untouched, not partially applied.
+    const unchanged = await AgentModel.findById(agent.id, teamAdmin.id, true);
+    expect(unchanged?.teams.map((team) => team.id)).toEqual([ownTeam.id]);
+  });
+
+  test("clearing the teams of a team-scoped agent is rejected, admin included", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const team = await makeTeam(org.id, admin.id);
+
+    const agent = await makeAgent({
+      name: "Team Scoped Agent",
+      agentType: "agent",
+      organizationId: org.id,
+      scope: "team",
+      teams: [team.id],
+    });
+
+    const result = await editAgent(
+      { id: agent.id, teams: [] },
+      {
+        agent: { id: agent.id, name: agent.name },
+        userId: admin.id,
+        organizationId: org.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("at least one team");
+
+    const unchanged = await AgentModel.findById(agent.id, admin.id, true);
+    expect(unchanged?.teams.map((team) => team.id)).toEqual([team.id]);
+  });
+
+  test("a team from another organization is rejected", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const team = await makeTeam(org.id, admin.id);
+
+    const otherOrg = await makeOrganization();
+    const outsider = await makeUser();
+    const foreignTeam = await makeTeam(otherOrg.id, outsider.id);
+
+    const agent = await makeAgent({
+      name: "Team Scoped Agent",
+      agentType: "agent",
+      organizationId: org.id,
+      scope: "team",
+      teams: [team.id],
+    });
+
+    const result = await editAgent(
+      { id: agent.id, teams: [foreignTeam.id] },
+      {
+        agent: { id: agent.id, name: agent.name },
+        userId: admin.id,
+        organizationId: org.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("Unknown team id");
+
+    const unchanged = await AgentModel.findById(agent.id, admin.id, true);
+    expect(unchanged?.teams.map((team) => team.id)).toEqual([team.id]);
+  });
+
+  test("an edit that leaves scope and teams alone still succeeds", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const team = await makeTeam(org.id, admin.id);
+
+    const agent = await makeAgent({
+      name: "Team Scoped Agent",
+      agentType: "agent",
+      organizationId: org.id,
+      scope: "team",
+      teams: [team.id],
+    });
+
+    const result = await editAgent(
+      { id: agent.id, description: "Updated description" },
+      {
+        agent: { id: agent.id, name: agent.name },
+        userId: admin.id,
+        organizationId: org.id,
+      },
+    );
+
+    expect(result.isError).toBe(false);
+    const updated = await AgentModel.findById(agent.id, admin.id, true);
+    expect(updated?.description).toBe("Updated description");
+    expect(updated?.teams.map((t) => t.id)).toEqual([team.id]);
+  });
+});
+
 function extractCreatedId(
   result: Awaited<ReturnType<typeof executeArchestraTool>>,
 ) {

@@ -1,6 +1,8 @@
 import { TOOL_LIST_AGENTS_SHORT_NAME } from "@archestra/shared";
 import { z } from "zod";
 import {
+  assertAgentTeams,
+  assertAssignableAgentTeams,
   getAgentTypePermissionChecker,
   isAgentTypeAdmin,
   requireAgentModifyPermission,
@@ -18,6 +20,7 @@ import {
   AgentLabelWithDetailsSchema,
   AgentScopeSchema,
   AgentToolAssignmentInputSchema,
+  ApiError,
   InsertAgentSchemaBase,
   SuggestedPromptInputSchema,
   ToolExposureModeSchema,
@@ -509,15 +512,44 @@ export async function handleEditResource<
     checker.require(existingAgent.agentType, "update");
 
     const userTeamIds = await TeamModel.getUserTeamIds(context.userId);
+    const existingTeamIds = existingAgent.teams.map((team) => team.id);
     requireAgentModifyPermission({
       checker,
       agentType: existingAgent.agentType,
       agentScope: existingAgent.scope,
       agentAuthorId: existingAgent.authorId,
-      agentTeamIds: existingAgent.teams.map((team) => team.id),
+      agentTeamIds: existingTeamIds,
       userTeamIds,
       userId: context.userId,
     });
+
+    // The check above authorizes the edit against the agent's *current* scope
+    // and teams. The incoming ones need authorizing too: otherwise a team-admin
+    // permitted to edit an agent in a team they belong to could reassign it to
+    // a team they don't, or clear its teams and leave it reachable by nobody.
+    // Mirrors the REST update path.
+    if (args.scope !== undefined || args.teams !== undefined) {
+      const scope = args.scope ?? existingAgent.scope;
+      const teamIds = args.teams ?? existingTeamIds;
+
+      try {
+        assertAssignableAgentTeams({
+          checker,
+          agentType: existingAgent.agentType,
+          requestedTeamIds: teamIds,
+          existingTeamIds,
+          userTeamIds,
+        });
+        await assertAgentTeams({
+          scope,
+          teamIds,
+          organizationId: context.organizationId,
+        });
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        throw error;
+      }
+    }
 
     const updateData: Record<string, unknown> = {};
     if (args.name !== undefined) updateData.name = args.name;

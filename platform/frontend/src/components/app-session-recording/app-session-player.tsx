@@ -5479,6 +5479,21 @@ export function buildPlayback(recording: PlaybackRecording): {
   );
   const withinEnd = (t: number) => !tailCut || t <= tailCut.fromMs;
 
+  // How long the chat pane will still be animating from each raw instant. An
+  // assistant turn reveals over real wall-clock time (see messageRevealMs),
+  // and that reveal is the ONLY thing on the timeline whose length is not a
+  // recorded duration — so the compression has to be told about it. Summed per
+  // instant because a burst stamped at one timestamp cascades in
+  // revealSchedule rather than landing at once.
+  const revealAt = new Map<number, number>();
+  for (const message of source.transcript) {
+    if (message.role !== "assistant") continue;
+    revealAt.set(
+      message.atMs,
+      (revealAt.get(message.atMs) ?? 0) + messageRevealMs(message.parts),
+    );
+  }
+
   const sorted = [...anchors].sort((a, b) => a - b);
   const compressedAt = new Map<number, number>();
   // The timeline opens at the lead's start, so the very first message
@@ -5486,6 +5501,11 @@ export function buildPlayback(recording: PlaybackRecording): {
   // opening already sent.
   let compressed = 0;
   compressedAt.set(sorted[0] ?? 0, compressed);
+  // The compressed instant the chat pane is busy revealing until. Nothing may
+  // be scheduled before it: the recorded session was SEQUENTIAL — the builder
+  // read the reply, then touched the app — and replaying the app's half over a
+  // reply that is still typing invents a concurrency that never happened.
+  let revealBusyUntil = revealAt.get(sorted[0] ?? 0) ?? 0;
   for (let i = 1; i < sorted.length; i++) {
     const gapInCut = cuts.some(
       (cut) => cut.fromMs <= sorted[i - 1] && sorted[i] <= cut.toMs,
@@ -5502,7 +5522,15 @@ export function buildPlayback(recording: PlaybackRecording): {
           : MAX_IDLE_MS;
       compressed += Math.min(sorted[i] - sorted[i - 1], cap);
     }
+    // Hold every later anchor behind the pending reveal — including one whose
+    // own gap was cut away. A cut removes RECORDED time; it cannot remove the
+    // time the chat pane needs to finish drawing a reply that is still on
+    // screen, and letting it would put the bug back exactly where a builder
+    // trimmed the pause after a long answer.
+    compressed = Math.max(compressed, revealBusyUntil);
     compressedAt.set(sorted[i], compressed);
+    const reveal = revealAt.get(sorted[i]);
+    if (reveal) revealBusyUntil = compressed + reveal;
   }
   const map = (t: number) => compressedAt.get(t) ?? t;
 

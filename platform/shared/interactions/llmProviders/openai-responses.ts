@@ -1,6 +1,7 @@
 import { parseArchestraToolRefusal } from "../../tool-refusal";
 import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
+import { tryParseJson } from "./json";
 
 type OpenAiResponsesArm = Extract<
   Interaction,
@@ -264,12 +265,4 @@ function extractInputMessageText(content: unknown): string {
       return [];
     })
     .join("\n");
-}
-
-function tryParseJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
 }

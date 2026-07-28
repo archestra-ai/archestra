@@ -524,12 +524,11 @@ function thumbnailFile(thumbnail: {
 }
 
 /**
- * The one size rule a submission must meet — GitHub's own ceiling on what a
- * single API request may carry, NOT a product quota. Returns the refusal
- * message when a
- * file is over it, null when everything fits. The dialog calls this at the
- * Share click so nobody signs in to GitHub only to learn the recording
- * can't be uploaded.
+ * The one size rule a submission must meet — GitHub's own strictest ceiling,
+ * NOT a product quota, and never tighter than GitHub's. Returns the refusal
+ * message when a file is over it, null when everything fits. The dialog calls
+ * this at the Share click so nobody signs in to GitHub only to learn the
+ * recording can't be uploaded.
  */
 export function oversizedGallerySubmissionFile(
   bundle: AppRecordingBundle,
@@ -1343,31 +1342,22 @@ function base64ToBytes(base64: string): Uint8Array {
 }
 
 /**
- * What api.github.com accepts as a REQUEST BODY. This — not any file or blob
- * size — is the limit submissions actually hit.
+ * The strictest ceiling api.github.com imposes on any endpoint this upload
+ * could use. GitHub's number, not a product quota, and deliberately not a
+ * millimetre under it: a submission GitHub would have taken must never be
+ * refused here.
  *
- * Measured, not assumed. A 57MB bundle was refused by BOTH upload paths: the
- * contents API answered "the file is too large to be processed" and the Git
- * Data API's blob endpoint answered "your input was too large to process",
- * despite GitHub documenting 100MB blobs. The common factor is the request
- * itself — 57MB base64-encodes to ~76MB on the wire, and no REST endpoint
- * takes that. Changing endpoints cannot raise this ceiling; only a smaller
- * bundle can, which is why the upload stays on the plain contents API.
- */
-const GITHUB_MAX_REQUEST_BODY_BYTES = 45 * 1024 * 1024;
-
-/**
- * The largest bundle that still fits a request once base64 has had its way
- * with it: base64 costs 4 bytes per 3, so the raw ceiling is 3/4 of the body
- * limit.
+ * The one measurement we have is a 57MB bundle refused by BOTH upload paths —
+ * the contents API answered "the file is too large to be processed", the Git
+ * Data API's blob endpoint "your input was too large to process". That is
+ * consistent with this ceiling and says nothing about which endpoint to use,
+ * which is why the upload stays on the plain contents API.
  *
- * Worth carrying when reasoning about capture — the bundle's video chunks are
- * ALREADY base64 inside its JSON and the upload encodes that JSON again, so a
- * byte of recorded video costs ~1.78 bytes by the time it reaches GitHub.
+ * Capture is what keeps real bundles far below it rather than this check: a
+ * minute at the SDK's governor lands around 10MB, so the gate exists for
+ * recordings made before those bounds, not for new ones.
  */
-const GITHUB_MAX_FILE_BYTES = Math.floor(
-  (GITHUB_MAX_REQUEST_BODY_BYTES * 3) / 4,
-);
+const GITHUB_MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 function mb(bytes: number): number {
   return Math.round(bytes / (1024 * 1024));

@@ -276,16 +276,14 @@
    * the gallery upload can carry. Content below the ceiling never feels it —
    * a static UI encodes to skip blocks whatever the ceiling says.
    */
-  // Sized by what GitHub will accept, not by what looks best. The bundle
-  // stores video base64 in JSON and the upload base64-encodes that JSON again,
-  // so a byte of video costs ~1.78 bytes on the wire — and api.github.com
-  // refuses a request body much past 45MB (measured: a 57MB bundle was turned
-  // away by both the contents API and the blob endpoint). At 3 Mbit/s a
-  // three-minute capture reached ~86MB and could never be submitted; at
-  // 1 Mbit/s it lands near 29MB, ~38MB on the wire, inside the limit with room
-  // to spare. The cost is visible softness on full-motion apps, which is the
-  // right trade for a gallery card that can actually be uploaded.
-  const VIDEO_GOVERNOR_MAX_BPS = 1_000_000;
+  // Sized against what a submission may actually be. The bound that matters is
+  // the FINAL CUT's length, not the ceiling here: at one minute this rate puts
+  // a worst-case all-motion cut near 29MB as a bundle and ~38MB once the
+  // upload base64-encodes it, both inside GitHub's strictest 50MB endpoint
+  // limit whichever of the two it applies to. It was briefly lowered to
+  // 1 Mbit/s to survive a three-minute cut, which cost visible sharpness on
+  // full-motion apps for a length no longer offered.
+  const VIDEO_GOVERNOR_MAX_BPS = 3_000_000;
   /**
    * Wide enough for the frame shed to hold the ceiling even when single
    * frames are enormous: the shed can only space frames out, so its floor is

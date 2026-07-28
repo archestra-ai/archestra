@@ -336,11 +336,10 @@ describe("submitRecordingToAppGallery", () => {
 
     const failure = await submit({ bundle }).catch((error) => error);
     expect(failure).toBeInstanceOf(Error);
-    // GitHub's real ceiling, phrased as GitHub's — never a product quota.
-    // The number is what api.github.com accepts as a REQUEST BODY (measured:
-    // a 57MB bundle was refused by the contents API AND the blob endpoint),
-    // less the room base64 takes on the way there.
-    expect(String(failure)).toMatch(/GitHub refuses uploads over 34MB/);
+    // GitHub's own strictest ceiling, phrased as GitHub's — never a product
+    // quota, and never tightened on our side: a submission GitHub would have
+    // taken must not be refused here.
+    expect(String(failure)).toMatch(/GitHub refuses uploads over 50MB/);
     // Not even the duplicate pre-flight ran — no request left the browser.
     expect(calls).toHaveLength(0);
   });

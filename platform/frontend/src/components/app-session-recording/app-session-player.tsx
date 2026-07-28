@@ -5,6 +5,8 @@ import {
   APP_RECORDING_RENDER_REGION_ATTR,
   APP_RECORDING_VIEWPORT_ASPECT,
   ARCHESTRA_MCP_CATALOG_ID,
+  exceedsFinalCutLimit,
+  formatDurationMs,
   getArchestraToolShortName,
   normalizeCuts,
   parseFullToolName,
@@ -578,7 +580,7 @@ export function AppSessionPlayer({
   // The one label every length surface quotes, formatted like the durations
   // beside it (m:ss) so "runs 4:12 / trim to 3:00" reads as one comparison.
   const finalCutLimitLabel = formatMs(maxFinalCutMs);
-  const tooLongToExport = finalCutMs > maxFinalCutMs;
+  const tooLongToExport = exceedsFinalCutLimit(finalCutMs, maxFinalCutMs);
   const exportBlocked = descriptionEditing || surfaceEditing || tooLongToExport;
 
   // The quick action behind the tooltip pills (and the timeline's limit
@@ -3415,7 +3417,7 @@ export function trimCutsToExportLimit(
   limitMs: number,
 ): { fromMs: number; toMs: number }[] | null {
   const playback = buildPlayback(recording);
-  if (playback.duration <= limitMs) return null;
+  if (!exceedsFinalCutLimit(playback.duration, limitMs)) return null;
   const base = buildPlayback(uncutRecording(recording));
   const rawStart = Math.round(base.toRawMs(0));
   const rawEnd = Math.round(base.toRawMs(Math.max(base.duration, 1)));
@@ -3433,11 +3435,19 @@ export function trimCutsToExportLimit(
       ...recording,
       edits: { ...recording.edits, cuts: next },
     }).duration;
-    return { next, fits: duration <= limitMs };
+    return { next, fits: !exceedsFinalCutLimit(duration, limitMs) };
   };
-  // The natural candidate: the raw instant currently playing at the limit.
-  let hi = Math.round(playback.toRawMs(limitMs));
-  if (hi - rawStart < 1 || rawEnd - hi < 1) return null;
+  // The natural candidate: the raw instant currently playing at the limit,
+  // CLAMPED inside the session rather than rejected when it lands on the end.
+  //
+  // A closing reply's reveal is charged against however many raw milliseconds
+  // are left after it, so the final raw span can carry a second of playback in
+  // one millisecond of recording — and the limit instant then rounds onto
+  // `rawEnd`. Reading that as "degenerate recording" and returning null is how
+  // the pill became a no-op while the tooltip demanded a trim: a fitting
+  // boundary existed, the bisection just never ran.
+  let hi = Math.min(Math.round(playback.toRawMs(limitMs)), rawEnd - 1);
+  if (hi - rawStart < 1) return null;
   const first = trial(hi);
   if (first.fits) return first.next;
   let lo = rawStart + 1; // a whole-session trim always fits
@@ -4077,7 +4087,7 @@ function ReplayTimeline({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label="Trim to the maximum allowed length"
+                aria-label={`Trim to the maximum allowed length (${exportLimitLabel})`}
                 className="group absolute top-0 z-30 flex h-2.5 -translate-x-1/2 cursor-pointer items-center"
                 style={{ left: leftPct(exportLimit) }}
                 disabled={saving}
@@ -4086,7 +4096,11 @@ function ReplayTimeline({
               >
                 <span className="flex h-4 items-center gap-0.5 rounded-full border bg-background px-1 font-medium text-[10px] text-muted-foreground shadow-sm transition-colors group-hover:border-destructive/50 group-hover:text-destructive">
                   <Scissors className="size-2.5" />
-                  {exportLimitLabel}
+                  {/* "max 1:00", never a bare "1:00": the strip under it is
+                      the UNCUT timeline, so a bare duration reads as one of
+                      its ruler ticks — and with a head trim this badge sits
+                      well to the right of the tick that shares its number. */}
+                  max {exportLimitLabel}
                 </span>
               </button>
             </TooltipTrigger>
@@ -6267,12 +6281,12 @@ function stableStringify(value: unknown): string {
     .join(",")}}`;
 }
 
-export function formatMs(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
+/**
+ * `m:ss`, from the shared implementation the length CHECK is defined against
+ * — a formatter that could disagree with the check is what printed "runs 1:00
+ * … trim to 1:00 or less".
+ */
+export const formatMs = formatDurationMs;
 
 /**
  * Point the recorded document's platform assets at the origin that will

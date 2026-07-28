@@ -3,6 +3,8 @@ import {
   APP_RECORDING_RENDER_REGION_SELECTOR,
   APP_RECORDING_RENDER_ROUTE,
   type AppRecordingBundle,
+  exceedsFinalCutLimit,
+  formatDurationMs,
 } from "@archestra/shared";
 import type { CDPSession } from "playwright-core";
 import config from "@/config";
@@ -309,10 +311,15 @@ async function renderWithBrowser(params: {
     // number — refusing a session trimmed to 14s for being 35s long is what
     // measuring that one gets you.
     const maxFinalCutMs = config.hackathonRecorder.maxFinalCutMs;
-    if (durationMs > maxFinalCutMs) {
+    // Judged and phrased exactly as the player does it -- same shared check,
+    // same m:ss. Rounding to seconds HERE while the browser floored to m:ss
+    // gave the server its own version of the paradox: it refused cuts the UI
+    // had already cleared, and told the author a different number than every
+    // surface they had been reading.
+    if (exceedsFinalCutLimit(durationMs, maxFinalCutMs)) {
       throw new ApiError(
         400,
-        `This cut runs ${Math.round(durationMs / 1000)}s. Trim it to ${Math.round(maxFinalCutMs / 1000)} seconds or less to export a video.`,
+        `This cut runs ${formatDurationMs(durationMs)}. Trim it to ${formatDurationMs(maxFinalCutMs)} or less to export a video.`,
       );
     }
 

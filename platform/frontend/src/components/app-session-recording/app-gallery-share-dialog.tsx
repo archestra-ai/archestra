@@ -3,6 +3,7 @@
 import {
   APP_GALLERY_CATEGORIES,
   type AppRecordingBundle,
+  exceedsFinalCutLimit,
   pruneCutEvents,
   validateRecordingBundle,
 } from "@archestra/shared";
@@ -214,7 +215,7 @@ export function AppGalleryShareButton(props: {
         // gallery plays; the raw capture is a different and always larger
         // number.
         const finalCutMs = finalCutDurationMs(trimmed);
-        if (finalCutMs > maxFinalCutMs) {
+        if (exceedsFinalCutLimit(finalCutMs, maxFinalCutMs)) {
           failedTitle = "Recording too long";
           fail(
             `This cut runs ${formatMs(finalCutMs)}. Trim it to ${formatMs(maxFinalCutMs)} or less to submit.`,

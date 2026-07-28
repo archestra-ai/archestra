@@ -1,4 +1,8 @@
-import { type AppRecordingBundle, pruneCutEvents } from "@archestra/shared";
+import {
+  type AppRecordingBundle,
+  exceedsFinalCutLimit,
+  pruneCutEvents,
+} from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   backfilledEnhancement,
@@ -746,7 +750,9 @@ describe("trimCutsToExportLimit", () => {
     const next = trimCutsToExportLimit(rec, 30_000);
     expect(next).not.toBeNull();
     const after = durationWith(rec, next ?? []);
-    expect(after).toBeLessThanOrEqual(30_000);
+    // Judged the way the gate judges it — a fraction of a second over is not
+    // something an author can trim, and is not refused (exceedsFinalCutLimit).
+    expect(exceedsFinalCutLimit(after, 30_000)).toBe(false);
     expect(after).toBeGreaterThan(29_900);
   });
 
@@ -758,7 +764,9 @@ describe("trimCutsToExportLimit", () => {
     expect(next).toContainEqual(mid);
     expect(next).toHaveLength(2);
     const after = durationWith(rec, next ?? []);
-    expect(after).toBeLessThanOrEqual(30_000);
+    // Judged the way the gate judges it — a fraction of a second over is not
+    // something an author can trim, and is not refused (exceedsFinalCutLimit).
+    expect(exceedsFinalCutLimit(after, 30_000)).toBe(false);
     expect(after).toBeGreaterThan(29_900);
   });
 
@@ -770,14 +778,18 @@ describe("trimCutsToExportLimit", () => {
     expect(next).not.toBeNull();
     expect(next).toHaveLength(1);
     const after = durationWith(rec, next ?? []);
-    expect(after).toBeLessThanOrEqual(30_000);
+    // Judged the way the gate judges it — a fraction of a second over is not
+    // something an author can trim, and is not refused (exceedsFinalCutLimit).
+    expect(exceedsFinalCutLimit(after, 30_000)).toBe(false);
     expect(after).toBeGreaterThan(29_900);
   });
 
   it("never lands a hair over the limit when it falls inside an idle-compressed gap", () => {
     // Activity to 28s, dead air to 120s (compressed to a beat), activity
     // again: the limit instant maps deep into the raw gap, where a naive
-    // rounded boundary re-expands to MORE than the limit.
+    // rounded boundary re-expands past the limit. It may now land a fraction
+    // of a second over — deliberate, and invisible at m:ss — but never past
+    // what the gate accepts, which is what "hair over" always meant.
     const rec = withEvents(125_000, [
       ...activity(0, 28_000),
       ...activity(120_000, 125_000),
@@ -785,7 +797,9 @@ describe("trimCutsToExportLimit", () => {
     const next = trimCutsToExportLimit(rec, 30_000);
     expect(next).not.toBeNull();
     const after = durationWith(rec, next ?? []);
-    expect(after).toBeLessThanOrEqual(30_000);
+    // Judged the way the gate judges it — a fraction of a second over is not
+    // something an author can trim, and is not refused (exceedsFinalCutLimit).
+    expect(exceedsFinalCutLimit(after, 30_000)).toBe(false);
     expect(after).toBeGreaterThan(29_900);
   });
 });
@@ -1434,6 +1448,91 @@ describe("planPaintFlush", () => {
       key,
       { kind: "video-flush", sel: "#v" },
     ]);
+  });
+});
+
+describe("trimCutsToExportLimit finds a boundary instead of giving up", () => {
+  /**
+   * The dead-pill case. A closing reply's reveal is charged against however
+   * many raw milliseconds are left after it, so the final raw span can carry
+   * seconds of playback in ONE millisecond of recording. The limit instant
+   * then rounds onto the raw end, and the old guard read that as a degenerate
+   * recording and returned null — so "Trim to 1:00" did nothing while the
+   * tooltip demanded a trim, with a fitting boundary sitting right there.
+   */
+  function reveaClampedTail() {
+    const events: Recording["events"] = [{ kind: "segment", t: 0, version: 1 }];
+    for (let t = 0; t <= 40_000; t += 400) {
+      events.push({ kind: "pointer", t, type: "click", x: 1, y: 1 });
+    }
+    const long = "a fairly long assistant reply. ".repeat(60);
+    return recording({
+      durationMs: 40_001,
+      events,
+      // TWO replies on the same instant: their reveals SUM there, so the last
+      // raw millisecond carries more playback than the whole slack the limit
+      // check allows — which is what makes this reachable at all.
+      transcript: [
+        {
+          id: "r1",
+          role: "assistant",
+          atMs: 40_000,
+          parts: [{ type: "text", text: long }],
+        },
+        {
+          id: "r2",
+          role: "assistant",
+          atMs: 40_000,
+          parts: [{ type: "text", text: long }],
+        },
+      ] as Recording["transcript"],
+    });
+  }
+
+  it("trims a cut whose limit instant rounds onto the raw end", () => {
+    const rec = reveaClampedTail();
+    const playback = buildPlayback(rec);
+    const tailStart = playback.toPlaybackMs(40_000);
+    // A limit landing in the upper half of that one-millisecond span, so the
+    // mapped-and-rounded boundary lands ON the raw end.
+    const limit = Math.round(
+      tailStart + (playback.duration - tailStart) * 0.55,
+    );
+
+    // The geometry the old guard bailed on, asserted rather than assumed.
+    expect(Math.round(playback.toRawMs(limit))).toBe(40_001);
+    // …while the cut really is over the limit, by more than the second of
+    // slack the check allows — so a trim is genuinely owed.
+    expect(exceedsFinalCutLimit(playback.duration, limit)).toBe(true);
+
+    const next = trimCutsToExportLimit(rec, limit);
+    // The fix: a boundary, not null. Null here is the dead pill.
+    expect(next).not.toBeNull();
+    const after = buildPlayback({
+      ...rec,
+      edits: { ...rec.edits, cuts: next ?? [] },
+    }).duration;
+    expect(exceedsFinalCutLimit(after, limit)).toBe(false);
+  });
+
+  it("still returns null when the cut already fits", () => {
+    const rec = recording({
+      durationMs: 5_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        { kind: "pointer", t: 1_000, type: "click", x: 1, y: 1 },
+      ] as Recording["events"],
+    });
+    expect(trimCutsToExportLimit(rec, 60_000)).toBeNull();
+  });
+
+  it("does not refuse a cut that is over only by a fraction of a second", () => {
+    // The paradox at the player level: a hair over the limit displays as the
+    // limit, so there is nothing an author could trim. It must simply fit.
+    expect(exceedsFinalCutLimit(60_000.75, 60_000)).toBe(false);
+    expect(
+      trimCutsToExportLimit(recording({ durationMs: 60_000 }), 60_000),
+    ).toBeNull();
   });
 });
 

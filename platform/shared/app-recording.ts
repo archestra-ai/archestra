@@ -499,6 +499,43 @@ export const APP_RECORDING_RENDER_FPS = 24;
 export const APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS = 60_000;
 
 /**
+ * A duration as every length surface says it out loud: `m:ss`, floored to the
+ * second. One implementation, because the limit is JUDGED at this precision
+ * too (see {@link exceedsFinalCutLimit}) and a formatter that disagreed with
+ * the check is exactly how a cut came to be refused for running "1:00" when
+ * the limit was "1:00".
+ */
+export function formatDurationMs(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Whether a final cut is over the limit — judged at the precision the limit is
+ * SPOKEN at, whole seconds, not raw float milliseconds.
+ *
+ * This is the whole of the fix for a paradox that reached participants: the
+ * gates compared floats while every message rendered `m:ss`, so the entire
+ * second above the limit was refused AND printed as exactly the limit. The
+ * tooltip read "This cut runs 1:00. Trim it to 1:00 or less to submit." — a
+ * demand with nothing to do — and the trim button beside it could be a no-op,
+ * because a fraction of a second is not something an author can edit away.
+ *
+ * Compared floored rather than rounded so the rule reads the way the number
+ * does: if it says 1:00 it is a minute, and a minute is allowed. The slack is
+ * at most one second of render, which costs ~24 frames.
+ *
+ * Every gate must use THIS — player, submission backstop, and the server's
+ * render route — or a cut passes one and is refused by the next.
+ */
+export function exceedsFinalCutLimit(
+  durationMs: number,
+  limitMs: number,
+): boolean {
+  return Math.floor(durationMs / 1000) > Math.floor(limitMs / 1000);
+}
+
+/**
  * How much longer than the final cut a capture may RUN, as a multiple of the
  * configured limit.
  *

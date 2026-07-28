@@ -5,6 +5,8 @@ import {
   APPS_HACKATHON_OPENS_AT_MS,
   type AppRecordingBundle,
   connectedMcpServerNames,
+  exceedsFinalCutLimit,
+  formatDurationMs,
   healBundleMcpServers,
   isAppsHackathonOpen,
   normalizeCuts,
@@ -333,6 +335,49 @@ describe("normalizeCuts", () => {
         { fromMs: 2000, toMs: 3500 }, // bridges the 1000–2500 and 3000–4000 runs
       ]),
     ).toEqual([{ fromMs: 1000, toMs: 4000 }]);
+  });
+});
+
+describe("exceedsFinalCutLimit", () => {
+  // The paradox this exists to prevent: the gates compared raw float
+  // milliseconds while every message rendered m:ss, so the whole second above
+  // the limit was refused AND printed as exactly the limit — "This cut runs
+  // 1:00. Trim it to 1:00 or less to submit", a demand with nothing to do.
+  it("judges at the precision the limit is spoken at", () => {
+    expect(exceedsFinalCutLimit(59_999, 60_000)).toBe(false);
+    expect(exceedsFinalCutLimit(60_000, 60_000)).toBe(false);
+    // The band that used to be refused while displaying as the limit itself.
+    expect(exceedsFinalCutLimit(60_000.0001, 60_000)).toBe(false);
+    expect(exceedsFinalCutLimit(60_003.75, 60_000)).toBe(false);
+    expect(exceedsFinalCutLimit(60_999, 60_000)).toBe(false);
+    // A second over is a second the author can see, and can edit away.
+    expect(exceedsFinalCutLimit(61_000, 60_000)).toBe(true);
+  });
+
+  it("never refuses a duration that formats as the limit", () => {
+    const limit = 60_000;
+    const label = formatDurationMs(limit);
+    for (let ms = 59_000; ms <= 62_000; ms++) {
+      if (formatDurationMs(ms) === label) {
+        expect(exceedsFinalCutLimit(ms, limit)).toBe(false);
+      }
+    }
+  });
+
+  it("holds for a limit that is not a whole minute", () => {
+    expect(exceedsFinalCutLimit(30_400, 30_000)).toBe(false);
+    expect(exceedsFinalCutLimit(31_000, 30_000)).toBe(true);
+  });
+});
+
+describe("formatDurationMs", () => {
+  it("floors to whole seconds as m:ss", () => {
+    expect(formatDurationMs(0)).toBe("0:00");
+    expect(formatDurationMs(59_999)).toBe("0:59");
+    expect(formatDurationMs(60_000)).toBe("1:00");
+    expect(formatDurationMs(60_999.9)).toBe("1:00");
+    expect(formatDurationMs(61_000)).toBe("1:01");
+    expect(formatDurationMs(603_000)).toBe("10:03");
   });
 });
 

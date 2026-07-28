@@ -87,32 +87,32 @@ describe("ExecutedAsBadge", () => {
       <ExecutedAsBadge
         executedAs={{ kind: "platform", callerUserId: "user-2" }}
         meUserId="user-1"
-        caller={{ label: "Grace Hopper", scope: "personal" }}
+        caller={{ name: "Grace Hopper", scope: "personal" }}
       />,
     );
 
     expect(screen.getByText("Grace Hopper")).toBeInTheDocument();
   });
 
-  it("draws a gateway token as its own scope, not as a person", async () => {
+  it("credits a call made with a gateway token to the scope it acts for", async () => {
     const user = userEvent.setup();
     render(
       <ExecutedAsBadge
         executedAs={{ kind: "platform", callerUserId: null }}
-        caller={{ label: "Org Token", scope: "org" }}
+        caller={{ name: null, scope: "org" }}
       />,
     );
 
-    // A token belongs to the organization, so it must not wear the personal
-    // peel that names somebody's own connection.
-    const label = screen.getByText("Org Token");
+    // The organization is the identity here, so the peel is the same one an
+    // organization-wide connection wears — never a person's.
+    const label = screen.getByText("Organization");
     expect(label.closest("span")?.parentElement).toHaveClass(
       ...scopeStyles.org.split(" "),
     );
     await user.hover(label);
     expect(
       await screen.findAllByText(
-        "This call used the Org Token to reach the Acme AI",
+        "This call used the organization's own connection to the Acme AI",
       ),
     ).not.toHaveLength(0);
   });
@@ -141,7 +141,7 @@ describe("ExecutedAsBadge", () => {
     render(
       <ExecutedAsBadge
         executedAs={{ kind: "platform", callerUserId: "user-2" }}
-        caller={{ label: "Grace Hopper", scope: "personal" }}
+        caller={{ name: "Grace Hopper", scope: "personal" }}
       />,
     );
 

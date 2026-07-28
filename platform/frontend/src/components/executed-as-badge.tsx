@@ -2,7 +2,7 @@
 
 import type { McpExecutedAs, McpExecutedAsKind } from "@archestra/shared";
 import type { LucideIcon } from "lucide-react";
-import { Globe, KeyRound, User, Users } from "lucide-react";
+import { Globe, User, Users } from "lucide-react";
 import { scopeStyles } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -24,11 +24,11 @@ import { cn } from "@/lib/utils";
  * built-in, a blocked call) or predates the descriptor.
  */
 /**
- * An identity that makes calls: a person, or a gateway token, which acts for a
- * team or for the whole organization rather than for anybody in particular.
+ * An identity that makes calls. A person has a name; a gateway token has none,
+ * because it acts for the team or the organization it belongs to.
  */
 export type CallerIdentity = {
-  label: string;
+  name: string | null;
   scope: keyof typeof scopeStyles;
 };
 
@@ -101,6 +101,34 @@ type ExecutedAsContext = {
 // How the reader's own identity reads, matching the resource peels elsewhere.
 const SELF_LABEL = "Me";
 
+// An identity the platform served a call for, but could not name.
+const UNKNOWN_CALLER = { label: "The caller", possessive: "the caller's" };
+
+// One peel per scope, shared by every identity a call can run as. A gateway
+// token is not a fourth kind of thing: it carries the authority of the team or
+// the organization it belongs to, so it wears that scope's peel and "called as
+// the organization" looks the same in chat and in the tool-call log.
+const scopePeels = {
+  personal: {
+    icon: User,
+    style: scopeStyles.personal,
+    label: "Personal connection",
+    possessive: "their",
+  },
+  team: {
+    icon: Users,
+    style: scopeStyles.team,
+    label: "Team",
+    possessive: "the team's",
+  },
+  org: {
+    icon: Globe,
+    style: scopeStyles.org,
+    label: "Organization",
+    possessive: "the organization's",
+  },
+} as const;
+
 // One entry per identity kind. The peel names the identity itself — the
 // surrounding column header or label says what the name means — so it reads
 // like the scope peels on the apps, projects and skills lists.
@@ -114,34 +142,29 @@ const executedAsDescriptors: {
     const isMe = !!meUserId && executedAs.ownerUserId === meUserId;
     if (isMe) {
       return {
-        icon: User,
-        style: scopeStyles.personal,
+        ...scopePeels.personal,
         label: SELF_LABEL,
         tooltip: "This call used your own connection to the MCP server.",
       };
     }
     const ownerName = executedAs.ownerName;
     return {
-      icon: User,
-      style: scopeStyles.personal,
-      label: ownerName ?? "Personal connection",
+      ...scopePeels.personal,
+      label: ownerName ?? scopePeels.personal.label,
       tooltip: ownerName
         ? `This call used ${ownerName}'s connection to the MCP server.`
         : "This call used a personal connection whose owner no longer exists.",
     };
   },
   team: (executedAs) => ({
-    icon: Users,
-    style: scopeStyles.team,
-    label: executedAs.teamName ?? "Team",
+    ...scopePeels.team,
+    label: executedAs.teamName ?? scopePeels.team.label,
     tooltip: executedAs.teamName
       ? `This call used the ${executedAs.teamName} team's connection to the MCP server.`
       : "This call used a team connection to the MCP server.",
   }),
   org: () => ({
-    icon: Globe,
-    style: scopeStyles.org,
-    label: "Organization",
+    ...scopePeels.org,
     tooltip:
       "This call used the organization-wide connection to the MCP server.",
   }),
@@ -167,28 +190,25 @@ const executedAsDescriptors: {
 };
 
 // The kinds that ran as the calling identity share one peel: that identity's
-// own name, or "Me" when the reader is it.
+// own name, or "Me" when the reader is it. A token has no name of its own, so
+// it reads as the scope it acts for.
 function describeCaller(
   callerUserId: string | null,
   { meUserId, caller }: ExecutedAsContext,
 ): Omit<ExecutedAsDisplay, "tooltip"> {
   if (!!meUserId && callerUserId === meUserId) {
-    return { icon: User, style: scopeStyles.personal, label: SELF_LABEL };
+    return { ...scopePeels.personal, label: SELF_LABEL };
   }
   if (!caller) {
-    return { icon: User, style: scopeStyles.personal, label: "The caller" };
+    return { ...scopePeels.personal, label: UNKNOWN_CALLER.label };
   }
-  return {
-    // A gateway token is not a person, so it carries the key icon and its own
-    // scope's color instead of reading as somebody's personal identity.
-    icon: caller.scope === "personal" ? User : KeyRound,
-    style: scopeStyles[caller.scope],
-    label: caller.label,
-  };
+  const peel = scopePeels[caller.scope];
+  return { ...peel, label: caller.name ?? peel.label };
 }
 
 // A platform call reached no MCP server, so the identity is whoever asked for
-// it — and for a token, that is the team or organization it belongs to.
+// it — and their gateway token is how they reach the platform in the first
+// place, which is the connection this names.
 function describePlatformCall(
   display: Omit<ExecutedAsDisplay, "tooltip">,
   { caller, appName }: ExecutedAsContext,
@@ -196,10 +216,14 @@ function describePlatformCall(
   if (display.label === SELF_LABEL) {
     return `This call used your own connection to the ${appName}`;
   }
-  if (caller && caller.scope !== "personal") {
-    return `This call used the ${caller.label} to reach the ${appName}`;
+  return `This call used ${callerPossessive(caller)} own connection to the ${appName}`;
+}
+
+function callerPossessive(caller: CallerIdentity | null | undefined): string {
+  if (!caller) {
+    return UNKNOWN_CALLER.possessive;
   }
-  return `This call used ${display.label}'s own connection to the ${appName}`;
+  return caller.name ? `${caller.name}'s` : scopePeels[caller.scope].possessive;
 }
 
 function describeExecutedAs(

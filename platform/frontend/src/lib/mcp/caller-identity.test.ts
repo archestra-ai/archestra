@@ -5,19 +5,18 @@ describe("formatCallerIdentity", () => {
   it("names the user who made the call", () => {
     expect(
       formatCallerIdentity({ userName: "Grace Hopper", authMethod: "oauth" }),
-    ).toEqual({ label: "Grace Hopper", scope: "personal" });
+    ).toEqual({ name: "Grace Hopper", scope: "personal" });
   });
 
-  it("names the token when a call carries no user", () => {
-    // Gateway tokens act for an organization or a team rather than a person,
-    // and an auditor still needs a name for whoever made the call. The scope
-    // keeps them from being drawn as somebody's personal identity.
+  it("credits a call made with a gateway token to the scope it acts for", () => {
+    // A token carries no user and is nobody's identity of its own — it holds
+    // the authority of the organization or team that issued it.
     expect(
       formatCallerIdentity({ userName: null, authMethod: "org_token" }),
-    ).toEqual({ label: "Org Token", scope: "org" });
+    ).toEqual({ name: null, scope: "org" });
     expect(
       formatCallerIdentity({ userName: null, authMethod: "team_token" }),
-    ).toEqual({ label: "Team Token", scope: "team" });
+    ).toEqual({ name: null, scope: "team" });
   });
 
   it("has nothing to name when a personal method lost its user", () => {

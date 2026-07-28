@@ -29,21 +29,21 @@ export function formatAuthMethod(authMethod: MCPGatewayAuthMethod): string {
 /**
  * Who a tool call ran on behalf of, for the calls the platform served itself.
  * A call made with a gateway token carries no user, and an auditor still needs
- * a name for it — that identity is the token, which acts for its team or for
- * the organization rather than for a person.
+ * an identity for it: the token acts for its team or for the organization, so
+ * that is who made the call. The auth method stays visible in its own column.
  */
 export function formatCallerIdentity(row: {
   userName: string | null;
   authMethod: MCPGatewayAuthMethod | null;
 }): CallerIdentity | null {
   if (row.userName) {
-    return { label: row.userName, scope: "personal" };
+    return { name: row.userName, scope: "personal" };
   }
   switch (row.authMethod) {
     case "org_token":
-      return { label: formatAuthMethod(row.authMethod), scope: "org" };
+      return { name: null, scope: "org" };
     case "team_token":
-      return { label: formatAuthMethod(row.authMethod), scope: "team" };
+      return { name: null, scope: "team" };
     default:
       // Every other method authenticates a person, so a missing name means the
       // user is gone — there is nothing to name them by.

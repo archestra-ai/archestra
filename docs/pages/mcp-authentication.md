@@ -250,11 +250,11 @@ flowchart TD
     style J fill:#f8d7da,stroke:#dc3545
 ```
 
-#### Ran As
+#### Called As
 
-Every tool call records which connection served it. Chat shows it on the tool call card — "Ran as me", "Ran as Grace Hopper", "Ran as Platform Team", or "Ran as the organization". The same identity appears in the **Ran As** column of the MCP Gateway logs, next to the user who made the call. So a call through a shared service account reads as "ran as that account, on behalf of the caller".
+Every tool call records the identity whose credential served it. Chat shows it on the tool call card. The MCP Gateway logs show it in the **Called as** column, next to the user who made the call. A call through a shared service account reads as that account, on behalf of the caller.
 
-Calls that use a token minted for the caller — Identity Provider Token Exchange, or a forwarded JWKS token — are shown as running as the caller.
+The identity is a person, a team, or the organization. Calls that use a token minted for the caller — Identity Provider Token Exchange, or a forwarded JWKS token — run as that caller. A call made with a gateway token runs as the team or the organization that issued the token.
 
 MCP clients see the same identity on the tool result, under the `_meta.archestraExecutedAs` key.
 

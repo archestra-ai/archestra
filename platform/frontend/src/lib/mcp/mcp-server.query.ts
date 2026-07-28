@@ -40,10 +40,11 @@ type McpServersParams = McpServersQuery & {
 };
 
 export function useMcpServers(params?: McpServersParams) {
-  // The endpoint requires mcpServerInstallation:read; skip the request for
-  // users whose role lacks it instead of letting it 403.
-  const { data: canReadInstallations } = useHasPermissions({
-    mcpServerInstallation: ["read"],
+  // The endpoint requires mcpServerInstallation:read — and :delete for the
+  // status:"deleted" tombstone bucket; skip the request for users whose role
+  // lacks it instead of letting it 403.
+  const { data: canListInstallations } = useHasPermissions({
+    mcpServerInstallation: [params?.status === "deleted" ? "delete" : "read"],
   });
 
   return useQuery({
@@ -80,7 +81,7 @@ export function useMcpServers(params?: McpServersParams) {
       return data ?? [];
     },
     initialData: params?.initialData,
-    enabled: (params?.enabled ?? true) && !!canReadInstallations,
+    enabled: (params?.enabled ?? true) && !!canListInstallations,
     refetchInterval: params?.hasInstallingServers ? 2000 : false,
   });
 }

@@ -515,7 +515,9 @@ export async function reloadToolsForServer(server: McpServer): Promise<{
     : null;
   if (!catalogItem) {
     throw new Error(
-      `Catalog item ${server.catalogId} not found for MCP server ${server.id}`,
+      server.catalogId
+        ? `Catalog item ${server.catalogId} not found for MCP server ${server.id}`
+        : `MCP server ${server.id} has no catalog (uninstall tombstone)`,
     );
   }
   const result = await syncToolsForServer(server, catalogItem);

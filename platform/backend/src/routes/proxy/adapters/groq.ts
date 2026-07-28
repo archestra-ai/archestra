@@ -5,7 +5,11 @@
  * This adapter delegates request/response/stream parsing to the OpenAI adapters
  * and only overrides provider-specific configuration (baseUrl, api key behavior).
  */
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import {
+  ArchestraInternalErrorCode,
+  GROQ_REQUEST_EXCEEDS_BUCKET_STATUS,
+  GroqErrorCodes,
+} from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -268,6 +272,18 @@ export const groqAdapterFactory: LLMProvider<
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
     if (get(error, "error.code") === "context_length_exceeded") {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
+    }
+    // Groq gives the transient throttle (429) and the "request bigger than the
+    // whole bucket" rejection (413) identical bodies, so the status is the only
+    // discriminator. Only the 413 is unretryable — without this it falls through
+    // to the status mapper and the user is told to shrink a payload that was
+    // never the problem.
+    const status = get(error, "status") ?? get(error, "statusCode");
+    if (
+      status === GROQ_REQUEST_EXCEEDS_BUCKET_STATUS &&
+      get(error, "error.code") === GroqErrorCodes.RATE_LIMIT_EXCEEDED
+    ) {
+      return ArchestraInternalErrorCode.RequestExceedsRateLimit;
     }
     return undefined;
   },

@@ -6,12 +6,16 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { throwOnApiError } from "@/lib/utils";
 
-// better-auth's admin plugin gates impersonateUser on `users.role === "admin"`
-// (the system-level role, not the org membership role). Org-admins whose
-// `users.role` is null pass `member:update` but still get rejected at call time.
+// Starting impersonation requires BOTH better-auth's admin plugin gate
+// (system-level `users.role === "admin"`) and the org-level RBAC permission
+// member:impersonate (enforced server-side in the auth before-hook), so the
+// UI only offers it when the caller passes both.
 export function useCanImpersonate() {
   const { data: session } = useSession();
-  return session?.user.role === "admin";
+  const { data: hasImpersonatePermission } = useHasPermissions({
+    member: ["impersonate"],
+  });
+  return session?.user.role === "admin" && !!hasImpersonatePermission;
 }
 
 export const impersonationKeys = {
@@ -21,7 +25,7 @@ export const impersonationKeys = {
 
 export function useImpersonationCandidates() {
   const isAuthenticated = useIsAuthenticated();
-  const { data: canManage } = useHasPermissions({ member: ["update"] });
+  const { data: canManage } = useHasPermissions({ member: ["impersonate"] });
 
   return useQuery({
     queryKey: impersonationKeys.candidates(),

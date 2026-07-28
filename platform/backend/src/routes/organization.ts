@@ -10,6 +10,7 @@ import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
+import { getPermissionsForUserContext } from "@/auth/utils";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
@@ -41,6 +42,7 @@ import {
   CompleteOnboardingSchema,
   constructResponseSchema,
   type NetworkPolicy,
+  type OrganizationRole,
   SelectOrganizationSchema,
   type TrustedImageRegistries,
   UpdateAgentSettingsSchema,
@@ -550,7 +552,29 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },
-    async ({ organizationId, body }, reply) => {
+    async ({ organizationId, body, user, headers, serviceAccount }, reply) => {
+      // The default role is stamped onto every account provisioned without an
+      // explicit role (self-signup, ChatOps auto-provisioning, role-less
+      // invitation acceptance), so choosing it is member administration rather
+      // than a general organization setting. Gate it on member:create so the
+      // broader organizationSettings:update — which roles like editor hold to
+      // manage appearance and auth options — is not by itself enough to decide
+      // what new accounts are granted.
+      if ("defaultMemberRole" in body) {
+        const { success: canProvisionMembers } = await hasPermission(
+          { member: ["create"] },
+          headers,
+          serviceAccount,
+          { userId: user.id, organizationId },
+        );
+        if (!canProvisionMembers) {
+          throw new ApiError(
+            403,
+            "You are not authorized to change the default role for new members",
+          );
+        }
+      }
+
       // A non-null default role must resolve to a real role in this org
       // (predefined or custom) — otherwise new members would be provisioned
       // with a role that grants no permissions.
@@ -562,6 +586,17 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!role) {
           throw new ApiError(400, "Default role not found");
         }
+
+        // Existence alone is not enough: predefined roles resolve here too, so
+        // without this the field could name a role more privileged than the
+        // caller and have future accounts provisioned into it. Hold the caller
+        // to the same "only grant what you have" rule custom-role authoring
+        // uses.
+        await assertCallerCanGrantRole({
+          role,
+          userId: user.id,
+          organizationId,
+        });
       }
 
       const organization = await OrganizationModel.patch(organizationId, body);
@@ -1169,6 +1204,36 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default organizationRoutes;
 
 // === Internal helpers ===
+
+/**
+ * Refuse a role assignment that would hand out more than the caller holds.
+ * Resolved through `getPermissionsForUserContext` so a service-account caller
+ * is measured against its own role rather than a synthetic user, and compared
+ * with the same `validateRolePermissions` rule custom-role authoring uses —
+ * which deliberately ignores the UI-behavior resources, where the admin role
+ * legitimately holds less than the member role.
+ */
+async function assertCallerCanGrantRole(params: {
+  role: OrganizationRole;
+  userId: string;
+  organizationId: string;
+}) {
+  const callerPermissions = await getPermissionsForUserContext({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  const { valid, missingPermissions } =
+    OrganizationRoleModel.validateRolePermissions(
+      callerPermissions,
+      params.role.permission,
+    );
+  if (!valid) {
+    throw new ApiError(
+      403,
+      `You cannot grant permissions you don't have: ${missingPermissions.join(", ")}`,
+    );
+  }
+}
 
 function sameNetworkPolicy(
   a: NetworkPolicy | null,

@@ -35,6 +35,7 @@ import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   createAzureFetchWithApiVersion,
+  isAzureOpenAiFirstPartyModelName,
   normalizeAzureApiKey,
 } from "@/clients/azure-url";
 import {
@@ -732,14 +733,51 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         (isAzureOpenAiEntraIdEnabled()
           ? KEYLESS_PROVIDER_API_KEY_PLACEHOLDER
           : undefined);
-      return createOpenAI({
+      const requestHeaders = normalizedApiKey
+        ? { ...headers, "api-key": normalizedApiKey }
+        : headers;
+
+      // Azure has no usable default endpoint; without this guard createOpenAI
+      // would fall back to api.openai.com and send the Azure api-key there.
+      if (!baseURL) {
+        throw new ApiError(400, "Azure AI Foundry base URL is required.");
+      }
+
+      // OpenAI first-party deployments stay on strict @ai-sdk/openai: its name
+      // heuristic converts max_tokens → max_completion_tokens for reasoning
+      // models (which reject max_tokens), and those models never stream
+      // reasoning text over chat completions anyway. Foundry-hosted open models
+      // (DeepSeek-R1, gpt-oss, ...) stream thinking in a `reasoning_content`
+      // delta field the strict parser drops, so — like the Ollama entry — they
+      // go through @ai-sdk/openai-compatible, which parses it into native
+      // reasoning parts.
+      if (isAzureOpenAiFirstPartyModelName(modelName)) {
+        return createOpenAI({
+          apiKey: sdkApiKey,
+          baseURL,
+          headers: requestHeaders,
+          fetch: fetchWithVersion,
+        }).chat(modelName);
+      }
+
+      return createOpenAICompatible({
+        name: "azure",
         apiKey: sdkApiKey,
         baseURL,
-        headers: normalizedApiKey
-          ? { ...headers, "api-key": normalizedApiKey }
-          : headers,
+        headers: requestHeaders,
         fetch: fetchWithVersion,
-      }).chat(modelName);
+        // @ai-sdk/openai always sends stream_options.include_usage; the compatible
+        // provider only sends it when asked. Keep it on so the final usage chunk
+        // still arrives and cost/usage metrics are unaffected.
+        includeUsage: true,
+        // @ai-sdk/openai always sends `response_format: json_schema` for
+        // structured outputs; the compatible provider defaults to a schema-less
+        // `json_object` (and nothing else carries the schema to the model),
+        // which breaks generateObject flows (KB reranker, dual-LLM subagents)
+        // pointed at an Azure deployment. Foundry honours json_schema;
+        // deployments that can't ignore it, exactly as with the strict client.
+        supportsStructuredOutputs: true,
+      }).chatModel(modelName);
     },
     defaultBaseUrl: config.llm.azure.baseUrl || undefined,
     apiKeyRequiredMessage:

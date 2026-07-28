@@ -27,6 +27,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { LRUCacheManager } from "@/cache-manager";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -63,6 +64,7 @@ import {
   type GatewayAgent,
   type InteractionAuthMethod,
   type InteractionRequest,
+  type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
@@ -588,12 +590,14 @@ export async function handleLLMProxy<
   // 5. Enforce authentication for keyless providers on external requests.
   // A passthrough key authenticates the user but carries no provider credential,
   // so it intentionally does not satisfy the keyless-provider requirement.
-  assertAuthenticatedForKeylessProvider(
+  assertAuthenticatedForKeylessProvider({
     apiKey,
-    wasVirtualKeyResolved || wasOAuthAuthenticated,
+    wasVirtualKeyResolved: wasVirtualKeyResolved || wasOAuthAuthenticated,
     wasJwksAuthenticated,
-    request.ip,
-  );
+    requestIp: request.ip,
+    providerSuppliesServerCredential:
+      providerSuppliesServerCredential(providerName),
+  });
 
   // All authenticated user-scoped credentials must resolve to the same user.
   assertConsistentUserCredentials([
@@ -602,6 +606,19 @@ export async function handleLLMProxy<
     oauthUserId,
     regularVirtualKeyUserId,
   ]);
+
+  // The acting user as proven by a credential, as opposed to `userId`, which
+  // starts from the unauthenticated X-Archestra-User-Id / OpenWebUI-email
+  // headers. Those headers are attribution hints — good enough for logging and
+  // usage records, never sufficient to unlock access — so authorization checks
+  // must read this instead. Undefined for org-scoped virtual keys, OAuth client
+  // credentials, and raw provider-key calls, none of which identify a user.
+  const authenticatedUserId =
+    authOverride?.userId ??
+    passthroughUserId ??
+    jwksUserId ??
+    oauthUserId ??
+    regularVirtualKeyUserId;
 
   // Fall back to the personal standard virtual key's owner for user attribution.
   // Higher-precedence sources — the passthrough key, JWKS, OAuth, and the
@@ -783,19 +800,34 @@ export async function handleLLMProxy<
       : [];
 
     // Enforce per-team model restrictions before any upstream call. Checked on
-    // the model actually being invoked (post cost-optimization rewrite).
+    // the model actually being invoked (post cost-optimization rewrite), and
+    // against the AUTHENTICATED identity only — `userTeams` above is derived
+    // from `userId`, which a caller can seed with the X-Archestra-User-Id
+    // header, so it must not decide access.
+    const authenticatedUserTeamIds = !authenticatedUserId
+      ? []
+      : authenticatedUserId === userId
+        ? userTeams.map((team) => team.id)
+        : (
+            await TeamModel.getTeamLabelInfoForUser({
+              userId: authenticatedUserId,
+              organizationId: resolvedAgent.organizationId,
+            })
+          ).map((team) => team.id);
+
     const modelTeamAccess = await utils.checkModelTeamAccess({
       provider: providerName,
       modelId: actualModel,
       organizationId: resolvedAgent.organizationId,
-      userId,
-      userTeamIds: userTeams.map((team) => team.id),
+      authenticatedUserId,
+      userTeamIds: authenticatedUserTeamIds,
     });
     if (!modelTeamAccess.allowed) {
       logger.info(
         {
           resolvedAgentId,
           userId,
+          authenticatedUserId,
           actualModel,
           reason: "model_team_restricted",
         },
@@ -1199,6 +1231,49 @@ async function handleStreaming<
   // to prevent streaming data for tools that appear after a blocked tool.
   let bufferAllToolCalls = false;
 
+  // The finally-block persist is gated on usage, so any stream that ends without
+  // the provider ever reporting usage — a mid-stream failure, or a stream the
+  // provider truncates cleanly — would otherwise leave no trace in LLM logs /
+  // session history. Both paths funnel through here; the flag keeps a failed
+  // stream from being recorded twice (the catch persists, then finally runs).
+  let usagelessInteractionRecorded = false;
+  const recordUsagelessInteraction = async (response: unknown) => {
+    if (usagelessInteractionRecorded) {
+      return;
+    }
+    usagelessInteractionRecorded = true;
+
+    try {
+      await InteractionModel.create({
+        profileId: agent.id,
+        externalAgentId,
+        executionId,
+        userId,
+        virtualKeyId,
+        passthroughVirtualKeyId,
+        sessionId,
+        sessionSource,
+        source,
+        authMethod,
+        authenticatedAppId: authenticatedApp?.id,
+        authenticatedAppName: authenticatedApp?.name,
+        type: provider.interactionType,
+        request: originalRequest as InteractionRequest,
+        processedRequest: request as InteractionRequest,
+        response: response as InteractionResponse,
+        model: actualModel,
+        baselineModel,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+    } catch (interactionError) {
+      logger.error(
+        { err: interactionError, profileId: agent.id },
+        "Failed to create interaction record for stream without usage",
+      );
+    }
+  };
+
   logger.debug(
     { model: actualModel },
     `[${providerName}Proxy] Starting streaming request`,
@@ -1544,44 +1619,16 @@ async function handleStreaming<
       requestDurationRecorded = true;
     }
 
-    // The finally-block persist below is gated on usage, so a stream that
-    // fails before any usage arrives (e.g. a provider 400 rejecting the
-    // request) would otherwise leave no trace in LLM logs / session history.
+    // A stream that fails before any usage arrives (e.g. a provider 400
+    // rejecting the request, or a mid-stream failure once SSE headers and
+    // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
-      try {
-        const errorMessage = provider.extractErrorMessage(error);
-        logger.info(
-          { profileId: agent.id, errorMessage },
-          "Persisting error interaction record for failed stream",
-        );
-        await InteractionModel.create({
-          profileId: agent.id,
-          externalAgentId,
-          executionId,
-          userId,
-          virtualKeyId,
-          passthroughVirtualKeyId,
-          sessionId,
-          sessionSource,
-          source,
-          authMethod,
-          authenticatedAppId: authenticatedApp?.id,
-          authenticatedAppName: authenticatedApp?.name,
-          type: provider.interactionType,
-          request: originalRequest as InteractionRequest,
-          processedRequest: request as InteractionRequest,
-          response: { error: errorMessage },
-          model: actualModel,
-          baselineModel,
-          inputTokens: 0,
-          outputTokens: 0,
-        });
-      } catch (interactionError) {
-        logger.error(
-          { err: interactionError, profileId: agent.id },
-          "Failed to create error interaction record for failed stream",
-        );
-      }
+      const errorMessage = provider.extractErrorMessage(error);
+      logger.info(
+        { profileId: agent.id, errorMessage },
+        "Persisting error interaction record for failed stream",
+      );
+      await recordUsagelessInteraction({ error: errorMessage });
     }
 
     return handleError(
@@ -1692,6 +1739,12 @@ async function handleStreaming<
           "Failed to create interaction record (agent may have been deleted)",
         );
       }
+    } else {
+      // No usage ever arrived. On the error path the catch has already recorded
+      // the failure; otherwise the provider ended the stream early (a truncated
+      // response), and the partial content is all we have to log. Either way the
+      // call must not disappear from interaction history.
+      await recordUsagelessInteraction(streamAdapter.toProviderResponse());
     }
   }
 }
@@ -2130,6 +2183,23 @@ function createDownstreamAbortSignal(params: {
   }
 
   return controller.signal;
+}
+
+/**
+ * Whether the backend authenticates upstream with its OWN credentials for this
+ * provider and discards whatever the caller sent.
+ *
+ * Gemini in Vertex AI mode builds its client from the server's project and
+ * ADC/service-account credentials, never reading the caller's key — so a
+ * caller-supplied Authorization value is not a credential and cannot stand in
+ * for authentication.
+ *
+ * Azure (Entra ID) and Anthropic (workload identity) are deliberately absent:
+ * both fall back to server credentials only when no caller key is present, so a
+ * key supplied there is a genuine provider secret that the upstream validates.
+ */
+function providerSuppliesServerCredential(providerName: string): boolean {
+  return providerName === "gemini" && isVertexAiEnabled();
 }
 
 function shouldUseKeylessProviderApiKey(params: {

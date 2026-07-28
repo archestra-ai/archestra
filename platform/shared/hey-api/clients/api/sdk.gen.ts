@@ -7612,7 +7612,7 @@ export const getUserPermissions = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `member:update`: Change member roles and settings
+ * `member:impersonate`: Temporarily sign in as another member to see the app with their access (role debugging)
  */
 export const getImpersonableUsers = <ThrowOnError extends boolean = false>(options?: Options<GetImpersonableUsersData, ThrowOnError>) => (options?.client ?? client).get<GetImpersonableUsersResponses, GetImpersonableUsersErrors, ThrowOnError>({ url: '/api/user/impersonable', ...options });
 

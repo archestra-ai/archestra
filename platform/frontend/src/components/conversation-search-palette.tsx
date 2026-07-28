@@ -118,14 +118,6 @@ const navigationItems = [
     href: "/llm/model-providers",
   },
   {
-    icon: Key,
-    label: "Client Credentials",
-    value: "credentials",
-    keywords:
-      "virtual keys oauth clients client credentials llm mcp gateways agents a2a",
-    href: "/credentials",
-  },
-  {
     icon: MessagesSquare,
     label: "Logs",
     value: "logs",

@@ -883,7 +883,14 @@ async function executeWithToolSpan<R>(params: {
   }
 
   logger.info(
-    { agentId: ctx.agentId, userId: ctx.userId, toolName, arguments: args },
+    {
+      agentId: ctx.agentId,
+      userId: ctx.userId,
+      toolName,
+      // Argument values are user/LLM content — log only shape, never payload.
+      argumentKeys: args ? Object.keys(args) : [],
+      argumentsSize: JSON.stringify(args ?? {}).length,
+    },
     entryLogMessage,
   );
 

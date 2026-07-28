@@ -14,6 +14,7 @@ import pretty from "pino-pretty";
 import { LOG_FORMAT } from "@/logging/log-format";
 import { LOG_LEVEL } from "@/logging/log-level";
 import { logRingBuffer } from "@/logging/log-ring-buffer";
+import { REDACTED_LOG_PATHS, serializeErrorBounded } from "@/logging/redaction";
 import { getActiveSessionId } from "@/observability/request-context";
 
 /**
@@ -60,6 +61,15 @@ function createLogger(): pino.Logger {
       // Drop `pid` and `hostname` — they're noise in a containerized
       // environment where pod metadata already identifies the host.
       base: undefined,
+      // Defense-in-depth: censor credential-shaped keys in every record
+      // before any stream (stdout, OTLP, ring buffer) sees it. Call sites
+      // must still avoid logging payloads — this only catches the common
+      // credential key names at the top and second level of a merge object.
+      redact: { paths: REDACTED_LOG_PATHS, censor: "[Redacted]" },
+      serializers: {
+        err: serializeErrorBounded,
+        error: serializeErrorBounded,
+      },
     },
     pino.multistream([
       { level: "trace", stream: createStdoutStream() },

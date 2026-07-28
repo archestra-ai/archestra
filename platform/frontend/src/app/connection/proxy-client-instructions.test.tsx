@@ -226,7 +226,7 @@ describe("ProxyClientInstructions — Claude Desktop attribution header", () => 
     ).toBeGreaterThan(0);
   });
 
-  it("points to the Virtual API Keys page when the user can't mint a key", () => {
+  it("points to LLM Proxies when the user can't mint a key", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
     } as ReturnType<typeof useHasPermissions>);
@@ -234,7 +234,7 @@ describe("ProxyClientInstructions — Claude Desktop attribution header", () => 
 
     expect(passthroughProvisionMock).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("link", { name: /Virtual API Keys/i }),
+      screen.getByRole("link", { name: /LLM Proxies/i }),
     ).toBeInTheDocument();
   });
 

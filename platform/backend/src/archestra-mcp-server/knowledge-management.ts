@@ -492,7 +492,8 @@ async function handleQueryKnowledgeSources(params: {
       tool: archestraMcpBranding.getToolName(
         TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
       ),
-      args,
+      // args carries the user's verbatim query — log shape only.
+      queryLength: args.query.length,
     },
     "knowledge-management tool called",
   );

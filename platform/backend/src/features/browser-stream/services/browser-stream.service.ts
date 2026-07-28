@@ -1308,9 +1308,12 @@ export class BrowserStreamService {
           contentLength: Array.isArray(result.content)
             ? result.content.length
             : 0,
-          contentSample: Array.isArray(result.content)
-            ? JSON.stringify(result.content.slice(0, 2)).slice(0, 500)
-            : String(result.content).slice(0, 500),
+          // Shape only — the content itself is page data the tool captured.
+          contentItemTypes: Array.isArray(result.content)
+            ? result.content
+                .slice(0, 5)
+                .map((item) => (item as { type?: string })?.type ?? typeof item)
+            : undefined,
         },
         "No screenshot data found in MCP response - unexpected content format",
       );

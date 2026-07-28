@@ -46,6 +46,7 @@ const actionLabels: Record<Action, string> = {
   manage: "Manage",
   "read-all": "Read All Chats",
   "share-org": "Share Org-Wide",
+  impersonate: "Impersonate",
 };
 
 const UNGRANTABLE_PERMISSION_TOOLTIP =

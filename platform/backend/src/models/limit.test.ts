@@ -2422,6 +2422,67 @@ describe("cleanupLimitsIfNeeded", () => {
     expect(result?.[1]).toContain("user-level cost limit");
   });
 
+  test("subscription-billed interactions do not count toward default user limits", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+
+    await EnvironmentDefaultUserLimitModel.create({
+      organizationId: org.id,
+      environmentId: null,
+      limitValue: 1,
+      model: ["gpt-4o"],
+      cleanupInterval: "1w",
+    });
+
+    // Subscription usage costs the org $0 and must not burn the default limit,
+    // even when its list-price estimate is far over the cap.
+    const subscriptionInteraction = await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      inputTokens: 100,
+      outputTokens: 100,
+      cost: "5",
+      billingMode: "subscription",
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ userId: user.id })
+      .where(eq(schema.interactionsTable.id, subscriptionInteraction.id));
+
+    const allowed = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      userId: user.id,
+    });
+    expect(allowed).toBeNull();
+
+    // A metered interaction over the cap still trips the limit.
+    const meteredInteraction = await makeInteraction(agent.id, {
+      model: "gpt-4o",
+      inputTokens: 100,
+      outputTokens: 100,
+      cost: "2",
+      billingMode: "metered",
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ userId: user.id })
+      .where(eq(schema.interactionsTable.id, meteredInteraction.id));
+
+    const blocked = await LimitValidationService.checkLimitsBeforeRequest({
+      agentId: agent.id,
+      userId: user.id,
+    });
+    expect(blocked).not.toBeNull();
+    expect(blocked?.[1]).toContain("user-level cost limit");
+  });
+
   test("custom user limits override the inherited default user limit", async ({
     makeAgent,
     makeOrganization,

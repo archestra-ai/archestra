@@ -1,8 +1,8 @@
+import type * as archestraApiTypes from "../../hey-api/clients/api/types.gen";
 import {
   ARCHESTRA_TOOL_NAME_TAG,
-  type archestraApiTypes,
   parseArchestraToolRefusal,
-} from "../../index";
+} from "../../tool-refusal";
 import type { PartialUIMessage } from "../types";
 import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
 
@@ -109,7 +109,8 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
       interaction.request as archestraApiTypes.GeminiGenerateContentRequest;
     this.response =
       interaction.response as archestraApiTypes.GeminiGenerateContentResponse;
-    this.modelName = this.response.modelVersion as string;
+    this.modelName =
+      interaction.model ?? (this.response.modelVersion as string) ?? "";
   }
 
   isLastMessageToolCall(): boolean {
@@ -139,7 +140,8 @@ class GeminiGenerateContentInteraction implements InteractionUtils {
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (message.role === "user" && Array.isArray(message.parts)) {
-        for (const part of message.parts) {
+        for (let j = message.parts.length - 1; j >= 0; j--) {
+          const part = message.parts[j];
           if (hasFunctionResponse(part) && part.functionResponse.id) {
             return part.functionResponse.id;
           }

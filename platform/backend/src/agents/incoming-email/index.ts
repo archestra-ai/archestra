@@ -475,7 +475,7 @@ export async function processIncomingEmail(
       messageId: email.messageId,
       toAddress: email.toAddress,
       fromAddress: email.fromAddress,
-      subject: email.subject,
+      // subject is message content — deliberately not logged
     },
     "[IncomingEmail] Processing incoming email",
   );

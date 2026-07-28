@@ -561,6 +561,54 @@ function consumeStashedSignOutSession(
   return v;
 }
 
+/**
+ * Org-level RBAC gate for starting impersonation. better-auth's own admin
+ * plugin check (system `users.role === "admin"`) still runs after this; an
+ * unauthenticated call is left for better-auth to reject so the error shape
+ * stays consistent.
+ */
+async function assertCallerCanImpersonate(
+  ctx: HookEndpointContext,
+): Promise<void> {
+  const { request, context } = ctx;
+
+  type SessionUser = { id: string };
+  let user = (context?.session as { user?: SessionUser } | undefined)?.user;
+
+  if (!user && request) {
+    try {
+      const headers = new Headers(request.headers as HeadersInit);
+      const resolved = await auth.api.getSession({ headers });
+      user = resolved?.user as SessionUser | undefined;
+    } catch (err) {
+      logger.debug(
+        { err },
+        "[auth:beforeHook] impersonation gate: getSession failed",
+      );
+    }
+  }
+
+  if (!user?.id) return;
+
+  const forbidden = () =>
+    new APIError("FORBIDDEN", {
+      message: "You do not have permission to impersonate users",
+    });
+
+  const userRecord = await UserModel.getById(user.id);
+  if (!userRecord?.organizationId) {
+    throw forbidden();
+  }
+
+  const permissions = await UserModel.getUserPermissions(
+    user.id,
+    userRecord.organizationId,
+  );
+  if (!permissions.member?.includes("impersonate")) {
+    throw forbidden();
+  }
+}
+
 function getBetterAuthLogLevel(
   logLevel: string,
 ): "debug" | "info" | "warn" | "error" | undefined {
@@ -675,6 +723,14 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
 
   if (isAuthSignOutPath(path)) {
     await stashSignOutSessionForAudit(ctx);
+  }
+
+  // better-auth's admin plugin only checks the system-level `users.role`
+  // before impersonating; layer the org-level RBAC permission on top so
+  // roles without member:impersonate cannot start an impersonated session.
+  // (/admin/stop-impersonating stays ungated — exiting must always work.)
+  if (path === "/admin/impersonate-user" && method === "POST") {
+    await assertCallerCanImpersonate(ctx);
   }
 
   if (

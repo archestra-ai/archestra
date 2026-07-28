@@ -6,15 +6,15 @@ import type {
 } from "@archestra/shared";
 import { useEffect, useState } from "react";
 import {
-  ProxyGrantField,
-  parseRedirectUris,
-  RedirectUrisField,
-} from "@/app/credentials/_parts/oauth-client-form-fields";
-import {
   AgentSelector,
   type AgentSelectorAgent,
 } from "@/components/agent-selector";
 import { FormDialog } from "@/components/form-dialog";
+import {
+  ProxyGrantField,
+  parseRedirectUris,
+  RedirectUrisField,
+} from "@/components/oauth-client-form-fields";
 import { OauthClientVisibilityField } from "@/components/oauth-client-visibility-field";
 import {
   type ProviderApiKeyMap,

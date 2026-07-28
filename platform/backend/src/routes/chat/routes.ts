@@ -1350,6 +1350,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const maxOutputTokens = resolveAgentMaxOutputTokens({
                   outputLength: modelRow?.outputLength ?? null,
                   ceiling: config.chat.maxOutputTokensCeiling,
+                  rateMeteredCeiling:
+                    config.chat.rateMeteredMaxOutputTokensCeiling,
                   provider,
                   // Effective (not architectural) window: for Ollama the
                   // admin-pinned `num_ctx` is what the request actually runs

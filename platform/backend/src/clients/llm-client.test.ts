@@ -81,6 +81,35 @@ vi.mock("@ai-sdk/openai", async (importOriginal) => {
   };
 });
 
+// Capture the options passed to createOpenAICompatible for the azure
+// open-model (reasoning_content) branch tests.
+const capturedCreateOpenAICompatibleOptions = vi.hoisted(() => ({
+  headers: undefined as Record<string, string> | undefined,
+  apiKey: undefined as string | undefined,
+  includeUsage: undefined as boolean | undefined,
+}));
+vi.mock("@ai-sdk/openai-compatible", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@ai-sdk/openai-compatible")>();
+  return {
+    ...actual,
+    createOpenAICompatible: (
+      options: Parameters<typeof actual.createOpenAICompatible>[0],
+    ) => {
+      capturedCreateOpenAICompatibleOptions.headers = (
+        options as { headers?: Record<string, string> }
+      ).headers;
+      capturedCreateOpenAICompatibleOptions.apiKey = (
+        options as { apiKey?: string }
+      ).apiKey;
+      capturedCreateOpenAICompatibleOptions.includeUsage = (
+        options as { includeUsage?: boolean }
+      ).includeUsage;
+      return actual.createOpenAICompatible(options);
+    },
+  };
+});
+
 // Capture the fetch option passed to createOllama, so the native `think`
 // reconciliation can be asserted against the body that actually goes out.
 const capturedCreateOllamaOptions = vi.hoisted(() => ({
@@ -365,6 +394,46 @@ describe("createDirectLLMModel", () => {
     expect(responseFormat?.json_schema?.schema).toBeDefined();
   });
 
+  it("sends the json_schema response_format for Azure open-model structured outputs", async () => {
+    let sent: Record<string, unknown> | undefined;
+    const mockFetch = vi.fn(
+      async (_input: unknown, init: RequestInit | undefined) => {
+        sent = JSON.parse(init?.body as string);
+        return new Response("upstream stub", { status: 500 });
+      },
+    );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const model = createDirectLLMModel({
+      provider: "azure",
+      apiKey: "test-key",
+      modelName: "DeepSeek-R1",
+      baseUrl: "https://my-resource.services.ai.azure.com/openai/v1",
+    });
+
+    await generateObject({
+      model,
+      schema: z.object({ answer: z.number() }),
+      prompt: "2 + 2?",
+      maxRetries: 0,
+    }).catch(() => {});
+
+    if (!sent) {
+      throw new Error("Expected a request to reach the fetch stub");
+    }
+    // Azure open models moved from the strict openai client, which always sent
+    // json_schema, to the compatible one, which downgrades to a schema-less
+    // `json_object` unless asked — silently breaking every generateObject flow
+    // (KB reranker, dual-LLM subagents) pointed at an Azure deployment.
+    const responseFormat = (
+      sent as {
+        response_format?: { type?: string; json_schema?: { schema?: unknown } };
+      }
+    ).response_format;
+    expect(responseFormat?.type).toBe("json_schema");
+    expect(responseFormat?.json_schema?.schema).toBeDefined();
+  });
+
   it("creates a model for zhipuai provider", () => {
     const model = createDirectLLMModel({
       provider: "zhipuai",
@@ -453,6 +522,133 @@ describe("createDirectLLMModel", () => {
       }),
     );
     expect(capturedCreateOpenAIOptions.apiKey).toBe("test-key");
+  });
+
+  it("keeps azure OpenAI first-party deployments on the strict openai chat model", () => {
+    const model = createDirectLLMModel({
+      provider: "azure",
+      apiKey: "test-key",
+      modelName: "gpt-5.5",
+      baseUrl: "https://my-resource.services.ai.azure.com/openai/v1",
+    });
+
+    expect((model as { provider: string }).provider).toBe("openai.chat");
+  });
+
+  it("uses the openai-compatible chat model for azure open-model deployments so reasoning_content surfaces", () => {
+    const model = createDirectLLMModel({
+      provider: "azure",
+      apiKey: "Bearer test-key",
+      modelName: "DeepSeek-R1",
+      baseUrl: "https://my-resource.services.ai.azure.com/openai/v1",
+    });
+
+    expect((model as { provider: string }).provider).toBe("azure.chat");
+    expect((model as { modelId: string }).modelId).toBe("DeepSeek-R1");
+    // The azure specifics must survive the SDK switch: api-key header
+    // (Bearer-stripped) and the usage chunk the strict SDK sends by default.
+    expect(capturedCreateOpenAICompatibleOptions.headers).toEqual(
+      expect.objectContaining({
+        "api-key": "test-key",
+      }),
+    );
+    expect(capturedCreateOpenAICompatibleOptions.apiKey).toBe("test-key");
+    expect(capturedCreateOpenAICompatibleOptions.includeUsage).toBe(true);
+  });
+
+  it("throws when azure has no base URL instead of falling back to api.openai.com", () => {
+    // Covers the strict-SDK branch too: createOpenAI would otherwise default
+    // to api.openai.com and send the Azure api-key there.
+    expect(() =>
+      createDirectLLMModel({
+        provider: "azure",
+        apiKey: "test-key",
+        modelName: "gpt-5.5",
+        baseUrl: null,
+      }),
+    ).toThrow("Azure AI Foundry base URL is required.");
+  });
+
+  it("routes azure gpt-oss deployments through the openai-compatible chat model", () => {
+    const model = createDirectLLMModel({
+      provider: "azure",
+      apiKey: "test-key",
+      modelName: "gpt-oss-120b",
+      baseUrl: "https://my-resource.services.ai.azure.com/openai/v1",
+    });
+
+    expect((model as { provider: string }).provider).toBe("azure.chat");
+  });
+
+  // Boundary test: drive the REAL @ai-sdk/openai-compatible model against a
+  // stubbed Azure upstream. Pins the reason for the azure SDK gate: DeepSeek-R1
+  // style deployments stream their thinking in `reasoning_content` delta
+  // fields, which the strict @ai-sdk/openai chat parser silently drops — the
+  // thinking must instead surface as reasoning stream parts.
+  it("surfaces azure reasoning_content deltas as reasoning stream parts", async () => {
+    const chunk = (payload: object) =>
+      `data: ${JSON.stringify({
+        id: "cmpl-1",
+        object: "chat.completion.chunk",
+        created: 1,
+        model: "DeepSeek-R1",
+        ...payload,
+      })}`;
+    const sseBody = [
+      chunk({
+        choices: [
+          {
+            index: 0,
+            delta: { role: "assistant", reasoning_content: "Let me think." },
+            finish_reason: null,
+          },
+        ],
+      }),
+      chunk({
+        choices: [{ index: 0, delta: { content: "42" }, finish_reason: null }],
+      }),
+      chunk({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] }),
+      chunk({
+        choices: [],
+        usage: { prompt_tokens: 3, completion_tokens: 5 },
+      }),
+      "data: [DONE]",
+    ].join("\n\n");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(`${sseBody}\n\n`, {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          }),
+      ),
+    );
+
+    const model = createDirectLLMModel({
+      provider: "azure",
+      apiKey: "test-key",
+      modelName: "DeepSeek-R1",
+      baseUrl: "https://my-resource.services.ai.azure.com/openai/v1",
+    });
+
+    const result = streamText({
+      model,
+      prompt: "What is 6 * 7?",
+      maxRetries: 0,
+    });
+    let reasoningText = "";
+    let answerText = "";
+    const errors: unknown[] = [];
+    for await (const part of result.fullStream) {
+      if (part.type === "reasoning-delta") reasoningText += part.text;
+      if (part.type === "text-delta") answerText += part.text;
+      if (part.type === "error") errors.push(part.error);
+    }
+
+    expect(errors).toEqual([]);
+    expect(reasoningText).toBe("Let me think.");
+    expect(answerText).toBe("42");
   });
 
   // createDirectLLMModel doesn't expose a `fetch` parameter — the azure createModel

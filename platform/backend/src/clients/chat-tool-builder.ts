@@ -8,7 +8,9 @@ import {
   extractMcpToolError,
   isAppRenderingArchestraToolShortName,
   isBrowserMcpTool,
+  MCP_EXECUTED_AS_META_KEY,
   parseFullToolName,
+  platformExecutedAs,
   stripReservedPlatformMeta,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -547,6 +549,13 @@ export async function buildArchestraToolOutput(params: {
     organizationId,
     tokenAuth,
   } = params;
+  // A dispatched third-party tool already carries the identity whose
+  // credential served it. Everything else here Archestra ran itself, with the
+  // caller's own permissions — say so rather than leaving the card unable to
+  // answer "as who did this run?".
+  const executedAs =
+    extractMcpExecutedAs(response) ?? platformExecutedAs(userId);
+  const executedAsMeta = { [MCP_EXECUTED_AS_META_KEY]: executedAs };
   // Never stringify an image block into the text summary — its base64 would
   // bloat context and evade the history image-stripper. Images ride rawContent
   // and reach the model as bounded media parts via toModelOutput instead.
@@ -566,7 +575,10 @@ export async function buildArchestraToolOutput(params: {
   if (!response.isError && response.content.some((c) => c.type === "image")) {
     return {
       content: text,
-      _meta: response._meta as Record<string, unknown> | undefined,
+      _meta: {
+        ...(response._meta as Record<string, unknown>),
+        ...executedAsMeta,
+      },
       rawContent: response.content as ContentBlock[],
     };
   }
@@ -592,14 +604,16 @@ export async function buildArchestraToolOutput(params: {
   ) {
     return {
       content: text,
+      _meta: executedAsMeta,
       structuredContent: response.structuredContent,
       rawContent: response.content as ContentBlock[],
     };
   }
 
   if (targetToolName === toolName) {
-    // Not a run_tool dispatch — no UI resource to attach.
-    return text;
+    // Not a run_tool dispatch — no UI resource to attach, but the card still
+    // names who the platform ran this for.
+    return { content: text, _meta: executedAsMeta };
   }
 
   let resourceUri: string | undefined;
@@ -647,20 +661,17 @@ export async function buildArchestraToolOutput(params: {
     // badge). Mirrors the direct path (executeMcpTool), which keeps these
     // fields. In-process Archestra tools carry neither and stay plain text, so
     // plain-output parsing (e.g. knowledge-source citations) is unaffected.
-    if (
-      (response.isError && extractMcpToolError(response)) ||
-      extractMcpExecutedAs(response)
-    ) {
-      return {
-        content: text,
-        _meta: response._meta as Record<string, unknown> | undefined,
-        structuredContent: response.structuredContent as
-          | Record<string, unknown>
-          | undefined,
-        rawContent: response.content as ContentBlock[],
-      };
-    }
-    return text;
+    return {
+      content: text,
+      _meta: {
+        ...(response._meta as Record<string, unknown>),
+        ...executedAsMeta,
+      },
+      structuredContent: response.structuredContent as
+        | Record<string, unknown>
+        | undefined,
+      rawContent: response.content as ContentBlock[],
+    };
   }
 
   // Bind the app's callbacks to the concrete install so its SDK `callServerTool`
@@ -677,6 +688,7 @@ export async function buildArchestraToolOutput(params: {
     content: text,
     _meta: {
       ...response._meta,
+      ...executedAsMeta,
       ui: { resourceUri, ...(mcpServerId ? { mcpServerId } : {}) },
     },
     structuredContent: response.structuredContent as

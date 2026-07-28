@@ -62,12 +62,27 @@ describe("ExecutedAsBadge", () => {
     [{ kind: "idp_exchange" }, "Ran as the caller"],
     [{ kind: "idp_passthrough" }, "Ran as the caller"],
     [{ kind: "caller_headers" }, "Ran as the caller"],
+    [{ kind: "platform", callerUserId: "user-1" }, "Ran as me"],
+    [{ kind: "platform", callerUserId: "user-2" }, "Ran as the caller"],
+    [{ kind: "platform", callerUserId: null }, "Ran as the caller"],
   ] as Array<
     [McpExecutedAs, string]
   >)("labels a %o identity", (executedAs, label) => {
     render(<ExecutedAsBadge executedAs={executedAs} meUserId="user-1" />);
 
     expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it("names the caller on a call Archestra ran itself", () => {
+    render(
+      <ExecutedAsBadge
+        executedAs={{ kind: "platform", callerUserId: "user-2" }}
+        meUserId="user-1"
+        callerName="Grace Hopper"
+      />,
+    );
+
+    expect(screen.getByText("Ran as Grace Hopper")).toBeInTheDocument();
   });
 
   it("renders nothing for a call that resolved no upstream credential", () => {

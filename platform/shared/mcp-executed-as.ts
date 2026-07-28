@@ -45,10 +45,10 @@ export function stripReservedPlatformMeta(
 }
 
 /**
- * Which identity the upstream call ran as. One member per way the gateway can
- * resolve a credential; a call that never reached an upstream server (a
- * platform built-in, a blocked call, an app launch) carries no descriptor at
- * all rather than a catch-all member.
+ * Which identity a tool call ran as. One member per way the gateway can
+ * resolve a credential, plus `platform` for the calls Archestra serves itself
+ * — every tool call answers "on whose behalf did this run?", so a card is
+ * never blank where the question still has an answer.
  */
 export const McpExecutedAsSchema = z.discriminatedUnion("kind", [
   z
@@ -78,10 +78,34 @@ export const McpExecutedAsSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("idp_passthrough") }).strict(),
   /** The caller's request carried the upstream authorization header itself. */
   z.object({ kind: z.literal("caller_headers") }).strict(),
+  /**
+   * Archestra served the call itself — a built-in tool, an app launch, or a
+   * call it refused before reaching a server. No MCP server credential was
+   * involved; the call ran with the caller's own permissions. Carries only the
+   * caller's id: every surface that shows this already knows the caller's name
+   * (the log row, the chat viewer), so resolving it here would cost a query
+   * per call for nothing.
+   */
+  z
+    .object({
+      kind: z.literal("platform"),
+      callerUserId: z.string().nullable(),
+    })
+    .strict(),
 ]);
 
 export type McpExecutedAs = z.infer<typeof McpExecutedAsSchema>;
 export type McpExecutedAsKind = McpExecutedAs["kind"];
+
+/**
+ * The identity for a call Archestra serves itself: no MCP server credential is
+ * involved, so it runs with the caller's own permissions.
+ */
+export function platformExecutedAs(
+  callerUserId: string | null | undefined,
+): McpExecutedAs {
+  return { kind: "platform", callerUserId: callerUserId ?? null };
+}
 
 /**
  * Read the executed-as descriptor off a tool result, a persisted tool-call log

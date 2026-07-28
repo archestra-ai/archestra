@@ -2,7 +2,7 @@
 
 import type { McpExecutedAs, McpExecutedAsKind } from "@archestra/shared";
 import type { LucideIcon } from "lucide-react";
-import { Globe, KeyRound, User, Users } from "lucide-react";
+import { Cpu, Globe, KeyRound, User, Users } from "lucide-react";
 import { scopeStyles } from "@/components/resource-visibility-badge";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 export function ExecutedAsBadge({
   executedAs,
   meUserId,
+  callerName,
 }: {
   executedAs: McpExecutedAs | null | undefined;
   /**
@@ -32,6 +33,12 @@ export function ExecutedAsBadge({
    * caller in the tool-call log. Omit to always name the owner.
    */
   meUserId?: string | null;
+  /**
+   * Display name of the user who made the call, for the calls Archestra ran
+   * itself (they carry only the caller's id). Omit where it is unknown; the
+   * badge then says "the caller".
+   */
+  callerName?: string | null;
 }) {
   if (!executedAs) {
     return null;
@@ -42,7 +49,7 @@ export function ExecutedAsBadge({
     style,
     label,
     tooltip,
-  } = describeExecutedAs(executedAs, meUserId);
+  } = describeExecutedAs(executedAs, meUserId, callerName);
 
   return (
     <TooltipProvider>
@@ -80,6 +87,7 @@ const executedAsDescriptors: {
   [K in McpExecutedAsKind]: (
     executedAs: Extract<McpExecutedAs, { kind: K }>,
     meUserId: string | null | undefined,
+    callerName: string | null | undefined,
   ) => ExecutedAsDisplay;
 } = {
   personal: (executedAs, meUserId) => {
@@ -140,17 +148,29 @@ const executedAsDescriptors: {
     tooltip:
       "The calling client supplied the credential the MCP server was called with.",
   }),
+  platform: (executedAs, meUserId, callerName) => {
+    const isMe = !!meUserId && executedAs.callerUserId === meUserId;
+    const who = isMe ? "me" : (callerName ?? "the caller");
+    return {
+      icon: Cpu,
+      style: scopeStyles.personal,
+      label: `${RAN_AS_PREFIX} ${who}`,
+      tooltip: `Archestra ran this tool itself, with ${isMe ? "your" : "the caller's"} permissions. No MCP server connection was used.`,
+    };
+  },
 };
 
 function describeExecutedAs(
   executedAs: McpExecutedAs,
   meUserId: string | null | undefined,
+  callerName: string | null | undefined,
 ): ExecutedAsDisplay {
   // Narrowed per kind by the descriptor table's mapped type; the lookup itself
   // needs the cast because TypeScript cannot correlate key and value here.
   const describe = executedAsDescriptors[executedAs.kind] as (
     executedAs: McpExecutedAs,
     meUserId: string | null | undefined,
+    callerName: string | null | undefined,
   ) => ExecutedAsDisplay;
-  return describe(executedAs, meUserId);
+  return describe(executedAs, meUserId, callerName);
 }

@@ -8657,7 +8657,7 @@ describe("executed-as identity", () => {
     expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({ kind: "org" });
   });
 
-  test("omits the identity when the call never resolved a credential", async ({
+  test("attributes a call the platform refused to the caller", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -8668,8 +8668,8 @@ describe("executed-as identity", () => {
     await makeMember(caller.id, org.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
     const { tool } = await makeRemoteCatalogTool(agent.id);
-    // No connection exists for the catalog, so resolution fails before any
-    // upstream credential is chosen.
+    // No connection exists, so the call is refused before any credential is
+    // chosen — but the platform still ran it on the caller's behalf.
 
     const result = await callTool({
       agentId: agent.id,
@@ -8678,6 +8678,9 @@ describe("executed-as identity", () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toBeUndefined();
+    expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
+      kind: "platform",
+      callerUserId: caller.id,
+    });
   });
 });

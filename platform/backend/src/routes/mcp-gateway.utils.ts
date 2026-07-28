@@ -6,10 +6,13 @@ import {
   isAgentTool,
   isAlwaysExposedArchestraToolShortName,
   isSkillTool,
+  MCP_EXECUTED_AS_META_KEY,
   MCP_GATEWAY_OAUTH_SCOPE,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
+  platformExecutedAs,
+  stripReservedPlatformMeta,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -796,6 +799,19 @@ export async function createAgentServer(
               : "Archestra MCP tool call completed",
           );
 
+          // Archestra ran this tool itself, with the caller's permissions —
+          // record that as the identity so the log answers "as who" for
+          // in-process tools too, not only for calls that reached a server.
+          const archestraResult = {
+            ...response,
+            _meta: {
+              ...stripReservedPlatformMeta(
+                response._meta as Record<string, unknown> | undefined,
+              ),
+              [MCP_EXECUTED_AS_META_KEY]: platformExecutedAs(tokenAuth?.userId),
+            },
+          };
+
           // Persist archestra/agent delegation tool call to database
           try {
             await McpToolCallModel.create({
@@ -807,7 +823,7 @@ export async function createAgentServer(
                 name,
                 arguments: args || {},
               },
-              toolResult: response,
+              toolResult: archestraResult,
               userId: tokenAuth?.userId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
             });
@@ -818,7 +834,7 @@ export async function createAgentServer(
             );
           }
 
-          return response;
+          return archestraResult;
         }
 
         logger.info(

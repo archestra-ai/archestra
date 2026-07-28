@@ -198,6 +198,7 @@ function McpToolCallDetail({
               <ExecutedAsBadge
                 executedAs={executedAs}
                 meUserId={mcpToolCall.userId}
+                callerName={mcpToolCall.userName}
               />
             </MetadataItem>
           )}

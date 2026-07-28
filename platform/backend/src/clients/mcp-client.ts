@@ -16,6 +16,7 @@ import {
   type McpExecutedAs,
   type McpToolError,
   parseFullToolName,
+  platformExecutedAs,
   stripReservedPlatformMeta,
   TimeInMs,
 } from "@archestra/shared";
@@ -424,14 +425,16 @@ class McpClient {
       availableTool?: CatalogTool;
     },
   ): Promise<CommonToolResult> {
-    // Derive auth info for logging. Reassigned once the outbound credential is
-    // resolved below, so every result built from that point on also names the
-    // identity the upstream call ran as.
+    // Derive auth info for logging. Until a credential resolves, the call is
+    // one the platform is serving itself (it may never reach a server — an app
+    // launch, or a refusal), so it starts attributed to the caller and is
+    // reassigned below once an upstream credential is settled.
     let authInfo: ToolCallAuthInfo | undefined =
       tokenAuth && Object.keys(tokenAuth).length
         ? {
             userId: tokenAuth.userId,
             authMethod: deriveAuthMethod(tokenAuth),
+            executedAs: platformExecutedAs(tokenAuth.userId),
           }
         : undefined;
 
@@ -484,6 +487,7 @@ class McpClient {
         owner,
         tokenAuth,
         catalogItem,
+        authInfo,
       });
     if ("error" in targetMcpServerIdResult) {
       return targetMcpServerIdResult.error;
@@ -1623,12 +1627,16 @@ class McpClient {
     toolCall,
     owner,
     catalogItem,
+    authInfo,
   }: {
     tool: McpToolAssignment;
     toolCall: CommonToolCall;
     owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
+    // Identity of the caller, so a refusal here is recorded and rendered like
+    // any other result rather than as an anonymous error.
+    authInfo?: ToolCallAuthInfo;
   }): Promise<
     | {
         targetMcpServerId: string;
@@ -1689,7 +1697,7 @@ class McpClient {
             owner,
             reconnectError.message,
             fallbackName,
-            undefined,
+            authInfo,
             reconnectError,
           ),
         };
@@ -1740,6 +1748,7 @@ class McpClient {
             owner,
             "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
             fallbackName,
+            authInfo,
           ),
         };
       }
@@ -1760,6 +1769,7 @@ class McpClient {
           owner,
           "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
           fallbackName,
+          authInfo,
         ),
       };
     }
@@ -1770,6 +1780,7 @@ class McpClient {
           owner,
           "Dynamic team credential is enabled but tool has no catalogId.",
           fallbackName,
+          authInfo,
         ),
       };
     }
@@ -1845,6 +1856,7 @@ class McpClient {
           owner,
           "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
           fallbackName,
+          authInfo,
         ),
       };
     }
@@ -1904,7 +1916,7 @@ class McpClient {
         owner,
         authError.message,
         fallbackName,
-        undefined,
+        authInfo,
         authError,
       ),
     };

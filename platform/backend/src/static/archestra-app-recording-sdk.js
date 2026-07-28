@@ -275,7 +275,16 @@
    * a minutes-long raw take stays under the ~100MB ceilings of the render
    * and gallery-upload paths. Content below the ceiling never feels it.
    */
-  const VIDEO_GOVERNOR_MAX_BPS = 3_000_000;
+  // Sized by what GitHub will accept, not by what looks best. The bundle
+  // stores video base64 in JSON and the upload base64-encodes that JSON again,
+  // so a byte of video costs ~1.78 bytes on the wire — and api.github.com
+  // refuses a request body much past 45MB (measured: a 57MB bundle was turned
+  // away by both the contents API and the blob endpoint). At 3 Mbit/s a
+  // three-minute capture reached ~86MB and could never be submitted; at
+  // 1 Mbit/s it lands near 29MB, ~38MB on the wire, inside the limit with room
+  // to spare. The cost is visible softness on full-motion apps, which is the
+  // right trade for a gallery card that can actually be uploaded.
+  const VIDEO_GOVERNOR_MAX_BPS = 1_000_000;
   /**
    * Wide enough for the frame shed to hold the ceiling even when single
    * frames are enormous: the shed can only space frames out, so its floor is

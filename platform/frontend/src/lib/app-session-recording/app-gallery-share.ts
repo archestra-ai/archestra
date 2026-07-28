@@ -590,7 +590,7 @@ export function oversizedGallerySubmissionFile(
 ): string | null {
   const { bytes } = recordingFile(bundle);
   if (bytes.byteLength > GITHUB_MAX_FILE_BYTES) {
-    return `This recording is ${mb(bytes.byteLength)}MB — GitHub refuses files over ${mb(GITHUB_MAX_FILE_BYTES)}MB. Trim it, or re-record a shorter session.`;
+    return `This recording is ${mb(bytes.byteLength)}MB — GitHub refuses uploads over ${mb(GITHUB_MAX_FILE_BYTES)}MB. Trim it, or re-record a shorter session.`;
   }
   return null;
 }
@@ -1397,12 +1397,31 @@ function base64ToBytes(base64: string): Uint8Array {
 }
 
 /**
- * GitHub's ceiling for a blob created through the Git Data API — the endpoint
- * the submission uploads through. Measured on the RAW bytes, which is what the
- * limit is about: the request carries them base64-encoded (~4/3 the size), but
- * the blob GitHub stores and bounds is the decoded file.
+ * What api.github.com accepts as a REQUEST BODY. This — not any file or blob
+ * size — is the limit submissions actually hit.
+ *
+ * Measured, not assumed. A 57MB bundle was refused by BOTH upload paths: the
+ * contents API answered "the file is too large to be processed" and the Git
+ * Data API's blob endpoint answered "your input was too large to process",
+ * despite GitHub documenting 100MB blobs. The common factor is the request
+ * itself — 57MB base64-encodes to ~76MB on the wire, and no REST endpoint
+ * takes that. Changing endpoints cannot raise this ceiling; only a smaller
+ * bundle can.
  */
-const GITHUB_MAX_FILE_BYTES = 100 * 1024 * 1024;
+const GITHUB_MAX_REQUEST_BODY_BYTES = 45 * 1024 * 1024;
+
+/**
+ * The largest bundle that still fits a request once base64 has had its way
+ * with it: base64 costs 4 bytes per 3, so the raw ceiling is 3/4 of the body
+ * limit.
+ *
+ * Worth carrying when reasoning about capture — the bundle's video chunks are
+ * ALREADY base64 inside its JSON and the upload encodes that JSON again, so a
+ * byte of recorded video costs ~1.78 bytes by the time it reaches GitHub.
+ */
+const GITHUB_MAX_FILE_BYTES = Math.floor(
+  (GITHUB_MAX_REQUEST_BODY_BYTES * 3) / 4,
+);
 
 function mb(bytes: number): number {
   return Math.round(bytes / (1024 * 1024));

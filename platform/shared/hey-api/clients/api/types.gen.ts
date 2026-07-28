@@ -57100,6 +57100,7 @@ export type McpGatewayGetResponses = {
         version: string;
         agentId: string;
         transport: string;
+        protocolVersions: Array<string>;
         capabilities: {
             tools: boolean;
         };

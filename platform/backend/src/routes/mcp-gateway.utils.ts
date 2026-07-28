@@ -6,10 +6,7 @@ import {
   isAgentTool,
   isAlwaysExposedArchestraToolShortName,
   isSkillTool,
-  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
-  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
   MCP_GATEWAY_OAUTH_SCOPE,
-  MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
@@ -102,9 +99,14 @@ import {
   type ToolExposureMode,
 } from "@/types";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
-import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
+import {
+  buildGatewayServerCapabilities,
+  buildPrivateListCacheHint,
+  isResourceUnavailableError,
+  withPrivateCacheHint,
+} from "./mcp-gateway.protocol";
 
 export { deriveAuthMethod };
 
@@ -170,27 +172,16 @@ export async function createAgentServer(
   agentId: string,
   tokenAuth?: TokenAuthContext,
 ): Promise<{ server: McpServer; agent: AgentInfo }> {
-  const extensionCapabilities = {
-    ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
-    ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-    ...MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
-  } as const;
-
   const mcpServer = new McpServer(
     {
       name: `archestra-agent-${agentId}`,
       version: config.api.version,
     },
     {
-      capabilities: {
-        resources: {
-          subscribe: true,
-          listChanged: true,
-        },
-        extensions: extensionCapabilities,
-        prompts: {},
-        tools: { listChanged: false },
-      } as McpServerCapabilitiesWithExtensions,
+      // Shared with the `server/discover` payload so the capabilities a
+      // 2025-11-25 client learns at `initialize` and a 2026-07-28 client learns
+      // on demand cannot drift apart.
+      capabilities: buildGatewayServerCapabilities(),
     },
   );
   const { server } = mcpServer;
@@ -457,7 +448,9 @@ export async function createAgentServer(
       logger.warn({ err: dbError }, "Failed to persist tools/list request:");
     }
 
-    return { tools: toolsList };
+    // SEP-2549 freshness hints. Always private: this list is filtered per
+    // caller, so it must never be shared across users by an intermediary.
+    return { tools: toolsList, ...buildPrivateListCacheHint() };
   });
 
   server.setRequestHandler(
@@ -473,7 +466,7 @@ export async function createAgentServer(
           { agentId, uri, resultType: typeof result },
           "Resource read successful",
         );
-        return result;
+        return withPrivateCacheHint(result);
       } catch (error) {
         // A third-party tool can advertise a `ui://` UI resource whose upstream
         // server does not actually implement `resources/read` (returning -32601
@@ -505,16 +498,25 @@ export async function createAgentServer(
 
   // SEP-1865: resources/list, resources/templates/list, prompts/list
   // Proxy to all upstream MCP servers connected to this agent and aggregate results.
+  // Each carries SEP-2549 cache hints, always private: these aggregate upstream
+  // servers reached with the caller's own credentials, so results differ per
+  // caller and must not be shared by an intermediary.
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return mcpClient.listResources(agentId, tokenAuth);
+    return withPrivateCacheHint(
+      await mcpClient.listResources(agentId, tokenAuth),
+    );
   });
 
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-    return mcpClient.listResourceTemplates(agentId, tokenAuth);
+    return withPrivateCacheHint(
+      await mcpClient.listResourceTemplates(agentId, tokenAuth),
+    );
   });
 
   server.setRequestHandler(ListPromptsRequestSchema, async () => {
-    return mcpClient.listPrompts(agentId, tokenAuth);
+    return withPrivateCacheHint(
+      await mcpClient.listPrompts(agentId, tokenAuth),
+    );
   });
 
   server.setRequestHandler(
@@ -2124,11 +2126,14 @@ function providesUiResource(tool: {
 
 /**
  * Whether a resource-read failure is an expected "the upstream server can't
- * serve this" condition — method not found (-32601) or resource not found
- * (-32002) — rather than a genuine platform fault. A third-party tool can
- * advertise a `ui://` UI resource whose server never implemented
+ * serve this" condition rather than a genuine platform fault. A third-party
+ * tool can advertise a `ui://` UI resource whose server never implemented
  * `resources/read`; the client degrades to the plain tool result, so the
  * gateway logs this quietly instead of at error level.
+ *
+ * Code matching is delegated so the SEP-2164 migration of missing-resource
+ * errors (-32002 to the generic -32602) does not silently reclassify these as
+ * platform faults once upstreams move to the newer revision.
  */
 function isUnavailableResourceError(error: unknown): boolean {
   if (
@@ -2138,8 +2143,11 @@ function isUnavailableResourceError(error: unknown): boolean {
     return true;
   }
   if (typeof error === "object" && error !== null && "code" in error) {
-    const code = (error as { code?: unknown }).code;
-    return code === -32601 || code === -32002;
+    const { code, message } = error as { code?: unknown; message?: unknown };
+    return isResourceUnavailableError({
+      code,
+      message: typeof message === "string" ? message : undefined,
+    });
   }
   return false;
 }

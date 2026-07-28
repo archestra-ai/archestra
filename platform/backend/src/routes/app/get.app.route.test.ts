@@ -95,6 +95,76 @@ describe("GET /api/apps/:appId", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("a member granted the app individually can GET another user's personal app", async ({
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const personal = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const other = await makeUser();
+    await makeMember(other.id, organizationId, { role: "member" });
+
+    // Grant through the catalog backing the app — the single source of truth
+    // every access path reads.
+    const { default: McpCatalogUserModel } = await import(
+      "@/models/mcp-catalog-user"
+    );
+    const { McpServerModel } = await import("@/models");
+    const server = await McpServerModel.findById(
+      personal.mcpServerId as string,
+    );
+    await McpCatalogUserModel.syncCatalogUsers(server?.catalogId as string, [
+      other.id,
+    ]);
+
+    user = other;
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/apps/${personal.id}`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ id: personal.id });
+    expect(response.json().users).toEqual([
+      expect.objectContaining({ id: other.id }),
+    ]);
+  });
+
+  test("revoking the grant closes access again", async ({
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const personal = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const other = await makeUser();
+    await makeMember(other.id, organizationId, { role: "member" });
+
+    const { default: McpCatalogUserModel } = await import(
+      "@/models/mcp-catalog-user"
+    );
+    const { McpServerModel } = await import("@/models");
+    const server = await McpServerModel.findById(
+      personal.mcpServerId as string,
+    );
+    const catalogId = server?.catalogId as string;
+    await McpCatalogUserModel.syncCatalogUsers(catalogId, [other.id]);
+    await McpCatalogUserModel.syncCatalogUsers(catalogId, []);
+
+    user = other;
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/apps/${personal.id}`,
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
   test("a member cannot GET another user's personal app (no existence leak)", async ({
     makeUser,
     makeMember,

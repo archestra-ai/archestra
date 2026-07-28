@@ -34,6 +34,7 @@ import {
   assertCallerMayModifyApp,
   callerIsAppAdmin,
   resolveOrgTeams,
+  resolveOrgUsers,
 } from "@/services/apps/app-authorization";
 import {
   createSeededAppConversation,
@@ -87,6 +88,12 @@ const CreateAppBodySchema = CreateAppSchema.extend({
 });
 const UpdateAppBodySchema = UpdateAppSchema.extend({
   teamIds: z.array(UuidIdSchema).optional(),
+  // People the app is shared with individually. Additive to `personal` scope
+  // rather than a scope of its own, so a personal app can follow a chat shared
+  // with named colleagues without widening to a team or the organization.
+  // Omitted leaves grants untouched; `[]` revokes them all. Not UUIDs — better-auth
+  // user ids are opaque strings.
+  userIds: z.array(z.string().min(1)).optional(),
 });
 
 // Create/update responses carry soft save-time validation warnings (the save
@@ -121,6 +128,12 @@ const OpenExternalAppInChatResponseSchema = OpenAppInChatResponseSchema.extend({
 // banner when an admin opens an app they only see through oversight.
 const AppWithTeamsSchema = SelectAppSchema.extend({
   teams: z.array(z.object({ id: z.string(), name: z.string() })),
+  // People the app is shared with individually. A non-empty list on a
+  // `personal`-scoped app is what the settings form renders as "Users" — the
+  // grant lives beside the scope rather than in it.
+  users: z.array(
+    z.object({ id: z.string(), name: z.string(), email: z.string() }),
+  ),
   viewerRole: z.enum(["owner", "shared", "admin"]),
   // The author's display name, so an admin viewing an app they only see through
   // oversight can be shown "Viewing as administrator · <name>". Null when the
@@ -202,8 +215,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .map((app) => app.authorId as string),
         ),
       ];
-      const [teamsByApp, authorNames, ownedPins, externalPins] =
+      const [usersByApp, teamsByApp, authorNames, ownedPins, externalPins] =
         await Promise.all([
+          AppAccessModel.getUserDetailsForApps(owned.map((app) => app.id)),
           AppAccessModel.getTeamDetailsForApps(owned.map((app) => app.id)),
           UserModel.getNamesByIds(personalAuthorIds),
           // Per-user pins (mirrors the projects list): surfaced as `pinnedAt` so
@@ -261,6 +275,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           latestVersion: app.latestVersion,
           enabled: app.enabled,
           teams: teamsByApp.get(app.id) ?? [],
+          users: usersByApp.get(app.id) ?? [],
           executionModel: "viewer-scoped" as const,
           cspOrigin: "platform-pinned" as const,
           pinnedAt: ownedPins.get(app.id) ?? null,
@@ -707,6 +722,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body.teamIds !== undefined
           ? await resolveOrgTeams(body.teamIds, organizationId)
           : undefined;
+      const nextUserIds =
+        body.userIds !== undefined
+          ? await resolveOrgUsers(body.userIds, organizationId)
+          : undefined;
 
       await assertCallerMayModifyApp({
         userId: user.id,
@@ -743,7 +762,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
       const reScoping = body.scope !== undefined && body.scope !== app.scope;
-      if (reScoping || nextTeamIds !== undefined) {
+      // Handing an app to named individuals widens who can reach it just as a
+      // team change does, so it goes through the same destination check rather
+      // than riding along on plain view access.
+      if (reScoping || nextTeamIds !== undefined || nextUserIds !== undefined) {
         await assertCallerMayModifyApp({
           userId: user.id,
           organizationId,
@@ -804,6 +826,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(Object.keys(patch).length > 0 ? { patch } : {}),
         ...(version ? { version } : {}),
         ...(nextTeamIds !== undefined ? { teamIds: nextTeamIds } : {}),
+        ...(nextUserIds !== undefined ? { userIds: nextUserIds } : {}),
       }).catch((error) => {
         // A rename into a name this author already uses hits apps_org_author_name_uidx.
         if (body.name !== undefined && isUniqueConstraintError(error)) {
@@ -1173,6 +1196,7 @@ async function buildAppDetail(params: {
   organizationId: string;
 }) {
   const { app, userId, organizationId } = params;
+  const usersByApp = await AppAccessModel.getUserDetailsForApps([app.id]);
   const teamsByApp = await AppAccessModel.getTeamDetailsForApps([app.id]);
   const viewerRole = await resolveViewerRole({ app, userId, organizationId });
   const authorName =
@@ -1183,6 +1207,7 @@ async function buildAppDetail(params: {
   return {
     ...app,
     teams: teamsByApp.get(app.id) ?? [],
+    users: usersByApp.get(app.id) ?? [],
     viewerRole,
     authorName,
   };

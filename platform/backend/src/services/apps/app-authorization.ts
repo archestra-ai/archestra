@@ -1,6 +1,6 @@
 import { requireScopedModifyPermission } from "@/auth/agent-type-permissions";
 import { userHasPermission } from "@/auth/utils";
-import { AppAccessModel, TeamModel } from "@/models";
+import { AppAccessModel, MemberModel, TeamModel } from "@/models";
 import { ApiError } from "@/types";
 import type { AppScope } from "@/types/app";
 
@@ -55,6 +55,36 @@ export async function resolveOrgTeams(
     );
   }
   return [...resolved];
+}
+
+/**
+ * Validate the user ids an app is being shared with, rejecting anyone outside
+ * the organization. Ids only — unlike teams there is no name resolution, since
+ * the picker always sends ids and matching people by display name would be
+ * ambiguous in exactly the cases where getting it wrong matters most.
+ */
+export async function resolveOrgUsers(
+  userRefs: string[] | undefined,
+  organizationId: string,
+): Promise<string[]> {
+  const unique = [...new Set((userRefs ?? []).map((ref) => ref.trim()))].filter(
+    (ref) => ref.length > 0,
+  );
+  if (unique.length === 0) return [];
+
+  const members = await MemberModel.findUserIdsInOrganization({
+    organizationId,
+    userIds: unique,
+  });
+  const known = new Set(members);
+  const unknown = unique.filter((id) => !known.has(id));
+  if (unknown.length > 0) {
+    throw new ApiError(
+      400,
+      `Unknown user(s) for this organization: ${unknown.join(", ")}`,
+    );
+  }
+  return unique;
 }
 
 /**

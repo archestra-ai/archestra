@@ -17593,6 +17593,10 @@ export type GetAppsResponses = {
                 id: string;
                 name: string;
             }>;
+            users: Array<{
+                id: string;
+                name: string;
+            }>;
         } | {
             name: string;
             description: string | null;
@@ -18676,6 +18680,11 @@ export type GetAppResponses = {
             id: string;
             name: string;
         }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
     };
@@ -18705,6 +18714,7 @@ export type UpdateAppData = {
         };
         environmentId?: string | null;
         teamIds?: Array<string>;
+        userIds?: Array<string>;
     };
     path: {
         appId: string;
@@ -18944,6 +18954,11 @@ export type EnableAppResponses = {
             id: string;
             name: string;
         }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;
     };
@@ -19069,6 +19084,11 @@ export type DisableAppResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         viewerRole: 'owner' | 'shared' | 'admin';
         authorName: string | null;

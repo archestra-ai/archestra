@@ -10,6 +10,7 @@ type StubApp = {
   scope: "personal" | "team" | "org";
   enabled: boolean;
   teams: Array<{ id: string; name: string }>;
+  users: Array<{ id: string; name: string; email: string }>;
 };
 
 let appsById: Record<string, StubApp> = {};
@@ -45,6 +46,7 @@ function makeApp(overrides: Partial<StubApp> & { id: string }): StubApp {
     scope: "personal",
     enabled: true,
     teams: [],
+    users: [],
     ...overrides,
   };
 }
@@ -53,12 +55,14 @@ function renderNotice(props: {
   appIds: string[];
   visibility: "private" | "organization" | "team" | "user";
   teamIds?: string[];
+  userIds?: string[];
 }) {
   return render(
     <ConversationAppAccessNotice
       appIds={props.appIds}
       visibility={props.visibility}
       teamIds={props.teamIds ?? []}
+      userIds={props.userIds ?? []}
     />,
     { wrapper: createWrapper() },
   );
@@ -181,6 +185,57 @@ describe("ConversationAppAccessNotice", () => {
     await waitFor(() => expect(warning()).toBeInTheDocument());
     expect(screen.getByText("Private One")).toBeInTheDocument();
     expect(screen.queryByText("Shared One")).not.toBeInTheDocument();
+  });
+
+  it("stays silent when every recipient already holds a grant on the app", async () => {
+    appsById.a = makeApp({
+      id: "a",
+      scope: "personal",
+      users: [
+        { id: "user-1", name: "Ada", email: "ada@example.com" },
+        { id: "user-2", name: "Grace", email: "grace@example.com" },
+      ],
+    });
+
+    renderNotice({
+      appIds: ["a"],
+      visibility: "user",
+      userIds: ["user-1", "user-2"],
+    });
+
+    await waitFor(() => expect(mockGetApp).toHaveBeenCalled());
+    expect(warning()).not.toBeInTheDocument();
+  });
+
+  it("warns when a recipient is missing a grant, even if others have one", async () => {
+    appsById.a = makeApp({
+      id: "a",
+      name: "Half Shared",
+      scope: "personal",
+      users: [{ id: "user-1", name: "Ada", email: "ada@example.com" }],
+    });
+
+    renderNotice({
+      appIds: ["a"],
+      visibility: "user",
+      userIds: ["user-1", "user-2"],
+    });
+
+    await waitFor(() => expect(warning()).toBeInTheDocument());
+    expect(screen.getByText("Half Shared")).toBeInTheDocument();
+  });
+
+  it("warns for an org-wide chat share even when named grants exist", async () => {
+    // Grants cover named people, not the whole organization.
+    appsById.a = makeApp({
+      id: "a",
+      scope: "personal",
+      users: [{ id: "user-1", name: "Ada", email: "ada@example.com" }],
+    });
+
+    renderNotice({ appIds: ["a"], visibility: "organization" });
+
+    await waitFor(() => expect(warning()).toBeInTheDocument());
   });
 
   it("says nothing about an app the sharer cannot read, rather than guessing", async () => {

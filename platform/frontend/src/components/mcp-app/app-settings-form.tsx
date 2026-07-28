@@ -4,8 +4,8 @@ import type {
   archestraApiTypes,
   ResourceVisibilityScope,
 } from "@archestra/shared";
-import { Globe, User, Users } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Globe, User, UserRound, Users } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
 import { EnvironmentSelector } from "@/components/environment-selector";
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { UserSearchableMultiSelect } from "@/components/user-searchable-multi-select";
 import {
   type VisibilityOption,
   VisibilitySelector,
@@ -31,12 +32,20 @@ import {
   useUnassignToolFromApp,
   useUpdateApp,
 } from "@/lib/app.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useOrganizationMembers } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 
 type App = archestraApiTypes.GetAppResponses["200"];
 
 type FormValues = { name: string; description: string };
+
+/**
+ * What the visibility control offers. Wider than the stored scope: an app
+ * shared with named people is persisted as `personal` plus grants, so "user"
+ * exists only in this form, which maps it both ways.
+ */
+type AppVisibilityChoice = ResourceVisibilityScope | "user";
 
 // The whole-app settings fields, hosted by `AppSettingsDialog` (apps-page cards
 // and the side panel both open that dialog). It folds the previously separate
@@ -63,6 +72,8 @@ export function AppSettingsForm({
   const { data: isAppAdmin } = useHasPermissions({ app: ["admin"] });
   const { data: isAppTeamAdmin } = useHasPermissions({ app: ["team-admin"] });
   const { data: teams } = useAssignableTeams({ isResourceAdmin: !!isAppAdmin });
+  const { data: session } = useSession();
+  const { data: members = [] } = useOrganizationMembers();
 
   const updateApp = useUpdateApp();
   const setEnabled = useSetAppEnabled();
@@ -81,8 +92,14 @@ export function AppSettingsForm({
   const [enabledStatus, setEnabledStatus] = useState<"disabled" | "enabled">(
     app.enabled ? "enabled" : "disabled",
   );
-  const [scope, setScope] = useState<ResourceVisibilityScope>(app.scope);
+  // The form's fourth option. On the wire an app shared with named people stays
+  // `personal` and carries grants, so "user" is a UI-side reading of
+  // (scope, users) — see the save path below, which maps it back.
+  const [scope, setScope] = useState<AppVisibilityChoice>(
+    app.scope === "personal" && app.users.length > 0 ? "user" : app.scope,
+  );
   const [teamIds, setTeamIds] = useState<string[]>(app.teams.map((t) => t.id));
+  const [userIds, setUserIds] = useState<string[]>(app.users.map((u) => u.id));
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -105,6 +122,20 @@ export function AppSettingsForm({
   const canShareTeams = isAppAdmin || isAppTeamAdmin;
   const hasNoTeams = (teams ?? []).length === 0;
 
+  // Everyone in the org but the author, who already reaches their own app —
+  // offering to "share" it with themselves would be a no-op that reads as a bug.
+  const memberOptions = useMemo(
+    () =>
+      members
+        .filter((member) => member.id !== session?.user?.id)
+        .map((member) => ({
+          userId: member.id,
+          name: member.name,
+          email: member.email,
+        })),
+    [members, session?.user?.id],
+  );
+
   const enabledOptions = [
     {
       value: "disabled" as const,
@@ -123,12 +154,21 @@ export function AppSettingsForm({
     (option) => option.value === enabledStatus,
   )?.description;
 
-  const options: VisibilityOption<ResourceVisibilityScope>[] = [
+  const options: VisibilityOption<AppVisibilityChoice>[] = [
     {
       value: "personal",
       label: "Personal",
       description: "Only you can use this app",
       icon: User,
+    },
+    {
+      value: "user",
+      label: "Users",
+      description: "Share this app with selected people",
+      icon: UserRound,
+      disabled: scope !== "user" && memberOptions.length === 0,
+      disabledLabel:
+        memberOptions.length === 0 ? "No users available" : undefined,
     },
     {
       value: "team",
@@ -155,6 +195,10 @@ export function AppSettingsForm({
   ];
 
   const teamSelectionMissing = scope === "team" && teamIds.length === 0;
+  // Same guard as Teams: an empty Users selection would silently save as a
+  // plain personal app, quietly un-sharing it.
+  const userSelectionMissing = scope === "user" && userIds.length === 0;
+  const selectionMissing = teamSelectionMissing || userSelectionMissing;
   // Save waits only while the assignments query is in flight. If it errors,
   // Save re-enables: identity/visibility still save, and the tool diff is
   // skipped below while the selection is unseeded (clearing it by accident is
@@ -171,9 +215,9 @@ export function AppSettingsForm({
   useEffect(() => {
     onStatusChange?.({
       saving,
-      disabled: saving || toolsLoading || teamSelectionMissing,
+      disabled: saving || toolsLoading || selectionMissing,
     });
-  }, [saving, toolsLoading, teamSelectionMissing, onStatusChange]);
+  }, [saving, toolsLoading, selectionMissing, onStatusChange]);
 
   // Serializes the handler itself: the state-based `saving` guard lags a
   // render, so a rapid resubmit could reread a stale tool-diff snapshot and
@@ -182,7 +226,7 @@ export function AppSettingsForm({
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (submitInFlight.current) return;
-    if (saving || toolsLoading || teamSelectionMissing) return;
+    if (saving || toolsLoading || selectionMissing) return;
     submitInFlight.current = true;
     try {
       await submitSettings(values);
@@ -206,9 +250,14 @@ export function AppSettingsForm({
     // Visibility is editable on its own permissions; identity + environment only
     // when the caller can update the app, so omit those fields otherwise (mirrors
     // the field-limited bodies the old publish popover / rename dialog sent).
+    // "Shared with named people" is stored as a personal app plus grants, so the
+    // fourth option collapses back to `personal` here. Both lists are always
+    // sent: switching away from Teams or Users must revoke what it left behind,
+    // not strand it.
     const body: archestraApiTypes.UpdateAppData["body"] = {
-      scope,
+      scope: scope === "user" ? "personal" : scope,
       teamIds: scope === "team" ? teamIds : [],
+      userIds: scope === "user" ? userIds : [],
     };
     if (canUpdate) {
       body.name = values.name.trim();
@@ -320,6 +369,21 @@ export function AppSettingsForm({
           options={options}
           onValueChange={setScope}
         >
+          {scope === "user" && (
+            <div className="space-y-2">
+              <Label>Users</Label>
+              <UserSearchableMultiSelect
+                value={userIds}
+                onValueChange={setUserIds}
+                users={memberOptions}
+                placeholder="Select users"
+                searchPlaceholder="Search users..."
+                emptyMessage="No users found."
+                className="w-full"
+              />
+            </div>
+          )}
+
           {scope === "team" && (
             <div className="space-y-2">
               <Label>Teams</Label>

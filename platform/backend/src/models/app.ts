@@ -19,6 +19,7 @@ import AppAccessModel from "./app-access";
 import AppToolModel from "./app-tool";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import McpCatalogTeamModel from "./mcp-catalog-team";
+import McpCatalogUserModel from "./mcp-catalog-user";
 
 /** Raw `apps` row (no `scope`/`environmentId` — those live on the backing catalog). */
 type AppRow = typeof schema.appsTable.$inferSelect;
@@ -341,6 +342,11 @@ class AppModel {
     >;
     version?: VersionPayload;
     teamIds?: string[];
+    /**
+     * Individually-named grants, routed to the backing catalog like `teamIds`.
+     * Undefined leaves them untouched; an empty array revokes every grant.
+     */
+    userIds?: string[];
     expectedLatestVersion?: number;
   }): Promise<App | null> {
     const patch = params.patch ?? {};
@@ -397,7 +403,8 @@ class AppModel {
         patch.scope !== undefined ||
         patch.environmentId !== undefined ||
         patch.name !== undefined ||
-        params.teamIds !== undefined;
+        params.teamIds !== undefined ||
+        params.userIds !== undefined;
       if (app.mcpServerId && routesToCatalog) {
         const [server] = await tx
           .select({ catalogId: schema.mcpServersTable.catalogId })
@@ -436,6 +443,13 @@ class AppModel {
             await McpCatalogTeamModel.syncCatalogTeams(
               server.catalogId,
               params.teamIds,
+              tx,
+            );
+          }
+          if (params.userIds !== undefined) {
+            await McpCatalogUserModel.syncCatalogUsers(
+              server.catalogId,
+              params.userIds,
               tx,
             );
           }

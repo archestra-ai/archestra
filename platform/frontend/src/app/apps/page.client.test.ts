@@ -18,6 +18,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   latestVersion: 1,
   enabled: true,
   teams: [],
+  users: [],
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",
   pinnedAt: null,

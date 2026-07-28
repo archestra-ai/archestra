@@ -2584,6 +2584,13 @@
       "when": 1785170861439,
       "tag": "0368_steady_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 369,
+      "version": "7",
+      "when": 1785254164675,
+      "tag": "0369_free_secret_warriors",
+      "breakpoints": true
     }
   ]
 }

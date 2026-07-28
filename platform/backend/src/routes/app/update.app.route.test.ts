@@ -246,4 +246,68 @@ describe("PATCH /api/apps/:appId", () => {
     expect(renamed.statusCode).toBe(200);
     expect(renamed.json().name).toBe("Renamed");
   });
+  test("shares a personal app with named users, and revokes with an empty list", async ({
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const created = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const colleague = await makeUser();
+    await makeMember(colleague.id, organizationId, { role: "member" });
+
+    const shared = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { userIds: [colleague.id] },
+    });
+    expect(shared.statusCode).toBe(200);
+    // The app stays personal — the grant sits beside the scope, not in it.
+    expect(shared.json().scope).toBe("personal");
+    // PATCH returns the app-with-warnings shape, so read the grant back from
+    // the detail route that actually surfaces it.
+    const afterShare = await app.inject({
+      method: "GET",
+      url: `/api/apps/${created.id}`,
+    });
+    expect(afterShare.json().users).toEqual([
+      expect.objectContaining({ id: colleague.id }),
+    ]);
+
+    const revoked = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { userIds: [] },
+    });
+    expect(revoked.statusCode).toBe(200);
+    const afterRevoke = await app.inject({
+      method: "GET",
+      url: `/api/apps/${created.id}`,
+    });
+    expect(afterRevoke.json().users).toEqual([]);
+  });
+
+  test("rejects sharing with a user outside the organization", async ({
+    makeUser,
+    makeApp,
+  }) => {
+    const created = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    // A real user, but never made a member of this organization.
+    const outsider = await makeUser();
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { userIds: [outsider.id] },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/Unknown user/i);
+  });
 });

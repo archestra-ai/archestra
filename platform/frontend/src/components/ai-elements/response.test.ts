@@ -153,3 +153,99 @@ describe("Response app-link canonicalization", () => {
     expect(container.querySelector("code")?.textContent).toBe(`a/${APP_ID}`);
   });
 });
+
+// Renders through the real Streamdown pipeline, so this covers what the unit
+// tests for the delimiter rewrite cannot: that the math plugin is wired up, its
+// rehype stage survives rehype-harden, and display vs inline is preserved.
+describe("Response math rendering", () => {
+  it("renders bracket display math as a centered formula", () => {
+    const { container } = renderResponse(
+      "\\[ x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a} \\]",
+    );
+    expect(container.querySelector(".katex-display")).not.toBeNull();
+    // The reported bug is delimiters shown verbatim; the TeX source itself
+    // legitimately survives in KaTeX's MathML <annotation>, so assert on the
+    // delimiters and on the visual layer rather than on the whole subtree.
+    expect(container.textContent).not.toContain("\\[");
+    expect(container.querySelector(".katex-html")?.textContent).not.toContain(
+      "\\",
+    );
+  });
+
+  it("renders bracket inline math inside the surrounding paragraph", () => {
+    const { container } = renderResponse(
+      "Pythagoras says \\(a^2 + b^2\\) holds",
+    );
+    const paragraph = container.querySelector("p");
+    expect(paragraph?.querySelector(".katex")).not.toBeNull();
+    expect(container.querySelector(".katex-display")).toBeNull();
+    expect(paragraph?.textContent).toContain("Pythagoras says");
+  });
+
+  it("renders dollar-delimited math that models already emit correctly", () => {
+    const { container } = renderResponse("$$\nE = mc^2\n$$");
+    expect(container.querySelector(".katex-display")).not.toBeNull();
+  });
+
+  // Single-dollar math stays disabled precisely so prices survive untouched.
+  it("leaves prices in prose alone", () => {
+    const { container } = renderResponse(
+      "The plan costs $5 and the add-on $10",
+    );
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container.textContent).toContain("$5");
+    expect(container.textContent).toContain("$10");
+  });
+
+  // The normalized string looks harmless in isolation; only a render shows the
+  // damage. Display math indented inside a list item must not break out of the
+  // item and swallow the following content into the math block.
+  it("keeps a list intact around indented display math", () => {
+    const { container } = renderResponse(
+      "1. First:\n\n   \\[ x^2 \\]\n\n2. Second",
+    );
+    expect(container.querySelectorAll("li")).toHaveLength(2);
+    expect(container.querySelector(".katex")).not.toBeNull();
+    expect(container.querySelector(".katex-error")).toBeNull();
+    expect(container.textContent).toContain("Second");
+  });
+
+  it("does not render math inside a code block", () => {
+    const { container } = renderResponse("```\n\\[ x^2 \\]\n```");
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container.textContent).toContain("\\[ x^2 \\]");
+  });
+
+  // Single-dollar math is the form models reach for most often, and it reaches
+  // the renderer only because preprocess-latex.ts promotes it. These cases are
+  // taken from real replies that showed raw TeX on screen.
+  it("renders single-dollar math inside bold and heading text", () => {
+    const { container } = renderResponse(
+      "**Second Moment $E[X_i^2]$**: $$E[X_i^2] = p$$",
+    );
+    expect(container.querySelectorAll(".katex").length).toBe(2);
+    expect(container.textContent).not.toContain("$E[X_i^2]$");
+  });
+
+  it("renders a single-dollar macro that KaTeX supports", () => {
+    const { container } = renderResponse("The count is $\\binom{n}{k}$ ways.");
+    expect(container.querySelector(".katex")).not.toBeNull();
+    expect(container.querySelector(".katex-error")).toBeNull();
+  });
+
+  it("keeps a price and inline math apart on the same line", () => {
+    const { container } = renderResponse("Costs $5, and $x^2$ is the formula");
+    expect(container.querySelector(".katex")).not.toBeNull();
+    expect(container.textContent).toContain("$5");
+  });
+
+  // Dollar and bracket math in one reply: each pass has to leave the other's
+  // work alone.
+  it("renders dollar and bracket math in the same reply", () => {
+    const { container } = renderResponse(
+      "Let $q = 1 - p$, so \\[ \\text{Var}(X) = npq \\] follows.",
+    );
+    expect(container.querySelectorAll(".katex").length).toBe(2);
+    expect(container.querySelector(".katex-error")).toBeNull();
+  });
+});

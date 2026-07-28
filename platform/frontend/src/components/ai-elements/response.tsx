@@ -1,8 +1,11 @@
 "use client";
 
+import { math } from "@streamdown/math";
 import { type ComponentProps, memo, useMemo } from "react";
 import { defaultRemarkPlugins, Streamdown } from "streamdown";
 import { cn } from "@/lib/utils";
+import { normalizeMathDelimiters } from "./normalize-math";
+import { preprocessLaTeX } from "./preprocess-latex";
 
 type ResponseProps = ComponentProps<typeof Streamdown> & {
   isStreaming?: boolean;
@@ -44,6 +47,12 @@ const REMARK_PLUGINS: ResponseProps["remarkPlugins"] = [
   remarkCanonicalizeAppLinks,
 ];
 
+// KaTeX rendering. Its stylesheet is imported in globals.css — streamdown only
+// reports the path via getStyles(), it never injects it. singleDollarTextMath
+// stays off (the plugin default) so prices in prose are not read as math;
+// normalize-math.ts rewrites bracket delimiters to `$$` to suit.
+const PLUGINS: ResponseProps["plugins"] = { math };
+
 /**
  * Check if a URL points to the same origin as the current page.
  * Same-origin links should bypass the "Open external link?" confirmation dialog.
@@ -59,7 +68,27 @@ export function isSameOriginUrl(url: string): boolean {
 }
 
 export const Response = memo(
-  ({ className, linkSafety, isStreaming = false, ...props }: ResponseProps) => {
+  ({
+    className,
+    linkSafety,
+    isStreaming = false,
+    children,
+    ...props
+  }: ResponseProps) => {
+    // Streamdown has no preprocess hook, so math delimiters are rewritten on
+    // the way in — `$$` is the only form remark-math parses here. Two passes,
+    // because models emit both and each needs a different trick: dollar math
+    // has to be told apart from prices (preprocess-latex.ts), bracket math has
+    // to be caught before CommonMark eats its backslashes (normalize-math.ts).
+    // Currency first, so it works on the original text.
+    const normalizedChildren = useMemo(
+      () =>
+        typeof children === "string"
+          ? normalizeMathDelimiters(preprocessLaTeX(children))
+          : children,
+      [children],
+    );
+
     const mergedLinkSafety = useMemo(
       () => ({
         enabled: true,
@@ -124,9 +153,12 @@ export const Response = memo(
           className,
         )}
         remarkPlugins={REMARK_PLUGINS}
+        plugins={PLUGINS}
         linkSafety={mergedLinkSafety}
         {...props}
-      />
+      >
+        {normalizedChildren}
+      </Streamdown>
     );
   },
   (prevProps, nextProps) =>

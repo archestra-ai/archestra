@@ -5,6 +5,10 @@
    during chat streaming (animated={{ animation: "fadeIn", sep: "word" }}).
    Only adds sd-prefixed keyframes — no conflicts with Archestra themes. */
 @import "streamdown/styles.css";
+/* KaTeX glyph metrics and layout rules for the @streamdown/math plugin. Without
+   it rendered formulas collapse into unpositioned spans. Streamdown never
+   injects this itself — its plugin only reports the path via getStyles(). */
+@import "katex/dist/katex.min.css";
 @import "./themes.css";
 
 /* Tell Tailwind v4 JIT to scan streamdown's minified JS for dynamic class names

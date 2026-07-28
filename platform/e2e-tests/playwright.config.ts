@@ -52,6 +52,7 @@ const uiTestMatch = [
   "**/dynamic-credentials.spec.ts",
   "**/identity-providers.ee.spec.ts",
   "**/invitation.spec.ts",
+  "**/mcp-edit.spec.ts",
   "**/mcp-install.spec.ts",
   "**/quickstart.spec.ts",
   "**/skill-share.spec.ts",

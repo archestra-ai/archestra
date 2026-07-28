@@ -65,7 +65,8 @@ describe("team tool execution", () => {
     expect(team.name).toBe("Engineering");
     expect(team.description).toBe("The eng team");
     expect(team.organizationId).toBe(organizationId);
-    expect(team.memberCount).toBe(0);
+    // The creator is added as a team admin, so a new team is never memberless.
+    expect(team.memberCount).toBe(1);
 
     const persisted = await TeamModel.findById(team.id);
     expect(persisted).not.toBeNull();
@@ -1127,15 +1128,18 @@ describe("team tool execution", () => {
       { team_id: teamId },
       mockContext,
     );
-    expect((listResult.structuredContent as any).members[0].role).toBe("admin");
+    const members = (listResult.structuredContent as any).members;
+    expect(
+      members.find((m: { userId: string }) => m.userId === user.id).role,
+    ).toBe("admin");
 
-    // get_team reports the member count
+    // get_team reports the member count: the creator plus the added member.
     const getResult = await executeArchestraTool(
       toolName("get_team"),
       { id: teamId },
       mockContext,
     );
-    expect((getResult.structuredContent as any).team.memberCount).toBe(1);
+    expect((getResult.structuredContent as any).team.memberCount).toBe(2);
 
     // Delete
     const deleteResult = await executeArchestraTool(

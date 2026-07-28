@@ -67,6 +67,14 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
               sandboxArtifactBytesLimit: z.number(),
+              // Max size of a chat upload the conversation can store (Files
+              // panel). Bounds the composer's file picker and its per-file
+              // policy; independent of what the sandbox can stage.
+              chatAttachmentStorageBytesLimit: z.number(),
+              // Request body ceiling. A turn's attachments travel base64-encoded
+              // in one request, so the composer needs this to stop a send that
+              // the body parser would reject with an opaque 413.
+              apiBodyLimitBytes: z.number(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               azureOpenAiEntraIdEnabled: z.boolean(),
@@ -147,6 +155,9 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           sandbox: skillSandboxRuntimeService.isEnabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
+          chatAttachmentStorageBytesLimit:
+            config.chat.attachmentStorageBytesLimit,
+          apiBodyLimitBytes: config.api.bodyLimit,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),

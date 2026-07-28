@@ -255,6 +255,8 @@ describe("chatUploadRejectionReason", () => {
     sandboxAvailable: false,
     sandboxByteLimit: 16 * 1024 * 1024,
   };
+  // Deliberately above the sandbox limit — the two caps are independent.
+  const STORAGE_LIMIT = 50 * 1024 * 1024;
 
   test("accepts a model-ingestible type at any size", () => {
     expect(
@@ -327,7 +329,7 @@ describe("chatUploadRejectionReason", () => {
     expect(
       chatUploadRejectionReason({
         ...base,
-        fileStorageFallback: true,
+        fileStorageByteLimit: STORAGE_LIMIT,
         mimeType: "application/zip",
         byteLength: 1_000,
       }),
@@ -338,22 +340,58 @@ describe("chatUploadRejectionReason", () => {
     expect(
       chatUploadRejectionReason({
         ...base,
-        fileStorageFallback: true,
+        fileStorageByteLimit: STORAGE_LIMIT,
         mimeType: "text/csv",
         byteLength: INLINE_TEXT_MAX_BYTES + 1,
       }),
     ).toBeNull();
   });
 
-  test("file-storage fallback still rejects a file over the storage limit", () => {
+  test("file-storage fallback accepts a file over the sandbox limit", () => {
+    // The sandbox is bypassed rather than made the gatekeeper: the file still
+    // lands in the Files panel, so acceptance answers only to the storage cap.
+    for (const sandboxAvailable of [true, false]) {
+      expect(
+        chatUploadRejectionReason({
+          ...base,
+          sandboxAvailable,
+          fileStorageByteLimit: STORAGE_LIMIT,
+          mimeType: "application/zip",
+          byteLength: base.sandboxByteLimit + 1,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  test("file-storage fallback rejects a file over the storage cap", () => {
     expect(
       chatUploadRejectionReason({
         ...base,
-        fileStorageFallback: true,
+        fileStorageByteLimit: STORAGE_LIMIT,
         mimeType: "application/zip",
-        byteLength: base.sandboxByteLimit + 1,
+        byteLength: STORAGE_LIMIT + 1,
       }),
-    ).toBe("too_large_for_sandbox");
+    ).toBe("too_large_to_store");
+  });
+
+  test("the storage cap bounds even a model-ingestible type", () => {
+    // Bytes are persisted for every accepted upload, so the cap applies to
+    // types the model reads natively too — but only when the fallback is on.
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        fileStorageByteLimit: STORAGE_LIMIT,
+        mimeType: "image/png",
+        byteLength: STORAGE_LIMIT + 1,
+      }),
+    ).toBe("too_large_to_store");
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        mimeType: "image/png",
+        byteLength: STORAGE_LIMIT + 1,
+      }),
+    ).toBeNull();
   });
 
   test("size-gates inlineable text even when the model lists it as ingestible", () => {

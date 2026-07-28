@@ -1062,6 +1062,10 @@ function rejectionText(reason: ChatUploadRejectionReason): string {
       return "text too large to inline";
     case "too_large_for_sandbox":
       return "exceeds the sandbox size limit";
+    // Unreachable here: A2A has no Files panel for its callers, so it never
+    // opts into the file-storage fallback that produces this reason.
+    case "too_large_to_store":
+      return "too large to store";
     case "unsupported_type":
       return "type not supported by this model";
   }

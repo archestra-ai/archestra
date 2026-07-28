@@ -30955,6 +30955,8 @@ export type GetConfigResponses = {
             orchestratorK8sRuntime: boolean;
             sandbox: boolean;
             sandboxArtifactBytesLimit: number;
+            chatAttachmentStorageBytesLimit: number;
+            apiBodyLimitBytes: number;
             byosEnabled: boolean;
             byosVaultKvVersion: '1' | '2';
             azureOpenAiEntraIdEnabled: boolean;

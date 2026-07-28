@@ -67,6 +67,26 @@ class ConversationAttachmentModel {
     return result ? normalizeByteaField(result, "fileData") : null;
   }
 
+  /**
+   * Batch metadata lookup that leaves the bytea column alone. Lets a caller
+   * decide which attachments it actually needs bytes for before paying to read
+   * them — an over-the-sandbox-limit file can be described from metadata alone.
+   */
+  static async findByIdsWithoutData(
+    ids: string[],
+  ): Promise<Omit<ConversationAttachment, "fileData">[]> {
+    if (ids.length === 0) return [];
+    return db
+      .select(metadataColumns)
+      .from(schema.conversationAttachmentsTable)
+      .where(
+        and(
+          inArray(schema.conversationAttachmentsTable.id, ids),
+          isNull(schema.conversationAttachmentsTable.deletedAt),
+        ),
+      );
+  }
+
   static async findByIdsWithData(
     ids: string[],
   ): Promise<ConversationAttachment[]> {

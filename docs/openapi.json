@@ -111572,6 +111572,12 @@
                         "sandboxArtifactBytesLimit": {
                           "type": "number"
                         },
+                        "chatAttachmentStorageBytesLimit": {
+                          "type": "number"
+                        },
+                        "apiBodyLimitBytes": {
+                          "type": "number"
+                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -111697,6 +111703,8 @@
                         "orchestratorK8sRuntime",
                         "sandbox",
                         "sandboxArtifactBytesLimit",
+                        "chatAttachmentStorageBytesLimit",
+                        "apiBodyLimitBytes",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",

@@ -4,6 +4,7 @@ import {
   type ChatSkillMetadata,
   type ContextWindowBreakdown,
   chatUploadRejectionReason,
+  DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
   E2eTestId,
   getMediaType,
   getModelReadableMimeTypes,
@@ -73,8 +74,6 @@ import {
   type SkillCommand,
 } from "./skill-commands";
 
-const CHAT_ATTACHMENT_MAX_BYTES = 50 * 1024 * 1024;
-const CHAT_ATTACHMENT_MAX_MB = CHAT_ATTACHMENT_MAX_BYTES / (1024 * 1024);
 // Fallback sandbox artifact limit when /api/config has not loaded yet (mirrors
 // the backend default). Only consulted when a sandbox is available.
 const DEFAULT_SANDBOX_ARTIFACT_BYTES = 16 * 1024 * 1024;
@@ -83,6 +82,47 @@ function formatBytes(bytes: number): string {
   return bytes >= 1024 * 1024
     ? `${Math.round(bytes / (1024 * 1024))} MB`
     : `${Math.round(bytes / 1024)} KB`;
+}
+
+/**
+ * The largest file the conversation can store, as configured by the server.
+ * Both the file picker's hard cap and the per-file policy read this one value,
+ * so the composer can never advertise a size it then refuses.
+ */
+function useChatAttachmentStorageByteLimit(): number {
+  return (
+    useFeature("chatAttachmentStorageBytesLimit") ??
+    DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES
+  );
+}
+
+// Fallback request body ceiling before /api/config resolves (mirrors the
+// backend default). Leaves room for the message text, history refs, and the
+// JSON envelope that ride alongside the attachments in the same request.
+const DEFAULT_API_BODY_LIMIT_BYTES = 70 * 1024 * 1024;
+const TURN_BODY_RESERVE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * How many base64 attachment characters one turn may carry. A single file is
+ * bounded by the storage cap, but nothing bounds their sum — and every
+ * attachment of a turn travels base64-encoded in one request, so two
+ * within-cap files can still overrun the body parser. It rejects the request
+ * before any handler runs, so the composer has to catch this itself or the
+ * user gets an opaque 413.
+ */
+function useTurnAttachmentBudget(): number {
+  const bodyLimit =
+    useFeature("apiBodyLimitBytes") ?? DEFAULT_API_BODY_LIMIT_BYTES;
+  return Math.max(0, bodyLimit - TURN_BODY_RESERVE_BYTES);
+}
+
+/**
+ * Serialized size of a turn's attachments. By submit time each file's `url` is
+ * already the base64 `data:` URL that goes on the wire, so its length is the
+ * exact cost — no encoding estimate needed.
+ */
+function attachmentPayloadBytes(files: readonly { url?: string }[]): number {
+  return files.reduce((total, file) => total + (file.url?.length ?? 0), 0);
 }
 
 /**
@@ -213,6 +253,8 @@ const PromptInputContent = ({
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalTextareaRef ?? internalTextareaRef;
   const controller = usePromptInputController();
+  const storageByteLimit = useChatAttachmentStorageByteLimit();
+  const turnAttachmentBudget = useTurnAttachmentBudget();
   const [subscriptionConnectRequest, setSubscriptionConnectRequest] =
     useState(0);
   const requestSubscriptionConnect = useCallback(() => {
@@ -507,6 +549,17 @@ const PromptInputContent = ({
         return;
       }
 
+      // Each file passed the per-file cap on its own, but they all ride in one
+      // request. Stop here rather than letting the body parser 413 the send.
+      const payloadBytes = attachmentPayloadBytes(message.files);
+      if (payloadBytes > turnAttachmentBudget) {
+        e.preventDefault();
+        toast.error(
+          `These attachments total ${formatBytes(payloadBytes)}, over the ${formatBytes(turnAttachmentBudget)} limit for one message. Send them in separate messages.`,
+        );
+        return;
+      }
+
       const trimmed = message.text.trim();
 
       if (trimmed === "/compact" && onCompactConversation) {
@@ -574,6 +627,7 @@ const PromptInputContent = ({
       sensitiveDataDetectionEnabled,
       skillCommands,
       subscriptionConnectRequired,
+      turnAttachmentBudget,
     ],
   );
 
@@ -616,13 +670,13 @@ const PromptInputContent = ({
         toast.error("File uploads are disabled");
       } else if (err.code === "max_file_size") {
         toast.error(
-          `File is too large. Maximum size is ${CHAT_ATTACHMENT_MAX_MB} MB.`,
+          `File is too large. Maximum size is ${formatBytes(storageByteLimit)}.`,
         );
       } else if (err.code === "max_files") {
         toast.error("Too many files attached.");
       }
     },
-    [],
+    [storageByteLimit],
   );
 
   const submitStatus = status === "error" ? "ready" : status;
@@ -829,7 +883,7 @@ const PromptInputContent = ({
         multiple
         onSubmit={handleWrappedSubmit}
         accept={showFileUploadButton ? undefined : "application/x-empty"}
-        maxFileSize={CHAT_ATTACHMENT_MAX_BYTES}
+        maxFileSize={storageByteLimit}
         onError={handleFileError}
       >
         {/* File attachments display - shown inline above textarea */}
@@ -992,6 +1046,7 @@ const ArchestraPromptInput = ({
   const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
   const sandboxByteLimit =
     useFeature("sandboxArtifactBytesLimit") ?? DEFAULT_SANDBOX_ARTIFACT_BYTES;
+  const storageByteLimit = useChatAttachmentStorageByteLimit();
 
   // Per-file policy mirroring the backend ingest gate (which is authoritative).
   // Returns a friendly reason to drop the file, or null to accept it.
@@ -1003,16 +1058,19 @@ const ArchestraPromptInput = ({
         ingestibleMimeTypes: getModelReadableMimeTypes(inputModalities),
         sandboxAvailable,
         sandboxByteLimit,
-        // Mirrors the backend gate: a file the model can't read is still
-        // accepted and lands in the conversation's Files panel.
-        fileStorageFallback: true,
+        // Mirrors the backend gate: a file the model can't read — or one too
+        // big for the sandbox — is still accepted and lands in the
+        // conversation's Files panel, so only the storage cap can reject.
+        fileStorageByteLimit: storageByteLimit,
       });
       switch (reason) {
         case null:
           return null;
         // With the Files-panel fallback the only reachable reason is
-        // "too_large_for_sandbox" (generic over-the-limit); the other cases
-        // stay for exhaustiveness over the shared union.
+        // "too_large_to_store"; the other cases stay for exhaustiveness over
+        // the shared union.
+        case "too_large_to_store":
+          return `"${file.name}" exceeds the maximum attachment size of ${formatBytes(storageByteLimit)}.`;
         case "text_too_large":
           return `"${file.name}" is too large to include as text (max ${formatBytes(INLINE_TEXT_MAX_BYTES)}).`;
         case "too_large_for_sandbox":
@@ -1021,7 +1079,7 @@ const ArchestraPromptInput = ({
           return `This model can't read "${file.name}".`;
       }
     },
-    [inputModalities, sandboxAvailable, sandboxByteLimit],
+    [inputModalities, sandboxAvailable, sandboxByteLimit, storageByteLimit],
   );
 
   const handleProviderFileError = useCallback(
@@ -1031,23 +1089,23 @@ const ArchestraPromptInput = ({
     }) => {
       if (err.code === "max_file_size") {
         toast.error(
-          `File is too large. Maximum size is ${CHAT_ATTACHMENT_MAX_MB} MB.`,
+          `File is too large. Maximum size is ${formatBytes(storageByteLimit)}.`,
         );
       } else if (err.code === "max_files") {
         toast.error("Too many files attached.");
       } else if (err.code === "rejected") {
-        // Policy rejection (unsupported type / too large to inline). Gentle,
-        // not an error toast — the message already explains the next step.
+        // Policy rejection (over the storage cap). Gentle, not an error toast —
+        // the message already explains the next step.
         toast(err.message);
       }
     },
-    [],
+    [storageByteLimit],
   );
 
   return (
     <div className="flex size-full flex-col justify-end">
       <PromptInputProvider
-        maxFileSize={CHAT_ATTACHMENT_MAX_BYTES}
+        maxFileSize={storageByteLimit}
         validateFile={validateFile}
         onError={handleProviderFileError}
       >

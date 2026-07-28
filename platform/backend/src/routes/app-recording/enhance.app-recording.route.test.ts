@@ -153,6 +153,7 @@ describe("POST /api/app-recordings/enhance", () => {
       prompt: "Build me a review queue for our open PRs.",
       response: "Built it — here is your review queue.",
       category: "Development",
+      reason: null,
     });
   });
 
@@ -178,11 +179,15 @@ describe("POST /api/app-recordings/enhance", () => {
     // so a provider outage must leave the author with a recording and the
     // fallback copy — never a failed stop.
     expect(response.statusCode).toBe(200);
+    // ...but an all-null 200 has to say WHICH of the two nothings this is, or
+    // the client can only degrade to fallback copy silently and the builder
+    // reads a generic gallery card as the platform's own choice.
     expect(response.json()).toEqual({
       description: null,
       prompt: null,
       response: null,
       category: null,
+      reason: "generation_failed",
     });
   });
 
@@ -201,11 +206,14 @@ describe("POST /api/app-recordings/enhance", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    // Distinct from a failed generation: there is nothing to draft FROM, so no
+    // amount of retrying helps and the client says so instead of offering one.
     expect(response.json()).toEqual({
       description: null,
       prompt: null,
       response: null,
       category: null,
+      reason: "empty_transcript",
     });
   });
 

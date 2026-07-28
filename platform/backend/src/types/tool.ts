@@ -1,4 +1,4 @@
-import { ClientFilterSchema } from "@archestra/shared";
+import { ClientFilterSchema, TOOL_SEARCH_MAX_LENGTH } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -93,7 +93,7 @@ export const ToolWithAssignmentsSchema = z.object({
 
 // Filter schema for tools with assignments
 export const ToolFilterSchema = z.object({
-  search: z.string().optional(),
+  search: z.string().max(TOOL_SEARCH_MAX_LENGTH).optional(),
   origin: z
     .string()
     .optional()

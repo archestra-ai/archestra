@@ -115,8 +115,9 @@ export const ChatRequestSchema = z
 
 const ResponseMessageSchema = z.looseObject({
   role: z.string(),
-  // Tool-call-only replies often omit `content`; the adapter already treats it
-  // as optional (`content ?? ""`). Requiring the key 500s response serialization.
+  // Tool-call replies clear/omit textual content; adapter coalesces with `?? ""`.
+  // https://docs.ollama.com/api/chat
+  // https://github.com/ollama/ollama/issues/7488
   content: z.string().optional(),
   thinking: z.string().optional(),
   tool_calls: z.array(ToolCallSchema).nullable().optional(),

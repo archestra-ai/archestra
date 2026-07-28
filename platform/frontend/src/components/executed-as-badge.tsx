@@ -82,16 +82,18 @@ type ExecutedAsDisplay = {
   tooltip: string;
 };
 
-const RAN_AS_PREFIX = "Ran as";
-
-// One entry per identity kind. `meUserId` decides only whether a personal
-// connection reads as the viewer's own.
 type ExecutedAsContext = {
   meUserId: string | null | undefined;
   callerName: string | null | undefined;
   appName: string;
 };
 
+// How the reader's own identity reads, matching the resource peels elsewhere.
+const SELF_LABEL = "Me";
+
+// One entry per identity kind. The peel names the identity itself — the
+// surrounding column header or label says what the name means — so it reads
+// like the scope peels on the apps, projects and skills lists.
 const executedAsDescriptors: {
   [K in McpExecutedAsKind]: (
     executedAs: Extract<McpExecutedAs, { kind: K }>,
@@ -104,7 +106,7 @@ const executedAsDescriptors: {
       return {
         icon: User,
         style: scopeStyles.personal,
-        label: `${RAN_AS_PREFIX} me`,
+        label: SELF_LABEL,
         tooltip: "This call used your own connection to the MCP server.",
       };
     }
@@ -112,9 +114,7 @@ const executedAsDescriptors: {
     return {
       icon: User,
       style: scopeStyles.personal,
-      label: ownerName
-        ? `${RAN_AS_PREFIX} ${ownerName}`
-        : `${RAN_AS_PREFIX} a personal connection`,
+      label: ownerName ?? "Personal connection",
       tooltip: ownerName
         ? `This call used ${ownerName}'s connection to the MCP server.`
         : "This call used a personal connection whose owner no longer exists.",
@@ -123,7 +123,7 @@ const executedAsDescriptors: {
   team: (executedAs) => ({
     icon: Users,
     style: scopeStyles.team,
-    label: `${RAN_AS_PREFIX} ${executedAs.teamName ?? "a team"}`,
+    label: executedAs.teamName ?? "Team",
     tooltip: executedAs.teamName
       ? `This call used the ${executedAs.teamName} team's connection to the MCP server.`
       : "This call used a team connection to the MCP server.",
@@ -131,44 +131,50 @@ const executedAsDescriptors: {
   org: () => ({
     icon: Globe,
     style: scopeStyles.org,
-    label: `${RAN_AS_PREFIX} the organization`,
+    label: "Organization",
     tooltip:
       "This call used the organization-wide connection to the MCP server.",
   }),
-  idp_exchange: () => ({
-    icon: KeyRound,
-    style: scopeStyles.personal,
-    label: `${RAN_AS_PREFIX} the caller`,
+  idp_exchange: (executedAs, context) => ({
+    ...describeCaller(executedAs.callerUserId, context),
     tooltip:
       "The identity provider issued a credential for the calling user, so the MCP server saw them.",
   }),
-  idp_passthrough: () => ({
-    icon: KeyRound,
-    style: scopeStyles.personal,
-    label: `${RAN_AS_PREFIX} the caller`,
+  idp_passthrough: (executedAs, context) => ({
+    ...describeCaller(executedAs.callerUserId, context),
     tooltip:
       "The calling user's own sign-in token was forwarded to the MCP server.",
   }),
-  caller_headers: () => ({
-    icon: KeyRound,
-    style: scopeStyles.personal,
-    label: `${RAN_AS_PREFIX} the caller`,
+  caller_headers: (executedAs, context) => ({
+    ...describeCaller(executedAs.callerUserId, context),
     tooltip:
       "The calling client supplied the credential the MCP server was called with.",
   }),
-  platform: (executedAs, { meUserId, callerName, appName }) => {
-    const isMe = !!meUserId && executedAs.callerUserId === meUserId;
-    const who = isMe ? "me" : (callerName ?? "the caller");
+  platform: (executedAs, context) => {
+    const caller = describeCaller(executedAs.callerUserId, context);
     return {
-      icon: User,
-      style: scopeStyles.personal,
-      label: `${RAN_AS_PREFIX} ${who}`,
-      tooltip: isMe
-        ? `This call used your own connection to the ${appName}`
-        : `This call used ${who}'s own connection to the ${appName}`,
+      ...caller,
+      tooltip:
+        caller.label === SELF_LABEL
+          ? `This call used your own connection to the ${context.appName}`
+          : `This call used ${caller.label}'s own connection to the ${context.appName}`,
     };
   },
 };
+
+// The kinds that ran as the calling user share one peel: their own name, or
+// "Me" when the reader is that user.
+function describeCaller(
+  callerUserId: string | null,
+  { meUserId, callerName }: ExecutedAsContext,
+): Omit<ExecutedAsDisplay, "tooltip"> {
+  const isMe = !!meUserId && callerUserId === meUserId;
+  return {
+    icon: User,
+    style: scopeStyles.personal,
+    label: isMe ? SELF_LABEL : (callerName ?? "The caller"),
+  };
+}
 
 function describeExecutedAs(
   executedAs: McpExecutedAs,

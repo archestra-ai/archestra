@@ -194,7 +194,7 @@ function McpToolCallDetail({
             </MetadataItem>
           )}
           {executedAs && (
-            <MetadataItem label="Ran As">
+            <MetadataItem label="Called as">
               <ExecutedAsBadge
                 executedAs={executedAs}
                 meUserId={mcpToolCall.userId}

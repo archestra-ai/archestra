@@ -581,10 +581,13 @@ function ExpandedToolCard({
         isCollapsible={false}
         actionButton={logsButton}
         identityBadge={
-          <ExecutedAsBadge
-            executedAs={executedAs}
-            meUserId={session?.user?.id}
-          />
+          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            Called as
+            <ExecutedAsBadge
+              executedAs={executedAs}
+              meUserId={session?.user?.id}
+            />
+          </span>
         }
       />
       <ToolContent>

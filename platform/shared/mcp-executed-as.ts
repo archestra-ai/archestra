@@ -73,11 +73,26 @@ export const McpExecutedAsSchema = z.discriminatedUnion("kind", [
     .strict(),
   z.object({ kind: z.literal("org") }).strict(),
   /** Enterprise-managed: a credential minted for this caller by an identity provider. */
-  z.object({ kind: z.literal("idp_exchange") }).strict(),
+  z
+    .object({
+      kind: z.literal("idp_exchange"),
+      callerUserId: z.string().nullable(),
+    })
+    .strict(),
   /** External IdP: the caller's own token forwarded verbatim upstream. */
-  z.object({ kind: z.literal("idp_passthrough") }).strict(),
+  z
+    .object({
+      kind: z.literal("idp_passthrough"),
+      callerUserId: z.string().nullable(),
+    })
+    .strict(),
   /** The caller's request carried the upstream authorization header itself. */
-  z.object({ kind: z.literal("caller_headers") }).strict(),
+  z
+    .object({
+      kind: z.literal("caller_headers"),
+      callerUserId: z.string().nullable(),
+    })
+    .strict(),
   /**
    * Archestra served the call itself — a built-in tool, an app launch, or a
    * call it refused before reaching a server. No MCP server credential was

@@ -36,9 +36,9 @@ describe("extractMcpExecutedAs", () => {
       { kind: "team", teamId: "team-1", teamName: "Payments" },
       { kind: "team", teamId: "team-1", teamName: null },
       { kind: "org" },
-      { kind: "idp_exchange" },
-      { kind: "idp_passthrough" },
-      { kind: "caller_headers" },
+      { kind: "idp_exchange", callerUserId: "user-1" },
+      { kind: "idp_passthrough", callerUserId: null },
+      { kind: "caller_headers", callerUserId: "user-1" },
     ];
 
     for (const executedAs of kinds) {

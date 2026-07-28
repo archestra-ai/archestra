@@ -3440,6 +3440,7 @@ describe("McpClient", () => {
         // not as the owner of the installation it was routed through.
         expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
           kind: "idp_exchange",
+          callerUserId: user.id,
         });
 
         const { StreamableHTTPClientTransport } = await import(
@@ -8485,6 +8486,7 @@ describe("executed-as identity", () => {
 
     expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
       kind: "idp_passthrough",
+      callerUserId: caller.id,
     });
   });
 
@@ -8540,6 +8542,7 @@ describe("executed-as identity", () => {
 
     expect(result._meta?.[MCP_EXECUTED_AS_META_KEY]).toEqual({
       kind: "caller_headers",
+      callerUserId: caller.id,
     });
   });
 

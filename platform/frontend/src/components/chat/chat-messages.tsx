@@ -1815,7 +1815,13 @@ const MessageTool = memo(
           isCollapsible={isExpandable}
           actionButton={logsButton}
           identityBadge={
-            <ExecutedAsBadge executedAs={executedAs} meUserId={viewerUserId} />
+            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              Called as
+              <ExecutedAsBadge
+                executedAs={executedAs}
+                meUserId={viewerUserId}
+              />
+            </span>
           }
         />
         <ToolContent forceMount={uiResourceUri ? true : undefined}>

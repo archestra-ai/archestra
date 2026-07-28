@@ -297,7 +297,7 @@ function McpToolCallsTable({
     },
     {
       id: "executedAs",
-      header: "Ran As",
+      header: "Called as",
       cell: ({ row }) => {
         // Whose credential served the call upstream. The User column above is
         // who asked for it, so the two together read "ran as X on behalf of Y".

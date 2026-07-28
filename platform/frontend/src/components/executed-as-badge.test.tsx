@@ -24,7 +24,7 @@ describe("ExecutedAsBadge", () => {
       />,
     );
 
-    expect(screen.getByText("Ran as Grace Hopper")).toBeInTheDocument();
+    expect(screen.getByText("Grace Hopper")).toBeInTheDocument();
   });
 
   it("says the call ran as me when I own the connection", () => {
@@ -39,7 +39,7 @@ describe("ExecutedAsBadge", () => {
       />,
     );
 
-    expect(screen.getByText("Ran as me")).toBeInTheDocument();
+    expect(screen.getByText("Me")).toBeInTheDocument();
   });
 
   it("names the owner rather than me when no viewer is given", () => {
@@ -53,26 +53,26 @@ describe("ExecutedAsBadge", () => {
       />,
     );
 
-    expect(screen.getByText("Ran as Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
   });
 
   it.each([
     [
       { kind: "personal", ownerUserId: null, ownerName: null },
-      "Ran as a personal connection",
+      "Personal connection",
     ],
     [
       { kind: "team", teamId: "team-1", teamName: "Platform Team" },
-      "Ran as Platform Team",
+      "Platform Team",
     ],
-    [{ kind: "team", teamId: "team-1", teamName: null }, "Ran as a team"],
-    [{ kind: "org" }, "Ran as the organization"],
-    [{ kind: "idp_exchange" }, "Ran as the caller"],
-    [{ kind: "idp_passthrough" }, "Ran as the caller"],
-    [{ kind: "caller_headers" }, "Ran as the caller"],
-    [{ kind: "platform", callerUserId: "user-1" }, "Ran as me"],
-    [{ kind: "platform", callerUserId: "user-2" }, "Ran as the caller"],
-    [{ kind: "platform", callerUserId: null }, "Ran as the caller"],
+    [{ kind: "team", teamId: "team-1", teamName: null }, "Team"],
+    [{ kind: "org" }, "Organization"],
+    [{ kind: "idp_exchange", callerUserId: "user-1" }, "Me"],
+    [{ kind: "idp_passthrough", callerUserId: "user-2" }, "The caller"],
+    [{ kind: "caller_headers", callerUserId: "user-1" }, "Me"],
+    [{ kind: "platform", callerUserId: "user-1" }, "Me"],
+    [{ kind: "platform", callerUserId: "user-2" }, "The caller"],
+    [{ kind: "platform", callerUserId: null }, "The caller"],
   ] as Array<
     [McpExecutedAs, string]
   >)("labels a %o identity", (executedAs, label) => {
@@ -90,7 +90,7 @@ describe("ExecutedAsBadge", () => {
       />,
     );
 
-    expect(screen.getByText("Ran as Grace Hopper")).toBeInTheDocument();
+    expect(screen.getByText("Grace Hopper")).toBeInTheDocument();
   });
 
   it("describes a platform-served call with the deployment's own name", async () => {
@@ -102,7 +102,7 @@ describe("ExecutedAsBadge", () => {
       />,
     );
 
-    await user.hover(screen.getByText("Ran as me"));
+    await user.hover(screen.getByText("Me"));
 
     // White-labeled deployments must not read "Archestra" here. Radix renders
     // the copy twice (visible plus a screen-reader node).

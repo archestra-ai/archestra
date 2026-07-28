@@ -2985,16 +2985,20 @@ class McpClient {
       secrets,
     } = params;
 
+    // These three all mean "the calling user's own identity reached the
+    // server", so they name that user rather than an installed connection.
+    const callerUserId = tokenAuth?.userId ?? null;
+
     if (enterpriseTransportCredential) {
-      return { kind: "idp_exchange" };
+      return { kind: "idp_exchange", callerUserId };
     }
 
     if (!hasStaticAuthorizationCredential(secrets)) {
       if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
-        return { kind: "idp_passthrough" };
+        return { kind: "idp_passthrough", callerUserId };
       }
       if (hasPassthroughAuthorizationHeader(tokenAuth?.passthroughHeaders)) {
-        return { kind: "caller_headers" };
+        return { kind: "caller_headers", callerUserId };
       }
     }
 

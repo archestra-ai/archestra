@@ -17593,6 +17593,10 @@ export type GetAppsResponses = {
                 id: string;
                 name: string;
             }>;
+            users: Array<{
+                id: string;
+                name: string;
+            }>;
         } | {
             name: string;
             description: string | null;

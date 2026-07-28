@@ -235,6 +235,7 @@ function OwnedAppCard({
                 <ScopeBadge
                   scope={app.scope}
                   teamNames={app.teams?.map((team) => team.name)}
+                  userNames={app.users?.map((user) => user.name)}
                 />
                 {/* A disabled app is author-only, so this badge only ever
                     shows on the author's own card. */}

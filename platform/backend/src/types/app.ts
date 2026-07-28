@@ -107,6 +107,10 @@ export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
   // Teams the app is shared with (via its backing catalog), for the card's
   // visibility pill. Empty unless the app is team-scoped.
   teams: z.array(z.object({ id: z.string(), name: z.string() })),
+  // People the app is shared with individually. A personal-scoped app with a
+  // non-empty list is shared, not private — without this the card would read
+  // its `personal` scope literally and label a shared app "Personal".
+  users: z.array(z.object({ id: z.string(), name: z.string() })),
 });
 
 // An external item is one UI-providing tool of one *install* of an MCP server.

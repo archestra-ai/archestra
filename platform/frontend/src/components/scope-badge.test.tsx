@@ -27,4 +27,30 @@ describe("ScopeBadge", () => {
     const { container } = render(<ScopeBadge scope="personal" hidePersonal />);
     expect(container).toBeEmptyDOMElement();
   });
+  it("says an app is shared, not Personal, when it has individual grants", () => {
+    // An app shared with named people is stored as `personal` plus grants, so
+    // reading the scope literally labelled a shared app "Personal" — the exact
+    // confusion this pill exists to settle.
+    render(<ScopeBadge scope="personal" userNames={["Joey"]} />);
+    expect(screen.getByLabelText("Shared with: Joey")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Personal")).not.toBeInTheDocument();
+  });
+
+  it("lists every person the app is shared with", () => {
+    render(<ScopeBadge scope="personal" userNames={["Ada", "Grace"]} />);
+    expect(
+      screen.getByLabelText("Shared with: Ada, Grace"),
+    ).toBeInTheDocument();
+  });
+
+  it("still reads Personal when the grant list is empty", () => {
+    render(<ScopeBadge scope="personal" userNames={[]} />);
+    expect(screen.getByLabelText("Personal")).toBeInTheDocument();
+  });
+
+  it("keeps a shared app visible even when hidePersonal is set", () => {
+    // hidePersonal hides *private* apps; a shared one still needs its pill.
+    render(<ScopeBadge scope="personal" userNames={["Joey"]} hidePersonal />);
+    expect(screen.getByLabelText("Shared with: Joey")).toBeInTheDocument();
+  });
 });

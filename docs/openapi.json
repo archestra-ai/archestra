@@ -60976,6 +60976,25 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "users": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               }
                             },
                             "required": [
@@ -60992,7 +61011,8 @@
                               "viewerRole",
                               "latestVersion",
                               "enabled",
-                              "teams"
+                              "teams",
+                              "users"
                             ],
                             "additionalProperties": false
                           },

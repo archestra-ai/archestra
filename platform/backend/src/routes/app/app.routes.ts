@@ -215,8 +215,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .map((app) => app.authorId as string),
         ),
       ];
-      const [teamsByApp, authorNames, ownedPins, externalPins] =
+      const [usersByApp, teamsByApp, authorNames, ownedPins, externalPins] =
         await Promise.all([
+          AppAccessModel.getUserDetailsForApps(owned.map((app) => app.id)),
           AppAccessModel.getTeamDetailsForApps(owned.map((app) => app.id)),
           UserModel.getNamesByIds(personalAuthorIds),
           // Per-user pins (mirrors the projects list): surfaced as `pinnedAt` so
@@ -274,6 +275,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           latestVersion: app.latestVersion,
           enabled: app.enabled,
           teams: teamsByApp.get(app.id) ?? [],
+          users: usersByApp.get(app.id) ?? [],
           executionModel: "viewer-scoped" as const,
           cspOrigin: "platform-pinned" as const,
           pinnedAt: ownedPins.get(app.id) ?? null,

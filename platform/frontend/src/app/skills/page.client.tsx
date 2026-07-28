@@ -503,29 +503,34 @@ function SkillsList() {
                   ownerLabelPlural="skills"
                   adminPermission={{ skill: ["admin"] }}
                 />
-                <Select
-                  value={sourceRepo || "all"}
-                  onValueChange={(value) =>
-                    setSourceRepoFilter(value === "all" ? "" : value)
-                  }
-                >
-                  <SelectTrigger
-                    aria-label="Filter by repository"
-                    className="w-[260px]"
+                {/* Only imported skills have a repository, so the filter would
+                    be a single inert "All repositories" entry until at least
+                    one skill is imported. */}
+                {sourceRepos.length > 0 && (
+                  <Select
+                    value={sourceRepo || "all"}
+                    onValueChange={(value) =>
+                      setSourceRepoFilter(value === "all" ? "" : value)
+                    }
                   >
-                    <SelectValue placeholder="All repositories" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All repositories</SelectItem>
-                    {sourceRepos.map((repo) => (
-                      <SelectItem key={repo} value={repo}>
-                        <span className="truncate font-mono text-xs">
-                          {repo}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    <SelectTrigger
+                      aria-label="Filter by repository"
+                      className="w-[260px]"
+                    >
+                      <SelectValue placeholder="All repositories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All repositories</SelectItem>
+                      {sourceRepos.map((repo) => (
+                        <SelectItem key={repo} value={repo}>
+                          <span className="truncate font-mono text-xs">
+                            {repo}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
               <ActiveFilterBadges adminPermission={{ skill: ["admin"] }} />
             </div>

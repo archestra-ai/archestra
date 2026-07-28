@@ -1,4 +1,5 @@
 import { SkillModel, SkillTeamModel } from "@/models";
+import { builtInSkillSourceRef } from "@/skills/built-in-skills";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 
 export const MANIFEST = [
@@ -27,6 +28,33 @@ export function manifestNamed(name: string, extraFrontmatter = ""): string {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/**
+ * A built-in skill written directly through the model layer, carrying the
+ * `builtin:<id>` identity token that startup sync stores in `source_ref`.
+ */
+export async function seedBuiltInSkill(params: {
+  organizationId: string;
+  name: string;
+  builtInSkillId: string;
+}) {
+  const skill = await SkillModel.createWithFiles({
+    skill: {
+      organizationId: params.organizationId,
+      authorId: null,
+      name: params.name,
+      description: `${params.name} description`,
+      content: `# ${params.name}`,
+      metadata: {},
+      sourceType: "built_in",
+      sourceRef: builtInSkillSourceRef(params.builtInSkillId),
+      scope: "org",
+    },
+    files: [],
+  });
+  if (!skill) throw new Error("seed failed");
+  return skill;
 }
 
 /** A github-sourced skill written directly through the model layer. */

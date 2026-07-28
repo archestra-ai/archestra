@@ -17,6 +17,7 @@ import {
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
+import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
 import type {
   InsertSkill,
   InsertSkillFile,
@@ -106,6 +107,12 @@ class SkillModel {
    * Distinct `owner/repo` strings across the org's imported skills, derived
    * from the `source_ref` provenance column (formatted as
    * `owner/repo@ref:path`).
+   *
+   * Built-in skills also carry a `source_ref`, but it is a `builtin:<id>`
+   * identity token rather than a repository — and one that embeds the
+   * unbranded product id, which would leak into the white-labeled repository
+   * filter. They are excluded, matching how the skills table suppresses the
+   * same refs in favor of the app-name badge.
    */
   static async findDistinctSourceRepos(params: {
     organizationId: string;
@@ -125,6 +132,7 @@ class SkillModel {
     const repos = new Set<string>();
     for (const { sourceRef } of rows) {
       if (!sourceRef) continue;
+      if (isBuiltInSkillSourceRef(sourceRef)) continue;
       const atIdx = sourceRef.indexOf("@");
       const repo = atIdx === -1 ? sourceRef : sourceRef.slice(0, atIdx);
       if (repo) repos.add(repo);

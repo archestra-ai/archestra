@@ -1697,7 +1697,7 @@ export class McpServerRuntimeManager {
               }
               try {
                 await this.k8sApi.deleteNamespacedService({
-                  name: `${deploymentName}-service`,
+                  name: K8sDeployment.constructHttpServiceName(deploymentName),
                   namespace: deploymentNamespace,
                 });
               } catch (err) {

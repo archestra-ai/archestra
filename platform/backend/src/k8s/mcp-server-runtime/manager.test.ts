@@ -179,6 +179,17 @@ vi.mock("./k8s-deployment", () => {
         }
         return `mcp-server-${mcpServerId}-secrets`;
       }
+      // Mirrors the real truncation: the base is capped at 55 chars so the
+      // service name fits the 63-char RFC 1123 label limit (legacy
+      // deployment names can exceed it).
+      static constructHttpServiceName(deploymentName: string): string {
+        const base = deploymentName
+          .replace(/\./g, "-")
+          .slice(0, 55)
+          .replace(/^[^a-z0-9]+/, "")
+          .replace(/[^a-z0-9]+$/g, "");
+        return `${base.length > 0 ? base : "mcp-server"}-service`;
+      }
       // Mirrors the real frozen-first logic: the stored deploymentName wins;
       // the name-derived recompute is only the NULL fallback.
       static constructDeploymentName(
@@ -2319,6 +2330,48 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
       expect.objectContaining({
         name: `mcp-server-${UNKNOWN_ID}-secrets`,
       }),
+    );
+  });
+
+  test("sweeps a legacy-named tombstone via the truncated service name", async () => {
+    const TOMBSTONED_ID = "123e4567-e89b-12d3-a456-426614174333";
+    // Legacy `mcp-<slug>` deployment names are not length-capped; the derived
+    // service name is — the sweep must not guess `<deployment>-service`.
+    const longDeploymentName = `mcp-${"a".repeat(60)}`;
+    const truncatedServiceName = `${longDeploymentName.slice(0, 55)}-service`;
+    vi.mocked(McpServerModel.findSoftDeletedIds).mockResolvedValueOnce(
+      new Set([TOMBSTONED_ID]),
+    );
+
+    const mockDeleteService = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: {
+        deleteNamespacedService: mockDeleteService,
+        deleteNamespacedSecret: vi.fn().mockResolvedValue({}),
+        listNamespacedSecret: vi.fn().mockResolvedValue({ items: [] }),
+      },
+      mockK8sAppsApi: {
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [
+            {
+              metadata: {
+                name: longDeploymentName,
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": TOMBSTONED_ID,
+                },
+              },
+            },
+          ],
+        }),
+        deleteNamespacedDeployment: vi.fn().mockResolvedValue({}),
+      },
+    });
+
+    await callCleanup(manager, []);
+
+    expect(mockDeleteService).toHaveBeenCalledWith(
+      expect.objectContaining({ name: truncatedServiceName }),
     );
   });
 

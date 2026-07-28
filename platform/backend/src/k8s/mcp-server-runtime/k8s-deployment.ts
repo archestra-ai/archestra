@@ -410,6 +410,28 @@ export default class K8sDeployment {
   }
 
   /**
+   * Service name for a streamable-http deployment. Not just
+   * `<deploymentName>-service`: the base is truncated/sanitized so the result
+   * fits the 63-char RFC 1123 label limit (legacy deployment names can exceed
+   * it). Static so the orphan sweep can recompute the name for a deployment
+   * it never hydrated into a K8sDeployment.
+   */
+  static constructHttpServiceName(deploymentName: string): string {
+    const maxBaseLength =
+      K8sDeployment.MAX_K8S_LABEL_LENGTH -
+      K8sDeployment.HTTP_SERVICE_SUFFIX.length;
+
+    const base = deploymentName
+      .replace(/\./g, "-")
+      .slice(0, maxBaseLength)
+      .replace(/^[^a-z0-9]+/, "")
+      .replace(/[^a-z0-9]+$/g, "");
+
+    const normalizedBase = base.length > 0 ? base : "mcp-server";
+    return `${normalizedBase}${K8sDeployment.HTTP_SERVICE_SUFFIX}`;
+  }
+
+  /**
    * Returns the K8s Secret name for this MCP server, taking multi-tenancy
    * into account using the cached catalogItem if available.
    */
@@ -3131,18 +3153,7 @@ export default class K8sDeployment {
   }
 
   private constructHttpServiceName(): string {
-    const maxBaseLength =
-      K8sDeployment.MAX_K8S_LABEL_LENGTH -
-      K8sDeployment.HTTP_SERVICE_SUFFIX.length;
-
-    const base = this.deploymentName
-      .replace(/\./g, "-")
-      .slice(0, maxBaseLength)
-      .replace(/^[^a-z0-9]+/, "")
-      .replace(/[^a-z0-9]+$/g, "");
-
-    const normalizedBase = base.length > 0 ? base : "mcp-server";
-    return `${normalizedBase}${K8sDeployment.HTTP_SERVICE_SUFFIX}`;
+    return K8sDeployment.constructHttpServiceName(this.deploymentName);
   }
 
   private getK8sNetworkPolicyName(): string {

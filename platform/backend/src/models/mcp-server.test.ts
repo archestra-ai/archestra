@@ -1286,6 +1286,26 @@ describe("McpServerModel", () => {
       ).resolves.toBeNull();
     });
 
+    test("setDeploymentName refuses tombstones", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+      const server = await makeRemoteServer({ catalogId: catalog.id });
+      await McpServerModel.delete(server.id);
+
+      await McpServerModel.setDeploymentName({
+        id: server.id,
+        deploymentName: "mcp-late-write",
+      });
+
+      // Deployment identity must not be stamped onto a tombstone.
+      const [raw] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+      expect(raw.deploymentName).toBeNull();
+    });
+
     test("findAll status 'deleted' lists tombstones", async ({
       makeInternalMcpCatalog,
     }) => {

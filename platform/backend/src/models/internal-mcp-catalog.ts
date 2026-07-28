@@ -943,7 +943,17 @@ class InternalMcpCatalogModel {
       // tombstoned for audit history. The catalog hard-delete below cascades
       // the tools and nulls each tombstone's catalog_id via FK.
       for (const server of servers) {
-        await McpServerModel.delete(server.id);
+        if (server.serverType === "app") {
+          // Backstop: app backings must never be tombstoned — the
+          // apps → mcp_server joins don't filter deleted_at, so a tombstoned
+          // backing would keep its app visible and its launch tool live. The
+          // route guards keep app catalogs out of this path (the Apps
+          // lifecycle purges the backing before deleting its catalog); if
+          // one slips through anyway, purge for real.
+          await McpServerModel.purge(server.id);
+        } else {
+          await McpServerModel.delete(server.id);
+        }
       }
     }
 

@@ -871,6 +871,55 @@ describe("InternalMcpCatalogModel", () => {
           .where(eq(schema.toolsTable.id, tool.id)),
       ).resolves.toEqual([]);
     });
+
+    test("an app backing caught in the cascade is purged, never tombstoned", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      // Assembled directly: the Apps lifecycle purges the backing before
+      // deleting its catalog, so this state only exists when a caller
+      // bypasses the route guards — exactly what the backstop is for.
+      const catalog = await InternalMcpCatalogModel.create({
+        name: "Backstop App",
+        serverType: "app",
+        scope: "org",
+      });
+      const [server] = await db
+        .insert(schema.mcpServersTable)
+        .values({
+          name: "backstop-app-backing",
+          serverType: "app",
+          catalogId: catalog.id,
+        })
+        .returning();
+      const [app] = await db
+        .insert(schema.appsTable)
+        .values({
+          organizationId: org.id,
+          name: "Backstop App",
+          mcpServerId: server.id,
+          latestVersion: 1,
+        })
+        .returning();
+
+      await expect(InternalMcpCatalogModel.delete(catalog.id)).resolves.toBe(
+        true,
+      );
+
+      // No tombstone: the backing row is really gone and the app detached
+      // via the real ON DELETE SET NULL FK.
+      await expect(
+        db
+          .select()
+          .from(schema.mcpServersTable)
+          .where(eq(schema.mcpServersTable.id, server.id)),
+      ).resolves.toEqual([]);
+      const [appRow] = await db
+        .select()
+        .from(schema.appsTable)
+        .where(eq(schema.appsTable.id, app.id));
+      expect(appRow.mcpServerId).toBeNull();
+    });
   });
 
   describe("excludes app backing catalogs from registry surfaces", () => {

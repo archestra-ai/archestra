@@ -151,7 +151,12 @@ class McpServerModel {
     await (tx ?? db)
       .update(schema.mcpServersTable)
       .set({ deploymentName: params.deploymentName })
-      .where(eq(schema.mcpServersTable.id, params.id));
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, params.id),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   /**

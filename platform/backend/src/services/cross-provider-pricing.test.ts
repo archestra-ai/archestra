@@ -64,6 +64,20 @@ const MODELS_DEV: ModelsDevApiResponse = {
         name: "Claude Sonnet 4.5 (Bedrock)",
         cost: { input: 3, output: 15 },
       },
+      // Two generations of one Amazon model, distinguished only by the `-vN`
+      // segment, priced five times apart. Amazon ids carry that segment as part
+      // of the model's identity rather than as a Bedrock version, so collapsing
+      // it would merge these two entries onto one key.
+      "amazon.titan-embed-text-v1": {
+        id: "amazon.titan-embed-text-v1",
+        name: "Titan Embeddings G1 Text",
+        cost: { input: 0.1, output: 0 },
+      },
+      "amazon.titan-embed-text-v2:0": {
+        id: "amazon.titan-embed-text-v2:0",
+        name: "Titan Text Embeddings V2",
+        cost: { input: 0.02, output: 0 },
+      },
     },
   },
 };
@@ -183,6 +197,26 @@ describe("resolveCrossProviderPrices — Bedrock", () => {
     // canonical anthropic entry must win so cache prices are recovered.
     expect(prices?.cacheReadPricePerToken).toBe("3e-7");
     expect(prices?.cacheWritePricePerToken).toBe("0.00000375");
+  });
+
+  // The version-stripping that canonicalises `…-v1:0` to `…` is correct for
+  // every vendor mapped to a canonical registry entry, where `-vN` is a Bedrock
+  // version. Amazon is not one of those vendors, and its `-vN` is part of the
+  // model name — so these two ids must keep resolving to their own entries.
+  test("keeps two Amazon generations that differ only by `-vN` distinct", () => {
+    const v1 = resolveCrossProviderPrices({
+      provider: "bedrock",
+      modelId: "amazon.titan-embed-text-v1",
+      modelsDevData: MODELS_DEV,
+    });
+    const v2 = resolveCrossProviderPrices({
+      provider: "bedrock",
+      modelId: "amazon.titan-embed-text-v2:0",
+      modelsDevData: MODELS_DEV,
+    });
+
+    expect(v1?.promptPricePerToken).toBe("1e-7");
+    expect(v2?.promptPricePerToken).toBe("2e-8");
   });
 
   test("returns null for an unknown vendor", () => {

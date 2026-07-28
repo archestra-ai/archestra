@@ -7,7 +7,10 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
 import { AgentModel, ConversationModel } from "@/models";
-import { draftRecordingEnhancement } from "@/services/apps/app-recording-enhancement";
+import {
+  draftRecordingEnhancement,
+  ENHANCEMENT_FAILURE_REASONS,
+} from "@/services/apps/app-recording-enhancement";
 import { renderJobClient } from "@/services/apps/app-recording-render-client";
 import { RENDER_BUNDLE_BODY_LIMIT_BYTES } from "@/services/apps/app-recording-render-protocol";
 import { assertAppsHackathonAvailable } from "@/services/apps/apps-hackathon-gate";
@@ -62,7 +65,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.EnhanceAppRecording,
         description:
-          "Draft the AI enhancement for a recorded app-building session: a one-sentence app description, one consolidated build prompt, one closing agent response, and a gallery category, all generated from the full chat. All are drafts the builder edits before applying; nulls mean generation was unavailable and the client falls back.",
+          "Draft the AI enhancement for a recorded app-building session: a one-sentence app description, one consolidated build prompt, one closing agent response, and a gallery category, all generated from the full chat. All are drafts the builder edits before applying; nulls mean generation was unavailable and the client falls back, with `reason` naming why the build prompt is missing so the client can say so instead of degrading silently.",
         tags: ["App Recordings"],
         body: z.object({
           conversationId: UuidIdSchema,
@@ -74,6 +77,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
             prompt: z.string().nullable(),
             response: z.string().nullable(),
             category: z.string().nullable(),
+            reason: z.enum(ENHANCEMENT_FAILURE_REASONS).nullable(),
           }),
         ),
       },

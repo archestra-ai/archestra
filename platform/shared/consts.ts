@@ -51,6 +51,21 @@ export const DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME =
   "ARCHESTRA_AUTH_ADMIN_PASSWORD";
 
 /**
+ * Max length (characters) of a `search` filter on the tool / agent-tool list
+ * endpoints. Those filters travel in the QUERY STRING, and Node counts the
+ * request line against `maxHeaderSize` — so an unbounded search term is not
+ * merely a wasteful query, it is refused by the HTTP parser with a 431 before
+ * any handler or schema runs, which surfaces as an opaque "API request failed"
+ * with nothing in the server logs.
+ *
+ * Generous next to any real tool name (`<catalogName>__<rawName>`) while
+ * staying far below the parser's limit, so callers that pass a name through —
+ * the policy editors look a tool up by name — cannot turn a malformed name
+ * into a transport-layer error.
+ */
+export const TOOL_SEARCH_MAX_LENGTH = 512;
+
+/**
  * Max length (characters) of a project's display name. Kept short so project
  * lists, headers, and dialogs stay readable. Enforced by the projects API and
  * the create/edit forms.

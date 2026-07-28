@@ -52441,7 +52441,8 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 512
             },
             "in": "query",
             "name": "search",
@@ -59354,7 +59355,7 @@
         "tags": [
           "App Recordings"
         ],
-        "description": "Draft the AI enhancement for a recorded app-building session: a one-sentence app description, one consolidated build prompt, one closing agent response, and a gallery category, all generated from the full chat. All are drafts the builder edits before applying; nulls mean generation was unavailable and the client falls back.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "description": "Draft the AI enhancement for a recorded app-building session: a one-sentence app description, one consolidated build prompt, one closing agent response, and a gallery category, all generated from the full chat. All are drafts the builder edits before applying; nulls mean generation was unavailable and the client falls back, with `reason` naming why the build prompt is missing so the client can say so instead of degrading silently.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -59404,13 +59405,22 @@
                     "category": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "reason": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "empty_transcript",
+                        "generation_failed"
+                      ]
                     }
                   },
                   "required": [
                     "description",
                     "prompt",
                     "response",
-                    "category"
+                    "category",
+                    "reason"
                   ],
                   "additionalProperties": false
                 }
@@ -303904,7 +303914,8 @@
           },
           {
             "schema": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 512
             },
             "in": "query",
             "name": "search",

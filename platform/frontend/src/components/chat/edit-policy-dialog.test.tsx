@@ -1,3 +1,4 @@
+import { TOOL_SEARCH_MAX_LENGTH } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -148,5 +149,56 @@ describe("EditPolicyDialog", () => {
     expect(
       screen.queryByText("Tool not found or not assigned to this Agent."),
     ).not.toBeInTheDocument();
+  });
+
+  // The name-based fallback sends `toolName` to the API as a query-string
+  // filter, and Node counts the request line against `maxHeaderSize`. A name
+  // that is not really a name — a malformed tool call carrying its arguments —
+  // is therefore refused by the HTTP parser with a 431 before any route runs:
+  // an opaque "API request failed" in the console with nothing server-side.
+  it("skips the name lookup for a name too long to belong to a tool", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {},
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockUseAllProfileTools.mockReturnValue({ data: { data: [] } });
+
+    render(
+      <EditPolicyDialog
+        open={true}
+        onOpenChange={() => {}}
+        toolName={"a".repeat(TOOL_SEARCH_MAX_LENGTH + 1)}
+        profileId="agent-1"
+      />,
+    );
+
+    expect(mockUseAllProfileTools).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+
+  it("still looks up an ordinary tool name", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    vi.mocked(useOrganization).mockReturnValue({
+      data: {},
+    } as unknown as ReturnType<typeof useOrganization>);
+    mockUseAllProfileTools.mockReturnValue({ data: { data: [] } });
+
+    render(
+      <EditPolicyDialog
+        open={true}
+        onOpenChange={() => {}}
+        toolName="workspace__export_data"
+        profileId="agent-1"
+      />,
+    );
+
+    expect(mockUseAllProfileTools).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
   });
 });

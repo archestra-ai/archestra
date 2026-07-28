@@ -1,6 +1,7 @@
 import {
   APP_RECORDING_RENDER_FPS,
   archestraApiSdk,
+  type archestraApiTypes,
   pruneTrailingTrimEvents,
   validateRecordingBundle,
 } from "@archestra/shared";
@@ -369,6 +370,32 @@ const RENDER_VIDEO_MUTATION_KEY = ["app-recording", "render-video"] as const;
 /** The description used when AI generation is unavailable or still pending. */
 export function fallbackRecordingDescription(appName: string): string {
   return `${appName} — an interactive app built in chat.`;
+}
+
+/** Why a draft carries no build prompt, as the enhance endpoint reports it. */
+export type EnhancementFailureReason = NonNullable<
+  archestraApiTypes.EnhanceAppRecordingResponses["200"]["reason"]
+>;
+
+/**
+ * What the builder is told when a draft comes back with no build prompt.
+ *
+ * The endpoint answers 200 with nulls, and the remedy for that is to fall back
+ * — an app-name description, the opening chat message as the prompt — which
+ * looks from the outside like the platform simply chose to write a poor gallery
+ * card. Naming the cause is the difference between that and an accurate "this
+ * failed, here is what to do": an empty transcript is nothing to draft FROM and
+ * no amount of retrying will fix it, whereas a model that returned nothing is
+ * worth one more click (or a switch to a funded provider in chat).
+ */
+export function enhancementFailureMessage(
+  reason: EnhancementFailureReason | null | undefined,
+): string {
+  const cause =
+    reason === "empty_transcript"
+      ? "This session has no chat text to draft a build prompt from"
+      : "Couldn't draft a build prompt automatically";
+  return `${cause} — write one here. (Your first chat message is used for the submission if you skip it.)`;
 }
 
 /**

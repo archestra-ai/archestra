@@ -699,7 +699,7 @@ export const appGalleryDeviceAuthPoll = <ThrowOnError extends boolean = false>(o
 });
 
 /**
- * Draft the AI enhancement for a recorded app-building session: a one-sentence app description, one consolidated build prompt, one closing agent response, and a gallery category, all generated from the full chat. All are drafts the builder edits before applying; nulls mean generation was unavailable and the client falls back.
+ * Draft the AI enhancement for a recorded app-building session: a one-sentence app description, one consolidated build prompt, one closing agent response, and a gallery category, all generated from the full chat. All are drafts the builder edits before applying; nulls mean generation was unavailable and the client falls back, with `reason` naming why the build prompt is missing so the client can say so instead of degrading silently.
  *
  * Authentication:
  *

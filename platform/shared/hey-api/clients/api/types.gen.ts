@@ -17128,6 +17128,7 @@ export type EnhanceAppRecordingResponses = {
         prompt: string | null;
         response: string | null;
         category: string | null;
+        reason: 'empty_transcript' | 'generation_failed';
     };
 };
 

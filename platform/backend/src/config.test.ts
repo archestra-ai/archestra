@@ -1,4 +1,5 @@
 import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
 } from "@archestra/shared";
@@ -2763,10 +2764,14 @@ describe("deriveOllamaNativeBaseUrl", () => {
 });
 
 describe("parseHackathonRecorderMaxFinalCutMs", () => {
-  test("defaults to three minutes when unset", () => {
-    expect(parseHackathonRecorderMaxFinalCutMs(undefined)).toBe(180_000);
-    expect(parseHackathonRecorderMaxFinalCutMs("")).toBe(180_000);
-    expect(parseHackathonRecorderMaxFinalCutMs("   ")).toBe(180_000);
+  test("defaults to the shared limit when unset", () => {
+    expect(parseHackathonRecorderMaxFinalCutMs(undefined)).toBe(60_000);
+    expect(parseHackathonRecorderMaxFinalCutMs("")).toBe(
+      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+    );
+    expect(parseHackathonRecorderMaxFinalCutMs("   ")).toBe(
+      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+    );
   });
 
   test("takes a deployment's own limit", () => {

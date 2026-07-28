@@ -3,7 +3,7 @@
 import {
   APP_GALLERY_CATEGORIES,
   type AppRecordingBundle,
-  pruneTrailingTrimEvents,
+  pruneCutEvents,
   validateRecordingBundle,
 } from "@archestra/shared";
 import {
@@ -180,8 +180,9 @@ export function AppGalleryShareButton(props: {
           fail(`This recording can't be shared. ${validation.reason}`);
           return;
         }
-        // Same size trim the video export ships (renders identically).
-        const trimmed = pruneTrailingTrimEvents(validation.bundle);
+        // Same cut-away pruning the video export ships: what the edit hides
+        // never leaves the browser (replays identically).
+        const trimmed = pruneCutEvents(validation.bundle);
         slug = gallerySubmissionSlug(trimmed);
 
         // Never block a working recording on a missing AI draft. Guarantee a
@@ -347,7 +348,7 @@ export function AppGalleryShareButton(props: {
       });
       return;
     }
-    const trimmed = pruneTrailingTrimEvents(validation.bundle);
+    const trimmed = pruneCutEvents(validation.bundle);
     const token = takeCachedGithubToken();
     const identity = token
       ? await fetchGithubIdentity(token, cancellation.signal)

@@ -8,7 +8,7 @@ import {
   healBundleMcpServers,
   isAppsHackathonOpen,
   normalizeCuts,
-  pruneTrailingTrimEvents,
+  pruneCutEvents,
   redactSensitiveText,
   sanitizeRecordingBundle,
   validateRecordingBundle,
@@ -336,7 +336,7 @@ describe("normalizeCuts", () => {
   });
 });
 
-describe("pruneTrailingTrimEvents", () => {
+describe("pruneCutEvents", () => {
   const seg = { kind: "segment", t: 0, version: 1 } as const;
 
   function trimBundle(
@@ -387,7 +387,7 @@ describe("pruneTrailingTrimEvents", () => {
       ],
       [{ fromMs: 2000, toMs: 5000 }],
     );
-    const out = pruneTrailingTrimEvents(b);
+    const out = pruneCutEvents(b);
     expect(out.recording.events).toEqual([seg, before, view]);
     // Everything else is untouched.
     expect(out.edits).toEqual(b.edits);
@@ -405,9 +405,9 @@ describe("pruneTrailingTrimEvents", () => {
       ],
       [{ fromMs: 2000, toMs: 4980 }],
     );
-    expect(pruneTrailingTrimEvents(b).recording.events.map((e) => e.t)).toEqual(
-      [0, 4990],
-    );
+    expect(pruneCutEvents(b).recording.events.map((e) => e.t)).toEqual([
+      0, 4990,
+    ]);
   });
 
   it("no-ops without cuts", () => {
@@ -415,10 +415,10 @@ describe("pruneTrailingTrimEvents", () => {
       seg,
       { kind: "canvas", t: 1000, sel: "#c", data: "x" },
     ]);
-    expect(pruneTrailingTrimEvents(b)).toBe(b);
+    expect(pruneCutEvents(b)).toBe(b);
   });
 
-  it("no-ops for a mid cut that does not reach the data end", () => {
+  it("leaves a mid cut's non-video events whole — later playback needs their state", () => {
     const b = trimBundle(
       [
         seg,
@@ -427,7 +427,148 @@ describe("pruneTrailingTrimEvents", () => {
       ],
       [{ fromMs: 1000, toMs: 2000 }],
     );
-    expect(pruneTrailingTrimEvents(b)).toBe(b);
+    expect(pruneCutEvents(b)).toBe(b);
+  });
+
+  // ── Mid-cut video pruning: the one payload a cut can throw away.
+  const chunk = (t: number, type: "key" | "delta", sel = "#c") =>
+    ({
+      kind: "video-chunk",
+      t,
+      sel,
+      type,
+      tsUs: t * 1000,
+      data: "bytes",
+    }) as const;
+  const chunksOf = (b: AppRecordingBundle) =>
+    b.recording.events.filter(
+      (event): event is Extract<typeof event, { kind: "video-chunk" }> =>
+        event.kind === "video-chunk",
+    );
+
+  it("a mid cut drops the video it hides, back to the keyframe the resume decodes from", () => {
+    const b = trimBundle(
+      [
+        seg,
+        chunk(1000, "key"),
+        chunk(1500, "delta"),
+        chunk(2500, "delta"), // hidden, and nothing still visible needs it
+        chunk(3000, "key"), // hidden, but what the resume decodes FROM
+        chunk(3500, "delta"), // hidden, and on the path from that keyframe
+        chunk(4500, "delta"), // in view
+        { kind: "canvas", t: 5500, sel: "#c", data: "end" },
+      ],
+      [{ fromMs: 2000, toMs: 4000 }],
+      6_000,
+    );
+
+    const kept = chunksOf(pruneCutEvents(b));
+    expect(kept.map((event) => event.t)).toEqual([
+      1000, 1500, 3000, 3500, 4500,
+    ]);
+    // The invariant a decoder needs: every RUN of kept chunks opens on a
+    // keyframe. The cut split this stream in two, so the second run opens at
+    // 3000 — a chunk the cut hides, kept precisely so 4500 decodes to the same
+    // pixels it always did.
+    expect(kept.map((event) => event.type)).toEqual([
+      "key",
+      "delta",
+      "key",
+      "delta",
+      "delta",
+    ]);
+  });
+
+  it("keeps hidden chunks when they are the chain the resume decodes through", () => {
+    const b = trimBundle(
+      [
+        seg,
+        chunk(1000, "key"),
+        chunk(2500, "delta"), // hidden, but there is no keyframe after it
+        chunk(4500, "delta"), // in view — decodes through 2500
+        { kind: "canvas", t: 5500, sel: "#c", data: "end" },
+      ],
+      [{ fromMs: 2000, toMs: 4000 }],
+      6_000,
+    );
+    // Nothing can go: the visible chunk's only path to a keyframe runs
+    // straight through the cut.
+    expect(pruneCutEvents(b)).toBe(b);
+  });
+
+  it("prunes each canvas's stream on its own keyframes", () => {
+    const b = trimBundle(
+      [
+        seg,
+        chunk(1000, "key", "#a"),
+        chunk(1000, "key", "#b"),
+        chunk(2500, "delta", "#a"), // droppable — #a re-keys inside the cut
+        chunk(2500, "delta", "#b"), // NOT droppable — #b never re-keys
+        chunk(3000, "key", "#a"),
+        chunk(4500, "delta", "#a"),
+        chunk(4500, "delta", "#b"),
+        { kind: "canvas", t: 5500, sel: "#a", data: "end" },
+      ],
+      [{ fromMs: 2000, toMs: 4000 }],
+      6_000,
+    );
+    // A keyframe in one canvas's stream says nothing about another's.
+    expect(
+      chunksOf(pruneCutEvents(b)).map((event) => `${event.sel}@${event.t}`),
+    ).toEqual([
+      "#a@1000",
+      "#b@1000",
+      "#b@2500",
+      "#a@3000",
+      "#a@4500",
+      "#b@4500",
+    ]);
+  });
+
+  it("never drops a video-config — it is what opens the stream", () => {
+    const config = {
+      kind: "video-config",
+      t: 2200,
+      sel: "#c",
+      codec: "vp09.00.10.08",
+      codedWidth: 640,
+      codedHeight: 800,
+    } as const;
+    const b = trimBundle(
+      [
+        seg,
+        chunk(1000, "key"),
+        config, // hidden by the cut, kept anyway
+        chunk(2500, "delta"),
+        chunk(3000, "key"),
+        chunk(4500, "delta"),
+        { kind: "canvas", t: 5500, sel: "#c", data: "end" },
+      ],
+      [{ fromMs: 2000, toMs: 4000 }],
+      6_000,
+    );
+    const out = pruneCutEvents(b);
+    expect(out.recording.events).toContainEqual(config);
+    // The 2500 delta still went — a config is not a decode anchor on its own.
+    expect(chunksOf(out).map((event) => event.t)).toEqual([1000, 3000, 4500]);
+  });
+
+  it("a pruned bundle is still a valid bundle", () => {
+    const b = trimBundle(
+      [
+        seg,
+        chunk(1000, "key"),
+        chunk(2500, "delta"),
+        chunk(3000, "key"),
+        chunk(4500, "delta"),
+        { kind: "canvas", t: 5500, sel: "#c", data: "end" },
+      ],
+      [{ fromMs: 2000, toMs: 4000 }],
+      6_000,
+    );
+    const out = pruneCutEvents(b);
+    expect(chunksOf(out)).toHaveLength(3);
+    expect(validateRecordingBundle(out).ok).toBe(true);
   });
 
   it("keeps an mcp that straddles the trim — its start anchor sits in the kept region", () => {
@@ -449,7 +590,7 @@ describe("pruneTrailingTrimEvents", () => {
       [{ fromMs: 4_000, toMs: 10_000 }],
       10_000,
     );
-    const out = pruneTrailingTrimEvents(b);
+    const out = pruneCutEvents(b);
     expect(out.recording.events).toContainEqual(straddle);
     expect(out.recording.events.map((e) => e.t)).toEqual([0, 5_000]);
   });
@@ -466,7 +607,7 @@ describe("pruneTrailingTrimEvents", () => {
       [{ fromMs: 500, toMs: 3000 }],
       2_000, // durationMs < 3000
     );
-    expect(pruneTrailingTrimEvents(b)).toBe(b);
+    expect(pruneCutEvents(b)).toBe(b);
   });
 });
 

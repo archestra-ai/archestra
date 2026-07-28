@@ -3,7 +3,7 @@ import {
   APP_RECORDING_RENDER_FPS,
   archestraApiSdk,
   type archestraApiTypes,
-  pruneTrailingTrimEvents,
+  pruneCutEvents,
   validateRecordingBundle,
 } from "@archestra/shared";
 import {
@@ -190,11 +190,11 @@ export function useRenderAppRecordingVideo() {
 
       try {
         const started = await renderAppRecordingVideo({
-          // Ship the trimmed recording without its cut-away tail: a size
-          // optimization that renders byte-for-byte the same (see
-          // pruneTrailingTrimEvents). Nothing else about the bundle changes.
+          // Ship the recording without what its cuts put out of view: a size
+          // optimization that renders identically (see pruneCutEvents).
+          // Nothing else about the bundle changes.
           body: {
-            bundle: pruneTrailingTrimEvents(validation.bundle),
+            bundle: pruneCutEvents(validation.bundle),
             title: params.title,
           },
         });

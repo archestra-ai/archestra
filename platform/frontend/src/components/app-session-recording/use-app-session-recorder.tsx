@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  APP_RECORDING_CAPTURE_HEADROOM,
   APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   APP_RECORDING_LIMITS,
   archestraApiSdk,
@@ -103,15 +104,17 @@ const MAX_SEGMENTS = APP_RECORDING_LIMITS.maxSegments - 5;
 /**
  * How long a capture may run before it stops itself.
  *
- * The SAME bound as the final cut, and deliberately so. The stored bundle
- * carries the whole CAPTURE — cuts are presentation, not deletion — so a long
- * recording trimmed to a short final cut still ships at the capture's size.
- * Letting capture run far past what may be submitted was how a participant
- * ended up with a recording they could edit but never upload. Following the
- * configured limit keeps the two from drifting: raise the deployment's limit
- * and both move together.
+ * A MULTIPLE of the final cut, so there is something to edit. A take that
+ * stopped dead at the submittable length left the author nothing to cut, and
+ * one that ran without limit produced recordings that could be edited but
+ * never uploaded — the stored bundle used to carry the whole capture however
+ * much of it was cut away. Pruning the cut-away video (`pruneCutEvents`) is
+ * what makes the headroom safe: an edit down to the limit now ships at the
+ * limit's size. Both bounds follow the deployment's configured limit, so
+ * raising it moves them together.
  */
-const DEFAULT_MAX_DURATION_MS = APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS;
+const DEFAULT_MAX_DURATION_MS =
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS * APP_RECORDING_CAPTURE_HEADROOM;
 /**
  * The SDK flushes its buffer on stop; give that final batch time to arrive —
  * including the video-encoder drain, which flushes each canvas's encoder and
@@ -537,10 +540,10 @@ export function useOwnAppSessionRecorder(params: {
   const coreRef = useRef<AppRecorderCore | null>(null);
   if (enabled && !coreRef.current) coreRef.current = new AppRecorderCore();
   const core = enabled ? coreRef.current : null;
-  // Capture stops at the same length the final cut may be submitted at, so a
-  // participant can never record more than they are allowed to ship.
+  // Capture may run past the submittable length — enough to leave room to
+  // edit, not enough to run away — since what an edit cuts no longer ships.
   const maxFinalCutMs = useMaxFinalCutMs();
-  if (core) core.maxDurationMs = maxFinalCutMs;
+  if (core) core.maxDurationMs = maxFinalCutMs * APP_RECORDING_CAPTURE_HEADROOM;
 
   const { data: app } = useApp(appId, { toastOnError: false });
   const { data: session } = useSession();

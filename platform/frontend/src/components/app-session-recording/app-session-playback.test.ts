@@ -1,7 +1,4 @@
-import {
-  type AppRecordingBundle,
-  pruneTrailingTrimEvents,
-} from "@archestra/shared";
+import { type AppRecordingBundle, pruneCutEvents } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   backfilledEnhancement,
@@ -1318,7 +1315,7 @@ describe("planPaintFlush", () => {
   });
 });
 
-describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
+describe("pruneCutEvents keeps buildPlayback identical", () => {
   // The offline renderer drives buildPlayback frame by frame, so the prune is
   // lossless iff buildPlayback's output — events, segments, transcript, duration
   // and the time mapping — is byte-for-byte the same on the pruned bundle.
@@ -1349,7 +1346,7 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
   }
 
   function pruned(rec: Recording): Recording {
-    const out = pruneTrailingTrimEvents(recToBundle(rec));
+    const out = pruneCutEvents(recToBundle(rec));
     return {
       ...rec,
       events: out.recording.events as unknown as Recording["events"],
@@ -1422,7 +1419,7 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
     expectSamePlayback(rec);
   });
 
-  it("leaves a mid cut alone and keeps playback identical", () => {
+  it("leaves a mid cut's non-video events alone and keeps playback identical", () => {
     const rec = recording({
       durationMs: 5_000,
       events: [
@@ -1434,6 +1431,64 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
     });
     expect(pruned(rec).events.length).toBe(rec.events.length);
     expectSamePlayback(rec);
+  });
+
+  it("drops a mid cut's hidden video without moving playback, and leaves a decodable stream", () => {
+    const vchunk = (t: number, type: "key" | "delta") => ({
+      kind: "video-chunk" as const,
+      t,
+      sel: "#v",
+      type,
+      tsUs: t * 1_000,
+      bytes: new Uint8Array([t % 256]),
+    });
+    const rec = recording({
+      durationMs: 7_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        vchunk(1_000, "key"),
+        vchunk(1_500, "delta"),
+        vchunk(2_500, "delta"), // hidden, and nothing visible decodes through it
+        vchunk(3_000, "key"), // hidden, but what the resume decodes FROM
+        vchunk(3_500, "delta"),
+        vchunk(4_500, "delta"), // in view
+        { kind: "canvas", t: 6_000, sel: "#c", blob: new Blob(["end"]) },
+      ],
+      edits: { cuts: [{ fromMs: 2_000, toMs: 4_000 }] },
+    });
+
+    const before = buildPlayback(rec);
+    const after = buildPlayback(pruned(rec));
+    // The timing contract: a hidden chunk sits where playback collapses to
+    // zero time, so removing it cannot move the clock or anything on it.
+    expect(after.duration).toBe(before.duration);
+    expect(after.segments).toEqual(before.segments);
+    expect(after.transcript).toEqual(before.transcript);
+    for (const ms of [0, before.duration / 2, before.duration]) {
+      expect(after.toPlaybackMs(ms)).toBeCloseTo(before.toPlaybackMs(ms), 6);
+      expect(after.toRawMs(ms)).toBe(before.toRawMs(ms));
+    }
+    // Exactly one chunk left, and it is the one no visible frame needed.
+    // Tagged by the ENCODER timestamp, not `t`: playback collapses the cut, so
+    // every chunk inside it comes back mapped to the same instant.
+    const tag = (event: { kind: string; t: number; tsUs?: number }) =>
+      `${event.kind}@${event.tsUs ?? event.t}`;
+    expect(after.events.map(tag)).toEqual(
+      before.events.map(tag).filter((it) => it !== "video-chunk@2500000"),
+    );
+    // And what remains still decodes: the stream re-opens on a KEYFRAME after
+    // the gap, which is the whole reason 3000 and 3500 were kept.
+    const kept = after.events.filter(
+      (event): event is Extract<typeof event, { kind: "video-chunk" }> =>
+        event.kind === "video-chunk",
+    );
+    expect(kept.map((event) => [event.tsUs / 1_000, event.type])).toEqual([
+      [1_000, "key"],
+      [1_500, "delta"],
+      [3_000, "key"],
+      [3_500, "delta"],
+      [4_500, "delta"],
+    ]);
   });
 
   it("merges overlapping cuts that together reach the end", () => {

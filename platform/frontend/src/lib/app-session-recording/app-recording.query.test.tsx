@@ -1,4 +1,7 @@
-import { archestraApiSdk } from "@archestra/shared";
+import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+  archestraApiSdk,
+} from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -259,6 +262,8 @@ describe("useMaxFinalCutMs", () => {
     vi.mocked(useFeature).mockReturnValue(
       undefined as ReturnType<typeof useFeature>,
     );
-    expect(renderHook(() => useMaxFinalCutMs()).result.current).toBe(180_000);
+    expect(renderHook(() => useMaxFinalCutMs()).result.current).toBe(
+      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+    );
   });
 });

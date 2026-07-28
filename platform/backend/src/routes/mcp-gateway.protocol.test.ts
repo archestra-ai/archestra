@@ -87,6 +87,25 @@ describe("resolveProtocolRevision", () => {
     expect(resolution.declaredExplicitly).toBe(false);
   });
 
+  test("a version declared in _meta counts as an explicit declaration", () => {
+    // The revision moved per-request version carriage into _meta, so a
+    // conforming client may send no version header at all.
+    const resolution = resolveOrThrow({
+      headers: {},
+      body: {
+        jsonrpc: "2.0",
+        method: "tools/list",
+        params: {
+          _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28" },
+        },
+        id: 1,
+      },
+    });
+
+    expect(resolution.revision).toBe(STATELESS_MCP_PROTOCOL_REVISION);
+    expect(resolution.declaredExplicitly).toBe(true);
+  });
+
   test("per-request clientInfo _meta implies the stateless revision", () => {
     const resolution = resolveOrThrow({
       headers: {},
@@ -127,7 +146,9 @@ describe("resolveProtocolRevision", () => {
       body: LEGACY_INITIALIZE,
     });
 
-    expect(resolution).toMatchObject({ code: -32600 });
+    // The revision's allocated UnsupportedProtocolVersion code, not generic
+    // Invalid Request.
+    expect(resolution).toMatchObject({ code: -32022 });
     if (!("code" in resolution)) throw new Error("expected an error");
     expect(resolution.message).toContain("2030-01-01");
     expect(resolution.message).toContain(STATELESS_MCP_PROTOCOL_REVISION);
@@ -186,7 +207,7 @@ describe("validateRoutingHeaders", () => {
       resolution: declaredStateless,
     });
 
-    expect(error).toMatchObject({ code: -32600 });
+    expect(error).toMatchObject({ code: -32020 });
     expect(error?.message).toContain("does not match request method");
   });
 
@@ -202,7 +223,7 @@ describe("validateRoutingHeaders", () => {
       resolution: declaredStateless,
     });
 
-    expect(error).toMatchObject({ code: -32600 });
+    expect(error).toMatchObject({ code: -32020 });
     expect(error?.message).toContain("does not match request target");
   });
 
@@ -215,7 +236,7 @@ describe("validateRoutingHeaders", () => {
       resolution: legacy,
     });
 
-    expect(error).toMatchObject({ code: -32600 });
+    expect(error).toMatchObject({ code: -32020 });
   });
 
   test("a name header on a method with no named target is rejected", () => {
@@ -225,7 +246,7 @@ describe("validateRoutingHeaders", () => {
       resolution: declaredStateless,
     });
 
-    expect(error).toMatchObject({ code: -32600 });
+    expect(error).toMatchObject({ code: -32020 });
     expect(error?.message).toContain("addresses no named target");
   });
 
@@ -236,7 +257,7 @@ describe("validateRoutingHeaders", () => {
       resolution: declaredStateless,
     });
 
-    expect(error).toMatchObject({ code: -32600 });
+    expect(error).toMatchObject({ code: -32020 });
     expect(error?.message).toContain("Missing required mcp-method");
   });
 
@@ -252,7 +273,7 @@ describe("validateRoutingHeaders", () => {
       resolution: declaredStateless,
     });
 
-    expect(error).toMatchObject({ code: -32600 });
+    expect(error).toMatchObject({ code: -32020 });
     expect(error?.message).toContain("Missing required mcp-name");
   });
 
@@ -321,6 +342,20 @@ describe("server/discover", () => {
       version: "1.2.3",
     });
     expect(result.capabilities).toEqual(buildGatewayServerCapabilities());
+  });
+
+  test("advertises every supported version, not only the negotiated one", () => {
+    const result = buildDiscoverResult({
+      agentId: "agent-1",
+      version: "1.2.3",
+      revision: STATELESS_MCP_PROTOCOL_REVISION,
+    });
+
+    expect(result.protocolVersions).toEqual([
+      STATELESS_MCP_PROTOCOL_REVISION,
+      LEGACY_MCP_PROTOCOL_REVISION,
+    ]);
+    expect(result.resultType).toBe("complete");
   });
 
   test("capabilities carry the MCP Apps extension", () => {

@@ -93,7 +93,7 @@ Gateways serve both the `2025-11-25` and `2026-07-28` MCP revisions from the sam
 
 The `2026-07-28` revision drops the `initialize` handshake and the session header. Clients on it call `server/discover` for capabilities and send `Mcp-Method` and `Mcp-Name` routing headers on every request. The gateway rejects a request whose routing headers disagree with its body.
 
-Tool lists carry a freshness hint so clients can cache them. The hint is always marked private — a gateway filters tools per caller, so two users can see different lists.
+Tool, prompt, and resource results carry a freshness hint so clients can cache them. The hint is always marked private — a gateway filters results per caller, so two users can see different ones.
 
 ## Access Control
 

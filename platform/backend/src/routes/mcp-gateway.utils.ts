@@ -105,6 +105,7 @@ import {
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
+  withPrivateCacheHint,
 } from "./mcp-gateway.protocol";
 
 export { deriveAuthMethod };
@@ -465,7 +466,7 @@ export async function createAgentServer(
           { agentId, uri, resultType: typeof result },
           "Resource read successful",
         );
-        return result;
+        return withPrivateCacheHint(result);
       } catch (error) {
         // A third-party tool can advertise a `ui://` UI resource whose upstream
         // server does not actually implement `resources/read` (returning -32601
@@ -497,16 +498,25 @@ export async function createAgentServer(
 
   // SEP-1865: resources/list, resources/templates/list, prompts/list
   // Proxy to all upstream MCP servers connected to this agent and aggregate results.
+  // Each carries SEP-2549 cache hints, always private: these aggregate upstream
+  // servers reached with the caller's own credentials, so results differ per
+  // caller and must not be shared by an intermediary.
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return mcpClient.listResources(agentId, tokenAuth);
+    return withPrivateCacheHint(
+      await mcpClient.listResources(agentId, tokenAuth),
+    );
   });
 
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-    return mcpClient.listResourceTemplates(agentId, tokenAuth);
+    return withPrivateCacheHint(
+      await mcpClient.listResourceTemplates(agentId, tokenAuth),
+    );
   });
 
   server.setRequestHandler(ListPromptsRequestSchema, async () => {
-    return mcpClient.listPrompts(agentId, tokenAuth);
+    return withPrivateCacheHint(
+      await mcpClient.listPrompts(agentId, tokenAuth),
+    );
   });
 
   server.setRequestHandler(

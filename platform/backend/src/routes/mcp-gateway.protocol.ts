@@ -56,23 +56,47 @@ export const MCP_METHOD_HEADER = "mcp-method";
 export const MCP_NAME_HEADER = "mcp-name";
 
 /**
- * `_meta` key carrying client identity on every request under 2026-07-28,
- * replacing what `initialize` negotiated once per connection.
+ * `_meta` keys carrying what `initialize` used to negotiate once per
+ * connection. Under 2026-07-28 every request carries its own protocol version
+ * and client capabilities, and SHOULD identify the client.
  */
 export const MCP_CLIENT_INFO_META_KEY = "io.modelcontextprotocol/clientInfo";
+export const MCP_PROTOCOL_VERSION_META_KEY =
+  "io.modelcontextprotocol/protocolVersion";
+export const MCP_CLIENT_CAPABILITIES_META_KEY =
+  "io.modelcontextprotocol/clientCapabilities";
 
 export const SERVER_DISCOVER_METHOD = "server/discover";
 
 /**
- * How long a `tools/list` result stays fresh, and who may share it (SEP-2549).
- *
- * `cacheScope` is always `private`: the gateway's tool list is filtered per
- * caller by RBAC, per-agent exclusions, and dynamic-tool reach, so two users
- * hitting the same agent legitimately see different lists. Advertising a
- * shared scope would let an intermediary serve one caller's tool visibility to
- * another.
+ * Error codes from the revision's allocation policy, which reserves
+ * -32020..-32099 for the specification. These replace the generic JSON-RPC
+ * codes an earlier draft used, so they are not interchangeable with -32600.
  */
-export const TOOLS_LIST_CACHE_TTL_MS = 30_000;
+export const HEADER_MISMATCH_ERROR_CODE = -32020;
+export const UNSUPPORTED_PROTOCOL_VERSION_ERROR_CODE = -32022;
+
+/**
+ * Every result carries `resultType`. `complete` is an ordinary result;
+ * `input_required` is reserved for the multi-round-trip pattern, which the
+ * gateway does not implement yet. Clients treat a missing field as `complete`,
+ * so emitting it is safe for older clients.
+ */
+export const COMPLETE_RESULT_TYPE = "complete";
+
+/**
+ * How long a cacheable result stays fresh, and who may share it (SEP-2549).
+ *
+ * The revision requires both fields on `tools/list`, `prompts/list`,
+ * `resources/list`, `resources/read`, and `resources/templates/list`.
+ *
+ * `cacheScope` is always `private`: every one of those results is filtered per
+ * caller by RBAC, per-agent exclusions, dynamic-tool reach, and the caller's
+ * own upstream credentials, so two users hitting the same agent legitimately
+ * see different results. `public` would let a shared intermediary serve one
+ * caller's view to another.
+ */
+export const LIST_CACHE_TTL_MS = 30_000;
 export const PRIVATE_CACHE_SCOPE = "private";
 
 export type CacheHint = {
@@ -81,7 +105,7 @@ export type CacheHint = {
 };
 
 /**
- * Cache hints for a per-caller list result.
+ * Cache hints for a per-caller cacheable result.
  *
  * Emitted to every client regardless of negotiated revision: unknown result
  * fields are preserved rather than rejected by the 2025-11-25 result schemas,
@@ -89,9 +113,19 @@ export type CacheHint = {
  */
 export function buildPrivateListCacheHint(): CacheHint {
   return {
-    ttlMs: TOOLS_LIST_CACHE_TTL_MS,
+    ttlMs: LIST_CACHE_TTL_MS,
     cacheScope: PRIVATE_CACHE_SCOPE,
   };
+}
+
+/**
+ * Attach cache hints to a result produced elsewhere (e.g. proxied from an
+ * upstream server) without disturbing its existing fields.
+ */
+export function withPrivateCacheHint<T extends object>(
+  result: T,
+): T & CacheHint {
+  return { ...result, ...buildPrivateListCacheHint() };
 }
 
 /**
@@ -140,11 +174,15 @@ export type ProtocolError = {
 /**
  * Decide which revision a request speaks.
  *
- * An explicit `MCP-Protocol-Version` header wins. Otherwise the request is
- * inferred: the 2026-07-28 markers are the routing headers and the per-request
- * `clientInfo` `_meta` key, none of which a 2025-11-25 client sends. Anything
- * else — notably a bare `initialize` — falls back to the legacy revision, so
- * existing clients are unaffected by this negotiation.
+ * A client declares its version either in the `MCP-Protocol-Version` header or
+ * in `params._meta` — the revision moved per-request version carriage into
+ * `_meta`, so a conforming client may send only that. Either is treated as an
+ * explicit declaration.
+ *
+ * Failing that the request is inferred from the remaining 2026-07-28 markers,
+ * the routing headers and the per-request `clientInfo` key, none of which a
+ * 2025-11-25 client sends. Anything else — notably a bare `initialize` — falls
+ * back to the legacy revision, so existing clients are unaffected.
  */
 export function resolveProtocolRevision(params: {
   headers: IncomingHttpHeaders;
@@ -152,7 +190,9 @@ export function resolveProtocolRevision(params: {
 }): ProtocolResolution | ProtocolError {
   const { headers, body } = params;
 
-  const declared = readHeader(headers, MCP_PROTOCOL_VERSION_HEADER);
+  const declared =
+    readHeader(headers, MCP_PROTOCOL_VERSION_HEADER) ??
+    readMetaProtocolVersion(body);
   if (declared) {
     if (declared === STATELESS_MCP_PROTOCOL_REVISION) {
       return {
@@ -175,7 +215,7 @@ export function resolveProtocolRevision(params: {
     }
 
     return {
-      code: -32600,
+      code: UNSUPPORTED_PROTOCOL_VERSION_ERROR_CODE,
       message: `Unsupported MCP protocol version "${declared}". Supported versions: ${[
         ...SUPPORTED_MCP_PROTOCOL_REVISIONS,
         ...SDK_SUPPORTED_PROTOCOL_VERSIONS.filter(
@@ -250,7 +290,7 @@ export function validateRoutingHeaders(params: {
 
   if (headerMethod !== undefined && headerMethod !== method) {
     return {
-      code: -32600,
+      code: HEADER_MISMATCH_ERROR_CODE,
       message: `Routing header mismatch: ${MCP_METHOD_HEADER} "${headerMethod}" does not match request method "${method}".`,
     };
   }
@@ -261,7 +301,7 @@ export function validateRoutingHeaders(params: {
     headerName !== targetName
   ) {
     return {
-      code: -32600,
+      code: HEADER_MISMATCH_ERROR_CODE,
       message: `Routing header mismatch: ${MCP_NAME_HEADER} "${headerName}" does not match request target "${targetName}".`,
     };
   }
@@ -270,7 +310,7 @@ export function validateRoutingHeaders(params: {
   // route a request somewhere its body never asked to go.
   if (headerName !== undefined && targetName === undefined) {
     return {
-      code: -32600,
+      code: HEADER_MISMATCH_ERROR_CODE,
       message: `Routing header mismatch: ${MCP_NAME_HEADER} was sent for method "${method}", which addresses no named target.`,
     };
   }
@@ -284,14 +324,14 @@ export function validateRoutingHeaders(params: {
 
   if (headerMethod === undefined) {
     return {
-      code: -32600,
+      code: HEADER_MISMATCH_ERROR_CODE,
       message: `Missing required ${MCP_METHOD_HEADER} header for protocol version ${STATELESS_MCP_PROTOCOL_REVISION}.`,
     };
   }
 
   if (targetName !== undefined && headerName === undefined) {
     return {
-      code: -32600,
+      code: HEADER_MISMATCH_ERROR_CODE,
       message: `Missing required ${MCP_NAME_HEADER} header for method "${method}" under protocol version ${STATELESS_MCP_PROTOCOL_REVISION}.`,
     };
   }
@@ -314,6 +354,12 @@ export function buildDiscoverResult(params: {
 }) {
   const { agentId, version, revision } = params;
   return {
+    resultType: COMPLETE_RESULT_TYPE,
+    // The revision has servers advertise every version they support, not just
+    // the one this request used, so a client can pick before committing.
+    protocolVersions: [...SUPPORTED_MCP_PROTOCOL_REVISIONS],
+    // The single negotiated version stays alongside it for clients written
+    // against the earlier draft, where discover returned only this.
     protocolVersion: revision,
     serverInfo: {
       name: `archestra-agent-${agentId}`,
@@ -393,9 +439,21 @@ function isRequest(body: unknown): boolean {
   return id !== undefined && id !== null;
 }
 
+function readMeta(body: unknown): Record<string, unknown> | undefined {
+  const meta = readParams(body)?._meta;
+  if (typeof meta !== "object" || meta === null) return undefined;
+  return meta as Record<string, unknown>;
+}
+
+function readMetaProtocolVersion(body: unknown): string | undefined {
+  const value = readMeta(body)?.[MCP_PROTOCOL_VERSION_META_KEY];
+  return typeof value === "string" ? value : undefined;
+}
+
 function hasStatelessClientInfo(body: unknown): boolean {
-  const params = readParams(body);
-  const meta = params?._meta;
-  if (typeof meta !== "object" || meta === null) return false;
-  return MCP_CLIENT_INFO_META_KEY in (meta as Record<string, unknown>);
+  const meta = readMeta(body);
+  if (!meta) return false;
+  return (
+    MCP_CLIENT_INFO_META_KEY in meta || MCP_CLIENT_CAPABILITIES_META_KEY in meta
+  );
 }

@@ -146,6 +146,10 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     const body = response.json();
     expect(body.id).toBe(7);
     expect(body.result.protocolVersion).toBe(STATELESS_MCP_PROTOCOL_REVISION);
+    expect(body.result.protocolVersions).toEqual([
+      STATELESS_MCP_PROTOCOL_REVISION,
+      LEGACY_MCP_PROTOCOL_REVISION,
+    ]);
     expect(body.result.serverInfo.name).toBe(`archestra-agent-${agent.id}`);
     expect(body.result.capabilities.tools).toEqual({ listChanged: false });
     expect(body.result.capabilities.extensions).toHaveProperty(
@@ -176,7 +180,7 @@ describe("MCP Gateway - protocol revision negotiation", () => {
 
     expect(response.statusCode).toBe(400);
     const body = response.json();
-    expect(body.error.code).toBe(-32600);
+    expect(body.error.code).toBe(-32020);
     expect(body.error.message).toContain("does not match request method");
     // The id is echoed so the client can correlate the failure.
     expect(body.id).toBe(3);
@@ -277,6 +281,34 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     expect(response.headers["mcp-protocol-version"]).toBe(
       STATELESS_MCP_PROTOCOL_REVISION,
     );
+  });
+
+  test("every cacheable result carries private cache hints", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    // The revision requires ttlMs/cacheScope on all five of these, not just
+    // tools/list.
+    const { agent, token } = await setup({ makeAgent, makeOrganization });
+
+    for (const method of [
+      "tools/list",
+      "prompts/list",
+      "resources/list",
+      "resources/templates/list",
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method, params: {}, id: 11 },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { result } = response.json();
+      expect(result.ttlMs).toBeGreaterThan(0);
+      expect(result.cacheScope).toBe("private");
+    }
   });
 
   test("GET discovery advertises both supported revisions", async ({

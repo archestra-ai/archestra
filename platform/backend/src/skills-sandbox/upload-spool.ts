@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ReplayEntry } from "@archestra/sandbox-rs";
-import config from "@/config";
 import logger from "@/logging";
 import SkillSandboxFileModel from "@/models/skill-sandbox-file";
 import type { SkillSandboxFileMetadata } from "@/types";
@@ -21,8 +21,43 @@ import { FileBytesMissingError } from "./object-store";
 export const SPOOL_MIN_BYTES = 256 * 1024;
 
 /**
+ * Host-side twin of the in-container attachments dir: the fixed local cache
+ * where large upload payloads live for BuildKit filesync. Deliberately not
+ * configurable — the location of sandbox file storage never was. Pure cache:
+ * recreated from Postgres on demand, safe to clear.
+ */
+export const SANDBOX_UPLOAD_SPOOL_ROOT = path.join(
+  tmpdir(),
+  "archestra-sandbox-attachments",
+);
+
+/**
+ * Write an upload's spool file from bytes already in hand — staging just
+ * inserted the row — so the first materialize filesyncs without re-reading
+ * the payload from Postgres. Small files never spool. Best-effort: the spool
+ * is cache, so a failure only means the first materialize re-reads the row.
+ */
+export async function warmUploadSpool(
+  upload: SkillSandboxFileMetadata,
+  data: Buffer,
+): Promise<void> {
+  if (upload.sizeBytes < SPOOL_MIN_BYTES) return;
+  try {
+    const dest = path.join(SANDBOX_UPLOAD_SPOOL_ROOT, upload.id);
+    const stat = await fs.stat(dest).catch(() => null);
+    if (stat?.size === upload.sizeBytes) return;
+    await writeSpoolFile(dest, data);
+  } catch (error) {
+    logger.debug(
+      { error, uploadId: upload.id },
+      "[UploadSpool] warm-from-bytes failed",
+    );
+  }
+}
+
+/**
  * Build the replay entry for an upload, choosing its byte transport. Large
- * payloads are spooled to `config.skillsSandbox.spoolDir` (named by the
+ * payloads are spooled to {@link SANDBOX_UPLOAD_SPOOL_ROOT} (named by the
  * immutable row id) and referenced via `hostPath`; a spool hit skips the
  * Postgres byte read entirely. Small payloads load lazily and inline as
  * base64, exactly as before.
@@ -72,8 +107,7 @@ let tempCounter = 0;
 async function ensureSpooled(
   upload: SkillSandboxFileMetadata,
 ): Promise<string> {
-  const root = config.skillsSandbox.spoolDir;
-  const dest = path.join(root, upload.id);
+  const dest = path.join(SANDBOX_UPLOAD_SPOOL_ROOT, upload.id);
   try {
     const stat = await fs.stat(dest);
     if (stat.size === upload.sizeBytes) {
@@ -87,6 +121,13 @@ async function ensureSpooled(
   }
 
   const data = await loadUploadData(upload.id);
+  await writeSpoolFile(dest, data);
+  return dest;
+}
+
+/** mkdir + atomic tmp/rename publish + best-effort eviction sweep. */
+async function writeSpoolFile(dest: string, data: Buffer): Promise<void> {
+  const root = path.dirname(dest);
   await fs.mkdir(root, { recursive: true, mode: 0o700 });
   tempCounter += 1;
   const temp = `${dest}.tmp-${process.pid}-${tempCounter}`;
@@ -97,7 +138,6 @@ async function ensureSpooled(
   void sweepSpool(root, dest).catch((error) => {
     logger.debug({ error, root }, "[UploadSpool] eviction sweep failed");
   });
-  return dest;
 }
 
 async function loadUploadData(id: string): Promise<Buffer> {

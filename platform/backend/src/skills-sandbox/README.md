@@ -59,11 +59,13 @@ new command. Each event is applied in `sequence` order: a command re-executes,
 an upload re-writes its bytes at its absolute path, a skill mount writes the
 pinned version's `SKILL.md` (+ its version files) under `/skills/<name>`.
 Small uploads inline their bytes in the recipe; large ones (over
-`SPOOL_MIN_BYTES` in `upload-spool.ts`) are spooled to a local cache dir and
-referenced by path, so BuildKit filesync ships the bytes to the engine once per
-content instead of on every materialize — and a spool hit skips the Postgres
-payload read entirely. The spool is pure cache: recreated from the DB on
-demand, evicted LRU past its size cap, safe to clear.
+`SPOOL_MIN_BYTES` in `upload-spool.ts`) are spooled to a fixed local cache dir
+(`archestra-sandbox-attachments` under the OS temp dir — deliberately not
+configurable, like sandbox file storage generally) and referenced by path, so
+BuildKit filesync ships the bytes to the engine once per content instead of on
+every materialize — and a spool hit skips the Postgres payload read entirely.
+The spool is pure cache: recreated from the DB on demand, evicted LRU past its
+size cap, safe to clear.
 Interleaving is preserved, so a file uploaded between command A and command B is
 **not** present while A replays — the on-disk order always matches the order
 operations were accepted.
@@ -78,9 +80,14 @@ materializes on the next `run_command` / `download_file` replay.
 Files the user attaches in chat are auto-staged into the conversation's
 **default** sandbox so the model can use them without juggling attachment ids
 (the failure mode that motivated this: the model can't see attachment ids, so it
-otherwise guesses). On each `run_command` / `download_file`, before context is
-built, `stageConversationAttachments` (in `skill-sandbox-runtime-service.ts`,
-run inside the per-sandbox queue) appends an upload replay event for every
+otherwise guesses). Staging happens at **upload time**: the chat route fires
+`stageConversationAttachmentsNow` as soon as a turn's attachments persist, so a
+file the model can't take is already on the sandbox filesystem (and its spool
+file already written, bytes in hand) when the pointer notice reaches the model.
+On each `run_command` / `download_file`, before context is built,
+`stageConversationAttachments` (in `skill-sandbox-runtime-service.ts`,
+run inside the per-sandbox queue) remains the idempotent catch-up: it appends
+an upload replay event for every
 not-yet-staged attachment of the sandbox's conversation, at
 `/home/sandbox/attachments/<sanitized-name>` (duplicate names get a short
 attachment-id suffix). It is idempotent (tracked via `source_attachment_id` +

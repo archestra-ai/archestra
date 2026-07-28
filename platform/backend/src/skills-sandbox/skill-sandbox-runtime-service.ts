@@ -43,7 +43,11 @@ import {
   type UploadFileParams,
   type UploadRef,
 } from "./types";
-import { uploadReplayEntry } from "./upload-spool";
+import {
+  SANDBOX_UPLOAD_SPOOL_ROOT,
+  uploadReplayEntry,
+  warmUploadSpool,
+} from "./upload-spool";
 
 const CONSUMER_ID = "skill-sandbox";
 // synthetic exit code recorded when the runtime errored mid-call and the real
@@ -125,7 +129,7 @@ class SkillSandboxRuntimeService {
           environment: params.environment,
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
-          spoolRoot: config.skillsSandbox.spoolDir,
+          spoolRoot: SANDBOX_UPLOAD_SPOOL_ROOT,
           cpuSeconds: config.skillsSandbox.cpuLimit,
           memoryBytes: config.skillsSandbox.memoryLimit,
         });
@@ -236,7 +240,7 @@ class SkillSandboxRuntimeService {
           // here invalidates Dagger's per-replay layer cache.
           outputBytesLimit: config.skillsSandbox.outputBytesLimit,
           fileSizeLimitBytes: config.skillsSandbox.artifactBytesLimit,
-          spoolRoot: config.skillsSandbox.spoolDir,
+          spoolRoot: SANDBOX_UPLOAD_SPOOL_ROOT,
           cpuSeconds: config.skillsSandbox.cpuLimit,
           memoryBytes: config.skillsSandbox.memoryLimit,
         });
@@ -564,6 +568,38 @@ class SkillSandboxRuntimeService {
    * the sandbox row inside the critical section so `fn` observes a replay
    * state no concurrent operation can move under it.
    */
+  /**
+   * Stage the conversation's attachments into its default sandbox at upload
+   * time instead of waiting for the first sandbox operation, so a file the
+   * model can't take is already on the sandbox filesystem when the pointer
+   * notice reaches it. Same dedup as op-time staging (which stays as the
+   * idempotent catch-up); never throws — a failure only delays staging to
+   * the next op.
+   */
+  async stageConversationAttachmentsNow(params: {
+    organizationId: string;
+    userId: string;
+    conversationId: string;
+  }): Promise<void> {
+    if (!config.skillsSandbox.enabled) return;
+    try {
+      const sandbox = await SkillSandboxModel.findOrCreateDefault({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        conversationId: params.conversationId,
+        defaultCwd: SKILL_SANDBOX_HOME,
+      });
+      await this.runWithSandbox(asSandboxId(sandbox.id), (loaded) =>
+        stageConversationAttachments(loaded),
+      );
+    } catch (error) {
+      logger.warn(
+        { error, conversationId: params.conversationId },
+        "[SkillSandbox] upload-time attachment staging failed",
+      );
+    }
+  }
+
   private runWithSandbox<T>(
     sandboxId: SandboxId,
     fn: (sandbox: SkillSandbox) => Promise<T>,
@@ -1052,7 +1088,7 @@ async function stageConversationAttachments(
     // sanitized names are always valid; this guards our own path logic and
     // fails loudly (not silently) if that ever regresses.
     validateUploadPath(path);
-    await SkillSandboxReplayEventModel.appendUpload({
+    const staged = await SkillSandboxReplayEventModel.appendUpload({
       sandboxId: sandbox.id,
       userId: sandbox.userId,
       path,
@@ -1062,6 +1098,12 @@ async function stageConversationAttachments(
       data: full.fileData,
       sourceAttachmentId: full.id,
     });
+    if (staged) {
+      // bytes are in hand — write the spool file now, so the first
+      // materialize filesyncs without re-reading the payload from Postgres.
+      const { data: _data, ...metadata } = staged;
+      await warmUploadSpool(metadata, full.fileData);
+    }
   }
   return notices;
 }

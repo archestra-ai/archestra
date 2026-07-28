@@ -1,4 +1,4 @@
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -2326,15 +2326,6 @@ const config = {
       process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
       DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
     ),
-    /**
-     * Local directory where large upload payloads are spooled so the Dagger
-     * engine pulls them via filesync (once per content) instead of receiving
-     * them inline in every materialize request. Pure cache — recreated from
-     * Postgres on demand, safe to clear at any time.
-     */
-    spoolDir:
-      process.env.ARCHESTRA_SKILLS_SANDBOX_SPOOL_DIR ||
-      path.join(tmpdir(), "archestra-sandbox-upload-spool"),
   },
   /**
    * agent lifecycle hooks — user scripts run at chat lifecycle events.

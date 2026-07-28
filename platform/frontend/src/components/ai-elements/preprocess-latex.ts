@@ -14,19 +14,20 @@
  * Complements `normalize-math.ts`, which covers the bracket forms LibreChat
  * does not handle. Run this first: it works on the original text, and the `$$`
  * regions it produces are then protected by normalize-math's own scan.
+ *
+ * Upstream's mhchem branch is deliberately not vendored. It rewrites `$\ce{…}$`
+ * to `$$\\ce{…}$$`, and KaTeX reads that doubled backslash as a line break, so
+ * the formula came out as bare letters ("ceH2O") that read as content. Nothing
+ * loads `katex/contrib/mhchem` here either, so `\ce` is an undefined control
+ * sequence either way — but left intact it renders as `\ce` in the plugin's
+ * errorColor, which at least reads as a command that failed.
  */
 export function preprocessLaTeX(content: string): string {
   // Early return for most common case
   if (!content.includes("$")) return content;
 
-  // Process mhchem first (usually rare, so check if needed)
-  let processed = content;
-  if (content.includes("\\ce{") || content.includes("\\pu{")) {
-    processed = escapeMhchem(content);
-  }
-
   // Find all code block regions once
-  const codeRegions = findCodeBlockRegions(processed);
+  const codeRegions = findCodeBlockRegions(content);
 
   // First pass: escape currency dollar signs
   const parts: string[] = [];
@@ -34,17 +35,17 @@ export function preprocessLaTeX(content: string): string {
 
   CURRENCY_REGEX.lastIndex = 0;
 
-  let match = CURRENCY_REGEX.exec(processed);
+  let match = CURRENCY_REGEX.exec(content);
   while (match !== null) {
     if (!isInCodeBlock(match.index, codeRegions)) {
-      parts.push(processed.substring(lastIndex, match.index));
+      parts.push(content.substring(lastIndex, match.index));
       parts.push("\\$");
       lastIndex = match.index + 1;
     }
-    match = CURRENCY_REGEX.exec(processed);
+    match = CURRENCY_REGEX.exec(content);
   }
-  parts.push(processed.substring(lastIndex));
-  processed = parts.join("");
+  parts.push(content.substring(lastIndex));
+  const processed = parts.join("");
 
   // Second pass: convert single dollar delimiters to double dollars. Regions
   // are recomputed because the currency pass shifted every offset after the
@@ -79,23 +80,6 @@ const CURRENCY_REGEX =
 // an escaped or code-adjacent closer.
 const SINGLE_DOLLAR_REGEX =
   /(?<!\\)\$(?!\$)((?:[^$\n]|\\[$])+?)(?<!\\)(?<!`)\$(?!\$)/g;
-
-/**
- * Escapes mhchem package notation in LaTeX by converting single dollar
- * delimiters to double dollars and escaping backslashes in mhchem commands.
- */
-function escapeMhchem(text: string): string {
-  let result = text.replace(MHCHEM_CE_REGEX, "$\\\\ce{");
-  result = result.replace(MHCHEM_PU_REGEX, "$\\\\pu{");
-  result = result.replace(MHCHEM_CE_ESCAPED_REGEX, (match) => `$${match}$`);
-  result = result.replace(MHCHEM_PU_ESCAPED_REGEX, (match) => `$${match}$`);
-  return result;
-}
-
-const MHCHEM_CE_REGEX = /\$\\ce\{/g;
-const MHCHEM_PU_REGEX = /\$\\pu\{/g;
-const MHCHEM_CE_ESCAPED_REGEX = /\$\\\\ce\{[^}]*\}\$/g;
-const MHCHEM_PU_ESCAPED_REGEX = /\$\\\\pu\{[^}]*\}\$/g;
 
 /**
  * Code regions that must not be rewritten, as [start, end] pairs.

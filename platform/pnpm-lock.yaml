@@ -762,8 +762,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
       katex:
-        specifier: ^0.17.0
-        version: 0.17.0
+        specifier: ^0.16.27
+        version: 0.16.28
       lodash-es:
         specifier: 4.18.1
         version: 4.18.1
@@ -8475,10 +8475,6 @@ packages:
 
   katex@0.16.28:
     resolution: {integrity: sha512-YHzO7721WbmAL6Ov1uzN/l5mY5WWWhJBSW+jq4tkfZfsxmo1hu6frS0EOswvjBUnWE6NtjEs48SFn5CQESRLZg==}
-    hasBin: true
-
-  katex@0.17.0:
-    resolution: {integrity: sha512-Vdw0ATsQ9V+LuegM/BTwQqV/6cTl5lbGcIrU+BCgLxyf6bo38ybOr372tuSIxir3CN720flu1meYR6XzNMwQnw==}
     hasBin: true
 
   keyv@5.6.0:
@@ -19292,10 +19288,6 @@ snapshots:
   jwt-decode@4.0.0: {}
 
   katex@0.16.28:
-    dependencies:
-      commander: 8.3.0
-
-  katex@0.17.0:
     dependencies:
       commander: 8.3.0
 

@@ -57,4 +57,14 @@ describe("preprocessLaTeX", () => {
       "```\n$5\n```\n\n$$x^2$$",
     );
   });
+
+  // Upstream doubles the backslash on mhchem commands, and KaTeX reads `\\` as
+  // a line break — the formula came out as stray letters with no error to show
+  // for it. That branch is not vendored, so the command reaches KaTeX intact.
+  it.each([
+    ["ce", "$\\ce{H2O}$ is water", "$$\\ce{H2O}$$ is water"],
+    ["pu", "mass $\\pu{123 kg}$ here", "mass $$\\pu{123 kg}$$ here"],
+  ])("leaves a \\%s command's backslash alone", (_label, input, expected) => {
+    expect(preprocessLaTeX(input)).toBe(expected);
+  });
 });

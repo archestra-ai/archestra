@@ -7,7 +7,11 @@
 @import "streamdown/styles.css";
 /* KaTeX glyph metrics and layout rules for the @streamdown/math plugin. Without
    it rendered formulas collapse into unpositioned spans. Streamdown never
-   injects this itself — its plugin only reports the path via getStyles(). */
+   injects this itself — its plugin only reports the path via getStyles().
+   The `katex` dependency exists only to resolve this path, so its range has to
+   track the katex that @streamdown/math renders with (`^0.16.27`). Bump it past
+   that and this stylesheet stops matching the markup it is styling — silently,
+   because nothing in the build or the tests compares the two. */
 @import "katex/dist/katex.min.css";
 @import "./themes.css";
 

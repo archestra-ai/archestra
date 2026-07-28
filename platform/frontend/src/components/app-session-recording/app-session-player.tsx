@@ -5437,14 +5437,6 @@ export function buildPlayback(recording: PlaybackRecording): {
 } {
   const source = finalVersionOnly(recording);
   const cuts = normalizeCuts(source.edits?.cuts ?? []);
-  /**
-   * A moment a cut removes — one that collapses onto the cut's instant rather
-   * than playing. The cut's own START still plays (it is the last kept
-   * moment); its END does not, matching how the bundle pruner and the
-   * trailing-trim filter read the same boundaries.
-   */
-  const insideCut = (t: number) =>
-    cuts.some((cut) => cut.fromMs < t && t <= cut.toMs);
   const anchors = new Set<number>([0, Math.max(0, source.durationMs)]);
   // When the author was actually USING the app, bounded by their first and last
   // input to it. Time inside that stretch is never compressed: it is the app
@@ -5528,6 +5520,34 @@ export function buildPlayback(recording: PlaybackRecording): {
       cut.toMs >= rawDataEnd - TRIM_EDGE_EPS_MS && cut.fromMs < rawDataEnd,
   );
   const withinEnd = (t: number) => !tailCut || t <= tailCut.fromMs;
+
+  /**
+   * A moment a MID cut removes — one that collapses onto the cut's instant
+   * rather than playing. The cut's own START still plays (it is the last kept
+   * moment); its END does not, matching how the bundle pruner and the
+   * trailing-trim filter read the same boundaries.
+   *
+   * ONLY mid cuts, and that restriction is the whole point. A head trim is
+   * stored as one cut reaching the axis floor, and pre-recording chat carries
+   * large NEGATIVE times — a real submission trims its first 25 seconds and
+   * stores {fromMs: -58041135, toMs: 25073}. Reading that as "everything in
+   * here was removed" swallows the entire conversation: measured across the
+   * live gallery it settled 73 of 73 and 20 of 20 messages, and those players
+   * replayed a fully-formed chat that never typed a character.
+   *
+   * A head trim does not delete conversation — it starts the demo later, and
+   * the history before it is exactly what this player exists to animate. A MID
+   * cut is the one that genuinely removes a stretch, so it is the one whose
+   * chat collapses. An end trim leaves its messages alone too: they still
+   * play, and charging them nothing would only shorten the tail nobody sees.
+   */
+  const midCuts = cuts.filter(
+    (cut) =>
+      cut.fromMs > leadStart + TRIM_EDGE_EPS_MS &&
+      cut.toMs < rawDataEnd - TRIM_EDGE_EPS_MS,
+  );
+  const insideCut = (t: number) =>
+    midCuts.some((cut) => cut.fromMs < t && t <= cut.toMs);
 
   // How long the chat pane will still be animating from each raw instant. An
   // assistant turn reveals over real wall-clock time (see messageRevealMs),

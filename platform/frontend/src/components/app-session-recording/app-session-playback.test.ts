@@ -202,6 +202,64 @@ describe("buildPlayback", () => {
     expect(withReply.duration).toBeGreaterThan(withoutReply.duration);
   });
 
+  it("leaves a head trim's chat animating — it starts the demo later, it does not delete conversation", () => {
+    // The regression this guards. A head trim is stored as ONE cut reaching the
+    // axis floor, and pre-recording chat carries large negative times: a real
+    // submission trims its first 25s and stores {fromMs: -58041135, toMs:
+    // 25073}. Treating everything in there as removed settled 73 of 73 messages
+    // on one live gallery card and 20 of 20 on another — both replayed a
+    // fully-formed chat that never typed a character.
+    const playback = buildPlayback(
+      recording({
+        durationMs: 40_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 30_000, type: "click", x: 1, y: 1 },
+        ] as Recording["events"],
+        transcript: [
+          reply("history-1", -8_047_639),
+          reply("history-2", -357_100),
+          reply("recorded", 5_000),
+        ] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: -8_048_839, toMs: 10_000 }] },
+      }),
+    );
+
+    // Nothing is settled: the trim removed app replay, not the conversation.
+    expect(playback.transcript.map((m) => m.settled)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    // And every reply still draws itself.
+    const { schedule } = revealSchedule(playback.transcript, playback.duration);
+    for (const message of playback.transcript) {
+      const slot = schedule.get(message.id);
+      expect(slot?.end).toBeGreaterThan(slot?.start ?? 0);
+    }
+  });
+
+  it("leaves an end trim's chat animating too", () => {
+    const playback = buildPlayback(
+      recording({
+        durationMs: 40_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 5_000, type: "click", x: 1, y: 1 },
+        ] as Recording["events"],
+        transcript: [
+          reply("kept", 1_000),
+          reply("in-tail", 30_000),
+        ] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 40_000 }] },
+      }),
+    );
+    expect(playback.transcript.map((m) => m.settled)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
   it("marks a collapsed reply as already sent so it never types over the app", () => {
     const playback = buildPlayback(
       recording({

@@ -1641,6 +1641,33 @@ export class McpServerRuntimeManager {
           labelSelector: "app=mcp-server",
         });
 
+        // Ids on live deployments that are not active installs: which belong
+        // to soft-deleted rows? Those deployments survived a failed
+        // delete-time teardown (e.g. cluster unreachable at uninstall) and
+        // must be swept — the tombstone would otherwise keep the pod running
+        // forever. Ids unknown to the DB entirely keep the historical
+        // skip-don't-guess behavior.
+        const unknownIds = [
+          ...new Set(
+            deployments.items
+              .map((d) => d.metadata?.labels?.["mcp-server-id"])
+              .filter(
+                (id): id is string => id !== undefined && !serverById.has(id),
+              ),
+          ),
+        ];
+        // Best-effort: a failed lookup skips the tombstone sweep this round
+        // but must not abort the rest of the orphan sweep.
+        const tombstonedIds = await McpServerModel.findSoftDeletedIds(
+          unknownIds,
+        ).catch((err): Set<string> => {
+          logger.warn(
+            { err },
+            "Failed to resolve soft-deleted MCP server ids for orphan sweep",
+          );
+          return new Set();
+        });
+
         for (const deployment of deployments.items) {
           const labels = deployment.metadata?.labels;
           const deploymentName = deployment.metadata?.name;
@@ -1650,7 +1677,49 @@ export class McpServerRuntimeManager {
           if (!serverId) continue;
 
           const server = serverById.get(serverId);
-          if (!server) continue;
+          if (!server) {
+            if (tombstonedIds.has(serverId)) {
+              // REVIEW(non-blocking): the failure this sweep exists for — the
+              // whole delete-time removeMcpServer failing — strands five
+              // resource kinds (deployment, service, K8s env secret, docker
+              // registry secrets, network policy), but only two are reclaimed
+              // here. For a tombstone this sweep is the LAST cleaner (no DB
+              // row will ever trigger a full teardown again), so the env
+              // secret — which holds credential material — and the network
+              // policy leak forever. Both are derivable without the catalog
+              // for the single-tenant case: `mcp-server-${serverId}-secrets`
+              // and constructManagedNetworkPolicyName(deploymentName)
+              // (multitenant secrets are per-catalog and must be left alone).
+              // Either delete those two here as well, or document the gap.
+              logger.info(
+                { deploymentName, serverId, deploymentNamespace },
+                "Deleting MCP deployment for a soft-deleted install",
+              );
+              try {
+                await this.k8sAppsApi.deleteNamespacedDeployment({
+                  name: deploymentName,
+                  namespace: deploymentNamespace,
+                });
+              } catch (err) {
+                logger.warn(
+                  { err, deploymentName, deploymentNamespace },
+                  "Failed to delete MCP deployment for soft-deleted install",
+                );
+              }
+              try {
+                await this.k8sApi.deleteNamespacedService({
+                  name: `${deploymentName}-service`,
+                  namespace: deploymentNamespace,
+                });
+              } catch (err) {
+                logger.debug(
+                  { err, deploymentName, deploymentNamespace },
+                  "No service to delete for soft-deleted install (or already gone)",
+                );
+              }
+            }
+            continue;
+          }
 
           const catalog = await getCatalog(server.catalogId);
 

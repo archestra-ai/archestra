@@ -59213,6 +59213,7 @@ export type GetMcpServersData = {
         catalogId?: string;
         assignmentScope?: 'personal' | 'team' | 'org';
         assignmentTeamIds?: Array<string>;
+        status?: 'active' | 'deleted';
     };
     url: '/api/mcp_server';
 };
@@ -59309,6 +59310,7 @@ export type GetMcpServersResponses = {
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         ownerEmail?: string | null;
         catalogName?: string | null;
         users?: Array<string>;
@@ -59456,6 +59458,7 @@ export type InstallMcpServerResponses = {
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         ownerEmail?: string | null;
         catalogName?: string | null;
         users?: Array<string>;
@@ -59669,6 +59672,7 @@ export type GetMcpServerResponses = {
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         ownerEmail?: string | null;
         catalogName?: string | null;
         users?: Array<string>;
@@ -59807,6 +59811,7 @@ export type ReauthenticateMcpServerResponses = {
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         ownerEmail?: string | null;
         catalogName?: string | null;
         users?: Array<string>;
@@ -60218,6 +60223,7 @@ export type ReinstallMcpServerResponses = {
         oauthRefreshFailedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         ownerEmail?: string | null;
         catalogName?: string | null;
         users?: Array<string>;

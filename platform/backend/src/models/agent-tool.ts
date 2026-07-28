@@ -293,7 +293,12 @@ class AgentToolModel {
         schema.teamMembersTable,
         eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
       )
-      .where(eq(schema.teamMembersTable.userId, userId));
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
 
     const teamAccessibleIds = teamAccessibleServers.map((s) => s.mcpServerId);
 
@@ -316,6 +321,7 @@ class AgentToolModel {
             and(
               eq(schema.mcpServersTable.scope, "org"),
               eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+              notDeleted(schema.mcpServersTable),
             ),
           )
           .then((rows) => rows.map((s) => s.mcpServerId))
@@ -1022,7 +1028,12 @@ class AgentToolModel {
       const mcpServerIds = await db
         .select({ id: schema.mcpServersTable.id })
         .from(schema.mcpServersTable)
-        .where(eq(schema.mcpServersTable.ownerId, filters.mcpServerOwnerId))
+        .where(
+          and(
+            eq(schema.mcpServersTable.ownerId, filters.mcpServerOwnerId),
+            notDeleted(schema.mcpServersTable),
+          ),
+        )
         .then((rows) => rows.map((r) => r.id));
 
       if (mcpServerIds.length > 0) {
@@ -1171,11 +1182,17 @@ class AgentToolModel {
 
     const agentIds = agentsInTeam.map((a) => a.agentId);
 
-    // Get all MCP servers owned by this user
+    // Get all MCP servers owned by this user (soft-deleted installs already
+    // had their pins nulled at delete time, so active rows suffice)
     const userServers = await db
       .select({ id: schema.mcpServersTable.id })
       .from(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.ownerId, userId));
+      .where(
+        and(
+          eq(schema.mcpServersTable.ownerId, userId),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
 
     if (userServers.length === 0) {
       return 0;

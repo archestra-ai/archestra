@@ -357,6 +357,17 @@ describe("AuditLogTable", () => {
     );
   });
 
+  it("requests both active and soft-deleted MCP servers for the entity picker", () => {
+    mockUseAuditLogs.mockReturnValue(withEmpty());
+
+    renderTable();
+
+    expect(mockUseMcpServers).toHaveBeenCalledWith();
+    expect(mockUseMcpServers).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "deleted" }),
+    );
+  });
+
   it("entity picker lists non-agent entities and applies resourceId on pick", async () => {
     const push = vi.fn();
     vi.mocked(useRouter).mockReturnValue({
@@ -364,9 +375,13 @@ describe("AuditLogTable", () => {
       replace: vi.fn(),
     } as unknown as ReturnType<typeof useRouter>);
     mockUseAuditLogs.mockReturnValue(withEmpty());
-    mockUseMcpServers.mockReturnValue({
-      data: [{ id: "mcp-1", name: "context7" }],
-    });
+    // Two buckets are requested (active + deleted); only the active one has
+    // this server, mirroring the real API split.
+    mockUseMcpServers.mockImplementation((params?: { status?: string }) =>
+      params?.status === "deleted"
+        ? { data: [] }
+        : { data: [{ id: "mcp-1", name: "context7" }] },
+    );
 
     renderTable();
 

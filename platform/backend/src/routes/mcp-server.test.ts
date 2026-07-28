@@ -3883,6 +3883,70 @@ describe("mcp server core route coverage", () => {
   });
 
   describe("GET /api/mcp_server", () => {
+    test("status=deleted lists only uninstall tombstones", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "remote",
+        serverUrl: "https://mcp.example.com/mcp",
+      });
+      const active = await McpServerModel.create({
+        name: "still-installed",
+        catalogId: catalog.id,
+        serverType: "remote",
+        scope: "personal",
+        ownerId: user.id,
+      });
+      const removed = await McpServerModel.create({
+        name: "uninstalled",
+        catalogId: catalog.id,
+        serverType: "remote",
+        scope: "org",
+        ownerId: user.id,
+      });
+      await McpServerModel.delete(removed.id);
+
+      const deletedResponse = await app.inject({
+        method: "GET",
+        url: "/api/mcp_server?status=deleted",
+      });
+      expect(deletedResponse.statusCode).toBe(200);
+      const deletedServers = deletedResponse.json();
+      expect(deletedServers.map((s: { id: string }) => s.id)).toEqual([
+        removed.id,
+      ]);
+      expect(deletedServers[0].deletedAt).not.toBeNull();
+
+      const activeResponse = await app.inject({
+        method: "GET",
+        url: "/api/mcp_server",
+      });
+      expect(activeResponse.statusCode).toBe(200);
+      const activeIds = activeResponse.json().map((s: { id: string }) => s.id);
+      expect(activeIds).toContain(active.id);
+      expect(activeIds).not.toContain(removed.id);
+    });
+
+    test("status=deleted requires the delete permission", async () => {
+      hasPermissionMock.mockImplementation(async (permissions) => ({
+        success: !(
+          permissions as { mcpServerInstallation?: string[] }
+        ).mcpServerInstallation?.includes("delete"),
+        error: null,
+      }));
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/mcp_server?status=deleted",
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().error.message).toBe(
+        "You do not have permission to view deleted MCP servers",
+      );
+    });
+
     test("lists the agents using each server via explicit tool assignments", async ({
       makeInternalMcpCatalog,
       makeMcpServer,
@@ -4164,6 +4228,44 @@ describe("mcp server core route coverage", () => {
         );
       expect(assignmentAfter).toHaveLength(1);
       expect(assignmentAfter[0].mcpServerId).toBeNull();
+    });
+
+    test("uninstall soft-deletes the row and removes the remote OAuth secret", async ({
+      makeInternalMcpCatalog,
+      makeSecret,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "remote",
+        serverUrl: "https://mcp.example.com/mcp",
+      });
+      const secret = await makeSecret();
+      const server = await McpServerModel.create({
+        name: "tombstoned-remote",
+        catalogId: catalog.id,
+        serverType: "remote",
+        scope: "personal",
+        ownerId: user.id,
+        secretId: secret.id,
+      });
+
+      const response = await app.inject({
+        method: "DELETE",
+        url: `/api/mcp_server/${server.id}`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ success: true });
+
+      // Tombstone: the row survives for audit history but is hidden from
+      // reads, and the remote OAuth secret is deleted (not retained).
+      const [raw] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+      expect(raw.deletedAt).not.toBeNull();
+      expect(raw.secretId).toBeNull();
+      await expect(McpServerModel.findById(server.id)).resolves.toBeNull();
+      await expect(secretManager().getSecret(secret.id)).resolves.toBeNull();
     });
 
     test("refuses to delete an app server with 400", async ({

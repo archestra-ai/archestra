@@ -815,6 +815,72 @@ describe("ToolModel", () => {
       expect(result[0].catalogId).toBe(healthyCatalog.id);
     });
 
+    test("a soft-deleted install does not count as a healthy connection", async ({
+      makeUser,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    }) => {
+      const user = await makeUser();
+      const agent = await makeAgent();
+
+      // The tombstoned catalog's only install is healthy on paper (success,
+      // no OAuth error) but soft-deleted — it must rank below a genuinely
+      // active install, otherwise an uninstalled server keeps its tools
+      // looking connected.
+      const tombstonedCatalog = await makeInternalMcpCatalog({
+        name: "weather-fixture-tombstoned",
+        serverUrl: "https://weather.example.com/mcp",
+      });
+      const tombstonedServer = await makeMcpServer({
+        name: "Weather Fixture",
+        catalogId: tombstonedCatalog.id,
+        ownerId: user.id,
+        localInstallationStatus: "success",
+      });
+      // Stamp the tombstone directly — the delete flow itself is covered by
+      // the McpServerModel tests; this pins the health predicate's SQL.
+      await db
+        .update(schema.mcpServersTable)
+        .set({ deletedAt: new Date() })
+        .where(eq(schema.mcpServersTable.id, tombstonedServer.id));
+      const tombstonedTool = await ToolModel.createToolIfNotExists({
+        name: "weather_fixture__get_weather",
+        description: "only install is soft-deleted",
+        parameters: {},
+        catalogId: tombstonedCatalog.id,
+      });
+
+      const activeCatalog = await makeInternalMcpCatalog({
+        name: "weather-fixture-active",
+        serverUrl: "https://weather.example.com/mcp",
+      });
+      await makeMcpServer({
+        name: "Weather Fixture",
+        catalogId: activeCatalog.id,
+        ownerId: user.id,
+        localInstallationStatus: "success",
+      });
+      const activeTool = await ToolModel.createToolIfNotExists({
+        name: "weather_fixture__get_weather",
+        description: "active install",
+        parameters: {},
+        catalogId: activeCatalog.id,
+      });
+
+      // Assign the tombstoned one first so a naive first-row pick finds it.
+      await AgentToolModel.create(agent.id, tombstonedTool.id);
+      await AgentToolModel.create(agent.id, activeTool.id);
+
+      const result = await ToolModel.getMcpToolsAssignedToAgent(
+        ["weather_fixture__get_weather"],
+        agent.id,
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[0].catalogId).toBe(activeCatalog.id);
+    });
+
     test("does not rank a static pin to a broken server as healthy just because its catalog has an unrelated working install", async ({
       makeUser,
       makeAgent,

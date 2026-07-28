@@ -1,5 +1,7 @@
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { secretManager } from "@/secrets-manager";
 import { describe, expect, mustExist, test } from "@/test";
 import McpServerModel from "./mcp-server";
 import McpServerUserModel from "./mcp-server-user";
@@ -1044,6 +1046,232 @@ describe("McpServerModel", () => {
       });
       expect(renamed?.reinstallRequired).toBe(true);
       expect(renamed?.reinstallReason).toBe("restart");
+    });
+  });
+
+  describe("soft delete", () => {
+    // Remote installs skip the K8s teardown branch, keeping these tests
+    // independent of the runtime manager.
+    async function makeRemoteServer(overrides: {
+      catalogId: string;
+      secretId?: string | null;
+      ownerId?: string | null;
+      scope?: "personal" | "team" | "org";
+    }) {
+      const [server] = await db
+        .insert(schema.mcpServersTable)
+        .values({
+          name: `remote-server-${crypto.randomUUID().substring(0, 8)}`,
+          serverType: "remote",
+          ...overrides,
+        })
+        .returning();
+      return server;
+    }
+
+    test("delete tombstones the row and hides it from finders", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+      const server = await makeRemoteServer({ catalogId: catalog.id });
+
+      await expect(McpServerModel.delete(server.id)).resolves.toBe(true);
+
+      // The row survives as a tombstone...
+      const [raw] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+      expect(raw.deletedAt).not.toBeNull();
+
+      // ...but every finder treats it as gone.
+      await expect(McpServerModel.findById(server.id)).resolves.toBeNull();
+      await expect(McpServerModel.findByIdsBasic([server.id])).resolves.toEqual(
+        [],
+      );
+      await expect(McpServerModel.findByCatalogId(catalog.id)).resolves.toEqual(
+        [],
+      );
+      const all = await McpServerModel.findAll();
+      expect(all.map((s) => s.id)).not.toContain(server.id);
+
+      // Idempotent: a second delete finds nothing to transition.
+      await expect(McpServerModel.delete(server.id)).resolves.toBe(false);
+    });
+
+    test("delete removes the secret bundle for remote servers", async ({
+      makeInternalMcpCatalog,
+      makeSecret,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+      const secret = await makeSecret();
+      const server = await makeRemoteServer({
+        catalogId: catalog.id,
+        secretId: secret.id,
+      });
+
+      await expect(McpServerModel.delete(server.id)).resolves.toBe(true);
+
+      // The OAuth-token secret is gone and the tombstone's secret_id was
+      // nulled by the secrets FK.
+      await expect(secretManager().getSecret(secret.id)).resolves.toBeNull();
+      const [raw] = await db
+        .select()
+        .from(schema.mcpServersTable)
+        .where(eq(schema.mcpServersTable.id, server.id));
+      expect(raw.secretId).toBeNull();
+    });
+
+    test("delete clears tool pins and per-install junction rows", async ({
+      makeInternalMcpCatalog,
+      makeUser,
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+      const server = await makeRemoteServer({ catalogId: catalog.id });
+      const owner = await makeUser();
+
+      const agent = await makeAgent();
+      const tool = await makeTool({ catalogId: catalog.id });
+      const agentTool = await makeAgentTool(agent.id, tool.id, {
+        mcpServerId: server.id,
+      });
+      await McpServerUserModel.assignUserToMcpServer(server.id, owner.id);
+      await db.insert(schema.appPinsTable).values({
+        userId: owner.id,
+        mcpServerId: server.id,
+        resourceUri: "ui://widget",
+        toolName: "widget",
+      });
+
+      await expect(McpServerModel.delete(server.id)).resolves.toBe(true);
+
+      // The assignment survives unpinned (mirrors the old FK ON DELETE SET
+      // NULL), the junction rows are gone (mirrors ON DELETE CASCADE).
+      const [assignment] = await db
+        .select()
+        .from(schema.agentToolsTable)
+        .where(eq(schema.agentToolsTable.id, agentTool.id));
+      expect(assignment.mcpServerId).toBeNull();
+      await expect(
+        db
+          .select()
+          .from(schema.mcpServerUsersTable)
+          .where(eq(schema.mcpServerUsersTable.mcpServerId, server.id)),
+      ).resolves.toEqual([]);
+      await expect(
+        db
+          .select()
+          .from(schema.appPinsTable)
+          .where(eq(schema.appPinsTable.mcpServerId, server.id)),
+      ).resolves.toEqual([]);
+    });
+
+    test("purge removes the row entirely", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+      const server = await makeRemoteServer({ catalogId: catalog.id });
+
+      await expect(McpServerModel.purge(server.id)).resolves.toBe(true);
+
+      await expect(
+        db
+          .select()
+          .from(schema.mcpServersTable)
+          .where(eq(schema.mcpServersTable.id, server.id)),
+      ).resolves.toEqual([]);
+    });
+
+    test("findByIdForAudit still resolves a tombstone", async ({
+      makeInternalMcpCatalog,
+      makeOrganization,
+    }) => {
+      const organization = await makeOrganization();
+      const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+      // Unowned + teamless rows qualify for any org (legacy/system branch).
+      const server = await makeRemoteServer({ catalogId: catalog.id });
+
+      await expect(McpServerModel.delete(server.id)).resolves.toBe(true);
+
+      const snapshot = await McpServerModel.findByIdForAudit(
+        server.id,
+        organization.id,
+      );
+      expect(snapshot).not.toBeNull();
+      expect(snapshot?.id).toBe(server.id);
+      expect(snapshot?.name).toBe(server.name);
+    });
+
+    test("findSoftDeletedIds classifies only tombstoned ids", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+      const active = await makeRemoteServer({ catalogId: catalog.id });
+      const deleted = await makeRemoteServer({ catalogId: catalog.id });
+      await McpServerModel.delete(deleted.id);
+
+      const result = await McpServerModel.findSoftDeletedIds([
+        active.id,
+        deleted.id,
+        "00000000-0000-4000-8000-0000000000ff",
+      ]);
+      expect(result).toEqual(new Set([deleted.id]));
+    });
+
+    test("a tombstone does not block reinstalling the same catalog item", async ({
+      makeInternalMcpCatalog,
+      makeUser,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+      const owner = await makeUser();
+      const server = await makeRemoteServer({
+        catalogId: catalog.id,
+        ownerId: owner.id,
+        scope: "personal",
+      });
+
+      await McpServerModel.delete(server.id);
+
+      // The duplicate-install guards resolve through this lookup: a
+      // tombstone must not be returned as "already installed".
+      await expect(
+        McpServerModel.getUserPersonalServerForCatalog(owner.id, catalog.id),
+      ).resolves.toBeNull();
+    });
+
+    test("update refuses tombstones", async ({ makeInternalMcpCatalog }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+      const server = await makeRemoteServer({ catalogId: catalog.id });
+      await McpServerModel.delete(server.id);
+
+      await expect(
+        McpServerModel.update(server.id, { name: "renamed" }),
+      ).resolves.toBeNull();
+    });
+
+    test("findAll status 'deleted' lists tombstones", async ({
+      makeInternalMcpCatalog,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+      const active = await makeRemoteServer({ catalogId: catalog.id });
+      const deleted = await makeRemoteServer({ catalogId: catalog.id });
+      await McpServerModel.delete(deleted.id);
+
+      const deletedBucket = await McpServerModel.findAll(
+        undefined,
+        undefined,
+        undefined,
+        "deleted",
+      );
+      expect(deletedBucket.map((s) => s.id)).toEqual([deleted.id]);
+      expect(deletedBucket[0].deletedAt).not.toBeNull();
+
+      const activeBucket = await McpServerModel.findAll();
+      expect(activeBucket.map((s) => s.id)).toContain(active.id);
+      expect(activeBucket.map((s) => s.id)).not.toContain(deleted.id);
     });
   });
 });

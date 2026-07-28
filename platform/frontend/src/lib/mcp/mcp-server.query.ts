@@ -54,6 +54,7 @@ export function useMcpServers(params?: McpServersParams) {
         catalogId: params?.catalogId,
         assignmentScope: params?.assignmentScope,
         assignmentTeamIds: params?.assignmentTeamIds,
+        status: params?.status,
       },
     ],
     queryFn: async () => {
@@ -61,7 +62,8 @@ export function useMcpServers(params?: McpServersParams) {
         query:
           params?.catalogId ||
           params?.assignmentScope ||
-          params?.assignmentTeamIds
+          params?.assignmentTeamIds ||
+          params?.status
             ? {
                 ...(params?.catalogId && { catalogId: params.catalogId }),
                 ...(params?.assignmentScope && {
@@ -70,6 +72,7 @@ export function useMcpServers(params?: McpServersParams) {
                 ...(params?.assignmentTeamIds && {
                   assignmentTeamIds: params.assignmentTeamIds,
                 }),
+                ...(params?.status && { status: params.status }),
               }
             : undefined,
       });

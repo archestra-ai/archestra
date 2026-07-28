@@ -278,7 +278,10 @@ export function AuditLogTable() {
   });
 
   // The remaining LIST_NAME_RESOURCE_TYPES entities for the entity picker.
+  // MCP servers use the same two-bucket pattern as agents: uninstalls are
+  // soft-deleted, so a removed server's history stays reachable here.
   const { data: mcpServers } = useMcpServers();
+  const { data: deletedMcpServers } = useMcpServers({ status: "deleted" });
   const { data: teams } = useTeams();
   const { data: rolesResponse } = useRolesPaginated({
     limit: ENTITY_FILTER_LIMIT,
@@ -333,6 +336,13 @@ export function AuditLogTable() {
     const deletedAgents = toOptions(deletedAgentsResponse?.data, "agent").map(
       (option) => ({ ...option, description: "Agent (deleted)" }),
     );
+    const deletedMcpServerOptions = toOptions(
+      deletedMcpServers,
+      "mcpServer",
+    ).map((option) => ({
+      ...option,
+      description: `${formatResourceType("mcpServer")} (deleted)`,
+    }));
     // External catalog apps carry no id (and are not audited) — only owned
     // apps can be picked.
     const ownedApps = appsResponse?.data?.filter(
@@ -343,6 +353,7 @@ export function AuditLogTable() {
       ...toOptions(activeAgentsResponse?.data, "agent"),
       ...deletedAgents,
       ...toOptions(mcpServers, "mcpServer"),
+      ...deletedMcpServerOptions,
       ...toOptions(teams, "team"),
       ...toOptions(rolesResponse?.data, "role"),
       ...toOptions(environmentList?.environments, "environment"),
@@ -353,6 +364,7 @@ export function AuditLogTable() {
     activeAgentsResponse,
     deletedAgentsResponse,
     mcpServers,
+    deletedMcpServers,
     teams,
     rolesResponse,
     environmentList,

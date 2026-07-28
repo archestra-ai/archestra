@@ -105,6 +105,8 @@ export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
     id: true,
     createdAt: true,
     updatedAt: true,
+    // Lifecycle-owned: only McpServerModel.delete stamps the tombstone.
+    deletedAt: true,
     // Frozen K8s deployment identity — computed by McpServerModel.create /
     // the startup adopt pass, never accepted from input.
     deploymentName: true,
@@ -125,6 +127,8 @@ export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
   .omit({
     serverType: true, // serverType should not be updated after creation
     scope: true, // scope is install-time only; to change scope, uninstall + reinstall
+    // Lifecycle-owned: only McpServerModel.delete stamps the tombstone.
+    deletedAt: true,
     // Frozen at creation/adopt time — renames must never touch it
     deploymentName: true,
   })

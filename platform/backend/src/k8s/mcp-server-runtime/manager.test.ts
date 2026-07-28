@@ -99,6 +99,7 @@ vi.mock("@/models/mcp-server", () => ({
   default: {
     findById: vi.fn().mockResolvedValue(null),
     findByCatalogId: vi.fn().mockResolvedValue([]),
+    findSoftDeletedIds: vi.fn().mockResolvedValue(new Set()),
     setDeploymentName: vi.fn().mockResolvedValue(undefined),
   },
 }));
@@ -2212,6 +2213,57 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
     );
     expect(mockDeleteService).toHaveBeenCalledWith(
       expect.objectContaining({ name: "mcp-legacy-name-service" }),
+    );
+  });
+
+  test("deletes deployments whose install was soft-deleted (failed delete-time teardown)", async () => {
+    const TOMBSTONED_ID = "123e4567-e89b-12d3-a456-426614174111";
+    const UNKNOWN_ID = "123e4567-e89b-12d3-a456-426614174222";
+    vi.mocked(McpServerModel.findSoftDeletedIds).mockResolvedValueOnce(
+      new Set([TOMBSTONED_ID]),
+    );
+
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const mockDeleteService = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: mockDeleteService },
+      mockK8sAppsApi: {
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [
+            {
+              metadata: {
+                name: "mcp-tombstoned",
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": TOMBSTONED_ID,
+                },
+              },
+            },
+            // Unknown to the DB entirely — keeps the historical
+            // skip-don't-guess behavior.
+            {
+              metadata: {
+                name: "mcp-unknown",
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": UNKNOWN_ID,
+                },
+              },
+            },
+          ],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+
+    await callCleanup(manager, []);
+
+    expect(mockDeleteDeployment).toHaveBeenCalledOnce();
+    expect(mockDeleteDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-tombstoned" }),
+    );
+    expect(mockDeleteService).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "mcp-tombstoned-service" }),
     );
   });
 

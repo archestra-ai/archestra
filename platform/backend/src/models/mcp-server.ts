@@ -12,7 +12,9 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
 import logger from "@/logging";
@@ -171,6 +173,7 @@ class McpServerModel {
         and(
           eq(schema.teamMembersTable.userId, userId),
           eq(schema.mcpServersTable.scope, "team"),
+          notDeleted(schema.mcpServersTable),
         ),
       );
 
@@ -185,7 +188,12 @@ class McpServerModel {
     const rows = await db
       .select({ id: schema.mcpServersTable.id })
       .from(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.scope, "org"));
+      .where(
+        and(
+          eq(schema.mcpServersTable.scope, "org"),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
     return rows.map((r) => r.id);
   }
 
@@ -203,6 +211,7 @@ class McpServerModel {
         and(
           eq(schema.mcpServersTable.id, mcpServerId),
           eq(schema.mcpServersTable.scope, "org"),
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);
@@ -229,6 +238,7 @@ class McpServerModel {
           eq(schema.mcpServersTable.id, mcpServerId),
           eq(schema.teamMembersTable.userId, userId),
           eq(schema.mcpServersTable.scope, "team"),
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);
@@ -238,7 +248,9 @@ class McpServerModel {
 
   /**
    * When the first MCP server was connected; null when none exist. An
-   * activation signal for the feedback pop-up.
+   * activation signal for the feedback pop-up. Deliberately includes
+   * soft-deleted rows — "has ever connected a server" is a historical fact
+   * that uninstalling must not reset.
    */
   static async getFirstCreatedAt(): Promise<Date | null> {
     const [row] = await db
@@ -264,6 +276,7 @@ class McpServerModel {
         and(
           isNotNull(schema.mcpServersTable.catalogId),
           inArray(schema.mcpServersTable.serverType, ["local", "remote"]),
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .orderBy(
@@ -276,10 +289,18 @@ class McpServerModel {
     userId?: string,
     isMcpServerAdmin?: boolean,
     organizationId?: string,
+    /**
+     * Lifecycle bucket, defaulting to active installs. "deleted" lists
+     * uninstall tombstones — used by the audit-log entity filter so a
+     * deleted server's audit rows stay resolvable/filterable. Access-scope
+     * ids only ever cover active installs, so non-admin callers get an empty
+     * deleted bucket.
+     */
+    status: "active" | "deleted" = "active",
   ): Promise<McpServer[]> {
     // Single query with LEFT JOINs for all related data including assigned users,
     // eliminating the consecutive DB query for user details.
-    let query = db
+    const query = db
       .select({
         server: schema.mcpServersTable,
         ownerEmail: schema.usersTable.email,
@@ -318,6 +339,12 @@ class McpServerModel {
       )
       .$dynamic();
 
+    const conditions = [
+      status === "deleted"
+        ? isNotNull(schema.mcpServersTable.deletedAt)
+        : notDeleted(schema.mcpServersTable),
+    ];
+
     // Apply access control filtering for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
       // Get MCP servers accessible through:
@@ -347,12 +374,12 @@ class McpServerModel {
         return [];
       }
 
-      query = query.where(
+      conditions.push(
         inArray(schema.mcpServersTable.id, accessibleMcpServerIds),
       );
     }
 
-    const results = await query;
+    const results = await query.where(and(...conditions));
 
     // Aggregate rows by server (LEFT JOIN on assigned users creates duplicates)
     const serversMap = new Map<string, McpServer>();
@@ -721,6 +748,7 @@ class McpServerModel {
         and(
           inArray(schema.mcpServersTable.id, accessibleServerIds),
           eq(schema.mcpServersTable.catalogId, params.catalogId),
+          notDeleted(schema.mcpServersTable),
         ),
       );
     // Stable selector order: scope precedence, then name.
@@ -851,6 +879,7 @@ class McpServerModel {
         and(
           inArray(schema.mcpServersTable.id, accessibleServerIds),
           inArray(schema.mcpServersTable.catalogId, params.catalogIds),
+          notDeleted(schema.mcpServersTable),
         ),
       );
     rows.sort(
@@ -929,7 +958,12 @@ class McpServerModel {
         schema.secretsTable,
         eq(schema.mcpServersTable.secretId, schema.secretsTable.id),
       )
-      .where(eq(schema.mcpServersTable.id, id));
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
 
     if (!result) {
       return null;
@@ -977,6 +1011,26 @@ class McpServerModel {
   }
 
   /**
+   * Which of `ids` belong to soft-deleted rows. Used by the runtime orphan
+   * sweep to recognize live deployments whose install was tombstoned but
+   * whose delete-time K8s teardown failed (e.g. cluster unreachable at
+   * uninstall time).
+   */
+  static async findSoftDeletedIds(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await db
+      .select({ id: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, ids),
+          isNotNull(schema.mcpServersTable.deletedAt),
+        ),
+      );
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /**
    * Find multiple MCP servers by IDs with a single query.
    * Returns basic table records (no JOINs) for lightweight validation.
    */
@@ -988,7 +1042,12 @@ class McpServerModel {
     return db
       .select()
       .from(schema.mcpServersTable)
-      .where(inArray(schema.mcpServersTable.id, ids));
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, ids),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   /**
@@ -1018,6 +1077,7 @@ class McpServerModel {
       .where(
         and(
           eq(schema.mcpServersTable.id, id),
+          notDeleted(schema.mcpServersTable),
           or(
             eq(schema.teamsTable.organizationId, organizationId),
             isNotNull(schema.membersTable.id),
@@ -1039,7 +1099,12 @@ class McpServerModel {
     return await (tx ?? db)
       .select()
       .from(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.catalogId, catalogId));
+      .where(
+        and(
+          eq(schema.mcpServersTable.catalogId, catalogId),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   static async findByCatalogIds(catalogIds: string[]): Promise<McpServer[]> {
@@ -1047,15 +1112,28 @@ class McpServerModel {
     return await db
       .select()
       .from(schema.mcpServersTable)
-      .where(inArray(schema.mcpServersTable.catalogId, catalogIds));
+      .where(
+        and(
+          inArray(schema.mcpServersTable.catalogId, catalogIds),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   static async findCustomServers(): Promise<McpServer[]> {
-    // Find servers that don't have a catalogId (custom installations)
+    // Find servers that don't have a catalogId (custom installations).
+    // notDeleted also keeps catalog-cascade tombstones out: deleting a
+    // catalog nulls its installs' catalogId via FK, which would otherwise
+    // make every one of those tombstones look "custom".
     return await db
       .select()
       .from(schema.mcpServersTable)
-      .where(isNull(schema.mcpServersTable.catalogId));
+      .where(
+        and(
+          isNull(schema.mcpServersTable.catalogId),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   static async update(
@@ -1080,7 +1158,12 @@ class McpServerModel {
       [updatedServer] = await (tx ?? db)
         .update(schema.mcpServersTable)
         .set(serverData)
-        .where(eq(schema.mcpServersTable.id, id))
+        .where(
+          and(
+            eq(schema.mcpServersTable.id, id),
+            notDeleted(schema.mcpServersTable),
+          ),
+        )
         .returning();
 
       if (!updatedServer) {
@@ -1091,7 +1174,12 @@ class McpServerModel {
       const [existingServer] = await (tx ?? db)
         .select()
         .from(schema.mcpServersTable)
-        .where(eq(schema.mcpServersTable.id, id));
+        .where(
+          and(
+            eq(schema.mcpServersTable.id, id),
+            notDeleted(schema.mcpServersTable),
+          ),
+        );
 
       if (!existingServer) {
         return null;
@@ -1116,7 +1204,12 @@ class McpServerModel {
     await db
       .update(schema.mcpServersTable)
       .set({ scope })
-      .where(eq(schema.mcpServersTable.id, id));
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   /**
@@ -1129,13 +1222,43 @@ class McpServerModel {
     const [updatedServer] = await db
       .update(schema.mcpServersTable)
       .set({ teamId })
-      .where(eq(schema.mcpServersTable.id, id))
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          notDeleted(schema.mcpServersTable),
+        ),
+      )
       .returning();
 
     return updatedServer || null;
   }
 
+  /**
+   * Soft-delete an install after full destructive teardown. The row survives
+   * as a tombstone (audit history, log entity filters) but everything it
+   * owned is gone: the K8s deployment is removed, the secret bundle is
+   * deleted (remote OAuth tokens included — a tombstone must not retain live
+   * credentials), and tool pins are cleared. Tombstones are never restorable;
+   * reinstalling the catalog item always creates a fresh row.
+   */
   static async delete(id: string): Promise<boolean> {
+    return McpServerModel.teardownAndRemove(id, "soft");
+  }
+
+  /**
+   * Hard-delete an install (same teardown, real row removal). Reserved for
+   * rows that must not leave a tombstone: rollback of a failed install and
+   * app-backing servers (their app is the audited entity, and app create
+   * rollback would otherwise leak ghost rows).
+   */
+  static async purge(id: string): Promise<boolean> {
+    return McpServerModel.teardownAndRemove(id, "hard");
+  }
+
+  private static async teardownAndRemove(
+    id: string,
+    mode: "soft" | "hard",
+  ): Promise<boolean> {
     // First, get the MCP server to find its associated secret
     const mcpServer = await McpServerModel.findById(id);
 
@@ -1155,12 +1278,6 @@ class McpServerModel {
       // Continue with deletion even if session cleanup fails
     }
 
-    // Uninstall retains the catalog's tools, their policies, and the agent ↔ tool
-    // assignments so reconnecting the catalog item restores them. The mcp_server
-    // delete below nulls each assignment's server binding via the agent_tools FK
-    // (onDelete: set null); a tool's availability is derived from whether the
-    // catalog still has an install, not from removing these rows.
-
     // For local servers, stop and remove the K8s deployment
     if (mcpServer.serverType === "local") {
       try {
@@ -1177,15 +1294,71 @@ class McpServerModel {
       }
     }
 
-    // Delete the MCP server from database
-    logger.info(`Deleting MCP server: ${mcpServer.name} with id: ${id}`);
-    const result = await db
-      .delete(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.id, id));
+    logger.info(
+      `Deleting MCP server (${mode}): ${mcpServer.name} with id: ${id}`,
+    );
 
-    const deleted = result.rowCount !== null && result.rowCount > 0;
+    let deleted: boolean;
+    if (mode === "hard") {
+      // Real DELETE — the FKs fire (agent_tools/app_tools/apps set null,
+      // mcp_server_user/app_pins cascade).
+      deleted =
+        (await hardDelete(
+          db,
+          schema.mcpServersTable,
+          eq(schema.mcpServersTable.id, id),
+        )) > 0;
+    } else {
+      // Uninstall retains the catalog's tools, their policies, and the
+      // agent/app ↔ tool assignments so reconnecting the catalog item
+      // restores them. A soft delete no longer fires the FK ON DELETE
+      // actions, so their effects are replicated here explicitly: pins are
+      // nulled (a tool's availability is derived from whether the catalog
+      // still has an active install, not from removing assignment rows) and
+      // the per-install junction rows are removed. `apps.mcp_server_id` is
+      // deliberately not touched — app backing servers only ever go through
+      // purge(), where the real FK handles it.
+      deleted = await withDbTransaction(async (tx) => {
+        await tx
+          .update(schema.agentToolsTable)
+          .set({ mcpServerId: null })
+          .where(eq(schema.agentToolsTable.mcpServerId, id));
+        await tx
+          .update(schema.appToolsTable)
+          .set({ mcpServerId: null })
+          .where(eq(schema.appToolsTable.mcpServerId, id));
+        await tx
+          .delete(schema.mcpServerUsersTable)
+          .where(eq(schema.mcpServerUsersTable.mcpServerId, id));
+        await tx
+          .delete(schema.appPinsTable)
+          .where(eq(schema.appPinsTable.mcpServerId, id));
+        const count = await softDelete(
+          tx,
+          schema.mcpServersTable,
+          eq(schema.mcpServersTable.id, id),
+        );
+        return count > 0;
+      });
+    }
 
-    // If the MCP server was deleted and it had an associated secret, delete the secret
+    // Delete the secret bundle for BOTH server types. Remote installs store
+    // OAuth tokens here — a tombstone (or rolled-back row) must not keep
+    // live credentials around. Deleting the secrets row auto-nulls the
+    // tombstone's secret_id via its ON DELETE SET NULL FK.
+    //
+    // REVIEW(blocking): this await is unguarded, and by this point the soft
+    // delete has already committed. If deleteSecret throws: (a) the uninstall
+    // route 500s even though the server is actually gone; (b) a retry can
+    // never reach the secret again — delete() re-resolves through findById,
+    // which now filters the tombstone out, so the OAuth/credential bundle
+    // leaks until someone spots it in the secrets UI, violating the
+    // "tombstone must not retain live credentials" invariant stated above;
+    // (c) in InternalMcpCatalogModel.delete's cascade loop the throw aborts
+    // the remaining installs AND the catalog hard-delete, leaving the catalog
+    // half-deleted. The old route path caught secret-deletion failures for
+    // local servers and continued; this rework made the unguarded model call
+    // the only path. Wrap in try/catch + logger.error and return `deleted`.
     if (deleted && mcpServer.secretId) {
       await secretManager().deleteSecret(mcpServer.secretId);
     }
@@ -1282,6 +1455,7 @@ class McpServerModel {
           eq(schema.mcpServersTable.catalogId, catalogId),
           inArray(schema.mcpServersTable.teamId, teamIds),
           isNotNull(schema.mcpServersTable.secretId),
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);
@@ -1319,6 +1493,7 @@ class McpServerModel {
           eq(schema.mcpServersTable.catalogId, catalogId),
           eq(schema.mcpServersTable.ownerId, userId),
           eq(schema.mcpServersTable.scope, "personal"),
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);
@@ -1346,6 +1521,7 @@ class McpServerModel {
           inArray(schema.mcpServersTable.catalogId, catalogIds),
           eq(schema.mcpServersTable.ownerId, userId),
           eq(schema.mcpServersTable.scope, "personal"),
+          notDeleted(schema.mcpServersTable),
         ),
       );
 
@@ -1409,6 +1585,8 @@ class McpServerModel {
     id: string,
     organizationId: string,
   ): Promise<Record<string, unknown> | null> {
+    // Deliberately includes soft-deleted rows: audit snapshots must keep
+    // resolving after an uninstall tombstones the install.
     // `mcp_server` has no direct `organization_id` column, so we infer org
     // membership through related rows. A snapshot is returned only when at
     // least one of these holds:

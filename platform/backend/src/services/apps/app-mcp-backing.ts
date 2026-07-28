@@ -105,8 +105,9 @@ export async function createAppBacking(params: {
   } catch (error) {
     // Roll back partial backing so the app is never left half-wired (delete the
     // server before its catalog — the catalog delete then cascades the launch
-    // tool and its assignments).
-    if (server) await McpServerModel.delete(server.id).catch(() => {});
+    // tool and its assignments). purge, not delete: a rollback must not leave
+    // a tombstone for a backing that never became visible.
+    if (server) await McpServerModel.purge(server.id).catch(() => {});
     if (catalog)
       await InternalMcpCatalogModel.delete(catalog.id).catch(() => {});
     throw error;
@@ -239,7 +240,9 @@ export async function deleteAppBacking(app: App): Promise<void> {
   if (!app.mcpServerId) return;
   try {
     const server = await McpServerModel.findById(app.mcpServerId);
-    await McpServerModel.delete(app.mcpServerId);
+    // purge, not delete: the app is the audited entity; its backing server
+    // must not leave an mcp_server tombstone of its own.
+    await McpServerModel.purge(app.mcpServerId);
     if (server?.catalogId) {
       await InternalMcpCatalogModel.delete(server.catalogId);
     }

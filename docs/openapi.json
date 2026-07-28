@@ -231803,6 +231803,18 @@
             "in": "query",
             "name": "assignmentTeamIds",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "deleted"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
           }
         ],
         "responses": {
@@ -231949,6 +231961,11 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "deletedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
                       "ownerEmail": {
                         "nullable": true,
                         "type": "string"
@@ -232077,7 +232094,8 @@
                       "oauthRefreshErrorDescription",
                       "oauthRefreshFailedAt",
                       "createdAt",
-                      "updatedAt"
+                      "updatedAt",
+                      "deletedAt"
                     ],
                     "additionalProperties": false
                   }
@@ -232564,6 +232582,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "ownerEmail": {
                       "nullable": true,
                       "type": "string"
@@ -232692,7 +232715,8 @@
                     "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -233097,6 +233121,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "ownerEmail": {
                       "nullable": true,
                       "type": "string"
@@ -233225,7 +233254,8 @@
                     "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -233939,6 +233969,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "ownerEmail": {
                       "nullable": true,
                       "type": "string"
@@ -234067,7 +234102,8 @@
                     "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -235414,6 +235450,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "ownerEmail": {
                       "nullable": true,
                       "type": "string"
@@ -235542,7 +235583,8 @@
                     "oauthRefreshErrorDescription",
                     "oauthRefreshFailedAt",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }

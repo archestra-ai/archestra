@@ -75,12 +75,33 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               z.array(z.string()),
             )
             .optional(),
+          /**
+           * Lifecycle bucket: "deleted" lists uninstall tombstones (for the
+           * audit-log entity filter). Defaults to active installs.
+           */
+          status: z.enum(["active", "deleted"]).optional(),
         }),
         response: constructResponseSchema(z.array(SelectMcpServerSchema)),
       },
     },
     async ({ user, headers, query, organizationId }, reply) => {
-      const { assignmentScope, assignmentTeamIds, catalogId } = query;
+      const { assignmentScope, assignmentTeamIds, catalogId, status } = query;
+
+      // Mirrors the agents listing: seeing the deleted bucket requires the
+      // delete permission on the resource, not just read.
+      if (status === "deleted") {
+        const { success } = await hasPermission(
+          { mcpServerInstallation: ["delete"] },
+          headers,
+        );
+        if (!success) {
+          throw new ApiError(
+            403,
+            "You do not have permission to view deleted MCP servers",
+          );
+        }
+      }
+
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         headers,
@@ -89,6 +110,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user.id,
         isMcpServerAdmin,
         organizationId,
+        status,
       );
 
       // serverType:"app" backings are managed on the Apps surface, not listed as
@@ -1084,8 +1106,10 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           localInstallationError: null,
         });
       } catch (toolError) {
-        // If fetching/creating tools fails, clean up everything we created
-        await McpServerModel.delete(mcpServer.id);
+        // If fetching/creating tools fails, clean up everything we created.
+        // purge, not delete: the install never became visible, so a rollback
+        // must not leave an audit tombstone behind.
+        await McpServerModel.purge(mcpServer.id);
 
         // Also clean up the secret if we created one
         if (createdSecretId) {
@@ -1485,25 +1509,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Delete database secret if it exists and is for a local server
-      // (don't delete OAuth tokens for remote servers)
-      if (mcpServer.secretId && mcpServer.serverType === "local") {
-        try {
-          await secretManager().deleteSecret(mcpServer.secretId);
-          logger.info(
-            { mcpServerId },
-            "Deleted database secret for local MCP server",
-          );
-        } catch (error) {
-          logger.error(
-            { err: error, mcpServerId },
-            "Failed to delete database secret",
-          );
-          // Continue with MCP server deletion even if secret deletion fails
-        }
-      }
-
-      // Delete the MCP server record
+      // Soft-delete the MCP server record. The model handles the full
+      // teardown, including deleting the secret bundle for BOTH local and
+      // remote servers — a tombstone must not retain live OAuth tokens.
       const success = await McpServerModel.delete(mcpServerId);
 
       return reply.send({ success });

@@ -3806,12 +3806,14 @@ class ToolModel {
       (SELECT ${schema.mcpServersTable.localInstallationStatus} = 'success'
          AND ${schema.mcpServersTable.oauthRefreshError} IS NULL
        FROM ${schema.mcpServersTable}
-       WHERE ${schema.mcpServersTable.id} = ${assignmentMcpServerId}),
+       WHERE ${schema.mcpServersTable.id} = ${assignmentMcpServerId}
+         AND ${schema.mcpServersTable.deletedAt} IS NULL),
       EXISTS (
         SELECT 1 FROM ${schema.mcpServersTable}
         WHERE ${schema.mcpServersTable.catalogId} = ${schema.toolsTable.catalogId}
           AND ${schema.mcpServersTable.localInstallationStatus} = 'success'
           AND ${schema.mcpServersTable.oauthRefreshError} IS NULL
+          AND ${schema.mcpServersTable.deletedAt} IS NULL
       )
     )`;
   }

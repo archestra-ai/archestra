@@ -33,7 +33,10 @@ class InstanceUsageModel {
         })
         .from(schema.llmProviderApiKeysTable),
       db.select({ total: count() }).from(schema.virtualApiKeysTable),
-      db.select({ total: count() }).from(schema.mcpServersTable),
+      db
+        .select({ total: count() })
+        .from(schema.mcpServersTable)
+        .where(notDeleted(schema.mcpServersTable)),
       db.select({ total: count() }).from(schema.conversationsTable),
       db.select({ total: count() }).from(schema.skillsTable),
       db

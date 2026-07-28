@@ -3,7 +3,6 @@ import {
   index,
   jsonb,
   pgEnum,
-  pgTable,
   text,
   timestamp,
   uuid,
@@ -16,6 +15,7 @@ import type {
 } from "@/types";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import { team } from "./team";
 import usersTable from "./user";
 
@@ -27,7 +27,10 @@ export const oauthRefreshErrorEnum = pgEnum("oauth_refresh_error_enum", [
   "no_refresh_token",
 ]);
 
-const mcpServerTable = pgTable(
+// Soft-deletable: uninstall tombstones the row (audit history, log filters)
+// after the destructive teardown — the pod, secret bundle, and tool pins are
+// still torn down at delete time, so a tombstone is never restorable.
+const mcpServerTable = softDeletablePgTable(
   "mcp_server",
   {
     id: uuid("id").primaryKey().defaultRandom(),

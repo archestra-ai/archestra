@@ -1,5 +1,6 @@
 import {
   CACHE_PRICE_MULTIPLIERS,
+  PROVIDERS_BILLING_NO_TOKEN_RATE,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -42,17 +43,6 @@ interface EffectivePricing {
   /** Source of the cache price, or null when unpriced. */
   cacheSource: PriceSource | null;
 }
-
-/**
- * Providers that charge no per-token rate, so their real price is zero rather
- * than unknown: the operator runs the server (vLLM, self-hosted Ollama), or the
- * vendor bills a flat subscription metered on compute time (Ollama's cloud).
- */
-const PROVIDERS_BILLING_NO_TOKEN_RATE = new Set<SupportedProvider>([
-  "ollama",
-  "ollama-native",
-  "vllm",
-]);
 
 /**
  * Returns default token prices for a model.

@@ -130,6 +130,60 @@ export function resolveDiscoveredModelRegistryEntry(params: {
  * as `-2407`/`-2411`, so stripping it would collapse two differently-priced
  * models onto one registry key.
  */
+/**
+ * Describe a model a self-hosted server serves, without asserting anything
+ * about the deployment.
+ *
+ * An operator names a model whatever they like, so the id is a HuggingFace path
+ * (`meta-llama/Llama-3.1-8B-Instruct`) far more often than a registry key
+ * (`meta/llama-3.1-8b-instruct`); matching on the trailing segment is what
+ * bridges the two. Nothing else here does that, deliberately — the shared
+ * first-party lookup backs the proxy-discovery path, where a looser match would
+ * begin asserting prices for models an operator merely named.
+ *
+ * Only modalities and tool support are reported. Prices belong to whoever
+ * serves the model, and the context window is set when the server is launched:
+ * registry entries for one model range over an order of magnitude precisely
+ * because each host chooses its own.
+ *
+ * Returns null unless every match agrees on the modalities, so an alias that
+ * collides with an unrelated vendor model reports nothing rather than something
+ * plausible.
+ */
+export function resolveSelfHostedModelMetadata(params: {
+  modelId: string;
+  modelsDevData: ModelsDevApiResponse;
+}): CrossProviderMetadata | null {
+  const { modelId, modelsDevData } = params;
+  const wanted = bareModelName(modelId);
+  if (!wanted) {
+    return null;
+  }
+
+  const matches: ModelsDevModel[] = [];
+  for (const modelsDevProviderId of FIRST_PARTY_REGISTRY_PROVIDERS) {
+    const models = modelsDevData[modelsDevProviderId]?.models ?? {};
+    for (const [key, model] of Object.entries(models)) {
+      if (bareModelName(model.id ?? key) === wanted) {
+        matches.push(model);
+      }
+    }
+  }
+  if (matches.length === 0) {
+    return null;
+  }
+
+  const readings = new Set(
+    matches.map((entry) => JSON.stringify(entry.modalities?.input ?? null)),
+  );
+  if (readings.size > 1) {
+    return null;
+  }
+
+  const metadata = metadataFromEntries(matches);
+  return metadata && { ...metadata, contextLength: null, outputLength: null };
+}
+
 export function stripModelDateSuffix(modelId: string): string {
   return modelId.replace(DATE_SUFFIX, "");
 }
@@ -377,6 +431,11 @@ function findFirstPartyRegistryEntry(
     }
   }
   return null;
+}
+
+/** The model's own name, with any owner prefix and casing removed. */
+function bareModelName(modelId: string): string {
+  return modelId.split("/").at(-1)?.trim().toLowerCase() ?? "";
 }
 
 function toArray<T>(value: T | null): T[] {

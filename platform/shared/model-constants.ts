@@ -115,6 +115,21 @@ const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
 ]);
 
 /**
+ * Providers that charge no per-token rate, so their real price is zero rather
+ * than unknown: the operator runs the server (vLLM, self-hosted Ollama), or the
+ * vendor bills a flat subscription metered on compute time (Ollama's cloud).
+ *
+ * Listed explicitly rather than derived from the self-hosted-provider set it
+ * currently matches, so that adding a keyless provider that does bill per token
+ * cannot silently make its traffic free.
+ */
+export const PROVIDERS_BILLING_NO_TOKEN_RATE = new Set<SupportedProvider>([
+  "ollama",
+  "ollama-native",
+  "vllm",
+]);
+
+/**
  * Providers that have no usable default endpoint, so an env-seeded key without an
  * explicit base URL is unusable: vLLM has no default at all (the OpenAI-compatible
  * SDK would silently fall back to api.openai.com), and Azure has no resource URL.

@@ -98,4 +98,43 @@ describe("fetchVllmModels", () => {
     const models = await fetchVllmModels("k");
     expect(models[0].createdAt).toBeUndefined();
   });
+
+  test("reports the context window the server was launched with", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ data: [{ id: "m", max_model_len: 131072 }] }),
+        { status: 200 },
+      ),
+    );
+    const models = await fetchVllmModels("k");
+    expect(models[0].capabilities?.contextLength).toBe(131072);
+  });
+
+  test("reports no capabilities when the server omits the field", async () => {
+    // Left absent rather than null so the tiers below still apply.
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: [{ id: "m" }] }), { status: 200 }),
+    );
+    const models = await fetchVllmModels("k");
+    expect(models[0].capabilities).toBeUndefined();
+  });
+
+  test.each([
+    ["a string", "131072"],
+    ["a float", 4096.5],
+    ["zero", 0],
+    ["a negative", -1],
+    ["null", null],
+  ])("discards a context window reported as %s", async (_label, value) => {
+    // The value lands in an integer column at the top of the priority chain,
+    // where nothing downstream can correct it.
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ data: [{ id: "m", max_model_len: value }] }),
+        { status: 200 },
+      ),
+    );
+    const models = await fetchVllmModels("k");
+    expect(models[0].capabilities).toBeUndefined();
+  });
 });

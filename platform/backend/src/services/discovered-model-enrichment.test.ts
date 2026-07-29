@@ -104,6 +104,34 @@ test("leaves a model the registry cannot place untouched", async () => {
   expect(model?.promptPricePerToken).toBeNull();
 });
 
+test("prices a Codex model no registry provider carries", async () => {
+  // models.dev never backfilled the pre-5.3 Codex models, so the first-party
+  // fallback finds nothing and the row would otherwise keep the estimate.
+  const created = await discover("gpt-5.1-codex", "bedrock");
+
+  expect(
+    await enrichDiscoveredModel({ model: created, modelsDevData: MODELS_DEV }),
+  ).toBe(true);
+  const model = await ModelModel.findByProviderAndModelId(
+    "bedrock",
+    "gpt-5.1-codex",
+  );
+  expect(Number(model?.promptPricePerToken)).toBe(0.00000125);
+  expect(Number(model?.completionPricePerToken)).toBe(0.00001);
+  expect(
+    ModelModel.getEffectivePricing(model ?? null, "gpt-5.1-codex").source,
+  ).not.toBe("default");
+});
+
+test("a registry entry still outranks the published map", async () => {
+  const created = await discover("gpt-4o", "bedrock");
+
+  await enrichDiscoveredModel({ model: created, modelsDevData: MODELS_DEV });
+
+  const model = await ModelModel.findByProviderAndModelId("bedrock", "gpt-4o");
+  expect(Number(model?.promptPricePerToken)).toBe(0.0000025);
+});
+
 test("a second sighting reports no insert, so enrichment does not re-run", async () => {
   await discover("gpt-4o", "bedrock");
 

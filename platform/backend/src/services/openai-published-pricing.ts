@@ -55,10 +55,21 @@ export function resolveOpenAiPublishedPrices(params: {
   modelId: string;
 }): OpenAiPublishedPrices | null {
   const { provider, modelId } = params;
-  if (provider !== "openai") {
-    return null;
-  }
+  return provider === "openai" ? lookupOpenAiPublishedPrices(modelId) : null;
+}
 
+/**
+ * Published prices for a model id, whatever provider it was recorded under.
+ *
+ * The LLM proxy writes a discovered model under the *endpoint's* provider, so a
+ * client naming a Codex model on a Bedrock endpoint produces a `bedrock` row.
+ * The price belongs to the model, and a reseller that publishes no rate of its
+ * own has nothing better to offer, so the lookup ignores the provider — the
+ * same reasoning that lets discovery fall back to a first-party registry entry.
+ */
+export function lookupOpenAiPublishedPrices(
+  modelId: string,
+): OpenAiPublishedPrices | null {
   const entry =
     PUBLISHED_PRICES[modelId] ??
     PUBLISHED_PRICES[stripModelDateSuffix(modelId)];

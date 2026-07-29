@@ -299,14 +299,17 @@ const PROVIDER_CONFIG: Record<
     consoleName: "DeepSeek Platform",
   },
   archestra: {
+    // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
     name: "Archestra",
     icon: "/icons/archestra.png",
     placeholder: "arch_...",
     enabled: true,
     consoleUrl: "https://archestra.ai/",
+    // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
     consoleName: "Archestra",
     baseUrlRequired: true,
     description:
+      // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
       "Route through another Archestra instance. On that instance, create an LLM Proxy and a virtual API key. Set the Base URL to the proxy's model router (e.g. https://your-archestra/v1/model-router/<llm-proxy-id>) and paste the virtual API key below.",
   },
   kimi: {

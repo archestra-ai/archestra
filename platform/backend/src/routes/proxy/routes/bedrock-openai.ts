@@ -122,6 +122,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     authorization: z
       .string()
       .optional()
+      // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
       .describe("Bearer token: Archestra virtual API key for Bedrock"),
   });
 

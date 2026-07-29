@@ -30,6 +30,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z
           .object({
             profileId: UuidIdSchema.optional().describe(
+              // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
               "Filter by profile ID (internal Archestra profile)",
             ),
             externalAgentId: z
@@ -153,6 +154,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z
           .object({
             profileId: UuidIdSchema.optional().describe(
+              // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
               "Filter by profile ID (internal Archestra profile)",
             ),
             userId: z

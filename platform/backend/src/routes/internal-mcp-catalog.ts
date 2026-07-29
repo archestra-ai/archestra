@@ -524,6 +524,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetInternalMcpCatalogTools,
         description:
+          // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
           "Get tools for a catalog item (including builtin Archestra tools)",
         tags: ["MCP Catalog"],
         params: z.object({

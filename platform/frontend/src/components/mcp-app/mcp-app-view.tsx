@@ -329,6 +329,7 @@ export const McpAppRuntime = function McpAppRuntime({
     const appBridge = new AppBridge(
       null,
       {
+        // white-label-ok: wire identifier, not copy
         name: "Archestra",
         version: process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0",
       },
@@ -350,6 +351,7 @@ export const McpAppRuntime = function McpAppRuntime({
           ),
           locale: navigator.language,
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          // white-label-ok: wire identifier, not copy
           userAgent: `Archestra/${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}`,
           styles: {
             variables: buildMcpUiStyleVariables(),
@@ -1379,6 +1381,7 @@ export function buildReplayHostContext(displayMode: McpUiDisplayMode) {
     containerDimensions: {},
     locale: navigator.language,
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    // white-label-ok: wire identifier, not copy
     userAgent: `Archestra/${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}`,
     styles: {
       variables: buildMcpUiStyleVariables(),

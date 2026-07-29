@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   ChatErrorCode,
+  DEFAULT_APP_NAME,
   providerDisplayNames,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
@@ -794,7 +795,7 @@ export class ChatOpsManager {
       // a task"), which matches neither the agent nor the chat display name.
       const platformName =
         (await OrganizationModel.getById(agent.organizationId))?.appName ||
-        "Archestra";
+        DEFAULT_APP_NAME;
       const botMentioned = message.metadata?.botMentioned === true;
       const mentionedOthers = Array.isArray(message.metadata?.mentionedOthers)
         ? (message.metadata.mentionedOthers as string[])

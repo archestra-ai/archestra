@@ -29,6 +29,7 @@ export const DEFAULT_APPS: readonly DefaultAppDefinition[] = [
     templateId: "default-app:demo-task-tracker",
     name: "Demo Task Tracker",
     description:
+      // white-label-ok: shipped default text; branded by brandBuiltInText where it is seeded
       "A simple task tracker demo app that uses Archestra's persistent shared data layer. Features a cinematic intro loader and lets colleagues collaborate on tasks together.",
     htmlFile: "demo-task-tracker.html",
   },
@@ -36,6 +37,7 @@ export const DEFAULT_APPS: readonly DefaultAppDefinition[] = [
     templateId: "default-app:demo-multiplayer-video-game",
     name: "Demo Multiplayer Video Game",
     description:
+      // white-label-ok: shipped default text; branded by brandBuiltInText where it is seeded
       "An 8-bit styled 2D top-down multiplayer shooter with a randomly generated map, built as a mini app in Archestra. Uses Archestra's shared data layer for multiplayer state and persistent storage so it can be shared with colleagues and played together.",
     htmlFile: "demo-multiplayer-video-game.html",
   },
@@ -43,6 +45,7 @@ export const DEFAULT_APPS: readonly DefaultAppDefinition[] = [
     templateId: "default-app:demo-data-analysis-tool",
     name: "Demo Data Analysis Tool",
     description:
+      // white-label-ok: shipped default text; branded by brandBuiltInText where it is seeded
       "A stylish graph viewer with timeframe selectors and a cinematic intro loader, built as a mini app in Archestra using the shared data layer for persistent, multiplayer-friendly storage.",
     htmlFile: "demo-data-analysis-tool.html",
   },
@@ -50,6 +53,7 @@ export const DEFAULT_APPS: readonly DefaultAppDefinition[] = [
     templateId: "default-app:demo-3d-object-viewer",
     name: "Demo 3D Object Viewer",
     description:
+      // white-label-ok: shipped default text; branded by brandBuiltInText where it is seeded
       "A stylish 3D object viewer that displays a randomly generated complex 3D shape you can rotate, with a cinematic fade-in/fade-out intro loader. Built as a mini app in Archestra.",
     htmlFile: "demo-3d-object-viewer.html",
   },

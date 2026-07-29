@@ -336,9 +336,9 @@ jobs:
           pnpm exec turbo check:ci --filter=!@backend
           pnpm exec turbo check:commit --filter=@backend
 
-      # Guards white-labeling: fails when new user- or LLM-facing copy hardcodes
-      # the brand instead of resolving the deployment's app name. Existing
-      # occurrences are baselined, so this only catches regressions.
+      # Guards white-labeling: fails when user- or LLM-facing copy hardcodes the
+      # brand instead of resolving the deployment's app name. Occurrences that
+      # legitimately name the vendor carry an inline `white-label-ok:` reason.
       - name: White-label copy check
         run: pnpm check:white-label
 

@@ -29,14 +29,13 @@ Runs automatically on PRs. **Blocks:** GPL, AGPL, Unknown. **Allows:** MIT, Apac
 
 # White-Label Copy Check
 
-Fails when new user- or LLM-facing copy hardcodes the `Archestra` brand instead
-of resolving the deployment's configured app name. Deployments can rebrand via
+Fails when user- or LLM-facing copy hardcodes the `Archestra` brand instead of
+resolving the deployment's configured app name. Deployments can rebrand via
 `organization.appName`; anything typed as a literal leaks the vendor's name to
 their users.
 
 ```bash
-pnpm check:white-label                    # CI mode (fails on new occurrences)
-pnpm check:white-label --update-baseline  # re-record known occurrences
+pnpm check:white-label
 ```
 
 Resolve the name at runtime instead:
@@ -54,20 +53,35 @@ they are contracts or diagnostics, not copy.
 
 ## Waiving an occurrence
 
-When a string genuinely names the vendor rather than the deployment — the
-`archestra` LLM provider names the upstream product you connect to, not this
-install — annotate the line:
+Some strings genuinely name the vendor rather than the deployment. Annotate the
+line, or the comment block above it, with a reason:
 
 ```ts
 // white-label-ok: names the upstream provider, not this deployment
 ```
 
-A reason is required. For files that are entirely about the default brand, add
-them to `ALLOWLISTED_FILES` / `ALLOWLISTED_DIRS` in the script instead.
+A reason is required — a bare marker does not suppress. The categories that
+legitimately need one:
 
-## Baseline
+| Category | Example |
+| --- | --- |
+| The `archestra` upstream LLM provider | chaining to another instance |
+| Wire identifiers | OpenAPI schema ids, MCP client `User-Agent` |
+| Text branded downstream | seeded prompts, tool descriptions, OpenAPI prose |
+| Internal error sentinels | matched by a handler that emits branded copy |
+| The vendor's own services | the hosted skills marketplace |
+| Default brand marks | shown only when no white-label logo is set |
 
-`white-label-baseline.json` records occurrences that predate the check, keyed by
-file plus the exact trimmed source line — so moving code does not churn it, but
-editing a flagged line re-raises it. The baseline is meant to shrink; when it
-does, the check says so and `--update-baseline` locks the win in.
+For files that are entirely about the default brand, add them to
+`ALLOWLISTED_FILES` / `ALLOWLISTED_DIRS` in the script instead.
+
+## Where branding happens downstream
+
+Not every literal can resolve the app name where it is written — some run before
+an organization has been loaded. Three seams handle those:
+
+- `archestraMcpBranding.brandBuiltInText()` — shipped platform text (built-in
+  skills, seeded prompts and demo apps, chat error defaults).
+- `getArchestraMcpTools()` — built-in MCP tool descriptions, at reconcile time.
+- `enrichOpenApiWithRbac()` — OpenAPI `description`/`summary`, per request,
+  because route schemas register before the branding singleton syncs.

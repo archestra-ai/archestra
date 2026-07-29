@@ -551,6 +551,7 @@ export async function processIncomingEmail(
           "[IncomingEmail] Private mode: sender email not found in Archestra users",
         );
         throw new Error(
+          // white-label-ok: internal error sentinel matched by the ChatOps handler; the user-facing sentence is branded there
           `Unauthorized: email sender ${senderEmail} is not a registered Archestra user`,
         );
       }

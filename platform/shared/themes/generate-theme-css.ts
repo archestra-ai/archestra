@@ -98,6 +98,7 @@ function generateThemeCSS(theme: ThemeItem): string {
  * Generate complete CSS file
  */
 function generateThemesCSS(): string {
+  // white-label-ok: header of a generated file — dev tooling output, not shipped copy
   const header = `/**
  * Theme definitions for Archestra platform
  * All themes from https://github.com/jnsahaj/tweakcn

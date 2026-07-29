@@ -45,7 +45,40 @@ export function enrichOpenApiWithRbac<T extends OpenApiDocument>(spec: T): T {
     }
   }
 
-  return clonedSpec;
+  return brandSpecText(clonedSpec) as T;
+}
+
+// === Internal helpers ===
+
+/**
+ * Rebrand the prose fields of the served spec.
+ *
+ * Route schemas are registered while the server is being built, which happens
+ * *before* the branding singleton is synced from the organization — so a route's
+ * `description` cannot resolve the app name where it is written. The spec is
+ * assembled per request, though, which makes this the one place that can.
+ *
+ * Only `description`/`summary` are rewritten, never arbitrary strings: schema
+ * ids, `$ref` targets, operationIds and enum values are wire identifiers, and
+ * rewriting a `$ref` value while its schema key stays put would produce a spec
+ * that no longer resolves. `brandBuiltInText` is a no-op for non-white-labeled
+ * deployments.
+ */
+const BRANDABLE_SPEC_KEYS = new Set(["description", "summary"]);
+
+function brandSpecText(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(brandSpecText);
+  }
+  if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      (value as Record<string, unknown>)[key] =
+        typeof child === "string" && BRANDABLE_SPEC_KEYS.has(key)
+          ? archestraMcpBranding.brandBuiltInText(child)
+          : brandSpecText(child);
+    }
+  }
+  return value;
 }
 
 // === Types ===

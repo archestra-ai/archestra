@@ -61,6 +61,11 @@ function OAuthCallbackContent() {
       const error = searchParams.get("error");
       const errorDescription = searchParams.get("error_description");
       const state = searchParams.get("state");
+      // RFC 9207: the authorization server may identify itself on the
+      // response. The backend compares it against the server the flow started
+      // with, so it has to reach it — dropping it here makes that check fail
+      // closed against exactly the servers that implement the RFC.
+      const iss = searchParams.get("iss");
 
       const initialError = getOAuthCallbackErrorState({
         code,
@@ -97,7 +102,11 @@ function OAuthCallbackContent() {
       try {
         // Exchange authorization code for access token
         const { catalogId, name, secretId } =
-          await callbackMutation.mutateAsync({ code, state });
+          await callbackMutation.mutateAsync({
+            code,
+            state,
+            ...(iss ? { iss } : {}),
+          });
 
         // Check if this is a re-authentication flow
         const mcpServerId = getOAuthMcpServerId();

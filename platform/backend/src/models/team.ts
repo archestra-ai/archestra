@@ -34,9 +34,9 @@ class TeamModel {
     const now = new Date();
     const { labels } = input;
 
-    // Insert the team row and its labels atomically so a failed label sync
-    // cannot leave a labelless team behind.
-    const team = await withDbTransaction(async (tx) => {
+    // Insert the team row, its creator's membership, and its labels atomically
+    // so a failed sync cannot leave a labelless or memberless team behind.
+    const { team, creatorMembership } = await withDbTransaction(async (tx) => {
       const [createdTeam] = await tx
         .insert(schema.teamsTable)
         .values({
@@ -53,11 +53,28 @@ class TeamModel {
         })
         .returning();
 
+      // `created_by` alone confers nothing: every team-scoped check reads
+      // `team_member`, so without this row the creator cannot see their own
+      // team under "my teams", cannot manage its members, and cannot assign
+      // team-scoped resources to it. Admin, because whoever creates a team is
+      // the one expected to fill it. `syncedFromSso` stays false so SSO team
+      // sync treats this as a manual membership and never removes it.
+      const [createdMembership] = await tx
+        .insert(schema.teamMembersTable)
+        .values({
+          id: crypto.randomUUID(),
+          teamId,
+          userId: input.createdBy,
+          role: ADMIN_ROLE_NAME,
+          createdAt: now,
+        })
+        .returning();
+
       if (labels && labels.length > 0) {
         await TeamLabelModel.syncTeamLabels(teamId, labels, tx);
       }
 
-      return createdTeam;
+      return { team: createdTeam, creatorMembership: createdMembership };
     });
     // No prune needed here: on create, label sync only creates keys/values and
     // inserts rows (never deletes), so nothing can be orphaned.
@@ -70,7 +87,7 @@ class TeamModel {
     logger.debug({ teamId }, "TeamModel.create: completed");
     return {
       ...team,
-      members: [],
+      members: [creatorMembership],
       labels: await TeamLabelModel.getLabelsForTeam(teamId),
     };
   }

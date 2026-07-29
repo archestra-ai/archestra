@@ -1573,6 +1573,167 @@ describe("read_app / edit_app", () => {
   });
 });
 
+describe("cross-conversation concurrent app editing (T-979)", () => {
+  // Two chats of the same user working on one app: chat A built it, chat B
+  // forked the head, and chat A keeps editing from its now-stale context.
+  // baseVersion is the only concurrency guard and models are told to pass it
+  // "only to guard against a concurrent edit" — which a chat can never know
+  // about — so today these stale writes land silently on top of work the
+  // editor never saw. These tests pin the required behavior: an edit that
+  // does not prove freshness against the head must surface a conflict, not
+  // silently supersede another conversation's work.
+  let context: ArchestraContext;
+  let organizationId: string;
+  let userId: string;
+  let agent: { id: string; name: string };
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const made = await makeAgent({ name: "Concurrent Editing Agent" });
+    organizationId = made.organizationId;
+    const user = await makeUser();
+    userId = user.id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    agent = { id: made.id, name: made.name };
+    context = { agent, organizationId, userId };
+  });
+
+  // Scaffold a fresh app in `ctx` and rewrite its seeded HTML to `html`
+  // (one full-document edit off version 1), returning the id and the head.
+  async function scaffoldTo(
+    ctx: ArchestraContext,
+    html: string,
+  ): Promise<{ appId: string; version: number }> {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: `App ${crypto.randomUUID().slice(0, 8)}` },
+      ctx,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+    const rewrite = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 1, replacementHtml: html },
+      ctx,
+    );
+    expect(rewrite.isError).toBe(false);
+    return { appId, version: structured(rewrite).latestVersion as number };
+  }
+
+  test("a stale full rewrite from another chat must not silently replace the head", async ({
+    makeConversation,
+  }) => {
+    const convA = await makeConversation(agent.id, { userId, organizationId });
+    const convB = await makeConversation(agent.id, { userId, organizationId });
+    const chatA: ArchestraContext = { ...context, conversationId: convA.id };
+    const chatB: ArchestraContext = { ...context, conversationId: convB.id };
+
+    // Chat A builds the app; its context now holds this version.
+    const { appId } = await scaffoldTo(
+      chatA,
+      "<html><head></head><body><h1>chat A build</h1></body></html>",
+    );
+
+    // Chat B legitimately continues from the head it just read.
+    const read = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
+      { appId },
+      chatB,
+    );
+    const chatBHtml =
+      "<html><head></head><body><h1>chat B rework</h1></body></html>";
+    const chatBEdit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: structured(read).version as number,
+        replacementHtml: chatBHtml,
+      },
+      chatB,
+    );
+    expect(chatBEdit.isError).toBe(false);
+    const headAfterB = structured(chatBEdit).latestVersion as number;
+
+    // Chat A rewrites from its stale context without baseVersion — exactly
+    // what a model does, since nothing in its conversation says the head
+    // moved. This must surface a conflict instead of saving.
+    const stale = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        replacementHtml:
+          "<html><head></head><body><h1>chat A follow-up</h1></body></html>",
+      },
+      chatA,
+    );
+    expect(stale.isError).toBe(true);
+
+    // Chat B's work is still the live head.
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(headAfterB);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, headAfterB))?.html,
+    ).toBe(chatBHtml);
+  });
+
+  test("stale str_replace edits that still match the moved head must not land blind", async ({
+    makeConversation,
+  }) => {
+    const convA = await makeConversation(agent.id, { userId, organizationId });
+    const convB = await makeConversation(agent.id, { userId, organizationId });
+    const chatA: ArchestraContext = { ...context, conversationId: convA.id };
+    const chatB: ArchestraContext = { ...context, conversationId: convB.id };
+
+    // Two independent regions, so a stale old_str can keep matching after the
+    // other chat rewrites its region.
+    const { appId, version } = await scaffoldTo(
+      chatA,
+      '<html><head></head><body><p id="title">Alpha</p><p id="status">Draft</p></body></html>',
+    );
+
+    const chatBHtml =
+      '<html><head></head><body><p id="title">Alpha</p><p id="status">Final</p></body></html>';
+    const chatBEdit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: version,
+        edits: [
+          {
+            old_str: '<p id="status">Draft</p>',
+            new_str: '<p id="status">Final</p>',
+          },
+        ],
+      },
+      chatB,
+    );
+    expect(chatBEdit.isError).toBe(false);
+    const headAfterB = structured(chatBEdit).latestVersion as number;
+
+    // Chat A patches its region from stale context, no baseVersion. The
+    // old_str still matches the moved head, so today this lands on content
+    // chat A never saw, producing a blend neither conversation intended.
+    const stale = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        edits: [
+          {
+            old_str: '<p id="title">Alpha</p>',
+            new_str: '<p id="title">Beta</p>',
+          },
+        ],
+      },
+      chatA,
+    );
+    expect(stale.isError).toBe(true);
+
+    // The head is exactly what chat B wrote — no silent interleave.
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(headAfterB);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, headAfterB))?.html,
+    ).toBe(chatBHtml);
+  });
+});
+
 describe("preview_app_tool", () => {
   let context: ArchestraContext;
   let organizationId: string;

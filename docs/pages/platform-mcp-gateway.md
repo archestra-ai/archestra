@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-07-29
+lastUpdated: 2026-07-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -104,6 +104,7 @@ Older revisions still work too. Anything back to `2024-11-05` is accepted and se
 | Result caching hints | Sent, ignored by older clients | `ttlMs` and `cacheScope` on tool, prompt, and resource results |
 | Result envelope | Plain result | `resultType`, plus server identity in `_meta` |
 | Missing-resource error | `-32002` | `-32602` |
+| `ping` and `logging/setLevel` | Answered | Removed — method-not-found |
 
 Both revisions see the same tools, the same access control, and the same policies. The differences are all in how a client talks to the gateway, not in what it can reach.
 

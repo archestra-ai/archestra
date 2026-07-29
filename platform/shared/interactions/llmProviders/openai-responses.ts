@@ -1,6 +1,7 @@
 import { parseArchestraToolRefusal } from "../../tool-refusal";
 import type { PartialUIMessage } from "../types";
 import type { Interaction, InteractionUtils } from "./common";
+import { tryParseJson } from "./json";
 
 type OpenAiResponsesArm = Extract<
   Interaction,
@@ -132,7 +133,7 @@ class OpenAiResponsesInteraction implements InteractionUtils {
       }
 
       messages.push({
-        role: item.role === "assistant" ? "assistant" : "user",
+        role: responsesRoleToUiMessageRole(item.role),
         parts: [{ type: "text", text: extractInputMessageText(item.content) }],
       });
     }
@@ -187,15 +188,32 @@ class OpenAiResponsesInteraction implements InteractionUtils {
 
 export default OpenAiResponsesInteraction;
 
+// `type` is optional on Responses input messages — it defaults to "message" —
+// and the AI SDK omits it, serializing plain turns as bare `{role, content}`.
+// Requiring the tag dropped every SDK-sent message on the floor, so the logs
+// rendered "No message" with an empty conversation. Key off `role` instead and
+// only reject items that tag themselves as something else (function_call,
+// function_call_output, reasoning).
 function isRequestMessage(
   item: unknown,
-): item is { type: "message"; role: "user" | "assistant"; content: unknown } {
-  return (
-    !!item &&
-    typeof item === "object" &&
-    "type" in item &&
-    item.type === "message"
-  );
+): item is { type?: "message"; role: string; content: unknown } {
+  if (!item || typeof item !== "object" || !("role" in item)) {
+    return false;
+  }
+  const type = (item as { type?: unknown }).type;
+  return type === undefined || type === "message";
+}
+
+// Mirrors the chat-completions mapper: instruction turns render as the "System
+// Prompt" block rather than as a user message.
+function responsesRoleToUiMessageRole(role: string): PartialUIMessage["role"] {
+  if (role === "assistant") {
+    return "assistant";
+  }
+  if (role === "system" || role === "developer") {
+    return "system";
+  }
+  return "user";
 }
 
 function isFunctionCallOutputItem(
@@ -247,12 +265,4 @@ function extractInputMessageText(content: unknown): string {
       return [];
     })
     .join("\n");
-}
-
-function tryParseJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
 }

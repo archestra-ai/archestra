@@ -1,3 +1,4 @@
+import type { SensitiveContextOrigin } from "@archestra/shared";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
@@ -62,6 +63,12 @@ export interface ArchestraContext {
   elicitation?: ChatMcpElicitationBridge;
   /** Whether the current caller context is still trusted/safe */
   contextIsTrusted?: boolean;
+  /**
+   * What flipped the caller's session into the sensitive state, when known.
+   * Meaningful only when `contextIsTrusted` is false; used to phrase
+   * sensitive-context policy blocks so they name the origin.
+   */
+  sensitiveContextOrigin?: SensitiveContextOrigin;
   /**
    * Bridge that surfaces a delegated child agent's tool calls on the caller's
    * conversation surface. Present only when a chat stream is driving the call;

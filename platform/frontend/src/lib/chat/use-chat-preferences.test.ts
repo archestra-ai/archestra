@@ -298,12 +298,16 @@ describe("agentRequiresPerUserConnect", () => {
     llmProviderRequiresPerUserCredential: true,
   };
 
-  test("true when the per-user agent model is selected but unavailable", () => {
+  test("true when the selected per-user agent model is catalogued but not connected", () => {
     expect(
       agentRequiresPerUserConnect({
         agent: perUserAgent,
         selectedModelId: "uuid-copilot",
-        isModelAvailable: false,
+        selectedModel: {
+          dbId: "uuid-copilot",
+          requiresUserConnection: true,
+          isConnected: false,
+        },
       }),
     ).toBe(true);
   });
@@ -313,9 +317,28 @@ describe("agentRequiresPerUserConnect", () => {
       agentRequiresPerUserConnect({
         agent: perUserAgent,
         selectedModelId: "uuid-copilot",
-        isModelAvailable: true,
+        selectedModel: {
+          dbId: "uuid-copilot",
+          requiresUserConnection: true,
+          isConnected: true,
+        },
       }),
     ).toBe(false);
+  });
+
+  test("supports a credential-level subscription on a shared provider", () => {
+    expect(
+      agentRequiresPerUserConnect({
+        agent: {
+          modelId: "uuid-chatgpt",
+          llmProviderRequiresPerUserCredential: false,
+        },
+        selectedModelId: "uuid-chatgpt",
+        selectedModel: undefined,
+        requiresPerUserCredential: true,
+        isCredentialConnected: false,
+      }),
+    ).toBe(true);
   });
 
   test("false when the selection is not the agent's pinned model (user override)", () => {
@@ -323,7 +346,7 @@ describe("agentRequiresPerUserConnect", () => {
       agentRequiresPerUserConnect({
         agent: perUserAgent,
         selectedModelId: "uuid-other",
-        isModelAvailable: false,
+        selectedModel: undefined,
       }),
     ).toBe(false);
   });
@@ -336,7 +359,7 @@ describe("agentRequiresPerUserConnect", () => {
           llmProviderRequiresPerUserCredential: false,
         },
         selectedModelId: "uuid-anthropic",
-        isModelAvailable: false,
+        selectedModel: undefined,
       }),
     ).toBe(false);
   });
@@ -346,7 +369,7 @@ describe("agentRequiresPerUserConnect", () => {
       agentRequiresPerUserConnect({
         agent: undefined,
         selectedModelId: "uuid-copilot",
-        isModelAvailable: false,
+        selectedModel: undefined,
       }),
     ).toBe(false);
   });

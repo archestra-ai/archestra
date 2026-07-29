@@ -4,10 +4,8 @@ import {
   CONTEXT_WINDOW_CATEGORIES,
   ContextWindowBreakdownSchema,
   chatUploadRejectionReason,
-  getAcceptedFileTypes,
   getMediaType,
   getModelReadableMimeTypes,
-  getSupportedFileTypesDescription,
   hasPersistableAssistantContent,
   hasRenderableAssistantContent,
   INLINE_TEXT_MAX_BYTES,
@@ -15,7 +13,6 @@ import {
   isInlineableTextMimeType,
   OUTPUT_MODALITY_OPTIONS,
   parseSandboxCommand,
-  supportsFileUploads,
 } from "./chat";
 
 const VALID_BREAKDOWN = {
@@ -171,31 +168,10 @@ describe("chat file upload helpers", () => {
   ];
 
   test("treats text modality as supporting the inlineable text document types", () => {
-    expect(getAcceptedFileTypes(["text"])).toBe(
-      TEXT_MODALITY_MIME_TYPES.join(","),
-    );
-    expect(supportsFileUploads(["text"])).toBe(true);
-    expect(getSupportedFileTypesDescription(["text"])).not.toBeNull();
-  });
-
-  test("deduplicates mime types across modalities", () => {
-    expect(getAcceptedFileTypes(["text", "text", "pdf"])).toBe(
-      [...TEXT_MODALITY_MIME_TYPES, "application/pdf"].join(","),
-    );
-  });
-
-  test("returns no file types when modalities are missing", () => {
-    expect(getAcceptedFileTypes(null)).toBeUndefined();
-    expect(getAcceptedFileTypes(undefined)).toBeUndefined();
-    expect(getAcceptedFileTypes([])).toBeUndefined();
-    expect(supportsFileUploads(null)).toBe(false);
-    expect(getSupportedFileTypesDescription(undefined)).toBeNull();
-  });
-
-  test("joins per-modality descriptions for multiple upload modalities", () => {
-    expect(getSupportedFileTypesDescription(["image", "pdf", "audio"])).toBe(
-      "images, PDFs, audio",
-    );
+    const readable = getModelReadableMimeTypes(["text"]);
+    for (const mimeType of TEXT_MODALITY_MIME_TYPES) {
+      expect(readable.has(mimeType)).toBe(true);
+    }
   });
 
   test("uses explicit file media types when present", () => {
@@ -279,6 +255,8 @@ describe("chatUploadRejectionReason", () => {
     sandboxAvailable: false,
     sandboxByteLimit: 16 * 1024 * 1024,
   };
+  // Deliberately above the sandbox limit — the two caps are independent.
+  const STORAGE_LIMIT = 50 * 1024 * 1024;
 
   test("accepts a model-ingestible type at any size", () => {
     expect(
@@ -345,6 +323,75 @@ describe("chatUploadRejectionReason", () => {
         byteLength: base.sandboxByteLimit + 1,
       }),
     ).toBe("too_large_for_sandbox");
+  });
+
+  test("file-storage fallback accepts an unsupported type without a sandbox", () => {
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        fileStorageByteLimit: STORAGE_LIMIT,
+        mimeType: "application/zip",
+        byteLength: 1_000,
+      }),
+    ).toBeNull();
+  });
+
+  test("file-storage fallback accepts oversized text without a sandbox", () => {
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        fileStorageByteLimit: STORAGE_LIMIT,
+        mimeType: "text/csv",
+        byteLength: INLINE_TEXT_MAX_BYTES + 1,
+      }),
+    ).toBeNull();
+  });
+
+  test("file-storage fallback accepts a file over the sandbox limit", () => {
+    // The sandbox is bypassed rather than made the gatekeeper: the file still
+    // lands in the Files panel, so acceptance answers only to the storage cap.
+    for (const sandboxAvailable of [true, false]) {
+      expect(
+        chatUploadRejectionReason({
+          ...base,
+          sandboxAvailable,
+          fileStorageByteLimit: STORAGE_LIMIT,
+          mimeType: "application/zip",
+          byteLength: base.sandboxByteLimit + 1,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  test("file-storage fallback rejects a file over the storage cap", () => {
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        fileStorageByteLimit: STORAGE_LIMIT,
+        mimeType: "application/zip",
+        byteLength: STORAGE_LIMIT + 1,
+      }),
+    ).toBe("too_large_to_store");
+  });
+
+  test("the storage cap bounds even a model-ingestible type", () => {
+    // Bytes are persisted for every accepted upload, so the cap applies to
+    // types the model reads natively too — but only when the fallback is on.
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        fileStorageByteLimit: STORAGE_LIMIT,
+        mimeType: "image/png",
+        byteLength: STORAGE_LIMIT + 1,
+      }),
+    ).toBe("too_large_to_store");
+    expect(
+      chatUploadRejectionReason({
+        ...base,
+        mimeType: "image/png",
+        byteLength: STORAGE_LIMIT + 1,
+      }),
+    ).toBeNull();
   });
 
   test("size-gates inlineable text even when the model lists it as ingestible", () => {

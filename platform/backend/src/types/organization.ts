@@ -12,6 +12,7 @@ import { schema } from "@/database";
 import { sanitizeSvg } from "@/utils/sanitize-svg";
 import { ToolInvocation, TrustedData } from "./autonomy-policies";
 import {
+  KubernetesNamespaceSchema,
   NetworkPolicyInputSchema,
   NetworkPolicySchema,
   TrustedImageRegistriesSchema,
@@ -316,6 +317,7 @@ const extendedFields = {
   defaultUserLimitValue: z.number().int().positive().nullable(),
   defaultUserLimitModel: z.array(z.string()).nullable(),
   defaultUserLimitCleanupInterval: LimitCleanupIntervalSchema.nullable(),
+  defaultMemberRole: z.string().nullable(),
   defaultAgentId: z.string().uuid().nullable(),
   favicon: z.string().nullable(),
   iconLogo: z.string().nullable(),
@@ -376,6 +378,27 @@ export const InsertOrganizationSchema = createInsertSchema(
   presetEntityDefaultLabel: true,
   presetEntityDefaultValidationRegex: true,
 });
+/**
+ * The white-label app name is not only shown in the UI: it is substituted into
+ * the built-in skills' stored name, description, and body, which are later
+ * served through the skill catalog and read as model context. A free-form
+ * string would therefore let the substitution introduce line breaks, markdown
+ * structure, or imperative text into that context, so the name is held to a
+ * single line of ordinary label characters: it must start with a letter or
+ * digit, and may then contain letters, digits, spaces, and the punctuation that
+ * appears in real product names. Newlines, control characters, and markdown
+ * syntax (`#`, `*`, backticks, brackets, angle brackets, pipes) are rejected.
+ * Clearing the name is done with `null`, not an empty string.
+ */
+const AppNameSchema = z
+  .string()
+  .min(1)
+  .max(100)
+  .regex(
+    /^[\p{L}\p{N}][\p{L}\p{N} .,'’\-&()+:!?_/]*$/u,
+    "App name must be a single line starting with a letter or digit, and may only contain letters, digits, spaces, and the punctuation . , ' - & ( ) + : ! ? _ /",
+  );
+
 export const UpdateAppearanceSettingsSchema = z.object({
   theme: OrganizationThemeSchema.optional(),
   customFont: OrganizationCustomFontSchema.optional(),
@@ -384,7 +407,7 @@ export const UpdateAppearanceSettingsSchema = z.object({
   favicon: Base64PngSchema.optional(),
   iconLogo: Base64LogoSchema.optional(),
   iconLogoDark: Base64LogoSchema.optional(),
-  appName: z.string().max(100).nullable().optional(),
+  appName: AppNameSchema.nullable().optional(),
   ogDescription: z.string().max(500).nullable().optional(),
   footerText: z.string().max(500).nullable().optional(),
   chatLinks: z.array(OrganizationChatLinkSchema).max(3).nullable().optional(),
@@ -436,6 +459,9 @@ export const UpdateAuthSettingsSchema = z.object({
   oauthAccessTokenLifetimeSeconds:
     OAuthAccessTokenLifetimeSecondsSchema.optional(),
   showTwoFactor: z.boolean().optional(),
+  // Role slug (predefined or custom) assigned to new self-signup / ChatOps
+  // members. `null` clears it back to the built-in "member" fallback.
+  defaultMemberRole: z.string().min(1).nullable().optional(),
 });
 
 export const UpdateConnectionSettingsSchema = z.object({
@@ -491,7 +517,9 @@ export const UpdateConnectionSettingsSchema = z.object({
 export const UpdateDefaultEnvironmentSchema = z.object({
   name: z.string().trim().min(1).max(50).nullable().optional(),
   description: z.string().trim().max(500).nullable().optional(),
-  namespace: z.string().trim().max(253).nullable().optional(),
+  // Becomes the code-managed engine's namespace and part of its kube-pod://
+  // target, which the NAPI boundary validates as an RFC1123 label.
+  namespace: KubernetesNamespaceSchema.nullable().optional(),
   networkPolicy: NetworkPolicyInputSchema.nullable().optional(),
   restricted: z.boolean().optional(),
   validationRegex: ValidationRegexSchema.nullable().optional(),

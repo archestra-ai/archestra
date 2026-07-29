@@ -53,6 +53,10 @@ const projectsTable = pgTable(
 export const projectShareVisibilityEnum = pgEnum("project_share_visibility", [
   "organization",
   "team",
+  // Named individuals, listed in `project_share_user`. Mirrors
+  // `conversation_shares`, which has carried this option from the start — a
+  // project shared with two colleagues should not have to go organization-wide.
+  "user",
 ]);
 
 /** One share row per project; mirrors `conversation_shares`. */
@@ -83,6 +87,23 @@ export const projectShareTeamsTable = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.shareId, table.teamId] }),
+  }),
+);
+
+/** Named individuals a project is shared with; mirrors `conversation_share_user`. */
+export const projectShareUsersTable = pgTable(
+  "project_share_user",
+  {
+    shareId: uuid("share_id")
+      .notNull()
+      .references(() => projectSharesTable.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.shareId, table.userId] }),
   }),
 );
 

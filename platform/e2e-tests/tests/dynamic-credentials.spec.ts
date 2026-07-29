@@ -1,4 +1,5 @@
-import { archestraApiSdk } from "@archestra/shared";
+import { archestraApiSdk, MCP_EXECUTED_AS_META_KEY } from "@archestra/shared";
+import { expect } from "@playwright/test";
 import {
   DEFAULT_TEAM_NAME,
   ENGINEERING_TEAM_NAME,
@@ -7,7 +8,9 @@ import {
 import { test } from "../fixtures";
 import {
   addCustomSelfHostedCatalogItem,
+  callMcpTool,
   createSharedTestGatewayViaApi,
+  getTeamTokenForProfile,
   goToMcpRegistry,
   installLocalCatalogItem,
   settleRegistryAfterInstall,
@@ -188,6 +191,21 @@ test("Verify tool calling using dynamic credentials", async ({
       profileId: sharedGateway.id,
     });
   }
+
+  // The gateway reports which connection served the call, so a client (and the
+  // MCP logs behind it) can tell whose credential ran the tool.
+  const engineeringToolResult = await callMcpTool(request, {
+    profileId: sharedGateway.id,
+    token: await getTeamTokenForProfile(request, ENGINEERING_TEAM_NAME),
+    toolName: `${CATALOG_ITEM_NAME}__print_archestra_test`,
+    timeoutMs: 60_000,
+  });
+  expect(engineeringToolResult._meta?.[MCP_EXECUTED_AS_META_KEY]).toMatchObject(
+    {
+      kind: "team",
+      teamName: ENGINEERING_TEAM_NAME,
+    },
+  );
 
   // CLEANUP: Delete existing created MCP servers / installations
   await archestraApiSdk.deleteInternalMcpCatalogItem({

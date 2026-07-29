@@ -64,6 +64,7 @@ import AgentLabelModel from "./agent-label";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import AgentUserModel from "./agent-user";
 import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
@@ -388,6 +389,7 @@ class AgentModel {
   static async create(
     {
       teams,
+      users,
       labels,
       knowledgeBaseIds,
       connectorIds,
@@ -453,6 +455,12 @@ class AgentModel {
     // Assign teams to the agent if provided
     if (teams && teams.length > 0) {
       await AgentTeamModel.assignTeamsToAgent(createdAgent.id, teams);
+    }
+
+    // Share with named individuals if provided. Additive to the scope, so a
+    // personal agent can reach a colleague without being published wider.
+    if (users && users.length > 0) {
+      await AgentUserModel.syncAgentUsers(createdAgent.id, users);
     }
 
     // Assign labels to the agent if provided
@@ -577,6 +585,7 @@ class AgentModel {
       ...createdAgent,
       tools: assignedTools.map((row) => row.tool),
       teams: teamDetails,
+      users: [],
       labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
       knowledgeBaseIds: knowledgeBaseIds ?? [],
       connectorIds: connectorIds ?? [],
@@ -685,6 +694,7 @@ class AgentModel {
           ...agent,
           tools: [],
           teams: [] as Array<{ id: string; name: string }>,
+          users: [] as Array<{ id: string; name: string; email: string }>,
           labels: [],
           knowledgeBaseIds: [],
           connectorIds: [],
@@ -702,14 +712,16 @@ class AgentModel {
     const agentIds = agents.map((agent) => agent.id);
 
     // Populate teams and labels for all agents with bulk queries to avoid N+1
-    const [teamsMap, labelsMap] = await Promise.all([
+    const [teamsMap, usersMap, labelsMap] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
 
-    // Assign teams and labels to each agent
+    // Assign teams, grantees, and labels to each agent
     for (const agent of agents) {
       agent.teams = teamsMap.get(agent.id) || [];
+      agent.users = usersMap.get(agent.id) || [];
       agent.labels = labelsMap.get(agent.id) || [];
     }
 
@@ -756,6 +768,7 @@ class AgentModel {
 
     const [
       teamsMap,
+      usersMap,
       labelsMap,
       kbMap,
       connectorMap,
@@ -763,6 +776,7 @@ class AgentModel {
       toolsResult,
     ] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
       AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
       AgentConnectorAssignmentModel.getConnectorIdsForAgents(agentIds),
@@ -795,6 +809,7 @@ class AgentModel {
       ...agent,
       tools: toolsByAgent.get(agent.id) || [],
       teams: teamsMap.get(agent.id) || [],
+      users: usersMap.get(agent.id) || [],
       labels: labelsMap.get(agent.id) || [],
       knowledgeBaseIds: kbMap.get(agent.id) || [],
       connectorIds: connectorMap.get(agent.id) || [],
@@ -843,6 +858,7 @@ class AgentModel {
 
     const [
       teamsMap,
+      usersMap,
       labelsMap,
       kbMap,
       connectorMap,
@@ -850,6 +866,7 @@ class AgentModel {
       toolsResult,
     ] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
       AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
       AgentConnectorAssignmentModel.getConnectorIdsForAgents(agentIds),
@@ -882,6 +899,7 @@ class AgentModel {
       ...agent,
       tools: toolsByAgent.get(agent.id) || [],
       teams: teamsMap.get(agent.id) || [],
+      users: usersMap.get(agent.id) || [],
       labels: labelsMap.get(agent.id) || [],
       knowledgeBaseIds: kbMap.get(agent.id) || [],
       connectorIds: connectorMap.get(agent.id) || [],
@@ -1310,6 +1328,7 @@ class AgentModel {
           ...agent,
           tools: [],
           teams: [] as Array<{ id: string; name: string }>,
+          users: [] as Array<{ id: string; name: string; email: string }>,
           labels: [],
           knowledgeBaseIds: [],
           connectorIds: [],
@@ -1327,14 +1346,16 @@ class AgentModel {
     const agentIds = agents.map((agent) => agent.id);
 
     // Populate teams and labels for all agents with bulk queries to avoid N+1
-    const [teamsMap, labelsMap] = await Promise.all([
+    const [teamsMap, usersMap, labelsMap] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
 
-    // Assign teams and labels to each agent
+    // Assign teams, grantees, and labels to each agent
     for (const agent of agents) {
       agent.teams = teamsMap.get(agent.id) || [];
+      agent.users = usersMap.get(agent.id) || [];
       agent.labels = labelsMap.get(agent.id) || [];
     }
 
@@ -1593,14 +1614,27 @@ class AgentModel {
           eq(schema.teamMembersTable.userId, userId),
         ),
       )
+      .leftJoin(
+        schema.agentUsersTable,
+        and(
+          eq(schema.agentsTable.id, schema.agentUsersTable.agentId),
+          eq(schema.agentUsersTable.userId, userId),
+        ),
+      )
       .where(
         and(
           notDeleted(schema.agentsTable),
           or(
             eq(schema.agentsTable.scope, "org"),
+            // A personal agent reaches its author, and anyone it has been
+            // shared with individually. The grant sits beside the scope rather
+            // than replacing it, so no scope enum has to learn a new value.
             and(
               eq(schema.agentsTable.scope, "personal"),
-              eq(schema.agentsTable.authorId, userId),
+              or(
+                eq(schema.agentsTable.authorId, userId),
+                eq(schema.agentUsersTable.userId, userId),
+              ),
             ),
             and(
               eq(schema.agentsTable.scope, "team"),
@@ -1858,6 +1892,9 @@ class AgentModel {
       ...agent,
       tools,
       teams,
+      users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
+        (map) => map.get(agent.id) ?? [],
+      ),
       labels,
       knowledgeBaseIds,
       connectorIds,
@@ -2006,6 +2043,9 @@ class AgentModel {
       ...agent,
       tools,
       teams,
+      users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
+        (map) => map.get(agent.id) ?? [],
+      ),
       labels,
       knowledgeBaseIds,
       connectorIds,
@@ -2069,6 +2109,9 @@ class AgentModel {
       ...agent,
       tools,
       teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
+      users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
+        (map) => map.get(agent.id) ?? [],
+      ),
       labels: await AgentLabelModel.getLabelsForAgent(agent.id),
       knowledgeBaseIds: await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
         agent.id,
@@ -2147,6 +2190,9 @@ class AgentModel {
         ...agent,
         tools,
         teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
+        users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
+          (map) => map.get(agent.id) ?? [],
+        ),
         labels: await AgentLabelModel.getLabelsForAgent(agent.id),
         knowledgeBaseIds: await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
           agent.id,
@@ -2184,6 +2230,7 @@ class AgentModel {
     id: string,
     {
       teams,
+      users,
       labels,
       knowledgeBaseIds,
       connectorIds,
@@ -2323,6 +2370,11 @@ class AgentModel {
     // Sync team assignments if teams is provided
     if (teams !== undefined) {
       await AgentTeamModel.syncAgentTeams(id, teams);
+    }
+
+    // Sync individual grants; `[]` revokes them all, omitted leaves them alone.
+    if (users !== undefined) {
+      await AgentUserModel.syncAgentUsers(id, users);
     }
 
     // Sync label assignments if labels is provided

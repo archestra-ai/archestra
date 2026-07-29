@@ -35,11 +35,15 @@ export const FinishReasonSchema = z
 const ChoiceSchema = z
   .object({
     finish_reason: FinishReasonSchema,
-    index: z.number(),
+    // Some OpenAI-compatible upstreams omit `index` on choices; without
+    // optional() the response fails serialization (500).
+    index: z.number().optional(),
     logprobs: z.any().nullable(),
     message: z
       .object({
-        content: z.string().nullable(),
+        // Tool-call-only replies often omit `content` entirely; requiring the
+        // key fails Fastify response serialization (500). Match Cerebras.
+        content: z.string().nullable().optional(),
         refusal: z.string().nullable().optional(),
         role: z.enum(["assistant"]),
         // Some OpenAI-compatible upstreams return `annotations: null` instead of
@@ -56,6 +60,10 @@ const ChoiceSchema = z
           .describe(
             `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L431`,
           ),
+        // DeepSeek-style reasoning models return thinking in `reasoning_content`
+        // and require it passed back on tool-call turns; response serialization
+        // must preserve it or clients can never satisfy that contract.
+        reasoning_content: z.string().nullable().optional(),
         tool_calls: z.array(ToolCallSchema).nullable().optional(),
       })
       .describe(

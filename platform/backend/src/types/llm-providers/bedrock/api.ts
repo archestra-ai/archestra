@@ -140,16 +140,21 @@ const MetricsSchema = z.object({
   latencyMs: z.number().optional(),
 });
 
-// Stop reason
-const StopReasonSchema = z.enum([
-  "end_turn",
-  "tool_use",
-  "max_tokens",
-  "stop_sequence",
-  "guardrail_intervened",
-  "content_filtered",
-  "model_context_window_exceeded",
-]);
+// Stop reason — current Converse values plus catch-all for future AWS additions:
+// https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html
+const StopReasonSchema = z
+  .enum([
+    "end_turn",
+    "tool_use",
+    "max_tokens",
+    "stop_sequence",
+    "guardrail_intervened",
+    "content_filtered",
+    "malformed_model_output",
+    "malformed_tool_use",
+    "model_context_window_exceeded",
+  ])
+  .or(z.string());
 
 // Output message
 const OutputMessageSchema = z.object({

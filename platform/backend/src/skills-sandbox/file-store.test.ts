@@ -362,10 +362,13 @@ describe("fileStore.get access", () => {
 
   test("project file: a member is allowed, a cross-org user is denied", async ({
     makeUser,
+    makeMember,
     makeOrganization,
   }) => {
     const org = await makeOrganization();
     const owner = await makeUser();
+    // Org-wide sharing requires the member role's project:share-org.
+    await makeMember(owner.id, org.id);
     const project = await ProjectModel.create({
       organizationId: org.id,
       userId: owner.id,
@@ -916,10 +919,13 @@ describe("fileStore disk overlay (filesystem provider)", () => {
 
   test("a disk-only file in a project folder follows project access", async ({
     makeUser,
+    makeMember,
     makeOrganization,
   }) => {
     const org = await makeOrganization();
     const owner = await makeUser();
+    // Org-wide sharing requires the member role's project:share-org.
+    await makeMember(owner.id, org.id);
     const project = await ProjectModel.create({
       organizationId: org.id,
       userId: owner.id,

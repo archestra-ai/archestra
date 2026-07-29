@@ -78,6 +78,13 @@ interface DataTableProps<TData, TValue> {
   hideHeader?: boolean;
   /** Hide the rows-per-page selector and page counter in the pagination bar. */
   compactPagination?: boolean;
+  /**
+   * Class applied to the inner `<table>` — e.g. a `min-w-[...]` so a table
+   * whose cell contents cannot shrink (badges, toggle groups) scrolls
+   * horizontally on narrow screens instead of squishing its columns until
+   * the contents overlap.
+   */
+  tableClassName?: string;
 }
 
 export function DataTable<TData, TValue>({
@@ -105,6 +112,7 @@ export function DataTable<TData, TValue>({
   hidePaginationWhenSinglePage = false,
   hideHeader = false,
   compactPagination = false,
+  tableClassName,
 }: DataTableProps<TData, TValue>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
@@ -209,7 +217,14 @@ export function DataTable<TData, TValue>({
   return (
     <div className="w-full space-y-4">
       <div className="overflow-x-auto rounded-md border">
-        <Table>
+        {/* The table never shrinks below the columns' summed configured sizes
+            (tanstack defaults unsized columns to 150px) — on narrow screens
+            the wrapper scrolls horizontally instead of crushing columns until
+            headers stack letter-by-letter and cell contents overlap. */}
+        <Table
+          className={tableClassName}
+          style={{ minWidth: table.getTotalSize() }}
+        >
           {!hideHeader && (
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (

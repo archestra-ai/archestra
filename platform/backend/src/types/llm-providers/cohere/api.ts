@@ -56,13 +56,11 @@ export const ChatResponseSchema = z.object({
     content: z.array(CohereMessageContentBlockSchema).optional(),
     tool_calls: z.array(CohereToolCallSchema).optional(),
   }),
-  finish_reason: z.enum([
-    "COMPLETE",
-    "MAX_TOKENS",
-    "STOP_SEQUENCE",
-    "TOOL_CALL",
-    "ERROR",
-  ]),
+  // Upstream may emit toxicity/variant reasons outside this enum; a closed
+  // enum would 500 response serialization / interaction read-back.
+  finish_reason: z
+    .enum(["COMPLETE", "MAX_TOKENS", "STOP_SEQUENCE", "TOOL_CALL", "ERROR"])
+    .or(z.string()),
   usage: UsageSchema.optional(),
 });
 

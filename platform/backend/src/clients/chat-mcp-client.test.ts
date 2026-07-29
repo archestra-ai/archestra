@@ -1,5 +1,7 @@
 import {
+  extractMcpExecutedAs,
   getArchestraToolFullName,
+  MCP_EXECUTED_AS_META_KEY,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -906,7 +908,7 @@ describe("chat-mcp-client tool caching", () => {
       { messages: [] } as any,
     );
 
-    expect(result).toBe("Workspace projects");
+    expect(result).toMatchObject({ content: "Workspace projects" });
     expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "workspace__find_projects",
@@ -1047,7 +1049,7 @@ describe("chat-mcp-client tool caching", () => {
       { messages: [] } as any,
     );
 
-    expect(result).toBe("Export queued");
+    expect(result).toMatchObject({ content: "Export queued" });
     expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
       expect.objectContaining({
         name: targetTool.name,
@@ -2006,7 +2008,11 @@ describe("buildArchestraToolOutput", () => {
       agentId: agent.id,
     });
 
-    expect(result).toBe("Diagram displayed!");
+    expect(result).toMatchObject({ content: "Diagram displayed!" });
+    expect(extractMcpExecutedAs(result)).toEqual({
+      kind: "platform",
+      callerUserId: null,
+    });
   });
 
   test("carries an image block as one media part without base64 in the text (end to end)", async ({
@@ -2109,7 +2115,7 @@ describe("buildArchestraToolOutput", () => {
       agentId: agent.id,
     });
 
-    expect(result).toBe(`Created app "Todo" (app-1).`);
+    expect(result).toMatchObject({ content: `Created app "Todo" (app-1).` });
   });
 
   test("returns the rich shape for a run_tool dispatch with a bare edit_app target", async ({
@@ -2151,7 +2157,9 @@ describe("buildArchestraToolOutput", () => {
       agentId: agent.id,
     });
 
-    expect(result).toBe("Error: Authentication required.");
+    expect(result).toMatchObject({
+      content: "Error: Authentication required.",
+    });
   });
 
   test("returns plain text for list_apps despite structuredContent", async ({
@@ -2169,7 +2177,7 @@ describe("buildArchestraToolOutput", () => {
       agentId: agent.id,
     });
 
-    expect(result).toBe("2 apps");
+    expect(result).toMatchObject({ content: "2 apps" });
   });
 
   test("attaches the target tool's UI resource when dispatched via run_tool", async ({
@@ -2208,6 +2216,85 @@ describe("buildArchestraToolOutput", () => {
     });
   });
 
+  test("keeps the identity a dispatched tool ran as, which chat shows on the card", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    // A plain dispatched tool with no MCP App UI — the case the bare-text
+    // fallback used to flatten, dropping the identity from the card.
+    const targetTool = await makeTool({
+      name: "grain__list_meetings",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+
+    const result = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: "2 meetings" }],
+        isError: false,
+        _meta: {
+          [MCP_EXECUTED_AS_META_KEY]: {
+            kind: "personal",
+            ownerUserId: "user-1",
+            ownerName: "Ada Lovelace",
+          },
+        },
+      },
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "grain__list_meetings", tool_args: {} },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      content: "2 meetings",
+      _meta: {
+        [MCP_EXECUTED_AS_META_KEY]: {
+          kind: "personal",
+          ownerUserId: "user-1",
+          ownerName: "Ada Lovelace",
+        },
+      },
+    });
+  });
+
+  test("attributes a dispatched tool that reached no server to the caller", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const agent = await makeAgent();
+    const catalog = await makeInternalMcpCatalog();
+    const targetTool = await makeTool({
+      name: "grain__list_meetings",
+      catalogId: catalog.id,
+    });
+    await makeAgentTool(agent.id, targetTool.id);
+
+    const result = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: "2 meetings" }],
+        isError: false,
+      },
+      toolName: "archestra__run_tool",
+      toolArguments: { tool_name: "grain__list_meetings", tool_args: {} },
+      agentId: agent.id,
+      userId: "user-9",
+    });
+
+    // No upstream identity came back (the dispatch never reached a server), so
+    // the card still says who Archestra ran it for rather than nothing.
+    expect(result).toMatchObject({ content: "2 meetings" });
+    expect(extractMcpExecutedAs(result)).toEqual({
+      kind: "platform",
+      callerUserId: "user-9",
+    });
+  });
+
   test("does not attach the UI resource when its upstream resource can't be read", async ({
     makeAgent,
     makeAgentTool,
@@ -2240,7 +2327,8 @@ describe("buildArchestraToolOutput", () => {
       agentId: agent.id,
     });
 
-    expect(result).toBe("Diagram displayed!");
+    expect(result).toMatchObject({ content: "Diagram displayed!" });
+    expect((result as { _meta?: { ui?: unknown } })._meta?.ui).toBeUndefined();
   });
 
   test("does not attach the UI resource when the target tool is not assigned to the agent", async ({
@@ -2273,7 +2361,8 @@ describe("buildArchestraToolOutput", () => {
       agentId: otherAgent.id,
     });
 
-    expect(result).toBe("Diagram displayed!");
+    expect(result).toMatchObject({ content: "Diagram displayed!" });
+    expect((result as { _meta?: { ui?: unknown } })._meta?.ui).toBeUndefined();
   });
 
   test("attaches the target tool's UI resource for an unassigned tool reached via dynamic access", async ({
@@ -2443,7 +2532,8 @@ describe("buildArchestraToolOutput", () => {
       organizationId: org.id,
     });
 
-    expect(result).toBe("Diagram displayed!");
+    expect(result).toMatchObject({ content: "Diagram displayed!" });
+    expect((result as { _meta?: { ui?: unknown } })._meta?.ui).toBeUndefined();
   });
 
   test("returns plain text when the dispatched target has no UI resource", async ({
@@ -2468,7 +2558,8 @@ describe("buildArchestraToolOutput", () => {
       agentId: agent.id,
     });
 
-    expect(result).toBe("Diagram displayed!");
+    expect(result).toMatchObject({ content: "Diagram displayed!" });
+    expect((result as { _meta?: { ui?: unknown } })._meta?.ui).toBeUndefined();
   });
 
   test("preserves a structured auth error (with credential scope) for a run_tool dispatch so chat renders the rich card", async ({
@@ -2527,7 +2618,7 @@ describe("buildArchestraToolOutput", () => {
       agentId: agent.id,
     });
 
-    expect(result).toBe("Error: rate limited.");
+    expect(result).toMatchObject({ content: "Error: rate limited." });
   });
 });
 

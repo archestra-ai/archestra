@@ -16,7 +16,7 @@ import {
   UserModel,
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
-import { validateMCPGatewayToken } from "@/routes/mcp-gateway.utils";
+import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import type { A2AContext, A2AMessage } from "@/types";
 import type { InteractionSource } from "../../../../shared";
 import { type A2AAttachment, executeA2AMessage } from "../a2a-executor";
@@ -207,7 +207,13 @@ export class A2AManager {
 
       const messageParts: (TextPart | FilePart)[] = [];
       (request.message.parts || []).forEach((p) => {
-        if (p.text !== undefined) {
+        // Blank text carries no turn: the executor only builds a current user
+        // turn from text that survives `trim()`, so keeping it would let
+        // `needToExecute` pass and send the prior context — which ends with an
+        // assistant turn — as the whole request. Blank text falls through to
+        // the file branch rather than returning, so a part carrying both keeps
+        // its payload.
+        if (p.text !== undefined && p.text.trim() !== "") {
           messageParts.push({ type: "text" as const, text: p.text });
           return;
         }

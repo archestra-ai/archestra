@@ -79,6 +79,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversationCount: 0,
         visibility: null,
         shareTeamNames: null,
+        shareUserNames: null,
         pinnedAt: null,
         createdAt: project.createdAt,
       };
@@ -128,6 +129,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversationCount: 1,
         visibility: null,
         shareTeamNames: null,
+        shareUserNames: null,
         pinnedAt: null,
         createdAt: project.createdAt,
       };
@@ -255,6 +257,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // generated client cannot represent a nullable enum.
           visibility: ProjectShareVisibilitySchema.or(z.literal("none")),
           teamIds: z.array(z.string()).default([]),
+          // People a `user` share names; ignored for other visibilities.
+          userIds: z.array(z.string()).default([]),
         }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
       },
@@ -266,6 +270,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         visibility: body.visibility === "none" ? null : body.visibility,
         teamIds: body.teamIds,
+        userIds: body.userIds,
       });
       return { ok: true as const };
     },

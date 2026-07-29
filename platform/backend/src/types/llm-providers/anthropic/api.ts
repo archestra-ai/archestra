@@ -42,11 +42,23 @@ const OutputConfigSchema = z.object({
     .optional(),
 });
 
-// Mirrors @anthropic-ai/sdk BetaThinkingConfigParam.
+// Mirrors @anthropic-ai/sdk BetaThinkingConfigParam. `display` controls
+// whether thinking text appears in the response ("summarized") or only the
+// signature comes back ("omitted", the newest models' default); without it in
+// the schema, Fastify's Zod validation would silently strip the field before
+// the body is forwarded upstream.
+const ThinkingDisplaySchema = z
+  .enum(["summarized", "omitted"])
+  .nullable()
+  .optional();
 const ThinkingConfigSchema = z.union([
-  z.object({ type: z.literal("enabled"), budget_tokens: z.number() }),
+  z.object({
+    type: z.literal("enabled"),
+    budget_tokens: z.number(),
+    display: ThinkingDisplaySchema,
+  }),
   z.object({ type: z.literal("disabled") }),
-  z.object({ type: z.literal("adaptive") }),
+  z.object({ type: z.literal("adaptive"), display: ThinkingDisplaySchema }),
 ]);
 
 export const MessagesRequestSchema = z.object({
@@ -113,8 +125,10 @@ export const MessagesResponseSchema = z.object({
   content: z.array(MessageContentBlockSchema),
   model: z.string(),
   role: z.enum(["assistant"]),
-  stop_reason: z.any().nullable(),
-  stop_sequence: z.string().nullable(),
+  // Anthropic/Bedrock may omit these keys rather than null them; requiring the
+  // key fails Fastify response serialization (500).
+  stop_reason: z.any().nullish(),
+  stop_sequence: z.string().nullish(),
   type: z.enum(["message"]),
   usage: UsageSchema,
 });

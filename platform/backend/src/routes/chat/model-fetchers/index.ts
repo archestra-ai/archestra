@@ -2,6 +2,7 @@ import type { SupportedProvider } from "@archestra/shared";
 import { MINIMAX_MODELS, PERPLEXITY_MODELS } from "@archestra/shared";
 import type { OpenAi } from "@/types";
 import { fetchAnthropicModels } from "./anthropic";
+import { fetchArchestraModels } from "./archestra";
 import { fetchAzureModels } from "./azure";
 import { makeBearerFetcher, makeStaticFetcher } from "./bearer-fetcher";
 import { fetchBedrockModels } from "./bedrock";
@@ -10,7 +11,7 @@ import { fetchDeepSeekModels } from "./deepseek";
 import { fetchGeminiModels } from "./gemini";
 import { fetchGithubCopilotModels } from "./github-copilot";
 import { fetchMicrosoft365CopilotModels } from "./microsoft-365-copilot";
-import { fetchOllamaModels } from "./ollama";
+import { fetchOllamaModels, fetchOllamaNativeModels } from "./ollama";
 import { fetchOpenAiModels } from "./openai";
 import { fetchOpenrouterModels } from "./openrouter";
 import type { ModelFetcher, ModelInfo } from "./types";
@@ -110,6 +111,7 @@ const fetchZhipuaiModels = makeBearerFetcher({
 
 export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   anthropic: fetchAnthropicModels,
+  archestra: fetchArchestraModels,
   azure: fetchAzureModels,
   bedrock: fetchBedrockModels,
   cerebras: fetchCerebrasModels,
@@ -123,6 +125,7 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   minimax: makeStaticFetcher("minimax", MINIMAX_MODELS),
   mistral: fetchMistralModels,
   ollama: fetchOllamaModels,
+  "ollama-native": fetchOllamaNativeModels,
   openai: fetchOpenAiModels,
   openrouter: fetchOpenrouterModels,
   perplexity: makeStaticFetcher("perplexity", PERPLEXITY_MODELS),

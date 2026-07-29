@@ -125,6 +125,11 @@ export const AUDIT_DECISIONS = {
     audited: true,
     model: ToolInvocationPolicyModel,
   },
+  toolObservationsTable: {
+    audited: false,
+    reason:
+      "runtime attribution metadata written by the LLM proxy (who observed a tool, via which client); not admin-mutable state",
+  },
   trustedDataPoliciesTable: { audited: true, model: TrustedDataPolicyModel },
   userTokensTable: { audited: true, model: UserTokenModel },
   virtualApiKeysTable: { audited: true, model: VirtualApiKeyModel },
@@ -375,6 +380,31 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: catalog × team; parent (catalog) audited",
   },
+  agentUsersTable: {
+    audited: false,
+    reason: "join: agent × user; parent (agent) audited",
+  },
+  skillUsersTable: {
+    audited: false,
+    reason: "join: skill × user; parent (skill) audited",
+  },
+  modelUsersTable: {
+    audited: false,
+    reason: "join: model × user; parent (model) audited",
+  },
+  projectShareUsersTable: {
+    audited: false,
+    reason: "join: project share × user; parent (project) audited",
+  },
+  mcpCatalogUsersTable: {
+    audited: false,
+    reason: "join: catalog × user; parent (catalog) audited",
+  },
+  modelTeamsTable: {
+    audited: false,
+    reason:
+      "join: model × team; parent (model) audited, snapshot includes restrictedToTeams",
+  },
   oauthClientTeamsTable: {
     audited: false,
     reason: "join: oauth client × team; parent (oauth client) audited",
@@ -423,6 +453,11 @@ export const AUDIT_DECISIONS = {
   skillTeamsTable: {
     audited: false,
     reason: "join: skill × team; parent (skill) audited",
+  },
+  skillEnvironmentsTable: {
+    audited: false,
+    reason:
+      "join: skill × environment; parent (skill) audited, and the skill audit snapshot includes environmentIds",
   },
   skillFilesTable: {
     audited: false,

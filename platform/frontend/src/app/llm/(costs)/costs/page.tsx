@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type archestraApiTypes,
   type StatisticsTimeFrame,
   StatisticsTimeFrameSchema,
 } from "@archestra/shared";
@@ -10,8 +11,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
+import { BilledCost } from "@/components/billed-cost";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   type ChartConfig,
   ChartContainer,
@@ -37,10 +46,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import {
   useCostSavingsStatistics,
   useModelStatistics,
   useProfileStatistics,
   useTeamStatistics,
+  useUserStatistics,
 } from "@/lib/statistics.query";
 
 /**
@@ -92,11 +108,18 @@ const ChartContainerWrapper = ({
 
 const TIMEFRAME_STORAGE_KEY = "cost-statistics-timeframe";
 const STATISTICS_TABLE_MAX_HEIGHT_CLASS = "max-h-[280px]";
+/**
+ * The per-user endpoint is paginated because user cardinality is unbounded;
+ * this page renders a leaderboard rather than the full roster.
+ */
+const USER_STATISTICS_PAGE_SIZE = 10;
+const USER_MODEL_BADGE_LIMIT = 2;
 
 export default function StatisticsPage() {
   const router = useRouter();
   const setActionButton = useSetCostsAction();
   const searchParams = useSearchParams();
+  const appName = useAppName();
 
   const [timeframe, setTimeframe] = useState<StatisticsTimeFrame>("1h");
   // The real timeframe (URL param or localStorage) is only known once the
@@ -125,6 +148,14 @@ export default function StatisticsPage() {
     timeframe,
     enabled: isTimeframeResolved,
   });
+  const { data: userStatisticsPage } = useUserStatistics({
+    timeframe,
+    limit: USER_STATISTICS_PAGE_SIZE,
+    includeModels: true,
+    enabled: isTimeframeResolved,
+  });
+  const userStatistics = userStatisticsPage?.data ?? [];
+  const userStatisticsTotal = userStatisticsPage?.pagination?.total ?? 0;
 
   /**
    * Initialize from URL parameters or localStorage
@@ -1154,6 +1185,138 @@ export default function StatisticsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>People</CardTitle>
+          <CardDescription>
+            Who is using {appName}, and on which models. Requests without a
+            resolved user identity are not attributed to anyone and do not
+            appear here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <StatisticsTablePanel>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="bg-card sticky top-0 z-10">
+                    User
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10">
+                    Requests
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10">
+                    Tokens Used
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10">
+                    Models
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10">
+                    Active Days
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10">
+                    Cost
+                  </TableHead>
+                  <TableHead className="bg-card sticky top-0 z-10 text-right">
+                    Last Active
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {userStatistics.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="text-center py-8 text-muted-foreground"
+                    >
+                      No attributed user activity for the selected timeframe
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  userStatistics.map((user) => (
+                    <TableRow key={user.userId}>
+                      <TableCell>
+                        <div className="font-medium">{user.userName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {user.userEmail}
+                        </div>
+                      </TableCell>
+                      <TableCell>{user.requests.toLocaleString()}</TableCell>
+                      <TableCell>{user.totalTokens.toLocaleString()}</TableCell>
+                      <TableCell>
+                        <UserModelBadges models={user.models} />
+                      </TableCell>
+                      <TableCell>{user.activeDays}</TableCell>
+                      <TableCell>
+                        <BilledCost
+                          cost={String(user.billedCost + user.subscriptionCost)}
+                          billedCost={String(user.billedCost)}
+                          subscriptionCost={String(user.subscriptionCost)}
+                          baselineCost={String(user.billedCost)}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {user.lastActiveAt
+                          ? format(new Date(user.lastActiveAt), "MMM d, HH:mm")
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </StatisticsTablePanel>
+          {userStatisticsTotal > USER_STATISTICS_PAGE_SIZE && (
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Showing top {USER_STATISTICS_PAGE_SIZE} of{" "}
+              {userStatisticsTotal.toLocaleString()} people by tokens used
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/**
+ * A user's model mix, heaviest first. Truncated because the point is which
+ * models someone reaches for, not an exhaustive list.
+ */
+function UserModelBadges({
+  models,
+}: {
+  models?: archestraApiTypes.GetUserStatisticsResponses["200"]["data"][number]["models"];
+}) {
+  if (!models || models.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  const shown = models.slice(0, USER_MODEL_BADGE_LIMIT);
+  const remaining = models.length - shown.length;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {shown.map((model) => (
+        <Badge key={model.model} variant="secondary" className="font-normal">
+          {model.model}
+        </Badge>
+      ))}
+      {remaining > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="outline" className="font-normal cursor-default">
+              +{remaining}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            {models
+              .slice(USER_MODEL_BADGE_LIMIT)
+              .map((model) => model.model)
+              .join(", ")}
+          </TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 }

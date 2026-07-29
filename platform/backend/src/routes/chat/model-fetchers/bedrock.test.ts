@@ -189,20 +189,30 @@ describe("fetchBedrockModels", () => {
     ]);
   });
 
-  test("calls ListInferenceProfiles with the correct URL and auth header", async () => {
+  test("calls ListInferenceProfiles and ListFoundationModels with the correct URLs and auth header", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: () => Promise.resolve({ inferenceProfileSummaries: [] }),
     });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ modelSummaries: [] }),
+    });
 
     await fetchBedrockModels("my-api-key");
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const [url, options] = mockFetch.mock.calls[0];
-    expect(url).toBe(
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const [profilesUrl, profilesOptions] = mockFetch.mock.calls[0];
+    expect(profilesUrl).toBe(
       "https://bedrock.us-east-1.amazonaws.com/inference-profiles?maxResults=1000",
     );
-    expect(options.headers.Authorization).toBe("Bearer my-api-key");
+    expect(profilesOptions.headers.Authorization).toBe("Bearer my-api-key");
+
+    const [modelsUrl, modelsOptions] = mockFetch.mock.calls[1];
+    expect(modelsUrl).toBe(
+      "https://bedrock.us-east-1.amazonaws.com/foundation-models",
+    );
+    expect(modelsOptions.headers.Authorization).toBe("Bearer my-api-key");
   });
 
   test("handles pagination with nextToken", async () => {
@@ -363,5 +373,159 @@ describe("fetchBedrockModels", () => {
     } finally {
       config.llm.bedrock.allowedProviders = originalAllowedProviders;
     }
+  });
+
+  describe("on-demand foundation models without an inference profile", () => {
+    const mockProfiles = (summaries: unknown[]) =>
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ inferenceProfileSummaries: summaries }),
+      });
+    const mockFoundationModels = (summaries: unknown[]) =>
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ modelSummaries: summaries }),
+      });
+
+    test("offers an on-demand chat model that has no inference profile", async () => {
+      mockProfiles([]);
+      mockFoundationModels([
+        {
+          modelId: "openai.gpt-oss-120b-1:0",
+          modelName: "gpt-oss-120b",
+          providerName: "OpenAI",
+          outputModalities: ["TEXT"],
+          inferenceTypesSupported: ["ON_DEMAND"],
+          modelLifecycle: { status: "ACTIVE" },
+        },
+      ]);
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      const gptOss = models.find((m) => m.id === "openai.gpt-oss-120b-1:0");
+      expect(gptOss).toBeDefined();
+      expect(gptOss?.displayName).toBe("gpt-oss-120b (OpenAI)");
+    });
+
+    test("skips models that are only reachable through an inference profile", async () => {
+      mockProfiles([]);
+      mockFoundationModels([
+        {
+          modelId: "anthropic.claude-sonnet-4-20250514-v1:0",
+          modelName: "Claude Sonnet 4",
+          outputModalities: ["TEXT"],
+          inferenceTypesSupported: ["INFERENCE_PROFILE"],
+          modelLifecycle: { status: "ACTIVE" },
+        },
+      ]);
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      // Its bare id is not invocable, and the cross-region profile already
+      // represents it in the picker.
+      expect(
+        models.some((m) => m.id === "anthropic.claude-sonnet-4-20250514-v1:0"),
+      ).toBe(false);
+    });
+
+    test("skips non-text and legacy models", async () => {
+      mockProfiles([]);
+      mockFoundationModels([
+        {
+          modelId: "stability.stable-image-core-v1:1",
+          modelName: "Stable Image Core",
+          outputModalities: ["IMAGE"],
+          inferenceTypesSupported: ["ON_DEMAND"],
+          modelLifecycle: { status: "ACTIVE" },
+        },
+        {
+          modelId: "amazon.old-text-model-v1:0",
+          modelName: "Retired",
+          outputModalities: ["TEXT"],
+          inferenceTypesSupported: ["ON_DEMAND"],
+          modelLifecycle: { status: "LEGACY" },
+        },
+      ]);
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      expect(models.some((m) => m.id.startsWith("stability."))).toBe(false);
+      expect(models.some((m) => m.id === "amazon.old-text-model-v1:0")).toBe(
+        false,
+      );
+    });
+
+    test("does not duplicate a model the inference-profile listing already returned", async () => {
+      mockProfiles([
+        {
+          inferenceProfileId: "openai.gpt-oss-120b-1:0",
+          inferenceProfileName: "gpt-oss-120b",
+          status: "ACTIVE",
+        },
+      ]);
+      mockFoundationModels([
+        {
+          modelId: "openai.gpt-oss-120b-1:0",
+          modelName: "gpt-oss-120b",
+          outputModalities: ["TEXT"],
+          inferenceTypesSupported: ["ON_DEMAND"],
+          modelLifecycle: { status: "ACTIVE" },
+        },
+      ]);
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      expect(
+        models.filter((m) => m.id === "openai.gpt-oss-120b-1:0"),
+      ).toHaveLength(1);
+    });
+
+    test("honors the operator's provider allowlist", async () => {
+      const originalAllowedProviders = config.llm.bedrock.allowedProviders;
+      config.llm.bedrock.allowedProviders = ["anthropic"];
+
+      try {
+        mockProfiles([]);
+        mockFoundationModels([
+          {
+            modelId: "openai.gpt-oss-120b-1:0",
+            modelName: "gpt-oss-120b",
+            outputModalities: ["TEXT"],
+            inferenceTypesSupported: ["ON_DEMAND"],
+            modelLifecycle: { status: "ACTIVE" },
+          },
+        ]);
+
+        const models = await fetchBedrockModels("test-api-key");
+
+        expect(models.some((m) => m.id.startsWith("openai."))).toBe(false);
+      } finally {
+        config.llm.bedrock.allowedProviders = originalAllowedProviders;
+      }
+    });
+
+    test("keeps the profile-derived models when listing foundation models is denied", async () => {
+      mockProfiles([
+        {
+          inferenceProfileId: "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+          inferenceProfileName: "Claude 3.5 Sonnet v2",
+          status: "ACTIVE",
+        },
+      ]);
+      // A credential without bedrock:ListFoundationModels must not break sync.
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        text: () => Promise.resolve("AccessDeniedException"),
+      });
+
+      const models = await fetchBedrockModels("test-api-key");
+
+      expect(
+        models.some(
+          (m) => m.id === "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+        ),
+      ).toBe(true);
+    });
   });
 });

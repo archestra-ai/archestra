@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import type { OptimizationRule } from "@/lib/optimization-rule.query";
+import { providerLogoUrl } from "@/lib/provider-logos";
 import type { Team } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 
@@ -73,7 +74,7 @@ export function ProviderSelect({
         <LlmProviderSelectItems
           options={providers.map((providerItem) => ({
             value: providerItem,
-            icon: `https://models.dev/logos/${providerItem}.svg`,
+            icon: providerLogoUrl(providerItem),
             name: providerDisplayNames[providerItem],
           }))}
         />

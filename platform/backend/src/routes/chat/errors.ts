@@ -35,6 +35,7 @@ import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
 import { captureRawProviderErrorInSentry } from "@/observability/sentry";
 import { MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE } from "@/routes/proxy/adapters/microsoft-365-copilot-graph-translator";
+import { SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { ContextWindowExceededError } from "./normalization/enforce-context-window-limit";
 import { RequestTooLargeError } from "./normalization/enforce-request-size-limit";
@@ -351,7 +352,8 @@ function extractArchestraInternalCode(
       code === ArchestraInternalErrorCode.ProviderInsufficientBalance ||
       code === ArchestraInternalErrorCode.UpstreamEmptyResponse ||
       code === ArchestraInternalErrorCode.UpstreamTimeout ||
-      code === ArchestraInternalErrorCode.ProviderOverloaded
+      code === ArchestraInternalErrorCode.ProviderOverloaded ||
+      code === ArchestraInternalErrorCode.RequestExceedsRateLimit
     ) {
       return code;
     }
@@ -944,7 +946,9 @@ function mapAnthropicErrorToCode(
       case AnthropicErrorTypes.NOT_FOUND:
         return ChatErrorCode.NotFound;
       case AnthropicErrorTypes.REQUEST_TOO_LARGE:
-        return ChatErrorCode.ContextTooLong;
+        // Anthropic's 413 is a byte-size cap on the request body, not a context
+        // overflow — attachments are the usual cause.
+        return ChatErrorCode.RequestTooLarge;
       case AnthropicErrorTypes.API_ERROR:
       case AnthropicErrorTypes.OVERLOADED:
         return ChatErrorCode.ServerError;
@@ -1142,7 +1146,11 @@ function mapStatusCodeToErrorCode(
     case 404:
       return ChatErrorCode.NotFound;
     case 413:
-      return ChatErrorCode.ContextTooLong;
+      // A 413 is about the size of *this request*, not the length of the
+      // conversation: providers return it for oversized payloads and for
+      // token-bucket rejections alike. Advising "start a new chat" is wrong for
+      // both — the request has to get smaller, not the history.
+      return ChatErrorCode.RequestTooLarge;
     case 422:
       return ChatErrorCode.InvalidRequest;
     case 429:
@@ -1379,6 +1387,7 @@ function mapMicrosoft365CopilotErrorToCode(
  */
 const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   openai: openAiCompatibleErrorHandler,
+  archestra: openAiCompatibleErrorHandler,
   anthropic: providerErrorHandler(parseAnthropicError, mapAnthropicErrorToCode),
   gemini: providerErrorHandler(parseGeminiError, mapGeminiErrorToCode),
   bedrock: providerErrorHandler(parseBedrockError, mapBedrockErrorToCode),
@@ -1391,6 +1400,7 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   openrouter: openAiCompatibleErrorHandler,
   vllm: providerErrorHandler(parseOpenAIError, mapVllmErrorToCode),
   ollama: providerErrorHandler(parseOpenAIError, mapOllamaErrorToCode),
+  "ollama-native": providerErrorHandler(parseOpenAIError, mapOllamaErrorToCode),
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
   kimi: openAiCompatibleErrorHandler,
@@ -1583,6 +1593,18 @@ export function mapProviderError(
   provider: SupportedProvider,
 ): ChatErrorResponse {
   logger.debug({ provider }, "[ChatErrorMapper] Mapping provider error");
+
+  // A deliberate cancellation — the caller's own AbortSignal fired (a user
+  // stop, a muted chatops thread, or a superseding follow-up message) and the
+  // in-flight provider call threw an AbortError. Not a provider failure, so
+  // return the structured "cancelled" response without any error reporting.
+  if (isAbortError(error)) {
+    return {
+      code: ChatErrorCode.Aborted,
+      message: ChatErrorMessages[ChatErrorCode.Aborted],
+      isRetryable: false,
+    };
+  }
 
   // Oversized request caught pre-flight (a large inline attachment) → an
   // actionable size error instead of the provider's generic rejection. The
@@ -1808,6 +1830,15 @@ export function mapProviderError(
     // ("the provider is experiencing issues"). Reclassify to the retryable
     // EmptyResponse code so the card names what actually happened.
     errorCode = ChatErrorCode.EmptyResponse;
+  } else if (
+    normalizedCode === ArchestraInternalErrorCode.RequestExceedsRateLimit
+  ) {
+    // A token-bucket rejection arrives as a 413 the status mapper would call
+    // RequestTooLarge ("compress or split large attachments"), which points at
+    // the wrong thing entirely — the payload is usually tiny and the reserved
+    // output budget is what blew the per-minute allowance. Reclassify so the
+    // card names the real cause and stops advising a new chat.
+    errorCode = ChatErrorCode.RequestExceedsRateLimit;
   } else if (normalizedCode === ArchestraInternalErrorCode.UpstreamTimeout) {
     // Mid-stream HTTP status is already committed as 200, so the normalized
     // code preserves the upstream 504 semantics and retryability.
@@ -1857,6 +1888,29 @@ export function mapProviderError(
   if (
     errorCode === ChatErrorCode.Unknown &&
     isUpstreamProviderError(errorMessage)
+  ) {
+    errorCode = ChatErrorCode.ServerError;
+  }
+
+  // A secrets-backend outage surfaces through the provider call as our own
+  // secrets-unavailable message (relayed by the proxy), often with no status
+  // code, landing on the dead-end Unknown card. The underlying incident is
+  // already captured and grouped at its source — classify it as a retryable
+  // ServerError here so the user gets a retry and the relay isn't re-captured.
+  if (
+    errorCode === ChatErrorCode.Unknown &&
+    isSecretsUnavailableMessage(errorMessage)
+  ) {
+    errorCode = ChatErrorCode.ServerError;
+  }
+
+  // Bedrock's InternalServerException arrives mid-stream as the bare message
+  // "Bedrock is unable to process your request." with no status code or typed
+  // body, so the per-provider mapper can't classify it. It's a transient
+  // provider-side failure — retryable ServerError, like any provider 5xx.
+  if (
+    errorCode === ChatErrorCode.Unknown &&
+    isProviderInternalFailureMessage(errorMessage)
   ) {
     errorCode = ChatErrorCode.ServerError;
   }
@@ -1930,6 +1984,14 @@ export function mapProviderError(
   );
 }
 
+// Matches by name rather than DOMException instanceof: the AbortError may be
+// the DOMException Node's AbortController produces, undici's flavor, or an AI
+// SDK re-throw, but all carry name "AbortError". Deliberately excludes
+// "TimeoutError" (AbortSignal.timeout) — a timeout is not a cancellation.
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 function isStreamTerminatedError(error: unknown): boolean {
   // Node.js/undici stream termination can surface as a bare Error("terminated")
   // when an upstream streamed response closes before the AI SDK finishes reading it.
@@ -1949,6 +2011,20 @@ function isToolApprovalPolicyBlockError(message: string): boolean {
 
 function isUpstreamProviderError(message: string): boolean {
   return /^upstream error from /i.test(message);
+}
+
+// `includes` rather than equality: the message may pick up envelope prefixes
+// on its way through the proxy, but the secrets-manager text and internal code
+// slug are stable constants.
+function isSecretsUnavailableMessage(message: string): boolean {
+  return (
+    message.includes("An error occurred while accessing secrets") ||
+    message.includes(SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE)
+  );
+}
+
+function isProviderInternalFailureMessage(message: string): boolean {
+  return message.includes("unable to process your request");
 }
 
 /**

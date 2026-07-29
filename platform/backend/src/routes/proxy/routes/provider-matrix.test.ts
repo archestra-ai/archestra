@@ -30,6 +30,7 @@ import {
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { anthropicAdapterFactory } from "../adapters/anthropic";
+import { archestraAdapterFactory } from "../adapters/archestra";
 import { azureAdapterFactory } from "../adapters/azure";
 import { azureResponsesAdapterFactory } from "../adapters/azure-responses";
 import { bedrockAdapterFactory } from "../adapters/bedrock";
@@ -44,6 +45,7 @@ import { microsoft365CopilotAdapterFactory } from "../adapters/microsoft-365-cop
 import { minimaxAdapterFactory } from "../adapters/minimax";
 import { mistralAdapterFactory } from "../adapters/mistral";
 import { ollamaAdapterFactory } from "../adapters/ollama";
+import { ollamaNativeAdapterFactory } from "../adapters/ollama-native";
 import { openaiAdapterFactory } from "../adapters/openai";
 import { openrouterAdapterFactory } from "../adapters/openrouter";
 import { perplexityAdapterFactory } from "../adapters/perplexity";
@@ -52,6 +54,7 @@ import { xaiAdapterFactory } from "../adapters/xai";
 import { zhipuaiAdapterFactory } from "../adapters/zhipuai";
 import * as proxyUtils from "../utils";
 import anthropicProxyRoutes from "./anthropic";
+import archestraProxyRoutes from "./archestra";
 import azureProxyRoutes from "./azure";
 import bedrockProxyRoutes from "./bedrock";
 import cerebrasProxyRoutes from "./cerebras";
@@ -65,6 +68,7 @@ import microsoft365CopilotProxyRoutes from "./microsoft-365-copilot";
 import minimaxProxyRoutes from "./minimax";
 import mistralProxyRoutes from "./mistral";
 import ollamaProxyRoutes from "./ollama";
+import ollamaNativeProxyRoutes from "./ollama-native";
 import openAiProxyRoutes from "./openai";
 import openrouterProxyRoutes from "./openrouter";
 import perplexityProxyRoutes from "./perplexity";
@@ -144,6 +148,7 @@ type HarnessOptions = {
   usage?: UsageSpec;
   nonStreamingToolCall?: ToolCallSpec | null;
   streamingToolCall?: ToolCallSpec | null;
+  reasoningContent?: string;
 };
 
 const READ_FILE_TOOL: ToolDefinition = {
@@ -490,6 +495,9 @@ function createOpenAiLikeHarness(options: HarnessOptions = {}) {
                         role: "assistant",
                         content: null,
                         refusal: null,
+                        ...(options.reasoningContent
+                          ? { reasoning_content: options.reasoningContent }
+                          : {}),
                         tool_calls: [
                           {
                             id: "call_nonstream_tool",
@@ -505,6 +513,9 @@ function createOpenAiLikeHarness(options: HarnessOptions = {}) {
                         role: "assistant",
                         content: text,
                         refusal: null,
+                        ...(options.reasoningContent
+                          ? { reasoning_content: options.reasoningContent }
+                          : {}),
                       },
                   finish_reason: options.nonStreamingToolCall
                     ? "tool_calls"
@@ -1131,6 +1142,15 @@ function createMinimaxHarness(options: HarnessOptions = {}) {
                 : {
                     role: "assistant",
                     content: text,
+                    // Native MiniMax shape only — the adapter mirrors it into
+                    // reasoning_content for OpenAI-compatible clients.
+                    ...(options.reasoningContent
+                      ? {
+                          reasoning_details: [
+                            { text: options.reasoningContent },
+                          ],
+                        }
+                      : {}),
                   },
               finish_reason: options.nonStreamingToolCall
                 ? "tool_calls"
@@ -1147,6 +1167,29 @@ function createMinimaxHarness(options: HarnessOptions = {}) {
       chatCompletionsStream: async (request: Record<string, unknown>) => {
         requests.push(request);
         options.onRequest?.(request);
+        // MiniMax streams thinking cumulatively: each chunk carries the full
+        // reasoning text so far, not a delta.
+        const reasoningChunks = options.reasoningContent
+          ? [
+              options.reasoningContent.slice(
+                0,
+                Math.ceil(options.reasoningContent.length / 2),
+              ),
+              options.reasoningContent,
+            ].map((cumulativeText) => ({
+              id: "minimax_stream",
+              object: "chat.completion.chunk",
+              created: 1,
+              model,
+              choices: [
+                {
+                  index: 0,
+                  delta: { reasoning_details: [{ text: cumulativeText }] },
+                  finish_reason: null,
+                },
+              ],
+            }))
+          : [];
         const chunks: unknown[] = options.streamingToolCall
           ? [
               {
@@ -1194,6 +1237,7 @@ function createMinimaxHarness(options: HarnessOptions = {}) {
               },
             ]
           : [
+              ...reasoningChunks,
               {
                 id: "minimax_stream",
                 object: "chat.completion.chunk",
@@ -1812,6 +1856,28 @@ const providerConfigsByProvider = {
     supportsStreamingToolCalls: true,
     supportsCompression: true,
   }),
+  // Present to satisfy the `Record<SupportedProvider, …>` exhaustiveness guard.
+  // The native provider uses an NDJSON `/api/chat` transport over a raw-fetch
+  // client, which this OpenAI-SDK-mock harness does not model — so it is filtered
+  // out of the executed matrix below and covered instead by the dedicated
+  // adapters/ollama-native.test.ts unit suite. `family`/`requestBuilder` are
+  // placeholders that are never invoked.
+  "ollama-native": makeConfig({
+    providerName: "Ollama (Native)",
+    providerSlug: "ollama-native",
+    provider: "ollama-native",
+    family: "openai",
+    routePlugin: ollamaNativeProxyRoutes,
+    adapterFactory: ollamaNativeAdapterFactory,
+    endpoint: (agentId) => `/v1/ollama-native/${agentId}/api/chat`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("llama3.2"),
+    model: "llama3.2",
+    optimizedModel: "llama3.2:1b",
+  }),
   zhipuai: makeConfig({
     providerName: "Zhipu AI",
     providerSlug: "zhipuai",
@@ -1846,6 +1912,25 @@ const providerConfigsByProvider = {
     requestBuilder: makeOpenAiCompatibleBuilder("deepseek-chat"),
     model: "deepseek-chat",
     optimizedModel: "deepseek-reasoner",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    supportsCompression: true,
+  }),
+  archestra: makeConfig({
+    providerName: "Archestra",
+    providerSlug: "archestra",
+    provider: "archestra",
+    family: "openai",
+    routePlugin: archestraProxyRoutes,
+    adapterFactory: archestraAdapterFactory,
+    endpoint: (agentId) => `/v1/archestra/${agentId}/chat/completions`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeOpenAiCompatibleBuilder("gpt-4o"),
+    model: "gpt-4o",
+    optimizedModel: "gpt-4o-mini",
     supportsDeclaredTools: true,
     supportsStreamingToolCalls: true,
     supportsCompression: true,
@@ -1978,7 +2063,12 @@ const azureResponsesConfig = makeConfig({
 });
 
 const providerConfigs = [
-  ...Object.values(providerConfigsByProvider),
+  // ollama-native speaks NDJSON /api/chat over a raw-fetch client, not an OpenAI
+  // SDK client, so this harness cannot exercise it. It is covered directly by
+  // adapters/ollama-native.test.ts.
+  ...Object.values(providerConfigsByProvider).filter(
+    (config) => config.provider !== "ollama-native",
+  ),
   azureResponsesConfig,
 ] satisfies ProviderTestConfig[];
 
@@ -2079,6 +2169,201 @@ describe("LLM proxy provider matrix", () => {
           const storedTool = await ToolModel.findByName(READ_FILE_TOOL.name);
           expect(storedTool).not.toBeNull();
           expect(await ToolModel.countByName(READ_FILE_TOOL.name)).toBe(1);
+        },
+      );
+
+      // DeepSeek-style thinking mode rejects tool-call turns with a 400 unless
+      // the assistant's `reasoning_content` is passed back verbatim, so the
+      // proxy must round-trip the field in both directions: request body
+      // validation must not strip it before it reaches the upstream, and
+      // response serialization must not strip it before it reaches the client.
+      // The zhipuai family shares the wire format: GLM thinking mode uses the
+      // same `reasoning_content` field through its bespoke adapter.
+      test.skipIf(config.family !== "openai" && config.family !== "zhipuai")(
+        "round-trips reasoning_content for thinking-mode tool calls",
+        async ({ makeAgent }) => {
+          const agent = await makeAgent({
+            agentType: "llm_proxy",
+            name: `${config.providerName} reasoning proxy`,
+          });
+          const responseReasoning =
+            "Considering the tool result before answering.";
+          const harness = await setupRoute(agent, {
+            reasoningContent: responseReasoning,
+          });
+
+          const requestReasoning =
+            "The user wants the file contents, so I should call read_file.";
+          const response = await app.inject({
+            method: "POST",
+            url: config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: {
+              model: config.model,
+              messages: [
+                { role: "user", content: "Read /tmp/test.txt" },
+                {
+                  role: "assistant",
+                  content: "",
+                  reasoning_content: requestReasoning,
+                  tool_calls: [
+                    {
+                      id: "call_reasoning_1",
+                      type: "function",
+                      function: {
+                        name: READ_FILE_TOOL.name,
+                        arguments: '{"file_path":"/tmp/test.txt"}',
+                      },
+                    },
+                  ],
+                },
+                {
+                  role: "tool",
+                  tool_call_id: "call_reasoning_1",
+                  content: "file contents",
+                },
+              ],
+            },
+          });
+
+          expect(response.statusCode).toBe(200);
+
+          const upstream = harness.requests[0] as unknown as {
+            messages: Array<Record<string, unknown>>;
+          };
+          const assistantMessage = upstream.messages.find(
+            (message) => message.role === "assistant",
+          );
+          expect(assistantMessage?.reasoning_content).toBe(requestReasoning);
+
+          expect(response.json().choices[0].message.reasoning_content).toBe(
+            responseReasoning,
+          );
+        },
+      );
+
+      // MiniMax speaks its own reasoning dialect: thinking arrives as
+      // reasoning_details and the docs want it passed back the same way for
+      // interleaved thinking. The proxy adapter translates both directions to
+      // the DeepSeek-style reasoning_content contract OpenAI-compatible
+      // clients understand: outgoing assistant reasoning_content becomes
+      // reasoning_details, incoming reasoning_details is mirrored into
+      // reasoning_content.
+      test.skipIf(config.family !== "minimax")(
+        "translates reasoning_content to MiniMax reasoning_details and back",
+        async ({ makeAgent }) => {
+          const agent = await makeAgent({
+            agentType: "llm_proxy",
+            name: `${config.providerName} reasoning proxy`,
+          });
+          const responseReasoning =
+            "Considering the tool result before answering.";
+          const harness = await setupRoute(agent, {
+            reasoningContent: responseReasoning,
+          });
+
+          const requestReasoning =
+            "The user wants the file contents, so I should call read_file.";
+          const response = await app.inject({
+            method: "POST",
+            url: config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: {
+              model: config.model,
+              messages: [
+                { role: "user", content: "Read /tmp/test.txt" },
+                {
+                  role: "assistant",
+                  content: "",
+                  reasoning_content: requestReasoning,
+                  tool_calls: [
+                    {
+                      id: "call_reasoning_1",
+                      type: "function",
+                      function: {
+                        name: READ_FILE_TOOL.name,
+                        arguments: '{"file_path":"/tmp/test.txt"}',
+                      },
+                    },
+                  ],
+                },
+                {
+                  role: "tool",
+                  tool_call_id: "call_reasoning_1",
+                  content: "file contents",
+                },
+              ],
+            },
+          });
+
+          expect(response.statusCode).toBe(200);
+
+          const upstream = harness.requests[0] as unknown as {
+            messages: Array<Record<string, unknown>>;
+          };
+          const assistantMessage = upstream.messages.find(
+            (message) => message.role === "assistant",
+          );
+          expect(assistantMessage?.reasoning_details).toEqual([
+            { text: requestReasoning },
+          ]);
+          expect(assistantMessage?.reasoning_content).toBeUndefined();
+
+          const message = response.json().choices[0].message;
+          expect(message.reasoning_details).toEqual([
+            { text: responseReasoning },
+          ]);
+          expect(message.reasoning_content).toBe(responseReasoning);
+        },
+      );
+
+      test.skipIf(config.family !== "minimax")(
+        "converts cumulative streamed reasoning_details into reasoning_content deltas",
+        async ({ makeAgent }) => {
+          const agent = await makeAgent({
+            name: `${config.providerName} reasoning stream`,
+          });
+          const responseReasoning = "First I read the file, then I answer.";
+          await setupRoute(agent, { reasoningContent: responseReasoning });
+
+          const response = await app.inject({
+            method: "POST",
+            url: config.streamEndpoint?.(agent.id) ?? config.endpoint(agent.id),
+            headers: config.headers(),
+            payload: {
+              ...config.requestBuilder.buildTextRequest({
+                model: config.model,
+                content: "Read the file",
+              }),
+              stream: true,
+            },
+          });
+
+          expect(response.statusCode).toBe(200);
+
+          const reasoningDeltas = response.body
+            .split("\n")
+            .filter(
+              (line) => line.startsWith("data: ") && line !== "data: [DONE]",
+            )
+            .map(
+              (line) =>
+                JSON.parse(line.slice(6)) as {
+                  choices?: Array<{ delta?: { reasoning_content?: string } }>;
+                },
+            )
+            .map(
+              (streamChunk) =>
+                streamChunk.choices?.[0]?.delta?.reasoning_content,
+            )
+            .filter((delta): delta is string => typeof delta === "string");
+
+          // Each forwarded chunk carries only the new text: joined deltas
+          // reproduce the full thinking exactly. If the adapter forwarded
+          // MiniMax's cumulative text verbatim, the join would repeat the
+          // first half.
+          expect(reasoningDeltas.length).toBeGreaterThanOrEqual(2);
+          expect(reasoningDeltas.join("")).toBe(responseReasoning);
         },
       );
 

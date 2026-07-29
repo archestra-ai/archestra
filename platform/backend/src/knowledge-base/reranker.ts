@@ -14,8 +14,10 @@ async function rerank(params: {
   queryText: string;
   chunks: VectorSearchResult[];
   organizationId: string;
+  /** The one connector this query is scoped to, or null when it spans several. */
+  connectorId?: string | null;
 }): Promise<VectorSearchResult[]> {
-  const { queryText, chunks, organizationId } = params;
+  const { queryText, chunks, organizationId, connectorId = null } = params;
 
   if (chunks.length === 0) {
     return [];
@@ -72,7 +74,6 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
       provider: rerankerConfig.provider,
       model: rerankerConfig.modelName,
       chunkCount: chunks.length,
-      queryText,
     },
     "[Reranker] Calling LLM for reranking",
   );
@@ -83,6 +84,7 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
       provider: rerankerConfig.provider,
       model: rerankerConfig.modelName,
       source: "knowledge:reranker",
+      connectorId,
       type: getProviderChatInteractionType(rerankerConfig.provider),
       callback: () =>
         generateObject({
@@ -109,18 +111,25 @@ Score each passage from 0 (completely irrelevant) to 10 (perfectly relevant). Re
 
     logger.info(
       {
-        queryText,
         chunkCount: chunks.length,
         filteredOut: reranked.length - filtered.length,
         minRelevanceScore: RERANKER_MIN_RELEVANCE_SCORE,
-        scores: reranked.map(({ chunk, score }) => ({
+        scores: reranked.map(({ score }) => score),
+      },
+      "[Reranker] LLM scores received",
+    );
+    // Query text, titles, and previews are user/corpus content — debug only.
+    logger.debug(
+      {
+        queryText,
+        scoredChunks: reranked.map(({ chunk, score }) => ({
           score,
           kept: score >= RERANKER_MIN_RELEVANCE_SCORE,
           title: chunk.title,
           contentPreview: chunk.content.slice(0, 80),
         })),
       },
-      "[Reranker] LLM scores received",
+      "[Reranker] LLM score previews",
     );
 
     return filtered.map((r) => r.chunk);

@@ -14,6 +14,7 @@ export function ProjectActionsMenu({
   pinned,
   canPin,
   canManage,
+  canDelete,
   onTogglePin,
   onEdit,
   onDelete,
@@ -21,6 +22,8 @@ export function ProjectActionsMenu({
   pinned: boolean;
   canPin: boolean;
   canManage: boolean;
+  /** Deleting an org-wide project needs `project:share-org` on top of canManage. */
+  canDelete: boolean;
   onTogglePin: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -44,16 +47,16 @@ export function ProjectActionsMenu({
           </DropdownMenuItem>
         )}
         {canManage && (
-          <>
-            <DropdownMenuItem onSelect={onEdit}>
-              <Pencil className="h-4 w-4" />
-              Edit details
-            </DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          </>
+          <DropdownMenuItem onSelect={onEdit}>
+            <Pencil className="h-4 w-4" />
+            Edit details
+          </DropdownMenuItem>
+        )}
+        {canManage && canDelete && (
+          <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </DropdownMenuItem>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

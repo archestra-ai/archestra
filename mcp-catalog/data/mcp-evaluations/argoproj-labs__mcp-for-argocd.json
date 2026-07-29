@@ -32,7 +32,6 @@
   },
   "readme": "# ArgoCD MCP Server\n\nA Model Context Protocol (MCP) server that provides AI assistants with access to ArgoCD for GitOps continuous delivery.\n\n## Features\n\n- Manage ArgoCD applications\n- Query sync status and health\n- Trigger deployments and syncs\n- Access application manifests\n- View deployment history\n\n## Installation\n\n### Quick Start with NPX\n```bash\nnpx argocd-mcp@latest stdio\n```\n\n### Docker\n```bash\ndocker run -i --rm \\\n  -e ARGOCD_BASE_URL=https://your-argocd-server \\\n  -e ARGOCD_API_TOKEN=your-api-token \\\n  europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:0.0.3 \\\n  npx argocd-mcp@latest stdio\n```\n\n## Configuration\n\n### Environment Variables\n\n| Variable | Purpose | Required |\n|----------|---------|----------|\n| `ARGOCD_BASE_URL` | Your ArgoCD server URL | **Yes** |\n| `ARGOCD_API_TOKEN` | API authentication token | **Yes** |\n\n## Usage with Claude Desktop\n\nAdd this to your `claude_desktop_config.json`:\n\n```json\n{\n  \"mcpServers\": {\n    \"argocd\": {\n      \"command\": \"npx\",\n      \"args\": [\"argocd-mcp@latest\", \"stdio\"],\n      \"env\": {\n        \"ARGOCD_BASE_URL\": \"https://your-argocd-server\",\n        \"ARGOCD_API_TOKEN\": \"your-api-token\"\n      }\n    }\n  }\n}\n```\n\n## License\n\nApache License 2.0\n",
   "category": "Development",
-  "quality_score": 0,
   "archestra_config": {
     "client_config_permutations": {
       "argocd-mcp-npx": {
@@ -63,21 +62,5 @@
     "ci_cd": false,
     "latest_commit_hash": ""
   },
-  "programming_language": "TypeScript",
-  "framework": null,
-  "last_scraped_at": "2025-12-11T00:00:00.000Z",
-  "evaluation_model": "manual",
-  "protocol_features": {
-    "implementing_tools": true,
-    "implementing_prompts": false,
-    "implementing_resources": true,
-    "implementing_sampling": false,
-    "implementing_roots": false,
-    "implementing_logging": true,
-    "implementing_stdio": true,
-    "implementing_streamable_http": false,
-    "implementing_oauth2": false
-  },
-  "dependencies": [],
-  "raw_dependencies": ""
+  "programming_language": "TypeScript"
 }

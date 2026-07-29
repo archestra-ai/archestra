@@ -131,6 +131,8 @@ export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
 // Turn the current chat into a project (moves the chat + its files into a new project).
 export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
+// Change who can see a project (org-wide, teams, or owner-only).
+export const TOOL_SET_PROJECT_SHARE_SHORT_NAME = "set_project_share";
 export const TOOL_SEARCH_TOOLS_SHORT_NAME = "search_tools";
 export const TOOL_RUN_TOOL_SHORT_NAME = "run_tool";
 export const TOOL_LIST_SKILLS_SHORT_NAME = "list_skills";
@@ -246,6 +248,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
+  TOOL_SET_PROJECT_SHARE_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
@@ -410,6 +413,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
 
   todo_write: "chat",
   create_project_from_conversation: "chat",
+  set_project_share: "chat",
 
   search_tools: "meta",
   run_tool: "meta",

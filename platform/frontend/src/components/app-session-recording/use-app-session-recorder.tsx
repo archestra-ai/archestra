@@ -1,8 +1,11 @@
 "use client";
 
 import {
+  APP_RECORDING_CAPTURE_HEADROOM,
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   APP_RECORDING_LIMITS,
   archestraApiSdk,
+  connectedMcpServerNames,
   parseFullToolName,
   sanitizeRecordingBundle,
   validateRecordingBundle,
@@ -18,10 +21,11 @@ import {
   useSyncExternalStore,
 } from "react";
 import { toast } from "sonner";
-import { useApp } from "@/lib/app.query";
+import { useApp, useAppTools } from "@/lib/app.query";
 import {
   fallbackRecordingDescription,
   useInvalidateAppRecording,
+  useMaxFinalCutMs,
 } from "@/lib/app-session-recording/app-recording.query";
 import { serializeRecordingEvents } from "@/lib/app-session-recording/app-recording-binary";
 import {
@@ -31,6 +35,7 @@ import {
 import { snapshotConversationTranscript } from "@/lib/app-session-recording/app-recording-transcript";
 import { useAppsHackathonAvailable } from "@/lib/app-session-recording/apps-hackathon";
 import { useSession } from "@/lib/auth/auth.query";
+import { resolveModelDisplayName } from "@/lib/llm-models.query";
 
 /**
  * The runtime-facing side of the session recorder: {@link McpAppRuntime}
@@ -96,7 +101,20 @@ export interface AppSessionRecorder {
  */
 const MAX_EVENTS = APP_RECORDING_LIMITS.maxEvents - 5_000;
 const MAX_SEGMENTS = APP_RECORDING_LIMITS.maxSegments - 5;
-const MAX_DURATION_MS = 10 * 60_000;
+/**
+ * How long a capture may run before it stops itself.
+ *
+ * A MULTIPLE of the final cut, so there is something to edit. A take that
+ * stopped dead at the submittable length left the author nothing to cut, and
+ * one that ran without limit produced recordings that could be edited but
+ * never uploaded — the stored bundle used to carry the whole capture however
+ * much of it was cut away. Pruning the cut-away video (`pruneCutEvents`) is
+ * what makes the headroom safe: an edit down to the limit now ships at the
+ * limit's size. Both bounds follow the deployment's configured limit, so
+ * raising it moves them together.
+ */
+const DEFAULT_MAX_DURATION_MS =
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS * APP_RECORDING_CAPTURE_HEADROOM;
 /**
  * The SDK flushes its buffer on stop; give that final batch time to arrive —
  * including the video-encoder drain, which flushes each canvas's encoder and
@@ -146,6 +164,12 @@ type RecorderStatus = AppSessionRecorder["status"];
  */
 class AppRecorderCore {
   status: RecorderStatus = "idle";
+  /**
+   * The capture ceiling this deployment configured. Settable rather than
+   * constructor-fixed: the core outlives any one render, and the value arrives
+   * with the config, which resolves after the first paint.
+   */
+  maxDurationMs = DEFAULT_MAX_DURATION_MS;
 
   private readonly listeners = new Set<() => void>();
   private startEpoch = 0;
@@ -329,7 +353,7 @@ class AppRecorderCore {
     this.rebroadcastTimer = setInterval(() => {
       this.postControl("start");
       // Hard stop at the ceiling so a forgotten recording can't grow unbounded.
-      if (Date.now() - this.startEpoch >= MAX_DURATION_MS) void this.stop();
+      if (Date.now() - this.startEpoch >= this.maxDurationMs) void this.stop();
     }, START_REBROADCAST_MS);
   }
 
@@ -516,9 +540,17 @@ export function useOwnAppSessionRecorder(params: {
   const coreRef = useRef<AppRecorderCore | null>(null);
   if (enabled && !coreRef.current) coreRef.current = new AppRecorderCore();
   const core = enabled ? coreRef.current : null;
+  // Capture may run past the submittable length — enough to leave room to
+  // edit, not enough to run away — since what an edit cuts no longer ships.
+  const maxFinalCutMs = useMaxFinalCutMs();
+  if (core) core.maxDurationMs = maxFinalCutMs * APP_RECORDING_CAPTURE_HEADROOM;
 
   const { data: app } = useApp(appId, { toastOnError: false });
   const { data: session } = useSession();
+  // The app's assigned tools are the source for the bundle's connected-MCP-server
+  // list: every server the app is wired to belongs on the gallery card, whether
+  // or not the recorded session happened to call it.
+  const { data: appTools } = useAppTools(appId);
   const invalidateRecording = useInvalidateAppRecording();
 
   // The core finalizes at stop time, so read the app/author context from a ref
@@ -531,11 +563,13 @@ export function useOwnAppSessionRecorder(params: {
     appId,
     appName: app?.name ?? "App",
     authorName: session?.user?.name ?? null,
+    connectedMcpServers: connectedMcpServerNames(appTools),
   });
   finalizeCtxRef.current = {
     appId,
     appName: app?.name ?? "App",
     authorName: session?.user?.name ?? null,
+    connectedMcpServers: connectedMcpServerNames(appTools),
   };
 
   useEffect(() => {
@@ -543,14 +577,19 @@ export function useOwnAppSessionRecorder(params: {
     core.setFinalize(async (raw, recordedConversationId) => {
       const ctx = finalizeCtxRef.current;
       // The chat transcript is part of every bundle's contract — snapshot it
-      // from the conversation the recording was made in.
-      const transcript = recordedConversationId
+      // from the conversation the recording was made in. The same fetch also
+      // carries the chat's model, resolved to a display name below.
+      const { transcript, modelId } = recordedConversationId
         ? await snapshotConversationTranscript({
             conversationId: recordedConversationId,
             startedAtMs: raw.startedAtMs,
             durationMs: raw.durationMs,
           })
-        : [];
+        : { transcript: [], modelId: null };
+      const model = modelId ? await resolveModelDisplayName(modelId) : null;
+      const userPromptCount = transcript.filter(
+        (message) => message.role === "user",
+      ).length;
       // Draft the AI presentation layer at save time, implicitly over the
       // agent connected to this chat session: the one-sentence description and
       // the consolidated build prompt the replay shows in place of the raw
@@ -569,6 +608,7 @@ export function useOwnAppSessionRecorder(params: {
         appId: ctx.appId,
         appName: ctx.appName,
         authorName: ctx.authorName,
+        connectedMcpServers: ctx.connectedMcpServers,
         raw: {
           ...raw,
           events: (await serializeRecordingEvents(
@@ -577,6 +617,8 @@ export function useOwnAppSessionRecorder(params: {
         },
         transcript,
         enhancement,
+        model,
+        userPromptCount,
       });
       // Sanitize (redact detected sensitive values), then hold the result to
       // the shared bundle contract: a recording that captured no app creation
@@ -697,11 +739,30 @@ function buildBundle(params: {
   appId: string | null;
   appName: string;
   authorName: string | null;
+  /** The MCP servers the app is connected to (from its assigned tools),
+   * whether or not the recorded session called them. */
+  connectedMcpServers: string[];
   raw: RawRecording;
   transcript: AppRecordingBundle["recording"]["transcript"];
   enhancement?: AppRecordingBundle["enhancement"];
+  /** The chat's model at record time, as a display name — null when it
+   * couldn't be resolved. */
+  model: string | null;
+  /** Count of the builder's own messages in `transcript` — how many prompts
+   * it took to build this version of the app. */
+  userPromptCount: number;
 }): AppRecordingBundle {
-  const { appId, appName, authorName, raw, transcript, enhancement } = params;
+  const {
+    appId,
+    appName,
+    authorName,
+    connectedMcpServers,
+    raw,
+    transcript,
+    enhancement,
+    model,
+    userPromptCount,
+  } = params;
   const startedAt = new Date(raw.startedAtMs);
   return {
     formatVersion: 1,
@@ -723,25 +784,30 @@ function buildBundle(params: {
       platform: "archestra",
       // Gallery facts about the build. (Built date and total duration are
       // already carried by createdAt and recording.durationMs.)
-      mcpServers: mcpServerNames(raw, transcript),
+      mcpServers: mcpServerNames(raw, transcript, connectedMcpServers),
       appVersionCount: raw.segments.reduce(
         (max, segment) => Math.max(max, segment.version),
         0,
       ),
+      ...(model ? { model } : {}),
+      userPromptCount,
     },
   };
 }
 
 /**
- * The MCP servers the session actually used, from both sides of the capture:
- * the app's own proxied calls and the agent's tool activity in the chat.
- * Tool names are `<server>__<tool>`; the server half is the name.
+ * The MCP servers to record for the app. Every server the app is connected to
+ * (from its assigned tools) is listed whether or not the session called it,
+ * unioned with the servers observed during capture — the app's own proxied
+ * calls and the agent's tool activity in the chat. Tool names are
+ * `<server>__<tool>`; the server half is the name.
  */
 function mcpServerNames(
   raw: RawRecording,
   transcript: AppRecordingBundle["recording"]["transcript"],
+  connectedMcpServers: string[],
 ): string[] {
-  const names = new Set<string>();
+  const names = new Set<string>(connectedMcpServers);
   const add = (toolName: unknown) => {
     if (typeof toolName !== "string") return;
     const server = parseFullToolName(toolName).serverName;
@@ -768,14 +834,40 @@ async function draftEnhancement(params: {
   appName: string;
 }): Promise<AppRecordingBundle["enhancement"]> {
   try {
-    const { data } = await archestraApiSdk.enhanceAppRecording({
+    const { data, error } = await archestraApiSdk.enhanceAppRecording({
       body: { conversationId: params.conversationId, appName: params.appName },
     });
+    // A failed REQUEST (the hackathon gate, a 500) and a model that produced
+    // nothing both ended here as a bundle with no enhancement, which made them
+    // indistinguishable from the console outward — and this runs at stop, where
+    // nothing else reports. Not fatal either way: the recording still saves and
+    // the player's readiness notice asks for the missing fields by hand.
+    if (error) {
+      console.error("Recording enhancement request failed:", error);
+      return undefined;
+    }
     const prompt = data?.prompt ?? null;
-    if (!prompt) return undefined;
+    const description = data?.description ?? null;
+    if (!prompt) {
+      console.warn(
+        `Recording enhancement drafted no build prompt (${data?.reason ?? "unknown reason"})`,
+      );
+      // The build prompt didn't generate. Keep a partial ONLY when the model
+      // still produced a real description — so a good description isn't thrown
+      // away with the missing prompt (the recorder's readiness notice then
+      // flags just the build prompt, and submission falls back to the opening
+      // chat message for it). Nothing usable at all → no enhancement, and the
+      // player shows its fallbacks plus the readiness notice.
+      if (!description) return undefined;
+      return {
+        description,
+        prompt: "",
+        ...(data?.response ? { response: data.response } : {}),
+        ...(data?.category ? { category: data.category } : {}),
+      };
+    }
     return {
-      description:
-        data?.description ?? fallbackRecordingDescription(params.appName),
+      description: description ?? fallbackRecordingDescription(params.appName),
       prompt,
       // The one closing agent reply the enhanced replay shows in place of
       // the captured assistant prose; absent, the player uses a stock line.
@@ -783,7 +875,8 @@ async function draftEnhancement(params: {
       // The gallery category for this app.
       ...(data?.category ? { category: data.category } : {}),
     };
-  } catch {
+  } catch (error) {
+    console.error("Recording enhancement request threw:", error);
     return undefined;
   }
 }

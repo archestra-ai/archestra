@@ -25,6 +25,11 @@ import { MAX_AGENT_STEPS, runAgentStream } from "@/agents/agent-run-stream";
 import { buildAgentSystemPrompt } from "@/agents/agent-system-prompt";
 import { DelegationLoopError } from "@/agents/errors";
 import { MIN_IMAGE_ATTACHMENT_SIZE } from "@/agents/incoming-email/constants";
+import {
+  isOpenAiReasoningSummaryMarkedUnsupported,
+  markOpenAiReasoningSummaryUnsupported,
+  openAiReasoningSummaryCacheKey,
+} from "@/agents/openai-reasoning-summary";
 import { createStepContextGuard } from "@/agents/step-context-guard";
 import { subagentExecutionTracker } from "@/agents/subagent-execution-tracker";
 import { closeChatMcpClient, getChatMcpTools } from "@/clients/chat-mcp-client";
@@ -47,6 +52,8 @@ import {
   ProviderError,
 } from "@/routes/chat/errors";
 import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
+import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
+import { createToolCallRepair } from "@/routes/chat/tool-call-repair";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
@@ -337,18 +344,19 @@ export async function executeA2AMessage(
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
     // Pass agent's llmApiKeyId so it can be used without user access check
-    const { model, anthropicNativeEndpoint } = await createLLMModelForAgent({
-      organizationId,
-      userId,
-      agentId: agent.id,
-      model: selectedModel,
-      provider,
-      sessionId,
-      source,
-      externalAgentId: delegationChain,
-      agentLlmApiKeyId: agent.llmApiKeyId,
-      contextIsTrusted: parentContextIsTrusted,
-    });
+    const { model, anthropicNativeEndpoint, chatApiKeyId } =
+      await createLLMModelForAgent({
+        organizationId,
+        userId,
+        agentId: agent.id,
+        model: selectedModel,
+        provider,
+        sessionId,
+        source,
+        externalAgentId: delegationChain,
+        agentLlmApiKeyId: agent.llmApiKeyId,
+        contextIsTrusted: parentContextIsTrusted,
+      });
 
     // Which attachment mime types this model can read. A missing model row
     // (lookup failure or unknown model) falls back to the safe default set
@@ -415,6 +423,55 @@ export async function executeA2AMessage(
     // message with no text or attachments), the context is used as-is. Callers
     // without context (delegation, scheduled, A2A v1) fall back to a plain
     // `prompt` for text, or a single `messages` turn when attachments survive.
+    // Request the model's real output ceiling (clamped by the operator
+    // ceiling), or a safe fallback when unknown. Without this, providers that
+    // inject a small default max (e.g. Anthropic's ~4096) truncated large
+    // tool-call payloads.
+    const maxOutputTokens = resolveAgentMaxOutputTokens({
+      outputLength: modelRow?.outputLength ?? null,
+      ceiling: config.chat.maxOutputTokensCeiling,
+      rateMeteredCeiling: config.chat.rateMeteredMaxOutputTokensCeiling,
+      provider,
+      contextLength: modelRow
+        ? ModelModel.resolveEffectiveContextLength(modelRow)
+        : null,
+    });
+
+    // Send the per-model generation parameters (num_ctx,
+    // num_predict, top_k, think, …) on native Ollama turns, mirroring the
+    // interactive chat route. Ollama reads the output cap from
+    // `options.num_predict`; the top-level `maxOutputTokens` above is discarded
+    // by the native endpoint, so the budget has to be folded in here too.
+    const ollamaTurn =
+      provider === "ollama-native"
+        ? buildOllamaNativeProviderOptions({
+            configured: modelRow?.configuredParameters,
+            maxOutputTokens,
+            effectiveContextLength: modelRow
+              ? ModelModel.resolveEffectiveContextLength(modelRow)
+              : null,
+          })
+        : undefined;
+
+    // Responses-routed OpenAI turns request reasoning summaries, mirroring the
+    // interactive chat route: reasoning is billed either way, the summary is
+    // the only visible signal, and scheduled-run views render it through the
+    // same chat reasoning UI. Skipped while the credential is negative-cached
+    // as unable to generate summaries (unverified OpenAI org) — the
+    // runAgentStream recovery marks it and retries without.
+    const openAiReasoningSummaryKey =
+      provider === "openai" && requiresOpenAiResponsesApi(selectedModel)
+        ? openAiReasoningSummaryCacheKey({
+            organizationId,
+            llmApiKeyId: chatApiKeyId ?? null,
+          })
+        : null;
+    const requestOpenAiReasoningSummary =
+      openAiReasoningSummaryKey !== null &&
+      !(await isOpenAiReasoningSummaryMarkedUnsupported(
+        openAiReasoningSummaryKey,
+      ));
+
     const baseConfig = {
       model,
       system: systemPrompt,
@@ -429,10 +486,35 @@ export async function executeA2AMessage(
       onStepFinish: (step: StepResult<ToolSet>) =>
         recordUnavailableToolCallStep(repeatTracker, step),
       abortSignal,
-      // Request the model's real output ceiling (clamped by the operator
-      // ceiling), or a safe fallback when unknown. Without this, providers that
-      // inject a small default max (e.g. Anthropic's ~4096) truncated large
-      // tool-call payloads.
+      // A malformed tool call is a model mistake, not a caller mistake, so it
+      // must not end the run. Headless surfaces (ChatOps, scheduled runs,
+      // direct A2A) have no one to retry by hand, which makes recovering here
+      // matter more than it does in chat.
+      experimental_repairToolCall: createToolCallRepair({
+        toolNames: Object.keys(mcpTools),
+        logContext: { agentId: agent.id, sessionId },
+        ...(abortSignal && { abortSignal }),
+        // Its own interaction source, so a re-ask stays distinguishable from
+        // the turn that provoked it.
+        createRepairModel: async () =>
+          (
+            await createLLMModelForAgent({
+              organizationId,
+              userId,
+              agentId: agent.id,
+              model: selectedModel,
+              provider,
+              sessionId,
+              source: "a2a:tool_call_repair",
+              externalAgentId: delegationChain,
+              agentLlmApiKeyId: agent.llmApiKeyId,
+              contextIsTrusted: parentContextIsTrusted,
+            })
+          ).model,
+      }),
+      // Per-transport shape for the output budget resolved above.
+      // - Native Ollama discards the top-level `maxOutputTokens` and reads the
+      //   cap from `options.num_predict`, so it rides along in providerOptions.
       // OpenAI transport quirks, mirroring routes/chat/routes.ts:
       // - Responses-routed models keep maxOutputTokens (mapped to
       //   max_output_tokens) and run with store:false so the SDK resends the
@@ -443,28 +525,35 @@ export async function executeA2AMessage(
       //   instead: the SDK maps maxOutputTokens to the legacy max_tokens for
       //   model names its reasoning heuristic doesn't recognize (e.g. the bare
       //   `chat-latest` alias), and newer models reject max_tokens outright.
-      ...(provider === "openai" && !requiresOpenAiResponsesApi(selectedModel)
+      ...(ollamaTurn
         ? {
-            providerOptions: {
-              openai: {
-                maxCompletionTokens: resolveAgentMaxOutputTokens({
-                  outputLength: modelRow?.outputLength ?? null,
-                  contextLength: modelRow?.contextLength ?? null,
-                  ceiling: config.chat.maxOutputTokensCeiling,
-                }),
-              },
-            },
+            maxOutputTokens,
+            providerOptions: ollamaTurn.providerOptions,
+            // Carries the explicit-thinking marker to the fetch wrapper, which
+            // strips it before the request leaves this process.
+            ...(ollamaTurn.headers ? { headers: ollamaTurn.headers } : {}),
           }
-        : {
-            maxOutputTokens: resolveAgentMaxOutputTokens({
-              outputLength: modelRow?.outputLength ?? null,
-              contextLength: modelRow?.contextLength ?? null,
-              ceiling: config.chat.maxOutputTokensCeiling,
+        : provider === "openai" && !requiresOpenAiResponsesApi(selectedModel)
+          ? {
+              providerOptions: {
+                openai: { maxCompletionTokens: maxOutputTokens },
+              },
+            }
+          : {
+              maxOutputTokens,
+              ...(provider === "openai"
+                ? {
+                    providerOptions: {
+                      openai: {
+                        store: false,
+                        ...(requestOpenAiReasoningSummary
+                          ? { reasoningSummary: "auto" }
+                          : {}),
+                      },
+                    },
+                  }
+                : {}),
             }),
-            ...(provider === "openai"
-              ? { providerOptions: { openai: { store: false } } }
-              : {}),
-          }),
       // Per-step context guard: cap oversized tool results and keep the
       // accumulated step history inside the model's context window, compacting
       // the older prefix into an LLM summary when it overflows. Overrides only
@@ -472,7 +561,9 @@ export async function executeA2AMessage(
       // persisted/streamed UIMessage) keeps the full tool outputs.
       prepareStep: createStepContextGuard({
         model,
-        contextLength: modelRow?.contextLength ?? null,
+        contextLength: modelRow
+          ? ModelModel.resolveEffectiveContextLength(modelRow)
+          : null,
         systemPrompt,
         abortSignal,
         logContext: { agentId: agent.id, sessionId },
@@ -506,7 +597,17 @@ export async function executeA2AMessage(
     try {
       const runStream = await runAgentStream({
         config: streamConfig,
-        recovery: { logContext: { agentId: agent.id, sessionId } },
+        recovery: {
+          logContext: { agentId: agent.id, sessionId },
+          ...(openAiReasoningSummaryKey !== null
+            ? {
+                onReasoningSummaryUnsupported: () =>
+                  markOpenAiReasoningSummaryUnsupported(
+                    openAiReasoningSummaryKey,
+                  ),
+              }
+            : {}),
+        },
       });
       const stream = runStream.result;
       getCapturedStreamError = runStream.getCapturedStreamError;
@@ -988,6 +1089,10 @@ function rejectionText(reason: ChatUploadRejectionReason): string {
       return "text too large to inline";
     case "too_large_for_sandbox":
       return "exceeds the sandbox size limit";
+    // Unreachable here: A2A has no Files panel for its callers, so it never
+    // opts into the file-storage fallback that produces this reason.
+    case "too_large_to_store":
+      return "too large to store";
     case "unsupported_type":
       return "type not supported by this model";
   }

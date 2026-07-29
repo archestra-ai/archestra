@@ -12,7 +12,8 @@ import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import { ToolModel } from "@/models";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
-import { normalizeToolInputSchema } from "./mcp-gateway.utils";
+import { RESOURCE_NOT_FOUND_ERROR_CODE } from "./mcp-gateway/protocol";
+import { normalizeToolInputSchema } from "./mcp-gateway/utils";
 
 type McpListTool = ListToolsResult["tools"][number];
 
@@ -77,7 +78,10 @@ export function createServerScopedServer(params: {
       // credentials. Refuse rather than forward (mirrors the owned-app gateway,
       // which serves only its own `ui://` resource).
       if (!uri.startsWith("ui://")) {
-        throw { code: -32002, message: `Resource not found: ${uri}` };
+        throw {
+          code: RESOURCE_NOT_FOUND_ERROR_CODE,
+          message: `Resource not found: ${uri}`,
+        };
       }
       return (await mcpClient.readResourceForServer({
         mcpServerId,

@@ -17,6 +17,7 @@ import {
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -132,9 +133,21 @@ import {
 } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import {
+  UserShareField,
+  useUserShareChoice,
+  useUserShareOption,
+} from "@/components/user-share-field";
+import {
   VisibilitySelector as SharedVisibilitySelector,
   type VisibilityOption,
 } from "@/components/visibility-selector";
+
+/**
+ * What the agent visibility control offers. Wider than the stored scope: an
+ * agent shared with named people persists as `personal` plus grants.
+ */
+type AgentVisibilityChoice = AgentScope | "user";
+
 import {
   useCreateProfile,
   useDeleteProfile,
@@ -488,6 +501,8 @@ export function AccessLevelSelector({
   agentType,
   teams,
   assignedTeamIds,
+  assignedUserIds = [],
+  onUserIdsChange,
   onTeamIdsChange,
   hasNoAvailableTeams,
   showTeamRequired,
@@ -501,17 +516,38 @@ export function AccessLevelSelector({
   agentType: AgentType;
   teams: Array<{ id: string; name: string }> | undefined;
   assignedTeamIds: string[];
+  /**
+   * Per-user sharing. Omitted by surfaces that cannot persist grants (the
+   * clone dialog), which then simply do not offer the option — better than
+   * showing a control whose selection would be silently dropped.
+   */
+  assignedUserIds?: string[];
+  onUserIdsChange?: (ids: string[]) => void;
   onTeamIdsChange: (ids: string[]) => void;
   hasNoAvailableTeams: boolean;
   showTeamRequired: boolean;
 }) {
   const scopeOptions = getScopeOptions(agentType);
   const canShareWithTeams = isAdmin || isTeamAdmin;
+  const userOption = useUserShareOption<AgentVisibilityChoice>("user");
+  // An agent shared with named people stays `personal` in storage and carries
+  // grants beside it, so "user" is a synthetic choice rather than a scope.
+  const { isUserChoice, selectChoice } = useUserShareChoice<AgentScope>({
+    scope,
+    personalScope: "personal",
+    userIds: assignedUserIds,
+    onScopeChange,
+    onUserIdsChange,
+  });
+  const choice: AgentVisibilityChoice = isUserChoice ? "user" : scope;
 
   const isOptionDisabled = (value: string) => {
     if (value === "personal" && initialScope && initialScope !== "personal")
       return true;
     if (value === "team" && (!canShareWithTeams || !canReadTeams)) return true;
+    // Nothing to share with: keep the option visible but inert and explained,
+    // rather than offering a choice that cannot be completed.
+    if (value === "team" && hasNoAvailableTeams) return true;
     if (value === "org" && !isAdmin) return true;
     return false;
   };
@@ -531,29 +567,76 @@ export function AccessLevelSelector({
       return `Team sharing is unavailable without ${formatPermissionRequirement({ resource: "team", action: "read" })}`;
     if (value === "team" && !canShareWithTeams)
       return `You need ${resourceName}:team-admin permission to share with teams`;
+    if (value === "team" && hasNoAvailableTeams)
+      return "There are no teams to share with yet. Create one from Settings → Teams.";
     if (value === "org" && !isAdmin)
       return `You need ${resourceName}:admin permission to make this available org-wide`;
     return "";
   };
 
-  const options: VisibilityOption<AgentScope>[] = scopeOptions.map(
-    (option) => ({
+  /** The short note beside the label; the reason itself sits under it. */
+  const getDisabledLabel = (value: string) => {
+    if (value === "personal") return "Unavailable";
+    if (value === "team" && (!canReadTeams || !canShareWithTeams))
+      return "Requires permission";
+    if (value === "team" && hasNoAvailableTeams) return "No teams available";
+    if (value === "org") return "Requires permission";
+    return undefined;
+  };
+
+  const scopedOptions: VisibilityOption<AgentVisibilityChoice>[] =
+    scopeOptions.map((option) => ({
       ...option,
       disabled: isOptionDisabled(option.value),
+      disabledLabel: isOptionDisabled(option.value)
+        ? getDisabledLabel(option.value)
+        : undefined,
       disabledReason: isOptionDisabled(option.value)
         ? getDisabledReason(option.value)
         : undefined,
-    }),
+    }));
+  // Users sits next to Personal: both keep the agent out of team/org reach.
+  const personalIndex = scopedOptions.findIndex(
+    (option) => option.value === "personal",
   );
+  // Sharing with named people is stored as `personal` plus grants, so it is
+  // bound by whatever bars Personal itself. Without this an already-shared
+  // agent offered the option and then refused the save.
+  const personalLocked = isOptionDisabled("personal");
+  const userChoiceOption: VisibilityOption<AgentVisibilityChoice> =
+    personalLocked
+      ? {
+          ...userOption,
+          disabled: true,
+          disabledLabel: "Unavailable",
+          disabledReason:
+            "Sharing with named people keeps this personal, and a shared agent cannot be made personal again.",
+        }
+      : userOption;
+  const options: VisibilityOption<AgentVisibilityChoice>[] =
+    personalIndex === -1 || !onUserIdsChange
+      ? scopedOptions
+      : [
+          ...scopedOptions.slice(0, personalIndex + 1),
+          userChoiceOption,
+          ...scopedOptions.slice(personalIndex + 1),
+        ];
 
   return (
     <SharedVisibilitySelector
       heading={`Who can use this ${agentTypeDisplayName[agentType] || "agent"}`}
-      value={scope}
+      value={choice}
       options={options}
-      onValueChange={onScopeChange}
+      onValueChange={selectChoice}
     >
-      {scope === "team" && (
+      {choice === "user" && onUserIdsChange && (
+        <UserShareField
+          value={assignedUserIds}
+          onValueChange={onUserIdsChange}
+        />
+      )}
+
+      {choice === "team" && (
         <div className="space-y-2">
           <Label>Teams{showTeamRequired && " *"}</Label>
           <MultiSelectCombobox
@@ -729,6 +812,9 @@ export function AgentDialog({
   const [selectedDelegationTargetIds, setSelectedDelegationTargetIds] =
     useState<string[]>([]);
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
+  // People the agent is shared with by name. Stored beside the `personal`
+  // scope, so the control below reads (scope, userIds) as a fourth choice.
+  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [considerContextUntrusted, setConsiderContextUntrusted] =
     useState(false);
@@ -864,6 +950,7 @@ export function AgentDialog({
             systemPrompt: agentData.systemPrompt || "",
             suggestedPrompts: agentData.suggestedPrompts,
             assignedTeamIds: agentData.teams.map((t) => t.id),
+            assignedUserIds: agentData.users?.map((u) => u.id) ?? [],
             labels: agentData.labels,
             considerContextUntrusted: agentData.considerContextUntrusted,
             llmApiKeyId: agentData.llmApiKeyId,
@@ -898,6 +985,7 @@ export function AgentDialog({
             systemPrompt: isInternalAgent ? DEFAULT_AGENT_SYSTEM_PROMPT : "",
             suggestedPrompts: [],
             assignedTeamIds: [],
+            assignedUserIds: [],
             labels: [],
             considerContextUntrusted: false,
             llmApiKeyId: null,
@@ -926,6 +1014,7 @@ export function AgentDialog({
       setLlmApiKeyId(nextValues.llmApiKeyId);
       setLlmModel(nextValues.llmModel);
       setAssignedTeamIds(nextValues.assignedTeamIds);
+      setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
       setConsiderContextUntrusted(nextValues.considerContextUntrusted);
       setIdentityProviderId(nextValues.identityProviderId);
@@ -992,6 +1081,10 @@ export function AgentDialog({
     () => availableApiKeys.find((k) => k.id === llmApiKeyId),
     [availableApiKeys, llmApiKeyId],
   );
+  const selectedApiKeyIsSubscription =
+    selectedApiKey !== undefined &&
+    (selectedApiKey.isChatgptSubscription === true ||
+      providerRequiresPerUserCredential(selectedApiKey.provider));
 
   // The selected model's row: source of the derived provider (like prompt
   // input's initialProvider/currentProvider) and of the capability gating
@@ -1191,6 +1284,7 @@ export function AgentDialog({
               accessAllSubagents,
             }),
             teams: assignedTeamIds,
+            users: assignedUserIds,
             labels: updatedLabels,
             scope,
             ...(showSecurity && { considerContextUntrusted }),
@@ -1240,6 +1334,7 @@ export function AgentDialog({
             accessAllSubagents,
           }),
           teams: assignedTeamIds,
+          users: assignedUserIds,
           labels: updatedLabels,
           scope,
           ...(showSecurity && { considerContextUntrusted }),
@@ -1333,6 +1428,7 @@ export function AgentDialog({
     systemPrompt,
     suggestedPrompts,
     assignedTeamIds,
+    assignedUserIds,
     labels,
     considerContextUntrusted,
     llmApiKeyId,
@@ -1421,6 +1517,7 @@ export function AgentDialog({
     systemPrompt,
     suggestedPrompts,
     assignedTeamIds,
+    assignedUserIds,
     labels,
     considerContextUntrusted,
     llmApiKeyId,
@@ -2379,6 +2476,8 @@ export function AgentDialog({
                         canReadTeams={!!canReadTeams}
                         assignedTeamIds={assignedTeamIds}
                         onTeamIdsChange={setAssignedTeamIds}
+                        assignedUserIds={assignedUserIds}
+                        onUserIdsChange={setAssignedUserIds}
                         hasNoAvailableTeams={hasNoAvailableTeams}
                         showTeamRequired={true}
                       />
@@ -2400,11 +2499,23 @@ export function AgentDialog({
                           </Alert>
                         ) : (
                           <>
-                            <p className="text-sm text-muted-foreground">
-                              {selectedApiKey && selectedApiKey.scope !== "org"
-                                ? "Selected key will be available to everyone who has access to this agent."
-                                : null}
-                            </p>
+                            {selectedApiKeyIsSubscription ? (
+                              <Alert>
+                                <InfoIcon className="h-4 w-4" />
+                                <AlertDescription>
+                                  Each person using this agent must connect
+                                  their own subscription account. No credential
+                                  is shared.
+                                </AlertDescription>
+                              </Alert>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                {selectedApiKey &&
+                                selectedApiKey.scope !== "org"
+                                  ? "Selected key will be available to everyone who has access to this agent."
+                                  : null}
+                              </p>
+                            )}
                             <div className="flex flex-wrap items-center gap-2">
                               <LlmProviderApiKeyDropdown
                                 availableKeys={availableApiKeys}
@@ -2799,6 +2910,7 @@ type AgentFormFields = {
   systemPrompt: string;
   suggestedPrompts: Array<{ summaryTitle: string; prompt: string }>;
   assignedTeamIds: string[];
+  assignedUserIds: string[];
   labels: ProfileLabel[];
   considerContextUntrusted: boolean;
   llmApiKeyId: string | null;

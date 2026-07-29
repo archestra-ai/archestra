@@ -1,6 +1,9 @@
 "use client";
 
-import { isProviderApiKeyOptional } from "@archestra/shared";
+import {
+  isProviderApiKeyOptional,
+  providerRequiresPerUserCredential,
+} from "@archestra/shared";
 import {
   AlertCircle,
   ArrowUpRight,
@@ -24,6 +27,7 @@ import {
   LLM_PROVIDER_API_KEY_PLACEHOLDER,
   LlmProviderApiKeyForm,
   type LlmProviderApiKeyFormValues,
+  PROVIDER_CONFIG,
 } from "@/components/llm-provider-api-key-form";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -227,6 +231,7 @@ function AddApiKeyDialog({
             geminiVertexAiEnabled={geminiVertexAiEnabled}
             hideScopeAndPrimary
             forEmbedding={forEmbedding}
+            allowPersonalSubscriptions={false}
           />
         </DialogBody>
         <DialogStickyFooter className="mt-0">
@@ -272,9 +277,14 @@ function ApiKeySelector({
   const prevSelectableCountRef = useRef<number | null>(null);
 
   const allKeys = apiKeys ?? [];
+  const organizationKeys = allKeys.filter(
+    (key) =>
+      key.isChatgptSubscription !== true &&
+      !providerRequiresPerUserCredential(key.provider),
+  );
   const keys = allowedKeyIds
-    ? allKeys.filter((k) => allowedKeyIds.has(k.id))
-    : allKeys;
+    ? organizationKeys.filter((k) => allowedKeyIds.has(k.id))
+    : organizationKeys;
   const hasKeys = keys.length > 0;
 
   // Auto-select the first key when transitioning from 0 → N selectable keys
@@ -508,6 +518,15 @@ function KnowledgeSettingsContent() {
     for (const model of modelsWithApiKeys ?? []) {
       if (model.embeddingDimensions == null) continue;
       for (const key of model.apiKeys) {
+        // Dimensioned models are not sufficient on their own: `ollama-native`
+        // syncs them (it shares the `/api/show` enrichment) but has no
+        // embedding adapter, so offering its key here is a dead end that fails
+        // the save probe with a 400. The add-key path already declares this via
+        // `supportsEmbeddings: false`; honour the same signal when picking an
+        // existing key.
+        const providerConfig =
+          PROVIDER_CONFIG[key.provider as keyof typeof PROVIDER_CONFIG];
+        if (providerConfig?.supportsEmbeddings === false) continue;
         ids.add(key.id);
       }
     }

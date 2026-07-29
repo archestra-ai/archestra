@@ -246,4 +246,136 @@ describe("PATCH /api/apps/:appId", () => {
     expect(renamed.statusCode).toBe(200);
     expect(renamed.json().name).toBe("Renamed");
   });
+  test("shares a personal app with named users, and revokes with an empty list", async ({
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const created = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const colleague = await makeUser();
+    await makeMember(colleague.id, organizationId, { role: "member" });
+
+    const shared = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { userIds: [colleague.id] },
+    });
+    expect(shared.statusCode).toBe(200);
+    // The app stays personal — the grant sits beside the scope, not in it.
+    expect(shared.json().scope).toBe("personal");
+    // PATCH returns the app-with-warnings shape, so read the grant back from
+    // the detail route that actually surfaces it.
+    const afterShare = await app.inject({
+      method: "GET",
+      url: `/api/apps/${created.id}`,
+    });
+    expect(afterShare.json().users).toEqual([
+      expect.objectContaining({ id: colleague.id }),
+    ]);
+
+    const revoked = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { userIds: [] },
+    });
+    expect(revoked.statusCode).toBe(200);
+    const afterRevoke = await app.inject({
+      method: "GET",
+      url: `/api/apps/${created.id}`,
+    });
+    expect(afterRevoke.json().users).toEqual([]);
+  });
+
+  test("rejects sharing with a user outside the organization", async ({
+    makeUser,
+    makeApp,
+  }) => {
+    const created = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    // A real user, but never made a member of this organization.
+    const outsider = await makeUser();
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { userIds: [outsider.id] },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/Unknown user/i);
+  });
+});
+
+describe("PATCH /api/apps/:appId — slug", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & { organizationId: string; user: User }
+      ).organizationId = organizationId;
+      (request as typeof request & { user: User }).user = user;
+    });
+
+    const { default: appRoutes } = await import("./app.routes");
+    await app.register(appRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("409s a slug another app in the organization holds", async ({
+    makeApp,
+  }) => {
+    await makeApp({ organizationId, scope: "org", name: "Taken" });
+    const mine = await makeApp({ organizationId, scope: "org", name: "Mine" });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${mine.id}`,
+      payload: { slug: "taken" },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.message).toContain("URL");
+    expect(response.json().error.message).not.toContain("app named");
+  });
+
+  test("400s a malformed slug without touching the app", async ({
+    makeApp,
+  }) => {
+    const created = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Sales Dashboard",
+    });
+
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { slug: "Not A Slug" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const after = await app.inject({
+      method: "GET",
+      url: `/api/apps/${created.id}`,
+    });
+    expect(after.json().slug).toBe("sales-dashboard");
+  });
 });

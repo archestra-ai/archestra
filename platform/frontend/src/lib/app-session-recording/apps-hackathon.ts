@@ -49,14 +49,12 @@ export const APPS_HACKATHON_SETTINGS_HREF = `/settings/agents#${APPS_HACKATHON_S
  * outside the hackathon window the whole thing goes away rather than lingering
  * as a switch that no longer does anything.
  *
- * The staging override bypasses the date window — the same bypass the backend
- * applies — so Archestra's own staging shows the recorder before the hackathon
- * opens and after it closes.
+ * The date window has no bypass — the same rule the backend enforces on every
+ * hackathon-recorder request.
  */
 export function useAppsHackathonOffered(): boolean {
   const deploymentEnabled = useFeature("hackathonRecorderEnabled") ?? false;
-  const overrideActive = useFeature("hackathonRecorderOverrideActive") ?? false;
-  return deploymentEnabled && (overrideActive || isAppsHackathonOpen());
+  return deploymentEnabled && isAppsHackathonOpen();
 }
 
 /**

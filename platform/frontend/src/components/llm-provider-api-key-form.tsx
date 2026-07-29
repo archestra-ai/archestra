@@ -2,18 +2,28 @@
 
 import {
   type archestraApiTypes,
+  BEDROCK_REGIONS,
+  bedrockRegionFromBaseUrl,
+  bedrockRuntimeBaseUrl,
   CHATGPT_SUBSCRIPTION_LABEL,
+  DEFAULT_BEDROCK_REGION,
   DEFAULT_PROVIDER_BASE_URLS,
   E2eTestId,
   isProviderApiKeyOptional,
   isSelfHostedProvider,
   providerRequiresPerUserCredential,
 } from "@archestra/shared";
-import { Building2, CheckCircle2, Trash2, User, Users } from "lucide-react";
+import {
+  Building2,
+  CheckCircle2,
+  ChevronDown,
+  Trash2,
+  User,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
-import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
-import { ExternalDocsLink } from "@/components/external-docs-link";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { Microsoft365CopilotSignIn } from "@/components/microsoft-365-copilot-sign-in";
 import { OpenaiCodexSignIn } from "@/components/openai-codex-sign-in";
@@ -23,8 +33,8 @@ import {
 } from "@/components/visibility-selector";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
-import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useTeams } from "@/lib/teams/team.query";
+import { cn } from "@/lib/utils";
 import { LlmProviderSelectItems } from "./llm-provider-select-items";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -111,6 +121,42 @@ export function deserializeExtraHeaders(
 
 export type LlmProviderApiKeyResponse =
   archestraApiTypes.GetLlmProviderApiKeysResponses["200"][number];
+
+function isOllamaProvider(provider: string): boolean {
+  return provider === "ollama" || provider === "ollama-native";
+}
+
+/**
+ * Ollama ships as two providers because the transports differ on the wire, but
+ * they are one product behind one base URL. The picker shows a single "Ollama"
+ * entry plus a separate transport control, so one of the pair stands in for both
+ * in the provider list.
+ *
+ * `ollama-native` is the better general default — it carries the per-model
+ * parameters `/v1` silently discards — but it cannot do embeddings, so for an
+ * embedding key the OpenAI-compatible transport is the only valid one and must
+ * be the entry shown. Collapsing to native unconditionally made Ollama
+ * unselectable in the embedding dialog.
+ */
+function ollamaTransportForContext(
+  forEmbedding: boolean,
+): CreateLlmProviderApiKeyBody["provider"] {
+  return forEmbedding ? "ollama" : "ollama-native";
+}
+
+/** Both Ollama transports, in the order the transport control lists them. */
+const OLLAMA_TRANSPORTS = [
+  "ollama-native",
+  "ollama",
+] as const satisfies readonly CreateLlmProviderApiKeyBody["provider"][];
+
+const OLLAMA_TRANSPORT_OPTIONS = [
+  { value: "ollama-native", label: "Native" },
+  { value: "ollama", label: "OpenAI-compatible" },
+] as const satisfies readonly {
+  value: CreateLlmProviderApiKeyBody["provider"];
+  label: string;
+}[];
 
 const PROVIDER_CONFIG: Record<
   CreateLlmProviderApiKeyBody["provider"],
@@ -216,13 +262,24 @@ const PROVIDER_CONFIG: Record<
     consoleName: "vLLM Docs",
   },
   ollama: {
-    name: "Ollama",
+    name: "Ollama (OpenAI-compatible)",
     icon: "/icons/ollama.png",
     placeholder: "optional-api-key",
     enabled: true,
     consoleUrl: "https://ollama.ai/",
     consoleName: "Ollama",
     description: "For self-hosted Ollama, an API key is not required.",
+  },
+  "ollama-native": {
+    name: "Ollama (Native)",
+    icon: "/icons/ollama.png",
+    placeholder: "optional-api-key",
+    enabled: true,
+    consoleUrl: "https://ollama.ai/",
+    consoleName: "Ollama",
+    description:
+      "Native /api/chat transport — lets you set num_ctx, num_predict, top_k, thinking effort, and other Ollama parameters. An API key is not required for self-hosted Ollama.",
+    supportsEmbeddings: false,
   },
   zhipuai: {
     name: "Zhipu AI",
@@ -240,6 +297,17 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://platform.deepseek.com/api_keys",
     consoleName: "DeepSeek Platform",
   },
+  archestra: {
+    name: "Archestra",
+    icon: "/icons/archestra.png",
+    placeholder: "arch_...",
+    enabled: true,
+    consoleUrl: "https://archestra.ai/",
+    consoleName: "Archestra",
+    baseUrlRequired: true,
+    description:
+      "Route through another Archestra instance. On that instance, create an LLM Proxy and a virtual API key. Set the Base URL to the proxy's model router (e.g. https://your-archestra/v1/model-router/<llm-proxy-id>) and paste the virtual API key below.",
+  },
   kimi: {
     name: "Moonshot (Kimi)",
     icon: "/icons/kimi.png",
@@ -255,7 +323,10 @@ const PROVIDER_CONFIG: Record<
     enabled: true,
     consoleUrl: "https://console.aws.amazon.com/bedrock",
     consoleName: "AWS Console",
-    baseUrlRequired: true,
+    // No baseUrlRequired: Bedrock asks for a region instead. AWS publishes no
+    // "base URL" for Bedrock — the SDK builds the endpoint from the region — so
+    // demanding one was a dead end. The region picker writes the runtime
+    // endpoint, and the custom-endpoint field stays available underneath it.
   },
   minimax: {
     name: "MiniMax",
@@ -331,6 +402,14 @@ interface LlmProviderApiKeyFormProps {
   hideScopeAndPrimary?: boolean;
   /** When true, providers without embedding support are disabled in the picker. */
   forEmbedding?: boolean;
+  /** Whether personal subscription credential modes can be configured. */
+  allowPersonalSubscriptions?: boolean;
+  /** Dedicated credential flow shown by the create dialog. */
+  credentialMode?: "api-key" | "subscription";
+  /** Hide optional API-key fields behind an Advanced settings disclosure. */
+  progressive?: boolean;
+  /** Called when a subscription sign-in returns a credential. */
+  onSubscriptionCredential?: (credential: string) => void;
 }
 
 export function LlmProviderApiKeyForm({
@@ -346,8 +425,11 @@ export function LlmProviderApiKeyForm({
   allowedProviders,
   hideScopeAndPrimary = false,
   forEmbedding = false,
+  allowPersonalSubscriptions = true,
+  credentialMode,
+  progressive = false,
+  onSubscriptionCredential,
 }: LlmProviderApiKeyFormProps) {
-  const authDocsUrl = getFrontendDocsUrl("platform-llm-proxy-authentication");
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicWifEnabled = useFeature("anthropicWifEnabled");
@@ -358,6 +440,9 @@ export function LlmProviderApiKeyForm({
   });
   const { data: teams = [] } = useTeams();
   const isEditMode = Boolean(existingKey);
+  const isSubscriptionFlow = credentialMode === "subscription";
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+  const showAdvancedSettings = !progressive || advancedSettingsOpen;
 
   const provider = form.watch("provider");
   const apiKey = form.watch("apiKey");
@@ -366,6 +451,8 @@ export function LlmProviderApiKeyForm({
   const bedrockAuthMethod = form.watch("bedrockAuthMethod");
   const isBedrockSigV4 =
     provider === "bedrock" && bedrockAuthMethod === "sigv4";
+  const baseUrl = form.watch("baseUrl");
+  const isBedrock = provider === "bedrock";
   const openaiAuthMethod = form.watch("openaiAuthMethod");
   // OpenAI "ChatGPT subscription" (Codex) auth mode: the credential is an
   // individual's ChatGPT subscription, so it behaves like the per-user Copilot
@@ -396,16 +483,70 @@ export function LlmProviderApiKeyForm({
   const isBaseUrlRequired =
     providerConfig.baseUrlRequired && !providerBaseUrls?.[provider];
 
+  // Bedrock's effective region, in the same precedence order the backend's
+  // getBedrockRegion applies: this key's own endpoint, then the server-wide
+  // Bedrock endpoint, then the SDK default. Showing the resolved value means the
+  // picker always reflects the region the key will really run against, so
+  // leaving it untouched can't silently mean something else.
+  const bedrockRegion =
+    bedrockRegionFromBaseUrl(baseUrl) ??
+    bedrockRegionFromBaseUrl(providerBaseUrls?.bedrock) ??
+    DEFAULT_BEDROCK_REGION;
+  // A custom endpoint carrying no recognizable region: the backend falls back to
+  // the default region, which is the trap worth naming out loud in the UI.
+  const hasUnresolvedBedrockRegion =
+    isBedrock && Boolean(baseUrl) && bedrockRegionFromBaseUrl(baseUrl) === null;
+
   const allowedProviderSet = useMemo(
     () =>
       new Set<CreateLlmProviderApiKeyBody["provider"]>(
-        allowedProviders ??
+        (
+          allowedProviders ??
           (Object.keys(
             PROVIDER_CONFIG,
-          ) as CreateLlmProviderApiKeyBody["provider"][]),
+          ) as CreateLlmProviderApiKeyBody["provider"][])
+        ).filter(
+          (candidate) =>
+            allowPersonalSubscriptions ||
+            !providerRequiresPerUserCredential(candidate),
+        ),
       ),
-    [allowedProviders],
+    [allowedProviders, allowPersonalSubscriptions],
   );
+  // The endpoint to suggest when the app runs in Docker. Derived from the
+  // provider's own default so it matches the transport in play — vLLM has no
+  // default endpoint at all, so it gets the advice without a concrete example.
+  const dockerBaseUrlExample = DEFAULT_PROVIDER_BASE_URLS[provider]?.replace(
+    "localhost",
+    "host.docker.internal",
+  );
+  // The transports a caller-supplied `allowedProviders` leaves open. The pair is
+  // one product with one credential, so a caller naming either one gets the
+  // single collapsed "Ollama" entry — but it must resolve to a transport that
+  // caller actually allows, or the entry renders permanently disabled.
+  const allowedOllamaTransports = useMemo(
+    (): CreateLlmProviderApiKeyBody["provider"][] =>
+      OLLAMA_TRANSPORTS.filter((key) => allowedProviderSet.has(key)),
+    [allowedProviderSet],
+  );
+  // Which of the two Ollama transports represents "Ollama" in the provider list:
+  // the context's preferred transport when it is open, otherwise whichever one
+  // the caller left.
+  const ollamaListedTransport = useMemo(() => {
+    const preferred = ollamaTransportForContext(forEmbedding);
+    return allowedOllamaTransports.includes(preferred)
+      ? preferred
+      : (allowedOllamaTransports[0] ?? preferred);
+  }, [allowedOllamaTransports, forEmbedding]);
+  // Embeddings only work on the `/v1` transport, and a caller that allows just
+  // one transport has already made the choice — in both cases there is nothing
+  // to pick, and offering the control would let the form produce a key the
+  // caller's own setup instructions do not describe.
+  const showOllamaTransport =
+    isOllamaProvider(provider) &&
+    !forEmbedding &&
+    allowedOllamaTransports.length > 1;
+  const showProviderField = !(progressive && allowedProviderSet.size === 1);
   const showConfiguredStyling = isEditMode && !hasApiKeyChanged;
 
   const existingPrimaryKey = useMemo(() => {
@@ -577,7 +718,17 @@ export function LlmProviderApiKeyForm({
   const prevProviderRef = useRef(provider);
   useEffect(() => {
     if (isEditMode || prevProviderRef.current === provider) return;
+    const previousProvider = prevProviderRef.current;
     prevProviderRef.current = provider;
+    // Switching between the two Ollama transports is not a change of provider
+    // in any way that invalidates a credential: it is the same server reached
+    // over a different endpoint, so the key and headers still apply. Only the
+    // base URL is transport-specific (`/v1` or not), and clearing it falls back
+    // to a placeholder showing the right default for the chosen transport.
+    if (isOllamaProvider(previousProvider) && isOllamaProvider(provider)) {
+      form.setValue("baseUrl", null);
+      return;
+    }
     form.setValue("apiKey", null);
     form.setValue("baseUrl", null);
     form.setValue("inferenceBaseUrl", null);
@@ -628,84 +779,181 @@ export function LlmProviderApiKeyForm({
   return (
     <div data-testid={E2eTestId.ChatApiKeyForm}>
       <div className="space-y-4">
-        <div className={mode === "full" ? "grid grid-cols-2 gap-4" : ""}>
+        {!isSubscriptionFlow && (
+          <div
+            className={
+              mode === "full" && showProviderField
+                ? "grid grid-cols-2 gap-4"
+                : ""
+            }
+          >
+            {showProviderField && (
+              <div className="space-y-2">
+                <Label htmlFor="llm-provider-api-key-provider">Provider</Label>
+                <Select
+                  value={
+                    isOllamaProvider(provider)
+                      ? ollamaListedTransport
+                      : provider
+                  }
+                  onValueChange={(value) =>
+                    form.setValue(
+                      "provider",
+                      value as CreateLlmProviderApiKeyBody["provider"],
+                    )
+                  }
+                  disabled={isEditMode || isPending || disableProvider}
+                >
+                  <SelectTrigger
+                    id="llm-provider-api-key-provider"
+                    className="w-full"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <LlmProviderSelectItems
+                      options={Object.entries(PROVIDER_CONFIG)
+                        // Personal subscription-only providers do not belong in
+                        // the API-key flow. The two Ollama transports are one
+                        // product and collapse to a single provider entry.
+                        .filter(
+                          ([key]) =>
+                            (allowPersonalSubscriptions ||
+                              !providerRequiresPerUserCredential(
+                                key as CreateLlmProviderApiKeyBody["provider"],
+                              )) &&
+                            (!isOllamaProvider(key) ||
+                              key === ollamaListedTransport),
+                        )
+                        .map(
+                          ([key, config]) =>
+                            [
+                              key,
+                              key === ollamaListedTransport
+                                ? { ...config, name: "Ollama" }
+                                : config,
+                            ] as const,
+                        )
+                        .sort(([, a], [, b]) => a.name.localeCompare(b.name))
+                        .map(([key, config]) => {
+                          const providerKey =
+                            key as CreateLlmProviderApiKeyBody["provider"];
+                          const isGeminiDisabledByVertexAi =
+                            providerKey === "gemini" && geminiVertexAiEnabled;
+                          const isBedrockDisabledByIamAuth =
+                            providerKey === "bedrock" && bedrockIamAuthEnabled;
+                          const isEmbeddingUnsupported =
+                            forEmbedding && config.supportsEmbeddings === false;
+
+                          return {
+                            value: providerKey,
+                            icon: config.icon,
+                            name: config.name,
+                            disabled:
+                              !allowedProviderSet.has(providerKey) ||
+                              !config.enabled ||
+                              isGeminiDisabledByVertexAi ||
+                              isBedrockDisabledByIamAuth ||
+                              isEmbeddingUnsupported,
+                            subtext: isEmbeddingUnsupported
+                              ? "Not supported for embeddings"
+                              : undefined,
+                            showComingSoon: !config.enabled,
+                            showGeminiVertexAiBadge: isGeminiDisabledByVertexAi,
+                            showBedrockIamBadge: isBedrockDisabledByIamAuth,
+                          };
+                        })}
+                    />
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {mode === "full" && (
+              <div className="space-y-2">
+                <Label htmlFor="llm-provider-api-key-name">
+                  Name{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  id="llm-provider-api-key-name"
+                  placeholder={defaultKeyName}
+                  disabled={isPending}
+                  autoComplete="off"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  {...form.register("name")}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/*
+          Sits outside the `byosEnabled` branch below on purpose: the transport
+          is part of the provider, not a way of supplying credentials, so it
+          must stay visible when keys come from the vault.
+        */}
+        {showOllamaTransport && (
           <div className="space-y-2">
-            <Label htmlFor="llm-provider-api-key-provider">Provider</Label>
-            <Select
-              value={provider}
-              onValueChange={(value) =>
-                form.setValue(
-                  "provider",
-                  value as CreateLlmProviderApiKeyBody["provider"],
-                )
-              }
+            {/*
+              A radiogroup rather than Tabs: this picks a value, it does not
+              switch between panels. Radix Tabs sets `aria-controls` on every
+              trigger unconditionally, so with no TabsContent both triggers
+              pointed at an element id that is never rendered.
+            */}
+            <span
+              id="llm-provider-api-key-ollama-transport"
+              className="text-sm font-medium leading-none"
+            >
+              Transport
+            </span>
+            <fieldset
+              className="grid w-full grid-cols-2 gap-1 rounded-lg bg-muted p-1"
+              aria-labelledby="llm-provider-api-key-ollama-transport"
               disabled={isEditMode || isPending || disableProvider}
             >
-              <SelectTrigger
-                id="llm-provider-api-key-provider"
-                className="w-full"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <LlmProviderSelectItems
-                  options={Object.entries(PROVIDER_CONFIG)
-                    .sort(([, a], [, b]) => a.name.localeCompare(b.name))
-                    .map(([key, config]) => {
-                      const providerKey =
-                        key as CreateLlmProviderApiKeyBody["provider"];
-                      const isGeminiDisabledByVertexAi =
-                        providerKey === "gemini" && geminiVertexAiEnabled;
-                      const isBedrockDisabledByIamAuth =
-                        providerKey === "bedrock" && bedrockIamAuthEnabled;
-                      const isEmbeddingUnsupported =
-                        forEmbedding && config.supportsEmbeddings === false;
-
-                      return {
-                        value: providerKey,
-                        icon: config.icon,
-                        name: config.name,
-                        disabled:
-                          !allowedProviderSet.has(providerKey) ||
-                          !config.enabled ||
-                          isGeminiDisabledByVertexAi ||
-                          isBedrockDisabledByIamAuth ||
-                          isEmbeddingUnsupported,
-                        subtext: isEmbeddingUnsupported
-                          ? "Not supported for embeddings"
-                          : undefined,
-                        showComingSoon: !config.enabled,
-                        showGeminiVertexAiBadge: isGeminiDisabledByVertexAi,
-                        showBedrockIamBadge: isBedrockDisabledByIamAuth,
-                      };
-                    })}
-                />
-              </SelectContent>
-            </Select>
+              {/*
+                The transport is baked into the stored provider, so an
+                existing key cannot switch without being recreated.
+              */}
+              {OLLAMA_TRANSPORT_OPTIONS.map((option) => {
+                const selected = provider === option.value;
+                return (
+                  <label
+                    key={option.value}
+                    className={cn(
+                      "cursor-pointer rounded-md px-3 py-1.5 text-center text-sm font-medium transition-colors",
+                      "has-disabled:cursor-not-allowed has-disabled:opacity-50",
+                      selected
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="llm-provider-api-key-ollama-transport-option"
+                      value={option.value}
+                      checked={selected}
+                      onChange={() => form.setValue("provider", option.value)}
+                      className="sr-only"
+                    />
+                    {option.label}
+                  </label>
+                );
+              })}
+            </fieldset>
+            <p className="text-xs text-muted-foreground">
+              {provider === "ollama-native"
+                ? "Ollama's own /api/chat. Supports per-model parameters such as num_ctx and thinking."
+                : "Ollama's OpenAI-compatible /v1 endpoint. Supports embeddings; per-model parameters are ignored."}
+            </p>
           </div>
+        )}
 
-          {mode === "full" && (
-            <div className="space-y-2">
-              <Label htmlFor="llm-provider-api-key-name">
-                Name{" "}
-                <span className="text-muted-foreground font-normal">
-                  (optional)
-                </span>
-              </Label>
-              <Input
-                id="llm-provider-api-key-name"
-                placeholder={defaultKeyName}
-                disabled={isPending}
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                {...form.register("name")}
-              />
-            </div>
-          )}
-        </div>
-
-        {byosEnabled ? (
+        {byosEnabled && !isSubscriptionFlow ? (
           <Suspense
             fallback={
               <div className="text-sm text-muted-foreground">Loading...</div>
@@ -791,62 +1039,68 @@ export function LlmProviderApiKeyForm({
               </div>
             )}
 
-            {provider === "openai" && (
-              <Tabs
-                value={openaiAuthMethod}
-                onValueChange={(value) => {
-                  form.setValue(
-                    "openaiAuthMethod",
-                    value as "api-key" | "chatgpt-subscription",
-                    { shouldDirty: true },
-                  );
-                  // Clear any credential carried over from the other auth mode:
-                  // a typed sk- key must not leak into ChatGPT-subscription mode
-                  // (false "connected" card / submit-before-sign-in), and an
-                  // OAuth credential must not surface in the visible API Key
-                  // field when switching back. Fires only on user interaction,
-                  // so it never wipes prefilled defaults.
-                  form.setValue("apiKey", null, { shouldDirty: true });
-                }}
-              >
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="api-key" disabled={isPending}>
-                    API Key
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="chatgpt-subscription"
-                    disabled={isPending}
-                  >
-                    {CHATGPT_SUBSCRIPTION_LABEL}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            )}
+            {provider === "openai" &&
+              allowPersonalSubscriptions &&
+              credentialMode === undefined && (
+                <Tabs
+                  value={openaiAuthMethod}
+                  onValueChange={(value) => {
+                    form.setValue(
+                      "openaiAuthMethod",
+                      value as "api-key" | "chatgpt-subscription",
+                      { shouldDirty: true },
+                    );
+                    // Clear any credential carried over from the other auth mode:
+                    // a typed sk- key must not leak into ChatGPT-subscription mode
+                    // (false "connected" card / submit-before-sign-in), and an
+                    // OAuth credential must not surface in the visible API Key
+                    // field when switching back. Fires only on user interaction,
+                    // so it never wipes prefilled defaults.
+                    form.setValue("apiKey", null, { shouldDirty: true });
+                  }}
+                >
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="api-key" disabled={isPending}>
+                      API Key
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="chatgpt-subscription"
+                      disabled={isPending}
+                    >
+                      {CHATGPT_SUBSCRIPTION_LABEL}
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
 
             {!isBedrockSigV4 &&
               bedrockAuthMethod !== "iam" &&
               (isPerUserProvider || isOpenaiChatgptSub ? (
                 <>
-                  <Label>
-                    {provider === "github-copilot"
-                      ? "GitHub Copilot account"
-                      : provider === "microsoft-365-copilot"
-                        ? "Microsoft 365 Copilot account"
-                        : CHATGPT_SUBSCRIPTION_LABEL}
-                  </Label>
-                  {isOpenaiChatgptSub ? (
-                    <p className="text-xs text-muted-foreground">
-                      No API key needed — just Sign in with the OpenAI account
-                      to connect your ChatGPT subscription. Keys are per-user:
-                      everyone using a Codex model signs in with their own
-                      account.
-                    </p>
-                  ) : (
-                    providerConfig.description && (
-                      <p className="text-xs text-muted-foreground">
-                        {providerConfig.description}
-                      </p>
-                    )
+                  {!isSubscriptionFlow && (
+                    <>
+                      <Label>
+                        {provider === "github-copilot"
+                          ? "GitHub Copilot account"
+                          : provider === "microsoft-365-copilot"
+                            ? "Microsoft 365 Copilot account"
+                            : CHATGPT_SUBSCRIPTION_LABEL}
+                      </Label>
+                      {isOpenaiChatgptSub ? (
+                        <p className="text-xs text-muted-foreground">
+                          No API key needed — just Sign in with the OpenAI
+                          account to connect your ChatGPT subscription. Keys are
+                          per-user: everyone using a Codex model signs in with
+                          their own account.
+                        </p>
+                      ) : (
+                        providerConfig.description && (
+                          <p className="text-xs text-muted-foreground">
+                            {providerConfig.description}
+                          </p>
+                        )
+                      )}
+                    </>
                   )}
                   {perUserCredentialConnected && (
                     <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
@@ -875,25 +1129,28 @@ export function LlmProviderApiKeyForm({
                   {provider === "github-copilot" ? (
                     <GithubCopilotSignIn
                       disabled={isPending}
-                      onToken={(token) =>
-                        form.setValue("apiKey", token, { shouldDirty: true })
-                      }
+                      onToken={(token) => {
+                        form.setValue("apiKey", token, { shouldDirty: true });
+                        onSubscriptionCredential?.(token);
+                      }}
                     />
                   ) : provider === "microsoft-365-copilot" ? (
                     <Microsoft365CopilotSignIn
                       disabled={isPending}
-                      onToken={(token) =>
-                        form.setValue("apiKey", token, { shouldDirty: true })
-                      }
+                      onToken={(token) => {
+                        form.setValue("apiKey", token, { shouldDirty: true });
+                        onSubscriptionCredential?.(token);
+                      }}
                     />
                   ) : (
                     <OpenaiCodexSignIn
                       disabled={isPending}
-                      onCredential={(credential) =>
+                      onCredential={(credential) => {
                         form.setValue("apiKey", credential, {
                           shouldDirty: true,
-                        })
-                      }
+                        });
+                        onSubscriptionCredential?.(credential);
+                      }}
                     />
                   )}
                 </>
@@ -1015,63 +1272,65 @@ export function LlmProviderApiKeyForm({
           </div>
         )}
 
-        {!hideScopeAndPrimary && (
-          <>
-            <VisibilitySelector
-              label="Scope"
-              value={scope}
-              options={visibilityOptions}
-              onValueChange={(nextScope) => {
-                form.setValue("scope", nextScope, { shouldDirty: true });
-                if (nextScope !== "team") {
-                  form.setValue("teamId", null, { shouldDirty: true });
-                }
-              }}
-            >
-              <p className="text-xs text-muted-foreground">
-                Controls who can use this key.
-                {authDocsUrl && (
-                  <>
-                    {" "}
-                    <ExternalDocsLink
-                      href={`${authDocsUrl}#api-key-scoping`}
-                      className="text-inherit underline hover:text-foreground"
-                      showIcon={false}
-                    >
-                      Learn more
-                    </ExternalDocsLink>
-                  </>
-                )}
-              </p>
-
-              {scope === "team" && (
-                <div className="space-y-2">
-                  <Label htmlFor="llm-provider-api-key-team">Team</Label>
-                  <Select
-                    value={teamId ?? undefined}
-                    onValueChange={(value) =>
-                      form.setValue("teamId", value, { shouldDirty: true })
-                    }
-                    disabled={isPending || !canReadTeams || teams.length === 0}
+        {!hideScopeAndPrimary && !isSubscriptionFlow && (
+          <VisibilitySelector
+            label="Scope"
+            value={scope}
+            options={visibilityOptions}
+            onValueChange={(nextScope) => {
+              form.setValue("scope", nextScope, { shouldDirty: true });
+              if (nextScope !== "team") {
+                form.setValue("teamId", null, { shouldDirty: true });
+              }
+            }}
+          >
+            {scope === "team" && (
+              <div className="space-y-2">
+                <Label htmlFor="llm-provider-api-key-team">Team</Label>
+                <Select
+                  value={teamId ?? undefined}
+                  onValueChange={(value) =>
+                    form.setValue("teamId", value, { shouldDirty: true })
+                  }
+                  disabled={isPending || !canReadTeams || teams.length === 0}
+                >
+                  <SelectTrigger
+                    id="llm-provider-api-key-team"
+                    className="w-full"
                   >
-                    <SelectTrigger
-                      id="llm-provider-api-key-team"
-                      className="w-full"
-                    >
-                      <SelectValue placeholder="Select a team" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {teams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
-                          {team.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </VisibilitySelector>
+                    <SelectValue placeholder="Select a team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {teams.map((team) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        {team.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </VisibilitySelector>
+        )}
 
+        {progressive && !isSubscriptionFlow && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto w-full justify-between px-0 py-2 text-sm"
+            aria-expanded={advancedSettingsOpen}
+            onClick={() => setAdvancedSettingsOpen((open) => !open)}
+          >
+            Advanced settings
+            <ChevronDown
+              className={`size-4 transition-transform ${advancedSettingsOpen ? "rotate-180" : ""}`}
+            />
+          </Button>
+        )}
+
+        {showAdvancedSettings &&
+          !isSubscriptionFlow &&
+          !hideScopeAndPrimary && (
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
                 <Label htmlFor="llm-provider-api-key-is-primary">
@@ -1092,87 +1351,97 @@ export function LlmProviderApiKeyForm({
                 disabled={isPending || Boolean(existingPrimaryKey)}
               />
             </div>
-          </>
+          )}
+
+        {/* Region is a primary Bedrock field, not an advanced one: AWS enables
+            models per region, so a key is unusable until it points at the right
+            one. The endpoint it writes lives under Advanced settings below. */}
+        {!isSubscriptionFlow && isBedrock && (
+          <div className="space-y-2">
+            <Label htmlFor="llm-provider-api-key-bedrock-region">Region</Label>
+            <p className="text-xs text-muted-foreground">
+              The AWS region to send Bedrock requests to. Models are enabled per
+              region, so pick the one where your models are available.
+            </p>
+            <Select
+              value={bedrockRegion}
+              onValueChange={(region) =>
+                form.setValue("baseUrl", bedrockRuntimeBaseUrl(region), {
+                  shouldDirty: true,
+                })
+              }
+              disabled={isPending}
+            >
+              <SelectTrigger id="llm-provider-api-key-bedrock-region">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BEDROCK_REGIONS.map(({ id, label }) => (
+                  <SelectItem key={id} value={id}>
+                    {label} — {id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hasUnresolvedBedrockRegion && (
+              <p className="text-xs text-amber-600 dark:text-amber-500">
+                The custom endpoint in Advanced settings carries no recognizable
+                region, so requests will run against{" "}
+                <code>{DEFAULT_BEDROCK_REGION}</code>. Use a{" "}
+                <code>bedrock-runtime.&lt;region&gt;.amazonaws.com</code>{" "}
+                endpoint to pin a different one.
+              </p>
+            )}
+          </div>
         )}
 
-        <div className="space-y-2">
-          <Label htmlFor="llm-provider-api-key-base-url">
-            Base URL{" "}
-            {!isBaseUrlRequired && (
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
-            )}
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Override the default API endpoint. Useful for self-hosted or proxy
-            setups.
-          </p>
-          {isSelfHostedProvider(provider) && (
-            <p className="text-xs text-muted-foreground">
-              If this app runs in Docker, <code>localhost</code> points at the
-              container, not your host machine. Use{" "}
-              <code>host.docker.internal</code> instead (e.g.{" "}
-              <code>http://host.docker.internal:11434/v1</code>).
-            </p>
-          )}
-          <Input
-            id="llm-provider-api-key-base-url"
-            type="url"
-            placeholder={
-              providerBaseUrls?.[provider] ||
-              DEFAULT_PROVIDER_BASE_URLS[provider] ||
-              "https://..."
-            }
-            disabled={isPending}
-            {...form.register("baseUrl", {
-              validate: (value) => {
-                if (!value) {
-                  if (isBaseUrlRequired) {
-                    return "Base URL is required for this provider";
-                  }
-                  return true;
-                }
-
-                try {
-                  const url = new URL(value);
-                  if (!["http:", "https:"].includes(url.protocol)) {
-                    return "URL must use http or https protocol";
-                  }
-                  return true;
-                } catch {
-                  return "Please enter a valid URL (e.g. https://api.example.com)";
-                }
-              },
-            })}
-          />
-          {form.formState.errors.baseUrl && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.baseUrl.message}
-            </p>
-          )}
-        </div>
-
-        {provider === "azure" && (
+        {!isSubscriptionFlow && (isBaseUrlRequired || showAdvancedSettings) && (
           <div className="space-y-2">
-            <Label htmlFor="llm-provider-api-key-inference-base-url">
-              Inference URL{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
+            <Label htmlFor="llm-provider-api-key-base-url">
+              {isBedrock ? "Custom endpoint" : "Base URL"}{" "}
+              {!isBaseUrlRequired && (
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              )}
             </Label>
             <p className="text-xs text-muted-foreground">
-              Runtime endpoint for chat and embeddings when it differs from the
-              Base URL used for Azure deployment discovery.
+              {isBedrock
+                ? "Filled in from the region above. Change it only for a VPC/PrivateLink endpoint or a Bedrock-compatible gateway."
+                : "Override the default API endpoint. Useful for self-hosted or proxy setups."}
             </p>
+            {isSelfHostedProvider(provider) && (
+              <p className="text-xs text-muted-foreground">
+                If this app runs in Docker, <code>localhost</code> points at the
+                container, not your host machine. Use{" "}
+                <code>host.docker.internal</code> instead
+                {dockerBaseUrlExample && (
+                  <>
+                    {" "}
+                    (e.g. <code>{dockerBaseUrlExample}</code>)
+                  </>
+                )}
+                .
+              </p>
+            )}
             <Input
-              id="llm-provider-api-key-inference-base-url"
+              id="llm-provider-api-key-base-url"
               type="url"
-              placeholder="https://<resource>.openai.azure.com/openai"
+              placeholder={
+                (isBedrock ? bedrockRuntimeBaseUrl(bedrockRegion) : "") ||
+                providerBaseUrls?.[provider] ||
+                DEFAULT_PROVIDER_BASE_URLS[provider] ||
+                "https://..."
+              }
               disabled={isPending}
-              {...form.register("inferenceBaseUrl", {
+              {...form.register("baseUrl", {
                 validate: (value) => {
-                  if (!value) return true;
+                  if (!value) {
+                    if (isBaseUrlRequired) {
+                      return "Base URL is required for this provider";
+                    }
+                    return true;
+                  }
 
                   try {
                     const url = new URL(value);
@@ -1186,69 +1455,114 @@ export function LlmProviderApiKeyForm({
                 },
               })}
             />
-            {form.formState.errors.inferenceBaseUrl && (
+            {form.formState.errors.baseUrl && (
               <p className="text-xs text-destructive">
-                {form.formState.errors.inferenceBaseUrl.message}
+                {form.formState.errors.baseUrl.message}
               </p>
             )}
           </div>
         )}
 
-        <div className="space-y-2">
-          <Label>
-            Extra HTTP headers{" "}
-            <span className="font-normal text-muted-foreground">
-              (optional)
-            </span>
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            Sent on every request to the provider. Useful for gateways that
-            require custom RBAC headers (e.g. <code>kubeflow-userid</code>).
-          </p>
-          {extraHeadersFieldArray.fields.length > 0 && (
+        {!isSubscriptionFlow &&
+          showAdvancedSettings &&
+          provider === "azure" && (
             <div className="space-y-2">
-              {extraHeadersFieldArray.fields.map((field, index) => (
-                <div key={field.id} className="flex items-start gap-2">
-                  <Input
-                    aria-label="Header name"
-                    placeholder="Header name"
-                    disabled={isPending}
-                    className="flex-1"
-                    {...form.register(`extraHeaders.${index}.name` as const)}
-                  />
-                  <Input
-                    aria-label="Header value"
-                    placeholder="Header value"
-                    disabled={isPending}
-                    className="flex-1"
-                    {...form.register(`extraHeaders.${index}.value` as const)}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    disabled={isPending}
-                    onClick={() => extraHeadersFieldArray.remove(index)}
-                    aria-label={`Remove header ${index + 1}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+              <Label htmlFor="llm-provider-api-key-inference-base-url">
+                Inference URL{" "}
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Runtime endpoint for chat and embeddings when it differs from
+                the Base URL used for Azure deployment discovery.
+              </p>
+              <Input
+                id="llm-provider-api-key-inference-base-url"
+                type="url"
+                placeholder="https://<resource>.openai.azure.com/openai"
+                disabled={isPending}
+                {...form.register("inferenceBaseUrl", {
+                  validate: (value) => {
+                    if (!value) return true;
+
+                    try {
+                      const url = new URL(value);
+                      if (!["http:", "https:"].includes(url.protocol)) {
+                        return "URL must use http or https protocol";
+                      }
+                      return true;
+                    } catch {
+                      return "Please enter a valid URL (e.g. https://api.example.com)";
+                    }
+                  },
+                })}
+              />
+              {form.formState.errors.inferenceBaseUrl && (
+                <p className="text-xs text-destructive">
+                  {form.formState.errors.inferenceBaseUrl.message}
+                </p>
+              )}
             </div>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={isPending}
-            onClick={() =>
-              extraHeadersFieldArray.append({ name: "", value: "" })
-            }
-          >
-            Add header
-          </Button>
-        </div>
+
+        {!isSubscriptionFlow && showAdvancedSettings && (
+          <div className="space-y-2">
+            <Label>
+              Extra HTTP headers{" "}
+              <span className="font-normal text-muted-foreground">
+                (optional)
+              </span>
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Sent on every request to the provider. Useful for gateways that
+              require custom RBAC headers (e.g. <code>kubeflow-userid</code>).
+            </p>
+            {extraHeadersFieldArray.fields.length > 0 && (
+              <div className="space-y-2">
+                {extraHeadersFieldArray.fields.map((field, index) => (
+                  <div key={field.id} className="flex items-start gap-2">
+                    <Input
+                      aria-label="Header name"
+                      placeholder="Header name"
+                      disabled={isPending}
+                      className="flex-1"
+                      {...form.register(`extraHeaders.${index}.name` as const)}
+                    />
+                    <Input
+                      aria-label="Header value"
+                      placeholder="Header value"
+                      disabled={isPending}
+                      className="flex-1"
+                      {...form.register(`extraHeaders.${index}.value` as const)}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={isPending}
+                      onClick={() => extraHeadersFieldArray.remove(index)}
+                      aria-label={`Remove header ${index + 1}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isPending}
+              onClick={() =>
+                extraHeadersFieldArray.append({ name: "", value: "" })
+              }
+            >
+              Add header
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

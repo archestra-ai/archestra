@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-07-09
+lastUpdated: 2026-07-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -86,6 +86,39 @@ MCP Gateways support four client authentication paths:
 Use OAuth 2.1 for standard MCP clients, ID-JAG or JWKS for enterprise-managed identity, and bearer tokens for direct service integrations or simple local setup.
 
 See [MCP Authentication](/docs/mcp-authentication) for more details.
+
+## Protocol Versions
+
+Gateways serve both the `2025-11-25` and `2026-07-28` MCP revisions from the same endpoint. Clients pick one with the `MCP-Protocol-Version` header, or by sending `io.modelcontextprotocol/protocolVersion` in a request's `_meta`. A client that declares neither keeps the older behavior, so existing integrations need no change.
+
+Older revisions still work too. Anything back to `2024-11-05` is accepted and served as `2025-11-25` would be — the gateway echoes back the version you asked for rather than upgrading you.
+
+### What Each Revision Gets
+
+| Feature | `2025-11-25` | `2026-07-28` |
+| --- | --- | --- |
+| Capability discovery | `initialize` handshake | `server/discover` |
+| Session | `Mcp-Session-Id` header | None — every request stands alone |
+| Routing headers | Not sent | `Mcp-Method` and `Mcp-Name` required |
+| Interactive input | Elicitation during the call | Multi round-trip: the call returns what it needs, you retry with the answer |
+| Result caching hints | Sent, ignored by older clients | `ttlMs` and `cacheScope` on tool, prompt, and resource results |
+| Result envelope | Plain result | `resultType`, plus server identity in `_meta` |
+| Missing-resource error | `-32002` | `-32602` |
+| `ping` and `logging/setLevel` | Answered | Removed — method-not-found |
+| Change notifications | None | `subscriptions/listen` stream for tool-list changes |
+| `x-mcp-header` params | Ignored | Mirrored to `Mcp-Param-*` headers on upstream calls |
+
+Both revisions see the same tools, the same access control, and the same policies. The differences are all in how a client talks to the gateway, not in what it can reach.
+
+### Notes for Clients on `2026-07-28`
+
+Routing headers must agree with the request body. The gateway rejects a mismatch — the headers exist so proxies can route without reading the body, so one that disagrees with its body is treated as a problem rather than ignored.
+
+Tool, prompt, and resource results carry a freshness hint. It is always marked private: a gateway filters results per caller, so two users can legitimately see different ones and a shared cache must not serve one person's view to another.
+
+A tool that needs input mid-call returns a request for it instead of prompting inline. Your client gathers the answer and retries the same call with it attached. The retry re-runs the tool, and the gateway caps how many times one call can go around.
+
+To hear about tool-list changes, open a `subscriptions/listen` stream with `toolsListChanged` in the filter. The first event acknowledges which types the gateway honors — tool-list changes only, since prompt and resource lists come from upstream servers. Close the stream to unsubscribe.
 
 ## Access Control
 

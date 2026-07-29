@@ -39,6 +39,7 @@ const app = {
   organizationId: "org-1",
   authorId: "user-1",
   name: "Test App",
+  slug: "test-app",
   description: null,
   templateId: null,
   mcpServerId: "server-1",
@@ -51,6 +52,7 @@ const app = {
   scope: "personal",
   environmentId: null,
   teams: [],
+  users: [],
   viewerRole: "owner",
   authorName: null,
 } satisfies archestraApiTypes.GetAppResponses["200"];

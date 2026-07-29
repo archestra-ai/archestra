@@ -101,6 +101,7 @@ beforeEach(() => {
 const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   source: "owned",
   id: "owned-1",
+  slug: null,
   name: "My Owned App",
   description: "An owned app",
   scope: "org",
@@ -110,6 +111,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   latestVersion: 1,
   enabled: true,
   teams: [],
+  users: [],
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",
   pinnedAt: null,
@@ -243,9 +245,18 @@ describe("OwnedAppCard", () => {
 
     expect(screen.getByText("My Owned App")).toBeInTheDocument();
     expect(screen.getByLabelText("MCP app")).toBeInTheDocument();
+    // No slug on this app, so the link falls back to the id.
     expect(
       screen.getByRole("link", { name: /open in new tab/i }),
     ).toHaveAttribute("href", "/a/owned-1");
+  });
+
+  it("links to the app's slug when it has one", () => {
+    render(<AppCard app={{ ...ownedApp, slug: "sales-dashboard" }} />);
+
+    expect(
+      screen.getByRole("link", { name: /open in new tab/i }),
+    ).toHaveAttribute("href", "/a/sales-dashboard");
 
     expect(screen.queryByTestId("delete-dialog")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("menuitem", { name: /delete/i }));

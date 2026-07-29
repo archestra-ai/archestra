@@ -239,7 +239,8 @@ describe("external UI server served as an MCP App (POST /api/mcp/server/:id)", (
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().error?.code).toBe(-32002);
+    // SEP-2164 moved missing-resource errors onto JSON-RPC Invalid Params.
+    expect(res.json().error?.code).toBe(-32602);
     // The refused read must never reach the upstream (no exfiltration through
     // the app runtime's install credentials).
     expect(readSpy).not.toHaveBeenCalled();

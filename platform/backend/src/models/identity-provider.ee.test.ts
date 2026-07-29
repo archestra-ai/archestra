@@ -2467,6 +2467,101 @@ describe("resolveSsoRole", () => {
     });
   });
 
+  describe("organization default role fallback", () => {
+    test("uses the org default role when the provider has no role mapping", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization({ defaultMemberRole: "editor" });
+      const provider = await makeIdentityProvider(org.id);
+
+      const params = createParams({
+        user: { id: "user-1", email: "user@example.com" },
+        provider: { providerId: provider.providerId },
+        token: { email: "user@example.com" },
+      });
+
+      const result = await IdentityProviderModel.resolveSsoRole(params);
+
+      expect(result).toBe("editor");
+    });
+
+    test("uses the org default role when no rule matches and the provider has no defaultRole", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization({ defaultMemberRole: "editor" });
+      const roleMapping: IdpRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
+        ],
+      };
+      const provider = await makeIdentityProvider(org.id, {
+        roleMapping: roleMapping as unknown as Record<string, unknown>,
+      });
+
+      const params = createParams({
+        user: { id: "user-1", email: "user@example.com" },
+        provider: { providerId: provider.providerId },
+        token: { groups: ["users"] },
+      });
+
+      const result = await IdentityProviderModel.resolveSsoRole(params);
+
+      expect(result).toBe("editor");
+    });
+
+    test("prefers the provider's own defaultRole over the org default", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization({ defaultMemberRole: "editor" });
+      const roleMapping: IdpRoleMappingConfig = {
+        rules: [
+          {
+            expression: '{{#includes groups "admins"}}true{{/includes}}',
+            role: "admin",
+          },
+        ],
+        defaultRole: "viewer",
+      };
+      const provider = await makeIdentityProvider(org.id, {
+        roleMapping: roleMapping as unknown as Record<string, unknown>,
+      });
+
+      const params = createParams({
+        user: { id: "user-1", email: "user@example.com" },
+        provider: { providerId: provider.providerId },
+        token: { groups: ["users"] },
+      });
+
+      const result = await IdentityProviderModel.resolveSsoRole(params);
+
+      expect(result).toBe("viewer");
+    });
+
+    test("falls back to the member role when the org leaves the default unset", async ({
+      makeOrganization,
+      makeIdentityProvider,
+    }) => {
+      const org = await makeOrganization();
+      const provider = await makeIdentityProvider(org.id);
+
+      const params = createParams({
+        user: { id: "user-1", email: "user@example.com" },
+        provider: { providerId: provider.providerId },
+        token: { email: "user@example.com" },
+      });
+
+      const result = await IdentityProviderModel.resolveSsoRole(params);
+
+      expect(result).toBe(MEMBER_ROLE_NAME);
+    });
+  });
+
   describe("role mapping with rules", () => {
     test("returns matched role when rule matches", async ({
       makeOrganization,

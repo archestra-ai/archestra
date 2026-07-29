@@ -133,7 +133,7 @@ The Helm chart provides extensive configuration options through values. For the 
 - `archestra.extraVolumes` - Additional volumes for mounting extra files into the platform and worker pods
 - `archestra.extraVolumeMounts` - Additional volume mounts for the platform and worker containers (for example, a Vertex AI service account key file)
 
-**Auth secret configuration**: `ARCHESTRA_AUTH_SECRET` is optional. If you do not configure it, the Helm chart creates a `<release>-auth` Secret and auto-generates a 64-character `auth-secret` value on first install.
+**Auth secret configuration**: the auth secrets are optional. If you do not configure them, the Helm chart creates a `<release>-auth` Secret and auto-generates 64-character `session-secret` and `secrets-encryption-secret` values on first install.
 
 If you manage secrets outside Helm, point the chart at an existing Kubernetes Secret:
 
@@ -166,7 +166,8 @@ archestra:
 openssl rand -base64 32
 
 # Then add to your helm command:
---set archestra.env.ARCHESTRA_AUTH_SECRET=<your-generated-secret>
+--set archestra.env.ARCHESTRA_AUTH_SESSION_SECRET=<generated-secret> \
+--set archestra.env.ARCHESTRA_SECRETS_ENCRYPTION_SECRET=<generated-secret>
 ```
 
 #### Init Container Configuration
@@ -722,9 +723,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Example: `ARCHESTRA_TRUST_PROXY=true`
 
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
-  - Default: `50MB` (52428800 bytes)
-  - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)
-  - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat
+  - Default: `70MB` (73400320 bytes)
+  - Format: Numeric bytes (e.g., `73400320`) or human-readable (e.g., `70MB`, `100KB`, `1GB`)
+  - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat. The default carries a max-size chat attachment as base64 plus room for history; raising `ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT` requires raising this too.
+  - All attachments of one chat message travel in a single request, so this also bounds their combined size. The chat composer blocks a message whose attachments exceed it and asks the user to send them separately.
 
 - **`ARCHESTRA_FRONTEND_URL`** - Setting this variable enables origin validation for CORS and authentication. When set, only requests from this origin (and any in `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`) are allowed. When not set, all origins are accepted.
   - Example: `https://frontend.example.com`
@@ -742,26 +744,38 @@ The following environment variables can be used to configure Archestra Platform.
 
 ### Code Sandbox
 
-By default the Helm chart runs a managed Dagger Engine. `archestra.codeRuntime.enabled` and `archestra.codeRuntime.dagger.managed.enabled` are both on, so the chart deploys the engine as a StatefulSet (`dagger-runtime-engine`) in the release namespace. That pod runs privileged, adds all Linux capabilities, runs as root, and needs a 50Gi `ReadWriteOnce` PVC for its cache. It schedules only on nodes whose pod-security policy allows those settings and where the PVC can bind.
+Archestra creates one Dagger engine per organization, and one per environment, as a StatefulSet in the namespace that owns it. Each engine pod runs privileged, adds all Linux capabilities, runs as root, and binds a `ReadWriteOnce` PVC for its build cache. An engine schedules only on nodes whose pod-security policy admits those settings and where the PVC can bind. Size the pod with the `ARCHESTRA_DAGGER_RUNTIME_ENGINE_*` variables below.
 
-The bundled engine is a convenience, not a requirement. The sandbox reaches its engine over `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, a `tcp://` or `kube-pod://` address. Run the engine however you like — the companion `platform/helm/dagger-runtime` chart, a Docker container, a standalone binary, or a separate cluster — as long as it is a reachable Dagger Engine. See Dagger's [custom runner](https://docs.dagger.io/reference/configuration/custom-runner) and [deployment](https://docs.dagger.io/reference/#deployment) references for the runner host schemes and engine requirements.
+To run your own engine instead of the ones Archestra creates, set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST` to a `tcp://` or `kube-pod://` address. See Dagger's [custom runner](https://docs.dagger.io/reference/configuration/custom-runner) and [deployment](https://docs.dagger.io/reference/#deployment) references for the runner host schemes and engine requirements.
 
-If your nodes can't host the managed pod, you have two options:
+If your nodes cannot host a privileged pod, either point `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST` at an engine you run elsewhere, or turn the sandbox off with `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker or `archestra.codeRuntime.enabled=false` in Helm values.
 
-- Run the engine elsewhere. Set `archestra.codeRuntime.dagger.managed.enabled=false` and point `archestra.codeRuntime.dagger.runnerHost` (or `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`) at it.
-- Turn the sandbox off. Set both `archestra.codeRuntime.enabled=false` and `archestra.codeRuntime.dagger.managed.enabled=false` in Helm. The second key is what stops the engine pod. For the Docker quickstart, set `ARCHESTRA_CODE_RUNTIME_ENABLED=false`.
+Upgrading from a chart that ran the bundled engine leaves its cache volume behind. The old `dagger-runtime-engine` StatefulSet is gone, but Kubernetes keeps its `data-dagger-runtime-engine-0` PVC and the disk it holds. Delete it once after the upgrade: `kubectl delete pvc data-dagger-runtime-engine-0 -n <release-namespace>`.
 
-- **`ARCHESTRA_CODE_RUNTIME_ENABLED`** - Deployment toggle for the code runtime — the per-conversation [code sandbox](./platform-code-sandbox) where agents run shell commands and Python, execute skill scripts, and run agent hooks. In the quickstart Docker image it deploys the bundled Dagger engine and wires its runner host. The backend enables the sandbox whenever a Dagger runner host (below) is reachable, so a deployment that points at an external engine stays on regardless of this flag. Set `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker (or `archestra.codeRuntime.enabled=false` in Helm) to skip deploying the engine.
+- **`ARCHESTRA_CODE_RUNTIME_ENABLED`** - Enables the code runtime — the per-conversation [code sandbox](./platform-code-sandbox) where agents run shell commands and Python, execute skill scripts, and run agent hooks. Set `false` to turn the sandbox off; that wins even when a runner host is set. Set `true` with the orchestrator configured (`ARCHESTRA_ORCHESTRATOR_KUBECONFIG` or `ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER`) and Archestra creates one Dagger engine per organization. Kubernetes is required for that: the engines are Kubernetes workloads. When off, `run_command` and the other sandbox tools are unavailable and skills cannot execute. The quickstart Docker image and the Helm chart enable it by default; opt out with `ARCHESTRA_CODE_RUNTIME_ENABLED=false` in Docker or `archestra.codeRuntime.enabled=false` in Helm values.
   - Default: `false`
   - Values: `true`, `false`
 
-- **`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`** - Address of the Dagger engine that materializes sandboxes, for example `tcp://dagger-engine:8080` or a `kube-pod://` URL. A reachable host is what enables the backend sandbox; unset it to turn the sandbox off.
+- **`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`** - Address of an existing Dagger engine, for example `tcp://dagger-engine:8080` or a `kube-pod://` URL. Set it to run your own engine: Archestra sends agents without an environment to that address and creates no default engine. An agent bound to an environment still runs on that environment's own engine, which Archestra creates and which needs Kubernetes. A `kube-pod://` host is reached by running a command inside its pod, so it needs Kubernetes as well; only a `tcp://` host runs without it. Setting this also enables the code runtime on its own. A value that is not a `tcp://` or `kube-pod://` URL is rejected and turns the code runtime off rather than falling back to an Archestra-managed engine, so a typo cannot silently provision engines you did not ask for. Leave it unset to let Archestra manage every engine.
   - Default: unset
   - Values: a `tcp://` or `kube-pod://` URL
 
 - **`ARCHESTRA_DAGGER_RUNTIME_IMAGE`** - Base image for Dagger sandboxes. Leave unset to use the default `ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim` image.
   - Default: unset
   - Use this to point at a custom Debian-based image or a pre-baked sandbox base.
+
+- **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT`**, **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE`** - Resources for an engine Archestra creates. Lower them for a small cluster. They apply to new engines only; delete an engine to resize it.
+  - The memory limit covers the engine itself, not the code it sandboxes. Use `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX` for that. The memory request reserves node capacity for both.
+  - Defaults: `2`, `6Gi`, `6Gi`, `50Gi`
+  - Values: Kubernetes quantity strings
+
+- **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX`** - Limits the memory an engine's sandboxes use at once. A run that goes past it is killed; the engine and other runs keep going. Raise it and the memory request together for heavy concurrent work, or lower `ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`.
+  - Default: `5Gi`. Keep it below `ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST`.
+  - Values: Kubernetes quantity strings
+
+- **`ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS`** - Extra IPv4 ranges an engine cannot reach. An engine with no [network policy](./platform-environments) already blocks private, link-local, and cloud-metadata ranges. Add your cluster's Service and Pod CIDRs when they fall outside those ranges, so sandboxed code cannot reach in-cluster services. An entry that is not a valid IPv4 CIDR is ignored, and the backend logs which ones.
+  - Default: unset
+  - Values: comma-separated CIDRs, for example `100.68.0.0/16,34.118.224.0/20`
 
 - **`ARCHESTRA_CODE_RUNTIME_BASE_PREBUILT`** - Set `true` only when `ARCHESTRA_DAGGER_RUNTIME_IMAGE` points at a pre-baked sandbox base image that already contains the apt toolbelt, the `uv` virtualenv, and the default Python dependencies. The runtime then skips the per-sandbox apt/`uv` build steps and instead verifies a provenance marker on the image — failing loudly if the image isn't the baked base — so an engine with restricted egress no longer needs to reach `ghcr.io`, the Debian mirrors, or PyPI when it materializes a sandbox; only the registry hosting the base image. Leave `false` (the default) to build the base from the stock runtime image on first use.
   - Default: `false`
@@ -775,8 +789,9 @@ If your nodes can't host the managed pod, you have two options:
   - Default: `120`
 - **`ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT`** - Maximum captured stdout/stderr per command; output beyond this is truncated.
   - Default: `262144` (256 KiB)
-- **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Maximum size of a file the sandbox can export to the conversation's Files panel.
-  - Default: `16777216` (16 MiB)
+- **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Maximum size of a file the sandbox can export to the conversation's Files panel, and of a chat attachment it can stage for the agent to read.
+  - Default: `52428800` (50 MiB), matching `ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT` so every stored attachment can be staged.
+  - Lowering it does not cap what chat can upload. An attachment over this limit skips sandbox staging and is still stored.
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`** - Sandbox commands the shared Dagger session runs at once, deployment-wide. Raise it with the engine's CPU and memory.
   - Default: `10`
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH`** - Sandbox commands allowed to wait for a free slot. Past this, a command fails with a runtime-at-capacity error instead of queueing.
@@ -850,11 +865,18 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
 
 ### Authentication & Security
 
-- **`ARCHESTRA_AUTH_SECRET`** - Secret key used for signing authentication tokens, encrypting secrets stored in the database, and encrypting JWKS private keys.
-  - Auto-generated once on first run. Set manually if you need to control the secret value. Must be at least 32 characters long.
-  - Example: `something-really-really-secret-12345`
-  - **Warning:** Do not change this value after deployment. Rotating this secret will invalidate all user sessions (forcing re-login), make existing encrypted secrets unreadable, break JWT signing (JWKS private keys are encrypted with this secret), and break two-factor authentication for enrolled users.
-  - Startup verifies this key against previously encrypted secrets and aborts on a mismatch. See `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY` to accept a deliberate rotation.
+- **`ARCHESTRA_AUTH_SESSION_SECRET`** - Session-signing secret (better-auth). Signs session cookies and the `session_data` cookie cache, and encrypts better-auth-internal material: JWKS private keys and two-factor secrets.
+  - Auto-generated once by Helm in the auth Secret under the `session-secret` key. Set manually to control it; must be at least 32 characters.
+  - **Rotating it** invalidates all sessions (forces re-login), regenerates JWKS (in-flight JWTs stop verifying), and breaks two-factor enrollment (enrolled users must re-enroll). No database migration is needed.
+
+- **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`** - Derives the AES key that encrypts secrets stored in the database (`secret` table). Independent of sessions/JWKS/2FA.
+  - Auto-generated once by Helm in the auth Secret under the `secrets-encryption-secret` key. Set manually to control it; must be at least 32 characters.
+  - Startup verifies this key against previously encrypted secrets and aborts on a mismatch (see `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`).
+  - **Rotating it** requires re-encrypting existing rows: set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and restart — the app re-encrypts stored secrets on startup, decrypting each with the previous key and re-encrypting with the new one (idempotent, and a no-op when the key is unchanged). You can also run it explicitly with `pnpm --filter backend db:reencrypt-secrets`. Vault-managed secrets are unaffected.
+
+- **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.
+
+  > When using an external `authSecret.existingSecretName`, that Secret must include `session-secret` and `secrets-encryption-secret` keys (add them before upgrading). Rotate by updating a key in your own secret manager.
 
 - **`ARCHESTRA_AUTH_ADMIN_EMAIL`** - Email address for the default Archestra Admin user, created on startup.
   - Default: `admin@example.com`
@@ -869,15 +891,18 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - The session is an ordinary one for that user — role-based access control is unchanged
   - Example: `admin@example.com`
 
-- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Cookie domain configuration for authentication.
-  - Should be set to the domain of the `ARCHESTRA_FRONTEND_URL`
-  - Example: If frontend is at `https://frontend.example.com`, set to `example.com`
-  - Required when using different domains or subdomains for frontend and backend
+- **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Scopes the session cookie to a domain so the frontend and backend can share it.
+  - Default: None. The cookie stays host-only, bound to the exact frontend host.
+  - Set this only when your frontend and backend are on different subdomains. Use the narrowest domain that covers both. For a frontend at `https://frontend.example.com` and a backend at `https://backend.example.com`, set `example.com`.
+  - The browser then sends the cookie to _every_ subdomain of that domain, not just those two. So `example.com` also reaches `other.example.com`.
+  - Warning: this is how one instance breaks another. If a second Archestra runs on a sibling subdomain (`staging.example.com`) and both use the default cookie prefix, their session cookies share a name and collide. The browser sends both, the server reads the wrong one, and login silently bounces back to the sign-in page.
+  - To run more than one instance under the same domain, give each a unique `ARCHESTRA_AUTH_COOKIE_PREFIX` (below). Do this even when only one instance sets a cookie domain — the shared cookie still leaks to the others.
 
 - **`ARCHESTRA_AUTH_COOKIE_PREFIX`** - Prefix for auth cookie names (`<prefix>.session_token`, etc.).
   - Default: `archestra`
-  - Browsers scope cookies to the host without the port, so multiple Archestra instances on different ports of the same host overwrite each other's session cookies. Give each instance a unique prefix to keep their sessions independent.
-  - Mainly useful for local development with parallel stacks; single-instance deployments can leave the default
+  - Give each instance that shares a host or domain with another a unique prefix, so their session cookies have distinct names and never collide.
+  - Two cases need this. Instances on different ports of one host: browsers ignore the port, so the cookies overwrite each other. Instances on sibling subdomains where one sets `ARCHESTRA_AUTH_COOKIE_DOMAIN`: that cookie leaks across the whole domain (see above).
+  - A single, isolated deployment can leave the default.
 
 - **`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH`** - Hides the username/password login form on the sign-in page.
   - Default: `false`
@@ -912,10 +937,10 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Options: `DB`, `VAULT`, or `READONLY_VAULT`
   - Note: When set to `VAULT` or `READONLY_VAULT`, requires `ARCHESTRA_HASHICORP_VAULT_ADDR` and the credentials for the selected auth method. See [Secrets Management](/docs/platform-secrets-management) for the full configuration reference (KV version, secret path prefix, auth methods).
 
-- **`ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`** - One-boot escape hatch after a deliberate `ARCHESTRA_AUTH_SECRET` change.
+- **`ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`** - One-boot escape hatch after a deliberate encryption-secret change made without the re-encryption migration.
   - Default: `false`
-  - Startup aborts when the current auth secret cannot decrypt previously stored secrets. Set to `true` for one boot to accept the new key, then unset it.
-  - Secrets encrypted with the previous key stay unreadable — re-enter them after the change.
+  - Startup aborts when the current encryption secret cannot decrypt previously stored secrets. Set to `true` for one boot to accept the new key, then unset it.
+  - Secrets encrypted with the previous key stay unreadable — re-enter them after the change. To keep them, use `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` and the re-encryption migration instead.
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - HashiCorp Vault server address
   - Required when: `ARCHESTRA_SECRETS_MANAGER=VAULT` or `READONLY_VAULT`
@@ -1016,9 +1041,20 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Set this to override the default if your Ollama server runs on a different host or port
   - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
 
+- **`ARCHESTRA_OLLAMA_NATIVE_BASE_URL`** - Base URL for the "Ollama (Native)" provider, which uses Ollama's native `/api/chat` endpoint.
+  - Default: `ARCHESTRA_OLLAMA_BASE_URL` with the `/v1` suffix stripped (`http://localhost:11434`)
+  - Set this only if the native endpoint runs on a different host than the OpenAI-compatible one
+  - This is the server **root** — do not include a `/v1` suffix
+  - See: [Ollama setup guide](/docs/platform-supported-llm-providers#ollama)
+
 - **`ARCHESTRA_DEEPSEEK_BASE_URL`** - Override the DeepSeek API base URL.
   - Default: `https://api.deepseek.com`
   - Use this to point to your own proxy or other custom endpoints
+
+- **`ARCHESTRA_ARCHESTRA_BASE_URL`** - Global upstream base URL for the Archestra provider (another Archestra instance's LLM proxy).
+  - No default; normally set per key in the UI
+  - A global value only enables raw passthrough at the `/v1/archestra` proxy prefix
+  - See: [Archestra provider setup](/docs/platform-supported-llm-providers#archestra)
 
 - **`ARCHESTRA_MINIMAX_BASE_URL`** - Override the MiniMax API base URL.
   - Default: `https://api.minimax.io/v1`
@@ -1135,9 +1171,10 @@ These environment variables set the default base URL for each LLM provider. Per-
   - See: [Vertex AI setup guide](/docs/platform-supported-llm-providers#using-vertex-ai)
 
 - **`ARCHESTRA_CHAT_<PROVIDER>_API_KEY`** - LLM provider API keys for the built-in Chat feature.
-  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `GITHUB_COPILOT`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
+  - Supported `<PROVIDER>` values: `ANTHROPIC`, `OPENAI`, `OPENROUTER`, `GEMINI`, `CEREBRAS`, `COHERE`, `GROQ`, `XAI`, `MISTRAL`, `PERPLEXITY`, `VLLM`, `OLLAMA`, `ZHIPUAI`, `DEEPSEEK`, `ARCHESTRA`, `GITHUB_COPILOT`, `BEDROCK`, `MINIMAX`, `AZURE_OPENAI`
   - These serve as fallback API keys when no organization default or profile-specific key is configured
   - Note: `ARCHESTRA_CHAT_VLLM_API_KEY` and `ARCHESTRA_CHAT_OLLAMA_API_KEY` are optional as most vLLM/Ollama deployments don't require authentication
+  - Note: there is no separate `OLLAMA_NATIVE` value — the "Ollama (Native)" provider reads `ARCHESTRA_CHAT_OLLAMA_API_KEY`, since both providers talk to the same server
   - Note: `ARCHESTRA_CHAT_GITHUB_COPILOT_API_KEY` holds a GitHub OAuth token (`gho_...`) of an account with a Copilot subscription, not a static API key
   - See [Chat](/docs/platform-chat) for full details on API key configuration and resolution order
 
@@ -1175,10 +1212,26 @@ Enable polling compatibility only when your database endpoint cannot keep sessio
   - Detection runs entirely in the browser — no message content is sent to the backend for scanning. The flag is read from the backend at runtime via `/api/config`, so toggling it does not require a frontend rebuild.
   - Values: `true`, `false`
 
+- **`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`** - Largest single file a chat upload may store as a conversation attachment.
+  - Default: `52428800` (50 MiB)
+  - This is the only size gate on a chat upload. A file the model cannot read, one too big for the sandbox, or one over `ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT` is not rejected: it is stored in the conversation's Files panel, where the user can download it, and the agent is told it is there.
+  - Raise `ARCHESTRA_API_BODY_LIMIT` alongside this. Uploads arrive base64-encoded (about 4/3 the byte size) in the same request as the conversation history, so the body limit must exceed this value by a comfortable margin.
+
+- **`ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT`** - Largest single attachment that may be embedded in a request to the LLM provider.
+  - Default: `16777216` (16 MiB)
+  - Storing a file and sending it to a model are separate decisions. A file above this is still stored and downloadable; it just never reaches the model, so a large upload cannot inflate a request past what the provider accepts.
+  - The effective ceiling is the lower of this value and the provider's own documented request limit (Anthropic 32 MiB, Bedrock 20 MiB).
+
 - **`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`** - Upper bound on the output tokens an agent turn (interactive chat and A2A/headless) may generate.
   - Default: `32768`
   - Each turn already requests the model's real output ceiling instead of the provider/SDK default that truncated large tool-call payloads and final submission turns. This variable caps that request for cost control: the turn uses `min(this value, the model's real output ceiling)`, and unsynced models fall back to `8192`.
   - Lower it to constrain spend; raise it for models whose useful outputs exceed 32768 tokens.
+
+- **`ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS`** - Output-token cap applied only to providers that charge a request's `max_tokens` reservation against a per-minute token bucket (currently Groq).
+  - Default: `4096`
+  - These providers bill the prompt plus the reserved output budget up front, so requesting a model's real output ceiling can exceed the entire per-minute allowance on an entry tier. The request is then rejected with a 413 before generating a token, and because the reservation is constant, shortening the conversation or starting a new chat does not help.
+  - The turn uses `min(ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS, this value, the model's real output ceiling)` for affected providers; every other provider is unchanged.
+  - Raise it on higher provider tiers, whose larger buckets leave room for longer generations. The cost of this cap is truncated long outputs; the cost of removing it on a small tier is that every request fails.
 
 ### MCP Apps Sandbox
 
@@ -1321,6 +1374,11 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
 - **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access.
   - Default: `archestra-metrics-secret`
   - Note: When set, clients must include `Authorization: Bearer <token>` header to access `/metrics`
+
+- **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often, in milliseconds, to recompute the `llm_active_users` gauge.
+  - Default: `300000` (5 minutes)
+  - Set to `0` to disable collection entirely
+  - Values below `30000` are raised to that floor: the gauge is a distinct count over the interactions table, so a short interval turns into steady background load for a number that changes slowly
 
 ### Incoming Email Configuration
 

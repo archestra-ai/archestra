@@ -146,6 +146,7 @@ export const RouteId = {
   GetTool: "getTool",
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
+  GetToolObservers: "getToolObservers",
   GetUnassignedTools: "getUnassignedTools",
   DeleteTool: "deleteTool",
 
@@ -254,6 +255,9 @@ export const RouteId = {
   OllamaChatCompletionsWithAgent: "ollamaChatCompletionsWithAgent",
   OllamaEmbeddingsWithDefaultAgent: "ollamaEmbeddingsWithDefaultAgent",
   OllamaEmbeddingsWithAgent: "ollamaEmbeddingsWithAgent",
+  // Proxy Routes - Ollama Native (/api/chat)
+  OllamaNativeChatWithDefaultAgent: "ollamaNativeChatWithDefaultAgent",
+  OllamaNativeChatWithAgent: "ollamaNativeChatWithAgent",
   // Proxy Routes - Zhipu AI
   ZhipuaiChatCompletionsWithDefaultAgent:
     "zhipuaiChatCompletionsWithDefaultAgent",
@@ -265,6 +269,11 @@ export const RouteId = {
   DeepSeekChatCompletionsWithDefaultAgent:
     "deepseekChatCompletionsWithDefaultAgent",
   DeepSeekChatCompletionsWithAgent: "deepseekChatCompletionsWithAgent",
+
+  // Proxy Routes - Archestra
+  ArchestraChatCompletionsWithDefaultAgent:
+    "archestraChatCompletionsWithDefaultAgent",
+  ArchestraChatCompletionsWithAgent: "archestraChatCompletionsWithAgent",
 
   // Proxy Routes - Kimi (Moonshot AI)
   KimiChatCompletionsWithDefaultAgent: "kimiChatCompletionsWithDefaultAgent",
@@ -402,6 +411,7 @@ export const RouteId = {
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   GetVirtualApiKey: "getVirtualApiKey",
+  GetVirtualApiKeyValue: "getVirtualApiKeyValue",
   CreateVirtualApiKey: "createVirtualApiKey",
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
@@ -508,6 +518,7 @@ export const RouteId = {
   // Identity Provider Routes
   GetPublicIdentityProviders: "getPublicIdentityProviders",
   GetIdentityProviders: "getIdentityProviders",
+  GetIdentityProviderTeamSyncOptions: "getIdentityProviderTeamSyncOptions",
   GetIdentityProvider: "getIdentityProvider",
   GetIdentityProviderLatestIdTokenClaims:
     "getIdentityProviderLatestIdTokenClaims",
@@ -540,6 +551,7 @@ export const RouteId = {
   GetTeamStatistics: "getTeamStatistics",
   GetAgentStatistics: "getAgentStatistics",
   GetModelStatistics: "getModelStatistics",
+  GetUserStatistics: "getUserStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
 
@@ -715,6 +727,10 @@ export const RouteId = {
   GetAppRecordingRenderStatus: "getAppRecordingRenderStatus",
   DownloadAppRecordingVideo: "downloadAppRecordingVideo",
   CancelAppRecordingRender: "cancelAppRecordingRender",
+  // Reviewer-facing: fetch a hackathon submission's recording bundle from
+  // GitHub (server-side, to dodge the frontend CSP) for the on-platform,
+  // read-only review player.
+  ReviewAppRecording: "reviewAppRecording",
   // Sharing a recording to the public App Gallery: the backend only relays
   // the GitHub device flow (browser CORS); the PR itself is filed client-side.
   AppGalleryDeviceAuthStart: "appGalleryDeviceAuthStart",

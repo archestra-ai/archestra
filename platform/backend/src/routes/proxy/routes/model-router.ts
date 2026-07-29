@@ -1,6 +1,7 @@
 import {
   hasArchestraTokenPrefix,
   LLM_PROXY_OAUTH_SCOPE,
+  MODEL_ROUTER_SUPPORTED_PROVIDERS,
   RouteId,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -17,6 +18,7 @@ import {
   LlmProviderApiKeyModelLinkModel,
   MemberModel,
   ModelModel,
+  ModelTeamModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
   TeamModel,
@@ -222,10 +224,33 @@ const translatedModelRouterProviders = [
   "gemini",
 ] as const satisfies ReadonlyArray<TranslatedModelRouterProvider>;
 
-const modelRouterSupportedProviders = new Set<SupportedProvider>([
+/**
+ * Built from the shared list so the connection UI cannot advertise the router
+ * for a provider that 404s on it. The assertion below keeps that list honest
+ * against the two maps that actually implement routing.
+ */
+const modelRouterSupportedProviders = new Set<SupportedProvider>(
+  MODEL_ROUTER_SUPPORTED_PROVIDERS,
+);
+
+const implementedModelRouterProviders: SupportedProvider[] = [
   ...(Object.keys(openAiWireProviders) as SupportedProvider[]),
   ...translatedModelRouterProviders,
-]);
+];
+for (const provider of implementedModelRouterProviders) {
+  if (!modelRouterSupportedProviders.has(provider)) {
+    throw new Error(
+      `[ModelRouterProxy] ${provider} is routable but missing from MODEL_ROUTER_SUPPORTED_PROVIDERS`,
+    );
+  }
+}
+for (const provider of modelRouterSupportedProviders) {
+  if (!implementedModelRouterProviders.includes(provider)) {
+    throw new Error(
+      `[ModelRouterProxy] ${provider} is listed in MODEL_ROUTER_SUPPORTED_PROVIDERS but has no router implementation`,
+    );
+  }
+}
 
 const ModelListResponseSchema = z.object({
   object: z.literal("list"),
@@ -693,18 +718,32 @@ async function listModels(params: { auth: ModelRouterAuth }) {
     .map((mapping) => mapping.providerApiKeyId);
   const linkedModels =
     await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
+  const candidateModels = linkedModels
+    .map(({ model }) => model)
+    .filter((model) => {
+      if (!modelRouterSupportedProviders.has(model.provider)) {
+        return false;
+      }
+      return (
+        ModelModel.supportsTextChat(model) ||
+        ModelModel.supportsEmbeddings(model)
+      );
+    });
+
+  // Hide team-restricted models the caller cannot invoke: user-attributed auth
+  // is filtered by the user's team memberships (mirroring the proxy-time
+  // guard); auth without a user identity cannot satisfy a team restriction,
+  // so restricted models are omitted entirely.
+  const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
+    modelIds: candidateModels.map((model) => model.id),
+    principalTeamIds:
+      params.auth.authMethod === "oauth_user"
+        ? await TeamModel.getUserTeamIds(params.auth.userId)
+        : [],
+  });
+
   const chatModels = sortRoutableModels(
-    linkedModels
-      .map(({ model }) => model)
-      .filter((model) => {
-        if (!modelRouterSupportedProviders.has(model.provider)) {
-          return false;
-        }
-        return (
-          ModelModel.supportsTextChat(model) ||
-          ModelModel.supportsEmbeddings(model)
-        );
-      }),
+    candidateModels.filter((model) => allowedModelIds.has(model.id)),
   );
 
   return {

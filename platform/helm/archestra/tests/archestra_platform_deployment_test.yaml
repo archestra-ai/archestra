@@ -447,14 +447,24 @@ tests:
                 secretKeyRef:
                   name: RELEASE-NAME-archestra-platform-auth
                   key: auth-secret
+            - name: ARCHESTRA_AUTH_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: RELEASE-NAME-archestra-platform-auth
+                  key: session-secret
+                  optional: true
+            - name: ARCHESTRA_SECRETS_ENCRYPTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: RELEASE-NAME-archestra-platform-auth
+                  key: secrets-encryption-secret
+                  optional: true
             - name: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE
               value: NAMESPACE
             - name: ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER
               value: "true"
             - name: ARCHESTRA_CODE_RUNTIME_ENABLED
               value: "true"
-            - name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
-              value: kube-pod://dagger-runtime-engine-0?namespace=NAMESPACE&container=dagger-engine
             - name: ARCHESTRA_PROCESS_TYPE
               value: "web"
 
@@ -476,7 +486,7 @@ tests:
             name: CUSTOM_VAR
             value: "custom-value"
 
-  - it: should set code runtime environment variables by default
+  - it: should set code runtime enabled env var but no runner host by default
     documentIndex: 1
     asserts:
       - contains:
@@ -484,41 +494,49 @@ tests:
           content:
             name: ARCHESTRA_CODE_RUNTIME_ENABLED
             value: "true"
-      - contains:
+      - notContains:
           path: spec.template.spec.containers[0].env
+          any: true
           content:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
-            value: kube-pod://dagger-runtime-engine-0?namespace=NAMESPACE&container=dagger-engine
 
-  - it: should not set code runtime environment variables when disabled
+  # "false" is the backend kill switch, so it must be emitted rather than omitted
+  # — otherwise a runner host supplied through archestra.env would re-enable the
+  # sandbox that archestra.codeRuntime.enabled=false was meant to turn off.
+  - it: should emit the code runtime kill switch when disabled
     documentIndex: 1
     set:
       archestra.codeRuntime.enabled: false
     asserts:
-      - notContains:
+      - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_CODE_RUNTIME_ENABLED
+            value: "false"
       - notContains:
           path: spec.template.spec.containers[0].env
+          any: true
           content:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
 
-  - it: should target the external companion-chart namespace when managed Dagger is disabled
+  - it: should keep the kill switch when a runner host comes from archestra.env
     documentIndex: 1
     set:
-      archestra.codeRuntime.dagger.managed.enabled: false
+      archestra.codeRuntime.enabled: false
+      archestra.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST: tcp://byo:1234
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
-            value: kube-pod://dagger-runtime-engine-0?namespace=dagger&container=dagger-engine
+            name: ARCHESTRA_CODE_RUNTIME_ENABLED
+            value: "false"
 
-  - it: should support custom code runtime Dagger runner host
+  # Bring-your-own engine is now expressed through archestra.env rather than a
+  # typed values key; the chart just passes it to the backend.
+  - it: should pass a bring-your-own Dagger runner host from archestra.env
     documentIndex: 1
     set:
-      archestra.codeRuntime.dagger.runnerHost: tcp://dagger-runtime.custom.svc.cluster.local:1234
+      archestra.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST: tcp://dagger-runtime.custom.svc.cluster.local:1234
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -526,19 +544,36 @@ tests:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
             value: tcp://dagger-runtime.custom.svc.cluster.local:1234
 
-  - it: should support custom code runtime Dagger pod settings
+  # Back-compat shim: a bring-your-own pointer left at the removed
+  # codeRuntime.dagger.runnerHost key still reaches the backend, so an upgrade
+  # keeps routing to that engine instead of silently provisioning in-cluster.
+  - it: should carry a leftover codeRuntime.dagger.runnerHost into the env var
     documentIndex: 1
     set:
-      archestra.codeRuntime.dagger.pod.name: dagger-engine-3
-      archestra.codeRuntime.dagger.pod.namespace: code-runtime
-      archestra.codeRuntime.dagger.pod.container: custom-engine
-      archestra.codeRuntime.dagger.pod.context: prod-cluster
+      archestra.codeRuntime.dagger.runnerHost: tcp://legacy-engine:1234
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
-            value: kube-pod://dagger-engine-3?namespace=code-runtime&container=custom-engine&context=prod-cluster
+            value: tcp://legacy-engine:1234
+
+  - it: should let an explicit archestra.env runner host win over the leftover key
+    documentIndex: 1
+    set:
+      archestra.codeRuntime.dagger.runnerHost: tcp://legacy-engine:1234
+      archestra.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST: tcp://explicit:1234
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: tcp://explicit:1234
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
+            value: tcp://legacy-engine:1234
 
   - it: should include ARCHESTRA_DATABASE_URL alongside custom env vars
     documentIndex: 1

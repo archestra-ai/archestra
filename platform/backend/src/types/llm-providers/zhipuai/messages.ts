@@ -60,6 +60,10 @@ const AssistantMessageParamSchema = z
   .object({
     role: z.enum(["assistant"]),
     content: z.string().nullable().optional(),
+    // GLM thinking mode returns the chain of thought in `reasoning_content`;
+    // clients (and @ai-sdk/openai-compatible) may pass it back on tool-call
+    // turns, so body validation must let it through instead of stripping it.
+    reasoning_content: z.string().nullable().optional(),
     name: z.string().optional(),
     tool_calls: z.array(ToolCallSchema).optional(),
     function_call: z

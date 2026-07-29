@@ -163,6 +163,13 @@ export const GithubConfigSchema = z.object({
   includePullRequests: z.boolean().optional(),
   includeRepositoryFiles: z.boolean().optional(),
   fileTypes: z.array(z.string()).optional(),
+  /**
+   * Repository folders to index when `includeRepositoryFiles` is on. Each entry
+   * is a path relative to the repository root (`docs`, `packages/api/src`); a
+   * file matches when it sits at or under one of them. Empty/absent means the
+   * whole repository, which is the pre-existing behaviour.
+   */
+  includePaths: z.array(z.string()).optional(),
   labelsToSkip: z.array(z.string()).optional(),
 });
 export type GithubConfig = z.infer<typeof GithubConfigSchema>;

@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import logger from "@/logging";
+import { modelFetchError } from "./types";
 
 interface FetchModelsWithBearerAuthParams {
   url: string;
@@ -31,7 +32,7 @@ export async function fetchModelsWithBearerAuth<TSchema extends z.ZodType>(
       { status: response.status, error: errorText },
       `Failed to fetch ${errorLabel}`,
     );
-    throw new Error(`Failed to fetch ${errorLabel}: ${response.status}`);
+    throw modelFetchError(errorLabel, response.status);
   }
 
   const json = await response.json();

@@ -45,9 +45,11 @@ describe("PATCH/PUT share/DELETE /api/projects/:id", () => {
 
   test("owner can update description, share, unshare, and delete", async ({
     makeTeam,
+    makeTeamMember,
   }) => {
     const project = await seedProject();
     const team = await makeTeam(organizationId, owner.id, { name: "T" });
+    await makeTeamMember(team.id, owner.id);
 
     const patch = await app.inject({
       method: "PATCH",

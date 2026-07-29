@@ -17,6 +17,10 @@ vi.mock("next/navigation");
 vi.mock("@/lib/interactions/interaction.query", () => ({
   useInteractions: vi.fn(),
   useInteractionSessions: vi.fn(),
+  useExportSessionInteractions: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
 }));
 
 vi.mock("react", async (importOriginal) => {

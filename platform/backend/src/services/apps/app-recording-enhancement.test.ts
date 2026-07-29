@@ -1,5 +1,9 @@
+import { APP_GALLERY_CATEGORIES } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
-import { sanitizeHumanAsk } from "./app-recording-enhancement";
+import {
+  sanitizeCategory,
+  sanitizeHumanAsk,
+} from "./app-recording-enhancement";
 
 describe("sanitizeHumanAsk", () => {
   test("keeps the human ask and drops the spec a model drifted into", () => {
@@ -36,10 +40,10 @@ describe("sanitizeHumanAsk", () => {
   });
 
   test("trims an over-long ask at a sentence boundary, never mid-clause", () => {
-    const rambling = `${"word ".repeat(60)}. And then it should also do something else entirely that nobody asked for, ${"more ".repeat(30)}.`;
+    const rambling = `${"word ".repeat(200)}. And then it should also do something else entirely that nobody asked for, ${"more ".repeat(120)}.`;
 
     const result = sanitizeHumanAsk(rambling);
-    expect(result.split(" ").length).toBeLessThanOrEqual(70);
+    expect(result.split(" ").length).toBeLessThanOrEqual(256);
     expect(result.endsWith(".")).toBe(true);
   });
 
@@ -47,5 +51,40 @@ describe("sanitizeHumanAsk", () => {
     expect(
       sanitizeHumanAsk('Build me a **bold** app with `code` and "quotes"'),
     ).toBe("Build me a bold app with code and quotes");
+  });
+});
+
+describe("sanitizeCategory", () => {
+  test("passes every canonical category through untouched", () => {
+    // The bug this guards against: a two-word cap truncated the three-word
+    // canonicals ("Games & Experiments" → "Games &"), corrupting the exact
+    // values the prompt tells the model to prefer.
+    for (const category of APP_GALLERY_CATEGORIES) {
+      expect(sanitizeCategory(category)).toBe(category);
+    }
+  });
+
+  test("strips the quotes and trailing period a model tacks on", () => {
+    expect(sanitizeCategory('"Games & Experiments."')).toBe(
+      "Games & Experiments",
+    );
+  });
+
+  test("collapses whitespace a model may answer across lines", () => {
+    expect(sanitizeCategory("  Data &\n  Dashboards  ")).toBe(
+      "Data & Dashboards",
+    );
+  });
+
+  test("bounds a model that ignored the instruction and wrote a sentence", () => {
+    const sentence =
+      "This app is a productivity tool for teams that tracks invoices.";
+    const result = sanitizeCategory(sentence);
+    expect(result.split(" ").length).toBeLessThanOrEqual(4);
+    expect(result).toBe("This app is a");
+  });
+
+  test("bounds a single runaway blob the word cap cannot catch", () => {
+    expect(sanitizeCategory("x".repeat(200)).length).toBeLessThanOrEqual(48);
   });
 });

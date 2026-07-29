@@ -89,6 +89,9 @@ export const EMBEDDING_ADAPTERS: Record<
   vllm: OPENAI_WIRE_FIXED_DIMENSION,
 
   // No embedding support — reject (they error/crash on the OpenAI path today).
+  // The native Ollama provider is chat-only (`/api/chat`); Ollama embeddings go
+  // through the OpenAI-compatible `ollama` provider above, so reject here.
+  "ollama-native": null,
   anthropic: null,
   cohere: null,
   cerebras: null,
@@ -100,6 +103,8 @@ export const EMBEDDING_ADAPTERS: Record<
   kimi: null,
   "github-copilot": null,
   "microsoft-365-copilot": null,
+  // Chat-only integration; embeddings are not wired for the Archestra provider.
+  archestra: null,
 };
 
 // ===== Internal helpers =====

@@ -65,6 +65,8 @@ const actionLabels: Record<Action, string> = {
   "deploy-to-restricted": "Deploy to Restricted",
   manage: "Manage",
   "read-all": "Read All Chats",
+  "share-org": "Share Org-Wide",
+  impersonate: "Impersonate",
 };
 
 export function RolePermissionsCard() {

@@ -3,7 +3,7 @@ title: Supported LLM Providers
 category: LLM Proxy
 order: 2
 description: LLM providers supported by Archestra Platform
-lastUpdated: 2026-07-21
+lastUpdated: 2026-07-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -32,7 +32,7 @@ Embedding models use the same provider-qualified IDs as chat models (for example
 
 ### List Models
 
-Call `GET /v1/model-router/{llm-proxy-id}/models` to list OpenAI-compatible model objects. Model IDs are returned as `<provider>:<model-id>` and only include providers mapped to the virtual key or LLM OAuth client used for the request. The list includes chat models and embedding models. See [Authentication](/docs/platform-llm-proxy-authentication) for configuration details.
+Call `GET /v1/model-router/{llm-proxy-id}/models` to list OpenAI-compatible model objects. Model IDs are returned as `<provider>:<model-id>` and only include providers mapped to the virtual key or LLM OAuth client used for the request. The list includes chat models and embedding models. Models [restricted to teams](/docs/platform-access-control#team-restricted-models) are omitted unless the request is attributed to a user in one of those teams. See [Authentication](/docs/platform-llm-proxy-authentication) for configuration details.
 
 ### Model Resolution
 
@@ -388,37 +388,58 @@ The base URL can also be set globally via the `ARCHESTRA_VLLM_BASE_URL` environm
 
 [Ollama](https://ollama.ai/) is a local LLM runner for open-source large language models on your machine. Use it for local development, testing, and privacy-conscious deployments.
 
+Ollama serves two APIs, and Archestra has a transport for each. Pick the transport when you add the key:
+
+- **Native** — Ollama's own `/api/chat` endpoint. Use it to control Ollama's generation parameters — `num_ctx`, `num_predict`, `top_k`, `repeat_penalty`, thinking, and the rest. The `/v1` endpoint silently drops those options.
+- **OpenAI-compatible** — Ollama's `/v1` endpoint. The simplest choice for standard chat, and the only transport with embeddings support.
+
+Both transports talk to the same Ollama server. You can add either or both.
+
 ### Supported Ollama APIs
 
-- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
-- **Embeddings API** (`/embeddings`) - OpenAI-compatible
+- **Chat API** (`/api/chat`) - Native transport. Discovery endpoints (`/api/tags`, `/api/show`, `/api/ps`) are proxied through unmodified.
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible transport
+- **Embeddings API** (`/embeddings`) - OpenAI-compatible transport only
 
 ### Ollama Connection Details
 
-- **Base URL**: `http://localhost:9000/v1/ollama/{profile-id}`
-- **Authentication**: API key is **optional**. Pass in `Authorization` header as `Bearer <your-api-key>` if your Ollama deployment requires auth (e.g., Ollama Cloud).
+- **Base URL (Native)**: `http://localhost:9000/v1/ollama-native/{profile-id}`
+- **Base URL (OpenAI-compatible)**: `http://localhost:9000/v1/ollama/{profile-id}`
+- **Authentication**: API key is **optional**. Pass it in the `Authorization` header as `Bearer <your-api-key>` if your Ollama deployment requires auth (e.g., Ollama Cloud).
 
 ### Setup
 
 1. Go to **Model Providers** and add a new key with provider **Ollama**
-2. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
-3. API key can be left blank for self-hosted Ollama
+2. Choose a **Transport**: **Native** (the default) or **OpenAI-compatible**
+3. Optionally set the **Base URL** if your Ollama server runs on a non-default host/port
+4. Leave the API key blank for self-hosted Ollama
 
-The default base URL is `http://localhost:11434/v1`. Override it per-key in the UI or globally via `ARCHESTRA_OLLAMA_BASE_URL`.
+### Model Parameters
+
+Open **LLM → Models**, edit a native-transport model, and set any generation parameter (`num_ctx`, `num_predict`, `temperature`, `top_p`, `top_k`, `repeat_penalty`, `stop`, thinking) under **Model parameters**. Archestra sends the values you set on every chat turn; leave a field empty to inherit Ollama's own default. The section only appears for the Native transport — `/v1` discards these options.
+
+### Context Window
+
+Ollama often runs a model with a smaller context window than the model architecturally supports. Archestra resolves the effective window — a `num_ctx` configured under [Model Parameters](#model-parameters), else a `num_ctx` baked into the Modelfile, else the model's architectural context length — and displays and enforces it on the Models page and in the [chat context ring](/docs/platform-chat#context-window-visualizer).
+
+A server-wide cap set through `OLLAMA_CONTEXT_LENGTH` is not reported by Ollama's model API and cannot be detected. If you run a capped server, set `num_ctx` on the model — a request-level value takes precedence.
 
 ### Environment Variables
 
-| Variable                        | Required | Description                                                                                  |
-| ------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
-| `ARCHESTRA_OLLAMA_BASE_URL`     | No       | Ollama server base URL (default: `http://localhost:11434/v1`)                                |
-| `ARCHESTRA_CHAT_OLLAMA_API_KEY` | No       | API key for Ollama server (optional, should be used for the Ollama Cloud API)                |
+| Variable                           | Required | Description                                                                                        |
+| ---------------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `ARCHESTRA_OLLAMA_BASE_URL`        | No       | OpenAI-compatible transport base URL (default: `http://localhost:11434/v1`)                       |
+| `ARCHESTRA_OLLAMA_NATIVE_BASE_URL` | No       | Native transport base URL — the server **root**, with no `/v1` suffix. Defaults to `ARCHESTRA_OLLAMA_BASE_URL` with `/v1` stripped (`http://localhost:11434`) |
+| `ARCHESTRA_CHAT_OLLAMA_API_KEY`    | No       | API key for the Ollama server, shared by both transports (optional; use it for the Ollama Cloud API) |
 
 ### Important Notes
 
-- **Enabled by default**: Ollama is enabled out of the box with a default base URL of `http://localhost:11434/v1`.
-- **No API key required**: Self-hosted Ollama doesn't require authentication. When adding an Ollama key in the platform, the API key field is marked as optional.
-- **Model availability**: Models must be pulled first using `ollama pull <model-name>` before they can be used through Archestra.
-- **Running Archestra in Docker**: When Archestra runs in a container (e.g. the `docker run` quickstart) and Ollama runs on the host, `localhost` resolves to the container itself, not the host. Use `http://host.docker.internal:11434/v1` as the Base URL instead. The platform detects this case and suggests the change when a `localhost` connection fails.
+- **Enabled by default**: both transports point at `http://localhost:11434` out of the box — the OpenAI-compatible one under `/v1`, the native one at the server root.
+- **Model availability**: models must be pulled first using `ollama pull <model-name>`.
+- **Not available through the model router**: the router has no translation for `/api/chat`, so `ollama-native:` model IDs are not routable. Use the `ollama:` prefix through the router, or call the native base URL directly.
+- **Output tokens**: Ollama publishes no output cap, so when a model's output ceiling is unknown the per-turn output budget falls back to the model's context window instead of the 8192-token default. Applies to both transports.
+- **Thinking** (Native transport): on or off, not an effort scale. **Inherit** sends nothing and lets Ollama decide. Turning thinking **Off** on a model that reasons anyway can surface its reasoning as the visible answer.
+- **Running Archestra in Docker**: when Archestra runs in a container and Ollama runs on the host, `localhost` resolves to the container itself. Use `http://host.docker.internal:11434/v1` (OpenAI-compatible) or `http://host.docker.internal:11434` (Native) as the Base URL instead. The platform detects this case and suggests the change when a `localhost` connection fails.
 
 ## Zhipu AI
 
@@ -660,6 +681,40 @@ To connect, use the **Sign in with Microsoft** button when adding a Microsoft 36
 - **Stateless mapping**: each request creates a fresh Copilot conversation; prior turns ride along as context. If a streaming response has no recognizable text, Archestra retries through the synchronous endpoint in a second conversation, so one request can appear as two conversations in Microsoft 365 activity.
 - **Conversation cleanup**: the [Copilot conversation API](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/chat/resources/copilotconversation) currently documents no delete operation. If a chat request fails after its conversation is created, the abandoned conversation may remain visible in Microsoft 365 activity.
 
+## Archestra
+
+Use another Archestra instance as an upstream provider. One Archestra routes its traffic through a second Archestra, which applies its own policies before reaching the real model. The upstream's model router is OpenAI-compatible, so this provider follows the OpenAI chat-completions path and can reach every provider that instance has configured.
+
+### Supported Archestra APIs
+
+- **Chat Completions API** (`/chat/completions`) - OpenAI-compatible
+
+### Archestra Connection Details
+
+- **Base URL**: the upstream Archestra's model router, for example `https://your-archestra/v1/model-router/<llm-proxy-id>`.
+- **Authentication**: pass a virtual API key (`arch_...`) minted from that LLM Proxy in the `Authorization` header as `Bearer <key>`.
+
+### Setup
+
+1. On the upstream Archestra, go to **LLM Proxies** and create an LLM Proxy, then create a virtual API key for it.
+2. On this Archestra, go to **Model Providers** and add a new key with provider **Archestra**.
+3. Set the **Base URL** to the upstream proxy's model router (for example `https://your-archestra/v1/model-router/<llm-proxy-id>`).
+4. Paste the virtual API key from the upstream LLM Proxy.
+
+Archestra fetches the model list from the upstream's `{base-url}/models` endpoint, so the picker shows exactly the models that proxy exposes. Model IDs are provider-qualified, for example `openai:gpt-5.4`.
+
+### Environment Variables
+
+| Variable                           | Required | Description                                                                                     |
+| ---------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| `ARCHESTRA_ARCHESTRA_BASE_URL`     | No       | Global upstream base URL. Normally set per key in the UI; a global value only enables raw passthrough at the `/v1/archestra` proxy prefix. |
+| `ARCHESTRA_CHAT_ARCHESTRA_API_KEY` | No       | Default virtual API key for the built-in chat feature.                                          |
+
+### Important Notes
+
+- **Base URL is required**: the upstream endpoint has no default, so a per-key base URL is always needed. Without one, the provider cannot resolve an upstream and requests would fall back to the public OpenAI endpoint.
+- **Models come from the upstream**: the model list mirrors whatever the upstream LLM Proxy exposes, so it stays in sync as that instance changes.
+
 ## Amazon Bedrock
 
 ### Supported Bedrock APIs
@@ -673,6 +728,12 @@ To connect, use the **Sign in with Microsoft** button when adding a Microsoft 36
 
 - **Base URL**: `http://localhost:9000/v1/bedrock/{profile-id}`
 - **Authentication**: Bearer API key or AWS IAM (see below)
+
+### Region
+
+Each Bedrock key carries an AWS region. Amazon enables models per region, so the region decides which models the key can use — pick the one where your models are turned on.
+
+A key can also point at a custom endpoint instead, for a VPC or PrivateLink setup. Archestra reads the region back out of that endpoint, and falls back to `us-east-1` when the endpoint carries no region.
 
 ### Authentication Methods
 
@@ -737,7 +798,10 @@ Archestra calls the Bedrock **Converse API**, and the **InvokeModel API** for cl
     },
     {
       "Effect": "Allow",
-      "Action": ["bedrock:ListInferenceProfiles"],
+      "Action": [
+        "bedrock:ListInferenceProfiles",
+        "bedrock:ListFoundationModels"
+      ],
       "Resource": "*"
     }
   ]
@@ -745,6 +809,8 @@ Archestra calls the Bedrock **Converse API**, and the **InvokeModel API** for cl
 ```
 
 Use `*` for the region in resource ARNs — cross-region inference profiles (`us.` prefix) can route requests to any US region.
+
+The two list actions populate the model picker. `ListInferenceProfiles` returns cross-region and application inference profiles. `ListFoundationModels` adds on-demand models that have no inference profile. Without it, those models are not offered.
 
 ### Environment Variables
 

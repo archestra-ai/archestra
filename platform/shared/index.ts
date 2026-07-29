@@ -1,4 +1,5 @@
 export * from "./agents";
+export * from "./app-gallery-categories";
 export * from "./app-recording";
 export * from "./archestra-mcp-server";
 export * from "./built-in-agents";
@@ -22,6 +23,7 @@ export * from "./interactions";
 export * from "./knowledge-base";
 export * from "./labels";
 export * from "./linked-idp-auth";
+export * from "./mcp-executed-as";
 export * from "./mcp-extensions";
 export * from "./mcp-orchestrator";
 export * from "./mcp-server-config";

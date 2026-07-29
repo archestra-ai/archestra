@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import type { ModelsDevApiResponse } from "@/clients/models-dev-client";
-import { resolveCrossProviderPrices } from "./cross-provider-pricing";
+import {
+  resolveCrossProviderPrices,
+  resolveDiscoveredModelRegistryEntry,
+} from "./cross-provider-pricing";
 
 // Minimal models.dev fixture mirroring real shapes: the canonical `anthropic`
 // entry carries cache prices; the `amazon-bedrock` entry is keyed by the Bedrock
@@ -63,6 +66,20 @@ const MODELS_DEV: ModelsDevApiResponse = {
         id: "anthropic.claude-sonnet-4-5-20250929-v1:0",
         name: "Claude Sonnet 4.5 (Bedrock)",
         cost: { input: 3, output: 15 },
+      },
+      // Two generations of one Amazon model, distinguished only by the `-vN`
+      // segment, priced five times apart. Amazon ids carry that segment as part
+      // of the model's identity rather than as a Bedrock version, so collapsing
+      // it would merge these two entries onto one key.
+      "amazon.titan-embed-text-v1": {
+        id: "amazon.titan-embed-text-v1",
+        name: "Titan Embeddings G1 Text",
+        cost: { input: 0.1, output: 0 },
+      },
+      "amazon.titan-embed-text-v2:0": {
+        id: "amazon.titan-embed-text-v2:0",
+        name: "Titan Text Embeddings V2",
+        cost: { input: 0.02, output: 0 },
       },
     },
   },
@@ -185,6 +202,26 @@ describe("resolveCrossProviderPrices — Bedrock", () => {
     expect(prices?.cacheWritePricePerToken).toBe("0.00000375");
   });
 
+  // The version-stripping that canonicalises `…-v1:0` to `…` is correct for
+  // every vendor mapped to a canonical registry entry, where `-vN` is a Bedrock
+  // version. Amazon is not one of those vendors, and its `-vN` is part of the
+  // model name — so these two ids must keep resolving to their own entries.
+  test("keeps two Amazon generations that differ only by `-vN` distinct", () => {
+    const v1 = resolveCrossProviderPrices({
+      provider: "bedrock",
+      modelId: "amazon.titan-embed-text-v1",
+      modelsDevData: MODELS_DEV,
+    });
+    const v2 = resolveCrossProviderPrices({
+      provider: "bedrock",
+      modelId: "amazon.titan-embed-text-v2:0",
+      modelsDevData: MODELS_DEV,
+    });
+
+    expect(v1?.promptPricePerToken).toBe("1e-7");
+    expect(v2?.promptPricePerToken).toBe("2e-8");
+  });
+
   test("returns null for an unknown vendor", () => {
     const prices = resolveCrossProviderPrices({
       provider: "bedrock",
@@ -263,4 +300,60 @@ test("returns null for providers that match models.dev keys directly", () => {
   });
 
   expect(prices).toBeNull();
+});
+
+describe("resolveDiscoveredModelRegistryEntry", () => {
+  // A client can send any model name to any gateway endpoint, and the row is
+  // recorded under the endpoint's provider. Provider-scoped resolution then
+  // matches nothing, even when the registry lists the model under its own
+  // vendor, so the model lands on the fabricated default estimate.
+  test("prices a vendor model that arrived at a mismatched provider endpoint", () => {
+    const resolved = resolveDiscoveredModelRegistryEntry({
+      provider: "bedrock",
+      modelId: "gpt-4o",
+      modelsDevData: MODELS_DEV,
+    });
+
+    expect(resolved?.prices).toEqual({
+      promptPricePerToken: "0.0000025",
+      completionPricePerToken: "0.00001",
+      cacheReadPricePerToken: "0.00000125",
+      cacheWritePricePerToken: null,
+    });
+  });
+
+  test("still prefers the provider-scoped match when one exists", () => {
+    const resolved = resolveDiscoveredModelRegistryEntry({
+      provider: "bedrock",
+      modelId: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      modelsDevData: MODELS_DEV,
+    });
+
+    // The bedrock entry, not a registry-wide guess.
+    expect(resolved?.prices?.promptPricePerToken).toBe("0.000003");
+    expect(resolved?.metadata?.contextLength).toBeNull();
+  });
+
+  test("abstains when no first-party vendor lists the model", () => {
+    expect(
+      resolveDiscoveredModelRegistryEntry({
+        provider: "bedrock",
+        modelId: "somevendor.private-model-v3",
+        modelsDevData: MODELS_DEV,
+      }),
+    ).toBeNull();
+  });
+
+  test("does not resolve a model listed only by a reseller", () => {
+    // `us.meta.llama3-3-70b-instruct-v1:0` exists in the fixture under
+    // amazon-bedrock only. Reached as a bare id under another provider it must
+    // not be priced from that reseller row.
+    expect(
+      resolveDiscoveredModelRegistryEntry({
+        provider: "openai",
+        modelId: "us.meta.llama3-3-70b-instruct-v1:0",
+        modelsDevData: MODELS_DEV,
+      }),
+    ).toBeNull();
+  });
 });

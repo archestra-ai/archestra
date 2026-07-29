@@ -48,6 +48,15 @@ export function builtInSkillSourceRef(builtInSkillId: string): string {
   return `${BUILT_IN_SKILL_SOURCE_REF_PREFIX}${builtInSkillId}`;
 }
 
+/**
+ * Whether a `source_ref` is a built-in identity token rather than an imported
+ * GitHub source. True even for an id we no longer ship, so a stale row is still
+ * recognized as built-in.
+ */
+export function isBuiltInSkillSourceRef(sourceRef: string): boolean {
+  return sourceRef.startsWith(BUILT_IN_SKILL_SOURCE_REF_PREFIX);
+}
+
 /** Resolve the shipped definition behind a `builtin:<id>` source ref, if any. */
 export function findBuiltInSkillBySourceRef(
   sourceRef: string,

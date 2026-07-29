@@ -1475,6 +1475,10 @@ async function getDefaultUserLimitUsage(params: {
 }) {
   const conditions: SQL[] = [
     eq(schema.interactionsTable.userId, params.userId),
+    // Subscription-billed traffic (e.g. Claude Pro/Max, ChatGPT Codex) costs
+    // the organization $0 and must not burn down default user limits — the
+    // same rule updateUsageAfterInteraction applies to explicit limits.
+    eq(schema.interactionsTable.billingMode, "metered"),
     buildUsagePeriodStartCondition(params.cleanupInterval),
   ];
 

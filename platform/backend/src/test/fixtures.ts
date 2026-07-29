@@ -191,6 +191,9 @@ async function makeOrganization(
       | "slug"
       | "defaultDiscoveredToolInvocationPolicy"
       | "defaultDiscoveredToolResultPolicy"
+      | "defaultEnvironmentNamespace"
+      | "defaultMemberRole"
+      | "defaultNetworkPolicy"
     >
   > = {},
 ) {
@@ -216,7 +219,9 @@ async function makeOrganization(
 async function makeTeam(
   organizationId: string,
   createdBy: string,
-  overrides: Partial<Pick<InsertTeam, "name" | "description">> = {},
+  overrides: Partial<
+    Pick<InsertTeam, "name" | "description" | "convertToolResultsToToon">
+  > = {},
 ) {
   const [team] = await db
     .insert(schema.teamsTable)
@@ -444,13 +449,19 @@ async function makeApp(
   // (catalog authorId + personal-scope access checks).
   const authorId = appOverrides.authorId ?? (await makeUser()).id;
 
+  const name =
+    appOverrides.name ?? `Test App ${crypto.randomUUID().substring(0, 8)}`;
+
   const created = await AppModel.create({
     app: {
-      name: `Test App ${crypto.randomUUID().substring(0, 8)}`,
+      // Derived like the real create paths, so fixtures carry the slug a
+      // production app has; a test that pins one overrides it below.
+      slug: await AppModel.generateUniqueSlug({ name, organizationId }),
       // Default to a live (enabled) app so existing tests exercise normal
       // visibility/consumption; disabled-specific tests pass `enabled: false`.
       enabled: true,
       ...appOverrides,
+      name,
       authorId,
       organizationId,
     },
@@ -884,6 +895,7 @@ async function makeInteraction(
       | "billingMode"
       | "sessionId"
       | "cacheReadTokens"
+      | "userId"
     >
   > = {},
 ) {
@@ -1024,6 +1036,7 @@ async function makeIdentityProvider(
     oidcConfig?: Record<string, unknown>;
     samlConfig?: Record<string, unknown>;
     roleMapping?: Record<string, unknown>;
+    teamSyncConfig?: Record<string, unknown>;
     ssoLoginEnabled?: boolean;
     userId?: string | null;
   } = {},
@@ -1050,6 +1063,9 @@ async function makeIdentityProvider(
         : undefined,
       roleMapping: overrides.roleMapping
         ? (JSON.stringify(overrides.roleMapping) as unknown as undefined)
+        : undefined,
+      teamSyncConfig: overrides.teamSyncConfig
+        ? (JSON.stringify(overrides.teamSyncConfig) as unknown as undefined)
         : undefined,
       userId: overrides.userId ?? null,
       // WORKAROUND: With domainVerification enabled, all SSO providers need domainVerified: true

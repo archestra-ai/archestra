@@ -13,11 +13,19 @@ import type {
   ConnectionSetupPlatform,
   ConnectionSetupProxyAuth,
 } from "@/types";
-import {
-  buildClaudeCodeStartupGuardContext,
-  buildClaudeCodeStartupGuardInstallSection,
-} from "./claude-code-startup-guard";
+import { archestraMarkWithText } from "./archestra-mark";
 import { renderWindowsSetupScript } from "./connection-setup-script.windows";
+import {
+  buildStartupGuardContext,
+  buildStartupGuardInstallSection,
+  buildStartupGuardUnshadowSection,
+  type StartupGuardClient,
+} from "./startup-guard";
+import {
+  CLAUDE_CODE_GUARD_CLIENT,
+  CODEX_GUARD_CLIENT,
+  COPILOT_GUARD_CLIENT,
+} from "./startup-guard.clients";
 
 /**
  * Pure renderers for the /connection one-command setup scripts. Everything in
@@ -293,19 +301,10 @@ function banner(ctx: SetupScriptContext): string {
   }
   if (ctx.skills) configures.push("Skills marketplace");
 
-  // A monospace rendition of the Archestra mark: a white tilted rounded bar
-  // and dot on the terminal's dark field, echoing the real logo-icon.svg.
-  // Block/quadrant glyphs (UTF-8) render as solid shapes in any modern terminal.
+  // The one canonical Archestra mark (shared with the startup guards), block/
+  // quadrant glyphs that render as solid shapes in any UTF-8 terminal.
   const logo = isDefaultBrandedAppName(ctx.appName)
-    ? `   ╭──────────────────╮
-   │                  │
-   │        ▟██▙      │
-   │        ████      │     ${ctx.appName}
-   │       ████       │     Secure access to your AI tools
-   │       ████ ▟▙    │
-   │      ▜██▛  ▜▛    │
-   │                  │
-   ╰──────────────────╯`
+    ? archestraMarkWithText({ appName: ctx.appName }).join("\n")
     : `   ${ctx.appName}
    Secure access to your AI tools`;
 
@@ -489,6 +488,8 @@ function indent(block: string, prefix: string): string {
 function claudeCodeSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
+  startupGuardUnshadowSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
+
   if (ctx.mcp) {
     // Register at USER scope so the gateway is visible in every directory for
     // this user. `claude mcp add` defaults to `local` (per-directory) scope,
@@ -522,15 +523,47 @@ if ! cli claude plugin install ${sh(pluginRef)}; then
 fi`);
   }
 
-  if (ctx.mcp || ctx.proxy || ctx.skills) {
-    sections.push(
-      buildClaudeCodeStartupGuardInstallSection(
-        buildClaudeCodeStartupGuardContext(ctx),
-      ),
-    );
-  }
+  startupGuardSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 
   return sections;
+}
+
+/**
+ * Prepend the guard-unshadow step, gated exactly like the install so the two
+ * always come as a pair. It runs before the connect steps invoke the client CLI
+ * so a guard wrapper installed by an earlier connect can never splash over this
+ * run. It is non-destructive (see {@link buildStartupGuardUnshadowSection}): the
+ * install section at the end is what refreshes the on-disk guard, and leaving
+ * the guard in place until then means a connect step failing under `set -e`
+ * never strands the user without a startup screen. Call this FIRST in a client's
+ * builder.
+ */
+function startupGuardUnshadowSection(
+  ctx: SetupScriptContext,
+  client: StartupGuardClient,
+  sections: string[],
+): void {
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    sections.push(buildStartupGuardUnshadowSection(client));
+  }
+}
+
+/**
+ * Append the startup-guard install to a client's script when connect wired at
+ * least one remote — the guard's whole job is to check those before launch, so
+ * a script that configured nothing has nothing to guard. Shared by every CLI
+ * client that gets a guard (Claude Code, Codex, Copilot CLI).
+ */
+function startupGuardSection(
+  ctx: SetupScriptContext,
+  client: StartupGuardClient,
+  sections: string[],
+): void {
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    sections.push(
+      buildStartupGuardInstallSection(buildStartupGuardContext(ctx), client),
+    );
+  }
 }
 
 // One shared source for the proxy env keys connect writes into
@@ -702,6 +735,8 @@ export function codexAttributionHeaderLines(
 function codexSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
+  startupGuardUnshadowSection(ctx, CODEX_GUARD_CLIENT, sections);
+
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
@@ -756,6 +791,8 @@ if ! cli codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
 fi`);
   }
 
+  startupGuardSection(ctx, CODEX_GUARD_CLIENT, sections);
+
   return sections;
 }
 
@@ -765,6 +802,8 @@ fi`);
 
 function copilotSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
+
+  startupGuardUnshadowSection(ctx, COPILOT_GUARD_CLIENT, sections);
 
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
@@ -800,6 +839,8 @@ if ! cli copilot plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect."
 fi`);
   }
+
+  startupGuardSection(ctx, COPILOT_GUARD_CLIENT, sections);
 
   return sections;
 }

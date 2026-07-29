@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -61,6 +61,14 @@ vi.mock("@/components/github-copilot-sign-in", () => ({
 vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
   CreateLlmProviderApiKeyDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="add-provider-key-dialog" /> : null,
+}));
+
+// Stubbed so the gate's provider logo doesn't pull next/image into jsdom; the
+// branded-CTA test asserts on the provider it's told to render.
+vi.mock("@/components/provider-icon", () => ({
+  ProviderIcon: ({ provider }: { provider: string }) => (
+    <span data-testid="provider-icon" data-provider={provider} />
+  ),
 }));
 
 function findClient(id: string) {
@@ -318,7 +326,7 @@ describe("ConnectCommandPanel", () => {
     expect(onProviderSelect).toHaveBeenCalledWith("bedrock");
   });
 
-  it("opens an inline add-provider-key dialog when no provider can mint a virtual key", async () => {
+  it("opens an inline add-provider-key dialog from the auth editor when no provider can mint a virtual key", async () => {
     // No configured provider key, but the user may create one
     // (hasPermissionsMock defaults to true for llmProviderApiKey:create).
     availableKeysMock.mockReturnValue({ data: [] });
@@ -327,11 +335,72 @@ describe("ConnectCommandPanel", () => {
 
     await user.click(screen.getByTestId("connect-change-proxy"));
     await user.click(screen.getByRole("tab", { name: "Virtual key" }));
+    await user.click(screen.getByTestId("connect-auth-add-provider-key"));
+
+    expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
+  });
+
+  it("gates step 3 and hides the OAuth step when virtual-key auth has no backing key", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    const user = userEvent.setup();
+    renderPanel();
+
+    // Passthrough by default → a runnable command, plus the OAuth step.
+    await screen.findByText(COMMAND);
+    expect(
+      screen.getByRole("heading", { name: "Finish the OAuth flow" }),
+    ).toBeInTheDocument();
+
+    // Switch the proxy auth to a virtual key that nothing can back.
+    await user.click(screen.getByTestId("connect-change-proxy"));
+    await user.click(screen.getByRole("tab", { name: "Virtual key" }));
+
+    // Step 3 gates on adding a key instead of shipping a command...
+    const gateButton = await screen.findByTestId(
+      "connect-gate-add-provider-key",
+    );
+    // Two supported providers (Anthropic, Bedrock) → the CTA stays generic.
+    expect(gateButton).toHaveTextContent("Add a provider key");
+    expect(screen.queryByText(COMMAND)).not.toBeInTheDocument();
+    // ...and the setup, now unproducible as configured, drops the OAuth step.
+    expect(
+      screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the add-provider-key dialog from the step-3 gate", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    const user = userEvent.setup();
+    renderPanel();
+    await screen.findByText(COMMAND);
+
+    await user.click(screen.getByTestId("connect-change-proxy"));
+    await user.click(screen.getByRole("tab", { name: "Virtual key" }));
     await user.click(
-      screen.getByRole("button", { name: /add a provider key/i }),
+      await screen.findByTestId("connect-gate-add-provider-key"),
     );
 
     expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
+  });
+
+  it("brands the step-3 gate CTA to the sole provider (Codex → OpenAI)", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    const user = userEvent.setup();
+    renderPanel({ client: findClient("codex") });
+
+    await screen.findByText(COMMAND);
+    await user.click(screen.getByTestId("connect-change-proxy"));
+    await user.click(screen.getByRole("tab", { name: "Virtual key" }));
+
+    const gateButton = await screen.findByTestId(
+      "connect-gate-add-provider-key",
+    );
+    // OpenAI-branded, not a generic "provider key".
+    expect(gateButton).toHaveTextContent("Add an OpenAI key");
+    expect(within(gateButton).getByTestId("provider-icon")).toHaveAttribute(
+      "data-provider",
+      "openai",
+    );
   });
 
   it("skips skills entirely for non-admin users", async () => {
@@ -455,6 +524,48 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.queryByRole("button", { name: /Sign in with GitHub/i }),
       ).not.toBeInTheDocument();
+    });
+
+    it("keeps the auth toggle reachable after Virtual key falls back to GitHub Copilot", async () => {
+      // With no configured keys, switching Copilot CLI to a virtual key collapses
+      // the provider list to GitHub Copilot (the only per-user one). The toggle
+      // must stay so the user isn't stranded in virtual-key mode.
+      availableKeysMock.mockReturnValue({ data: [] });
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("copilot-cli") });
+
+      await screen.findByText(COMMAND);
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      await user.click(screen.getByRole("tab", { name: "Virtual key" }));
+
+      // We fell back to the GitHub Copilot connect gate...
+      expect(
+        await screen.findByRole("button", { name: /Sign in with GitHub/i }),
+      ).toBeInTheDocument();
+      // ...but both auth tabs are still there to switch back.
+      expect(
+        screen.getByRole("tab", { name: "Your provider key" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("tab", { name: "Virtual key" }),
+      ).toBeInTheDocument();
+    });
+
+    it("switches back to passthrough off the per-user provider so the choice sticks", async () => {
+      availableKeysMock.mockReturnValue({ data: [] });
+      const onProviderSelect = vi.fn();
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("copilot-cli"), onProviderSelect });
+
+      await screen.findByText(COMMAND);
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      await user.click(screen.getByRole("tab", { name: "Virtual key" }));
+      await screen.findByRole("button", { name: /Sign in with GitHub/i });
+
+      // Clicking back to passthrough moves off GitHub Copilot (which forces
+      // virtual-key) to the first passthrough-capable provider.
+      await user.click(screen.getByRole("tab", { name: "Your provider key" }));
+      expect(onProviderSelect).toHaveBeenCalledWith("openai");
     });
   });
 });

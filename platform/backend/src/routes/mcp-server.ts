@@ -1092,8 +1092,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await secretManager().deleteSecret(createdSecretId);
         }
 
+        // 502, not 500: the failure is the user's MCP server rejecting or
+        // dropping the connection (bad auth, stale session, unreachable) —
+        // an upstream fault, not a crash of ours.
         throw new ApiError(
-          500,
+          502,
           `Failed to fetch tools from MCP server ${mcpServer.name}: ${toolError instanceof Error ? toolError.message : "Unknown error"}`,
         );
       }

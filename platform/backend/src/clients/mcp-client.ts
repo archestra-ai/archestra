@@ -11,10 +11,13 @@ import {
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
   MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  MCP_EXECUTED_AS_META_KEY,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  type McpExecutedAs,
   type McpToolError,
   parseFullToolName,
-  SEEDED_APP_RENDER_META_KEY,
+  platformExecutedAs,
+  stripReservedPlatformMeta,
   TimeInMs,
 } from "@archestra/shared";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
@@ -45,6 +48,7 @@ import {
   McpToolCallModel,
   TeamModel,
   ToolModel,
+  UserModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
 import { discoverOAuthEndpoints, refreshOAuthToken } from "@/routes/oauth";
@@ -92,6 +96,7 @@ import {
   type McpElicitationHandler,
   withMcpElicitationCapability,
 } from "./mcp-elicitation";
+import { mcpParamHeadersForCall } from "./mcp-param-headers";
 
 const MCP_CLIENT_EXTENSION_CAPABILITIES = {
   ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
@@ -111,6 +116,19 @@ export class McpServerConnectionTimeoutError extends Error {
   ) {
     super(message);
     this.name = "McpServerConnectionTimeoutError";
+  }
+}
+
+/**
+ * Thrown when connecting to (or discovering tools from) a user's MCP server
+ * fails — the server is unreachable, rejects the connection, or errors during
+ * the handshake. An operational/config condition on the caller's side, not a
+ * bug of ours: error tracking drops it by name, and routes map it to a 502.
+ */
+class McpServerUnreachableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "McpServerUnreachableError";
   }
 }
 
@@ -146,6 +164,26 @@ export type TokenAuthContext = {
   isSessionAuth?: boolean;
   /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */
   passthroughHeaders?: Record<string, string>;
+};
+
+/**
+ * The ownership fields of the install a tool call resolved to — everything
+ * needed to say whose credential served the call.
+ */
+type ResolvedInstallIdentity = Pick<
+  McpServer,
+  "id" | "ownerId" | "teamId" | "scope"
+>;
+
+/**
+ * Identity fields attached to every persisted tool call and returned result:
+ * who called (inbound), how they authenticated, and — once a credential has
+ * been resolved — whose credential the upstream call ran under.
+ */
+type ToolCallAuthInfo = {
+  userId?: string;
+  authMethod?: MCPGatewayAuthMethod;
+  executedAs?: McpExecutedAs;
 };
 
 /**
@@ -388,12 +426,16 @@ class McpClient {
       availableTool?: CatalogTool;
     },
   ): Promise<CommonToolResult> {
-    // Derive auth info for logging
-    const authInfo =
+    // Derive auth info for logging. Until a credential resolves, the call is
+    // one the platform is serving itself (it may never reach a server — an app
+    // launch, or a refusal), so it starts attributed to the caller and is
+    // reassigned below once an upstream credential is settled.
+    let authInfo: ToolCallAuthInfo | undefined =
       tokenAuth && Object.keys(tokenAuth).length
         ? {
             userId: tokenAuth.userId,
             authMethod: deriveAuthMethod(tokenAuth),
+            executedAs: platformExecutedAs(tokenAuth.userId),
           }
         : undefined;
 
@@ -409,6 +451,35 @@ class McpClient {
     const { tool, catalogItem, resolvedToolCall } = validationResult;
     // Use the resolved name (may have been prefixed by suffix fallback lookup)
     toolCall = resolvedToolCall;
+
+    // SEP-2243 x-mcp-header: mirror annotated argument values into
+    // Mcp-Param-* headers on the upstream call. Widening the passthrough set
+    // deliberately reuses its whole pipeline — the headers are merged into the
+    // transport exactly where passthrough headers are, and the credential
+    // fingerprint check discards a cached connection whose baked headers no
+    // longer match, so per-call values cannot leak across pooled calls.
+    const mcpParamHeaders = mcpParamHeadersForCall({
+      inputSchema: tool.parameters,
+      args: toolCall.arguments,
+    });
+    if (mcpParamHeaders && tokenAuth) {
+      tokenAuth = {
+        ...tokenAuth,
+        passthroughHeaders: {
+          ...tokenAuth.passthroughHeaders,
+          ...mcpParamHeaders,
+        },
+      };
+    } else if (mcpParamHeaders) {
+      // Every gateway request carries token auth, so this should be
+      // unreachable — but if a call path without auth context ever reaches an
+      // annotated tool, the mirrored headers are dropped, and that should be
+      // visible rather than silent.
+      logger.debug(
+        { toolName: toolCall.name, headers: Object.keys(mcpParamHeaders) },
+        "Skipping Mcp-Param headers: no token auth context to carry them",
+      );
+    }
 
     // App backing servers have no upstream to connect to: the `open` launch tool is
     // served in-process. Hand the host the app's UI resource pointer (the
@@ -446,11 +517,13 @@ class McpClient {
         owner,
         tokenAuth,
         catalogItem,
+        authInfo,
       });
     if ("error" in targetMcpServerIdResult) {
       return targetMcpServerIdResult.error;
     }
-    const { targetMcpServerId, mcpServerName } = targetMcpServerIdResult;
+    const { targetMcpServerId, mcpServerName, resolvedServer } =
+      targetMcpServerIdResult;
     const effectiveEnterpriseManagedConfig =
       catalogItem.enterpriseManagedConfig ?? null;
     if (
@@ -509,6 +582,19 @@ class McpClient {
       return secretsResult.error;
     }
     const { secrets, secretId, serverState } = secretsResult;
+
+    // The outbound credential is fully settled here (install secrets loaded,
+    // enterprise exchange done), so every result below can name the identity
+    // it ran as — including the ones the token-refresh retry produces.
+    const executedAs = await this.describeExecutedAs({
+      resolvedServer,
+      tokenAuth,
+      enterpriseTransportCredential,
+      secrets,
+    });
+    if (executedAs) {
+      authInfo = { ...authInfo, executedAs };
+    }
 
     // Build connection cache key using the resolved target server ID.
     // Agents: when conversationId is provided, each (agent, conversation) gets
@@ -1148,8 +1234,10 @@ class McpClient {
     }
 
     // Create the client with UI extension capabilities
+    // No `roots`: nothing here implements `roots/list`, and declaring it
+    // invited upstream servers to call a method we always failed. Deprecated
+    // in 2026-07-28 besides.
     const baseCapabilities: ClientCapabilitiesWithExtensions = {
-      roots: { listChanged: true },
       extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
     };
     const capabilities = elicitationHandler
@@ -1368,6 +1456,8 @@ class McpClient {
     if (!tool && availableTool && availableTool.name === toolCall.name) {
       tool = {
         toolName: availableTool.name,
+        parameters:
+          (availableTool.parameters as Record<string, unknown> | null) ?? null,
         rawName: availableTool.rawName,
         mcpServerId: null,
         credentialResolutionMode: "dynamic",
@@ -1571,22 +1661,46 @@ class McpClient {
     toolCall,
     owner,
     catalogItem,
+    authInfo,
   }: {
     tool: McpToolAssignment;
     toolCall: CommonToolCall;
     owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
+    // Identity of the caller, so a refusal here is recorded and rendered like
+    // any other result rather than as an anonymous error.
+    authInfo?: ToolCallAuthInfo;
   }): Promise<
-    | { targetMcpServerId: string; mcpServerName: string }
+    | {
+        targetMcpServerId: string;
+        mcpServerName: string;
+        // The install whose stored credential serves the call, so the caller
+        // can report which identity the upstream call ran as. Null only when
+        // the install row could not be loaded (a pin whose row vanished
+        // between resolution and lookup).
+        resolvedServer: ResolvedInstallIdentity | null;
+      }
     | { error: CommonToolResult }
   > {
     const fallbackName = tool.catalogName || "unknown";
+    // Never log tokenAuth/tool wholesale: tokenAuth can carry a raw bearer
+    // JWT and passthrough header values; log identifying fields only.
     logger.info(
       {
         toolName: toolCall.name,
-        tool: tool,
-        tokenAuth: tokenAuth,
+        toolCatalogId: tool.catalogId,
+        toolMcpServerId: tool.mcpServerId,
+        credentialResolutionMode: tool.credentialResolutionMode,
+        tokenAuth: tokenAuth && {
+          tokenId: tokenAuth.tokenId,
+          teamId: tokenAuth.teamId,
+          userId: tokenAuth.userId,
+          isOrganizationToken: tokenAuth.isOrganizationToken,
+          isUserToken: tokenAuth.isUserToken,
+          isExternalIdp: tokenAuth.isExternalIdp,
+          isSessionAuth: tokenAuth.isSessionAuth,
+        },
       },
       "Determining target MCP server ID for catalog item",
     );
@@ -1604,6 +1718,7 @@ class McpClient {
           return {
             targetMcpServerId: resolved.id,
             mcpServerName: resolved.name,
+            resolvedServer: resolved,
           };
         }
         const reconnectError = this.buildReconnectRequiredMessage(
@@ -1616,7 +1731,7 @@ class McpClient {
             owner,
             reconnectError.message,
             fallbackName,
-            undefined,
+            authInfo,
             reconnectError,
           ),
         };
@@ -1628,7 +1743,8 @@ class McpClient {
       logger.info(
         {
           toolName: toolCall.name,
-          catalogItem: catalogItem,
+          catalogItemId: catalogItem.id,
+          catalogItemName: catalogItem.name,
           targetMcpServerId: tool.mcpServerId,
         },
         "Determined target MCP server ID for catalog item",
@@ -1636,6 +1752,7 @@ class McpClient {
       return {
         targetMcpServerId: tool.mcpServerId,
         mcpServerName: mcpServer?.name || fallbackName,
+        resolvedServer: mcpServer ?? null,
       };
     }
 
@@ -1650,6 +1767,7 @@ class McpClient {
         return {
           targetMcpServerId: explicitTargetMcpServerId,
           mcpServerName: mcpServer?.name || fallbackName,
+          resolvedServer: mcpServer ?? null,
         };
       }
 
@@ -1664,6 +1782,7 @@ class McpClient {
             owner,
             "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
             fallbackName,
+            authInfo,
           ),
         };
       }
@@ -1671,6 +1790,7 @@ class McpClient {
       return {
         targetMcpServerId: resolvedServer.id,
         mcpServerName: resolvedServer.name,
+        resolvedServer,
       };
     }
 
@@ -1683,6 +1803,7 @@ class McpClient {
           owner,
           "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
           fallbackName,
+          authInfo,
         ),
       };
     }
@@ -1693,6 +1814,7 @@ class McpClient {
           owner,
           "Dynamic team credential is enabled but tool has no catalogId.",
           fallbackName,
+          authInfo,
         ),
       };
     }
@@ -1721,6 +1843,7 @@ class McpClient {
         return {
           targetMcpServerId: pinnedServer.id,
           mcpServerName: pinnedServer.name,
+          resolvedServer: pinnedServer,
         };
       }
       logger.warn(
@@ -1755,6 +1878,7 @@ class McpClient {
       return {
         targetMcpServerId: resolvedServer.id,
         mcpServerName: resolvedServer.name,
+        resolvedServer,
       };
     }
 
@@ -1766,6 +1890,7 @@ class McpClient {
           owner,
           "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
           fallbackName,
+          authInfo,
         ),
       };
     }
@@ -1797,6 +1922,7 @@ class McpClient {
         return {
           targetMcpServerId: idpFallbackServer.id,
           mcpServerName: idpFallbackServer.name,
+          resolvedServer: idpFallbackServer,
         };
       }
     }
@@ -1824,7 +1950,7 @@ class McpClient {
         owner,
         authError.message,
         fallbackName,
-        undefined,
+        authInfo,
         authError,
       ),
     };
@@ -2309,6 +2435,17 @@ class McpClient {
     return nameMap.get(strippedToolName.toLowerCase()) ?? strippedToolName;
   }
 
+  // The reserved `_meta` entry naming the identity a call ran as, or nothing
+  // when no upstream credential was resolved (a platform built-in, an app
+  // launch, or a failure before resolution).
+  private executedAsMeta(
+    authInfo: ToolCallAuthInfo | undefined,
+  ): Record<string, McpExecutedAs> {
+    return authInfo?.executedAs
+      ? { [MCP_EXECUTED_AS_META_KEY]: authInfo.executedAs }
+      : {};
+  }
+
   /**
    * Create and persist an error result
    */
@@ -2317,10 +2454,7 @@ class McpClient {
     owner: ToolOwner,
     error: string,
     mcpServerName: string = "unknown",
-    authInfo?: {
-      userId?: string;
-      authMethod?: MCPGatewayAuthMethod;
-    },
+    authInfo?: ToolCallAuthInfo,
     structuredError?: McpToolError,
   ): Promise<CommonToolResult> {
     const normalizedError: McpToolError = structuredError ?? {
@@ -2336,6 +2470,7 @@ class McpClient {
       error,
       _meta: {
         archestraError: normalizedError,
+        ...this.executedAsMeta(authInfo),
       },
       structuredContent: {
         archestraError: normalizedError,
@@ -2362,7 +2497,7 @@ class McpClient {
     content: ContentBlock[];
     isError: boolean;
     _meta?: Record<string, unknown>;
-    authInfo?: { userId?: string; authMethod?: MCPGatewayAuthMethod };
+    authInfo?: ToolCallAuthInfo;
     structuredContent?: Record<string, unknown>;
   }): Promise<CommonToolResult> {
     const {
@@ -2376,18 +2511,25 @@ class McpClient {
       structuredContent,
     } = opts;
 
-    // `archestraError` and the seeded-app-render marker are platform-reserved
-    // envelopes: error renderers and the trusted-data guardrail key off them to
-    // identify platform-authored results. Only the platform sets them, so strip
-    // any copy an upstream tool put in its result metadata — otherwise a
-    // hostile server could forge a dispatch error or a seeded-render marker and
-    // slip untrusted output past the injection scan.
+    // `archestraError`, the seeded-app-render marker and the executed-as
+    // identity are platform-reserved envelopes: error renderers, the
+    // trusted-data guardrail and the tool card key off them to identify
+    // platform-authored results. Only the platform sets them, so strip any copy
+    // an upstream tool put in its result metadata — otherwise a hostile server
+    // could forge a dispatch error, a seeded-render marker or an identity, and
+    // slip untrusted output past the injection scan. The platform's own
+    // executed-as value goes on after the strip.
+    const executedAsMeta = this.executedAsMeta(authInfo);
+    const strippedMeta = stripReservedPlatformMeta(_meta);
     const toolResult: CommonToolResult = {
       id: toolCall.id,
       name: toolCall.name,
       content,
       isError,
-      _meta: stripReservedPlatformMeta(_meta),
+      _meta:
+        strippedMeta || Object.keys(executedAsMeta).length
+          ? { ...strippedMeta, ...executedAsMeta }
+          : undefined,
       structuredContent: stripReservedPlatformMeta(structuredContent),
     };
 
@@ -2827,14 +2969,14 @@ class McpClient {
       return null;
     }
 
-    if (server.scope === "org") {
+    const executedAs = await this.describeInstallCredential(server);
+    if (executedAs.kind === "org") {
       return { credentialScope: "org", credentialTeamName: null };
     }
-    if (server.teamId) {
-      const [team] = await TeamModel.findByIds([server.teamId]);
+    if (executedAs.kind === "team") {
       return {
         credentialScope: "team",
-        credentialTeamName: team?.name ?? null,
+        credentialTeamName: executedAs.teamName,
       };
     }
     // Personal install. Only present it as the caller's own credential when the
@@ -2845,12 +2987,85 @@ class McpClient {
     // credentials …" and point the caller at the wrong owner.
     if (
       tokenAuth?.userId &&
-      server.ownerId &&
-      tokenAuth.userId === server.ownerId
+      executedAs.ownerUserId &&
+      tokenAuth.userId === executedAs.ownerUserId
     ) {
       return { credentialScope: "personal", credentialTeamName: null };
     }
     return null;
+  }
+
+  /**
+   * Describe which identity the upstream call ran as, so the chat card and the
+   * tool-call log record can answer "on whose behalf did this run?".
+   *
+   * The order mirrors how {@link getTransport} actually builds the outbound
+   * credential header, not how the install was picked: an enterprise-managed
+   * credential overrides the install's own secrets, and an external IdP token
+   * is forwarded only when the install carries no stored authorization of its
+   * own. Getting the order wrong would name the install's owner for a call
+   * that really ran as the caller.
+   */
+  private async describeExecutedAs(params: {
+    resolvedServer: ResolvedInstallIdentity | null;
+    tokenAuth: TokenAuthContext | undefined;
+    enterpriseTransportCredential: ResolvedEnterpriseTransportCredential | null;
+    secrets: Record<string, unknown>;
+  }): Promise<McpExecutedAs | null> {
+    const {
+      resolvedServer,
+      tokenAuth,
+      enterpriseTransportCredential,
+      secrets,
+    } = params;
+
+    // These three all mean "the calling user's own identity reached the
+    // server", so they name that user rather than an installed connection.
+    const callerUserId = tokenAuth?.userId ?? null;
+
+    if (enterpriseTransportCredential) {
+      return { kind: "idp_exchange", callerUserId };
+    }
+
+    if (!hasStaticAuthorizationCredential(secrets)) {
+      if (tokenAuth?.isExternalIdp && tokenAuth.rawToken) {
+        return { kind: "idp_passthrough", callerUserId };
+      }
+      if (hasPassthroughAuthorizationHeader(tokenAuth?.passthroughHeaders)) {
+        return { kind: "caller_headers", callerUserId };
+      }
+    }
+
+    return resolvedServer
+      ? await this.describeInstallCredential(resolvedServer)
+      : null;
+  }
+
+  /**
+   * Map an install to the identity its stored credential belongs to. Shared by
+   * the executed-as descriptor and the expired-credential card so both read
+   * the install's scope the same way.
+   */
+  private async describeInstallCredential(
+    server: Pick<McpServer, "scope" | "teamId" | "ownerId">,
+  ): Promise<Extract<McpExecutedAs, { kind: "personal" | "team" | "org" }>> {
+    if (server.scope === "org") {
+      return { kind: "org" };
+    }
+    if (server.teamId) {
+      const [team] = await TeamModel.findByIds([server.teamId]);
+      return {
+        kind: "team",
+        teamId: server.teamId,
+        teamName: team?.name ?? null,
+      };
+    }
+    const ownerName = server.ownerId
+      ? ((await UserModel.getNamesByIds([server.ownerId])).get(
+          server.ownerId,
+        ) ?? null)
+      : null;
+    return { kind: "personal", ownerUserId: server.ownerId, ownerName };
   }
 
   private buildAssignedCredentialUnavailableMessage(
@@ -2961,10 +3176,7 @@ class McpClient {
     mcpServerName: string,
     toolCall: CommonToolCall,
     toolResult: CommonToolResult,
-    authInfo?: {
-      userId?: string;
-      authMethod?: MCPGatewayAuthMethod;
-    },
+    authInfo?: ToolCallAuthInfo,
   ): Promise<void> {
     // Skip high-frequency browser tool logging to prevent DB bloat
     // (screenshots every ~2s, tab list checks, viewport resizes)
@@ -2996,7 +3208,9 @@ class McpClient {
       };
 
       if (toolResult.isError) {
-        logData.error = toolResult.error;
+        // Tool errors routinely echo request/response payloads — cap them
+        // the same way as the success-path content preview.
+        logData.error = toolResult.error?.slice(0, 100);
       } else {
         logData.resultContent = previewToolResultContent(
           toolResult.content,
@@ -3066,8 +3280,8 @@ class McpClient {
           secretId,
         );
 
+        // No `roots` — see the identical omission above.
         const capabilities: ClientCapabilitiesWithExtensions = {
-          roots: { listChanged: true },
           extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
         };
 
@@ -3126,14 +3340,14 @@ class McpClient {
         }
 
         // Last attempt failed, throw error
-        throw new Error(
+        throw new McpServerUnreachableError(
           `Failed to connect to MCP server ${catalogItem.name}: ${lastError.message}`,
         );
       }
     }
 
     // Should never reach here, but TypeScript needs it
-    throw new Error(
+    throw new McpServerUnreachableError(
       `Failed to connect to MCP server ${catalogItem.name}: ${
         lastError?.message || "Unknown error"
       }`,
@@ -4147,33 +4361,6 @@ function isAuthRelatedError(errorMessage: string): boolean {
   );
 }
 
-// Platform-reserved metadata keys: `archestraError` (set only by
-// createErrorResult) and the seeded-app-render marker (set only by the
-// open-in-chat conversation seeding). Renderers and the trusted-data guardrail
-// key off them to identify platform-authored results.
-const RESERVED_PLATFORM_META_KEYS = [
-  "archestraError",
-  SEEDED_APP_RENDER_META_KEY,
-] as const;
-
-// Remove platform-reserved keys from tool-supplied metadata so they can only
-// ever be present when the platform itself authored them — otherwise a hostile
-// server could forge a dispatch error or a seeded-render marker and slip
-// untrusted output past the injection scan. Returns the same reference when
-// nothing was stripped.
-function stripReservedPlatformMeta(
-  meta: Record<string, unknown> | undefined,
-): Record<string, unknown> | undefined {
-  if (!meta || !RESERVED_PLATFORM_META_KEYS.some((key) => key in meta)) {
-    return meta;
-  }
-  const rest = { ...meta };
-  for (const key of RESERVED_PLATFORM_META_KEYS) {
-    delete rest[key];
-  }
-  return rest;
-}
-
 function isAuthRelatedToolResult(result: {
   isError?: boolean;
   content?: Array<{ type?: string; text?: string }>;
@@ -4469,6 +4656,20 @@ function getJwtExpirationMs(token: string): number | undefined {
   }
 
   return undefined;
+}
+
+// Whether the caller's own request supplied the upstream authorization header,
+// which the transport forwards verbatim (mergePassthroughHeaders only fills
+// headers the install itself did not set) — so the call runs as the caller.
+function hasPassthroughAuthorizationHeader(
+  passthroughHeaders: Record<string, string> | undefined,
+): boolean {
+  if (!passthroughHeaders) {
+    return false;
+  }
+  return Object.keys(passthroughHeaders).some(
+    (name) => name.toLowerCase() === "authorization",
+  );
 }
 
 function hasStaticAuthorizationCredential(

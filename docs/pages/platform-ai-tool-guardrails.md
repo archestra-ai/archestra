@@ -2,7 +2,7 @@
 title: Tool Guardrails
 category: LLM Proxy
 order: 5
-lastUpdated: 2026-07-05
+lastUpdated: 2026-07-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -96,11 +96,13 @@ Tool call policies control whether a tool may run in the current context.
 Available actions:
 
 - **Allow always**: The tool can run even when the current context is marked sensitive or untrusted.
-- **Block in sensitive context**: The tool is blocked when the current context is sensitive. The context becomes sensitive once a tool with a "Results are: Sensitive" policy has been called previously.
+- **Block in sensitive context**: The tool is blocked when the current context is sensitive. The context becomes sensitive once a tool with a "Results are: Sensitive" policy has been called previously. The block message names what made the session sensitive — the tool whose earlier result was marked sensitive, for example.
 - **Require approval**: The tool requires explicit user approval in chat. In autonomous execution contexts, the call is blocked.
 - **Block always**: The tool is never allowed to run automatically.
 
 Use tool call policies to separate safe internal read paths from tools that could exfiltrate data or cause side effects.
+
+A coding CLI's own tools (Claude Code's `Bash`, for example) are discovered with **Allow always** so the client keeps working when the session turns sensitive. The client's MCP tools — names starting with `mcp__` — get the configured default instead. Each stamp is a per-tool policy you can tighten.
 
 For example, a `send_email` tool may only be acceptable for internal recipients:
 

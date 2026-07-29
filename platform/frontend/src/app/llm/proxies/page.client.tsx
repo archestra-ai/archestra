@@ -3,25 +3,25 @@
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
+import { LlmProxyConnectInstructionsDialog } from "@/components/agent-connect-instructions-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
-import {
-  ActiveFilterBadges,
-  AgentDeletedStatusFilter,
-  AgentScopeFilter,
-} from "@/components/agent-scope-filter";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
-import { PostCreateConnectDialog } from "@/components/post-create-connect-dialog";
+import {
+  ActiveFilterBadges,
+  ResourceDeletedStatusFilter,
+  ResourceScopeFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
 import { ResourceVisibilityBadge } from "@/components/resource-visibility-badge";
 import { SearchInput } from "@/components/search-input";
 import { Badge } from "@/components/ui/badge";
@@ -112,15 +112,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     | "asc"
     | "desc"
     | null;
-  const scopeFromUrl = searchParams.get("scope") as
-    | "personal"
-    | "team"
-    | "org"
-    | "built_in"
-    | null;
-  const teamIdsFromUrl = searchParams.get("teamIds");
-  const authorIdsFromUrl = searchParams.get("authorIds");
-  const excludeAuthorIdsFromUrl = searchParams.get("excludeAuthorIds");
+  const scopeFilter = useScopeFilterParams({ includeBuiltIn: true });
   const labelsFromUrl = searchParams.get("labels");
   const statusFromUrl = searchParams.get("status") as
     | "active"
@@ -144,18 +136,11 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
     sortDirection,
     name: nameFilter || undefined,
     agentTypes: proxyAgentTypes,
-    scope: scopeFromUrl || undefined,
-    teamIds: teamIdsFromUrl ? teamIdsFromUrl.split(",") : undefined,
-    authorIds: authorIdsFromUrl ? authorIdsFromUrl.split(",") : undefined,
-    excludeAuthorIds: excludeAuthorIdsFromUrl
-      ? excludeAuthorIdsFromUrl.split(",")
-      : undefined,
-    excludeOtherPersonalAgents:
-      scopeFromUrl !== "personal" &&
-      !authorIdsFromUrl &&
-      !excludeAuthorIdsFromUrl
-        ? true
-        : undefined,
+    scope: scopeFilter.scope,
+    teamIds: scopeFilter.teamIds,
+    authorIds: scopeFilter.authorIds,
+    excludeAuthorIds: scopeFilter.excludeAuthorIds,
+    excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
   });
@@ -183,21 +168,11 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
 
   type ProxyData = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
-  const router = useRouter();
-
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [postCreateProxy, setPostCreateProxy] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
-  const navigateToConnection = useCallback(
-    (agentId: string) => {
-      router.push(
-        `/connection?proxyId=${encodeURIComponent(agentId)}&from=table`,
-      );
-    },
-    [router],
-  );
+  const [connectingProxy, setConnectingProxy] = useState<Pick<
+    ProxyData,
+    "id" | "name" | "agentType"
+  > | null>(null);
   const editId = searchParams.get("edit");
   const { data: editFromUrl } = useProfile(editId ?? undefined);
   const editDialog = useDialogUrlParam<ProxyData>({
@@ -311,6 +286,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         <ResourceVisibilityBadge
           scope={row.original.scope}
           teams={row.original.teams}
+          users={row.original.users}
           authorId={row.original.authorId}
           authorName={row.original.authorName}
           currentUserId={currentUserId}
@@ -341,7 +317,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
           <LlmProxyActions
             agent={agent}
             canModify={canModify}
-            onConnect={(a) => navigateToConnection(a.id)}
+            onConnect={setConnectingProxy}
             onEdit={editDialog.open}
             onDelete={setDeletingProxyId}
             onRestore={(agentId) => {
@@ -404,11 +380,12 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                   searchFields={["name"]}
                   paramName="name"
                 />
-                <AgentScopeFilter
+                <ResourceScopeFilter
+                  showLabels
                   ownerLabelPlural="LLM proxies"
                   adminPermission={{ llmProxy: ["admin"] }}
                 />
-                <AgentDeletedStatusFilter
+                <ResourceDeletedStatusFilter
                   deletePermission={{ llmProxy: ["delete"] }}
                 />
               </div>
@@ -437,10 +414,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 onPaginationChange={handlePaginationChange}
                 hasActiveFilters={Boolean(
                   nameFilter ||
-                    scopeFromUrl ||
-                    teamIdsFromUrl ||
-                    authorIdsFromUrl ||
-                    excludeAuthorIdsFromUrl ||
+                    scopeFilter.hasActiveScopeFilters ||
                     labelsFromUrl ||
                     isDeletedView,
                 )}
@@ -476,15 +450,16 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
               defaultIconType="llm_proxy"
               onCreated={(created) => {
                 setIsCreateDialogOpen(false);
-                setPostCreateProxy(created);
+                // Creation ends in the connect dialog, so the flow closes on
+                // "here's the endpoint and how to authenticate".
+                setConnectingProxy({ ...created, agentType: "llm_proxy" });
               }}
             />
 
-            <PostCreateConnectDialog
-              created={postCreateProxy}
-              agentType="llm_proxy"
+            <LlmProxyConnectInstructionsDialog
+              proxy={connectingProxy}
               onOpenChange={(open) => {
-                if (!open) setPostCreateProxy(null);
+                if (!open) setConnectingProxy(null);
               }}
             />
 

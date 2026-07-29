@@ -787,6 +787,28 @@ describe("ModelModel", () => {
       );
       expect(after?.discoveredViaLlmProxy).toBe(false);
     });
+
+    test("a repeat call neither duplicates the row nor resets its fields", async () => {
+      await ModelModel.ensureModelExists("repeat-model", "openai");
+      const first = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "repeat-model",
+      );
+      await ModelModel.update(first?.id ?? "", {
+        customPricePerMillionInput: "4.00",
+      });
+
+      await ModelModel.ensureModelExists("repeat-model", "openai");
+
+      const all = await ModelModel.findAll({ provider: "openai" });
+      expect(all.filter((m) => m.modelId === "repeat-model")).toHaveLength(1);
+      const after = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "repeat-model",
+      );
+      expect(after?.id).toBe(first?.id);
+      expect(after?.customPricePerMillionInput).toBe("4.00");
+    });
   });
 
   describe("findLlmProxyModels", () => {
@@ -1279,6 +1301,294 @@ describe("ModelModel", () => {
       expect(pricing.source).toBe("default");
       expect(pricing.pricePerMillionCacheRead).toBe("5");
       expect(pricing.cacheSource).toBe("derived_multiplier");
+    });
+
+    // Ollama charges no per-token rate on either transport, so the generic
+    // estimate would bill local inference at $50/M against a real rate of zero.
+    test.each([
+      "ollama",
+      "ollama-native",
+      "vllm",
+    ] as const)("prices an unpriced %s model at zero rather than the generic estimate", async (provider) => {
+      const model = await ModelModel.create({
+        externalId: `${provider}/qwen3:8b`,
+        provider,
+        modelId: "qwen3:8b",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      const pricing = ModelModel.getEffectivePricing(model);
+
+      expect(pricing.pricePerMillionInput).toBe("0.00");
+      expect(pricing.pricePerMillionOutput).toBe("0.00");
+    });
+
+    test("prices an unknown Ollama model at zero from the provider hint alone", () => {
+      const pricing = ModelModel.getEffectivePricing(
+        null,
+        "some-local-model",
+        "ollama",
+      );
+
+      expect(pricing.pricePerMillionInput).toBe("0.00");
+      expect(pricing.pricePerMillionOutput).toBe("0.00");
+    });
+
+    test("leaves the generic estimate in place for other providers", () => {
+      const pricing = ModelModel.getEffectivePricing(
+        null,
+        "some-unknown-model",
+        "openai",
+      );
+
+      expect(pricing.pricePerMillionInput).toBe("50.00");
+    });
+  });
+
+  describe("configuredParameters (native Ollama)", () => {
+    async function makeNativeModel() {
+      return ModelModel.create({
+        externalId: "ollama/llama3.2",
+        provider: "ollama-native",
+        modelId: "llama3.2",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+    }
+
+    test("persists configured parameters via update", async () => {
+      const created = await makeNativeModel();
+      expect(created.configuredParameters).toBeNull();
+
+      const updated = await ModelModel.update(created.id, {
+        configuredParameters: {
+          num_ctx: 8192,
+          num_predict: 1024,
+          reasoning_effort: "medium",
+          stop: ["END"],
+        },
+      });
+      expect(updated?.configuredParameters).toEqual({
+        num_ctx: 8192,
+        num_predict: 1024,
+        reasoning_effort: "medium",
+        stop: ["END"],
+      });
+
+      // Round-trips through a fresh read.
+      const reloaded = await ModelModel.findByProviderAndModelId(
+        "ollama-native",
+        "llama3.2",
+      );
+      expect(reloaded?.configuredParameters?.num_ctx).toBe(8192);
+    });
+
+    test("clears configured parameters when set to null", async () => {
+      const created = await makeNativeModel();
+      await ModelModel.update(created.id, {
+        configuredParameters: { num_ctx: 4096 },
+      });
+      const cleared = await ModelModel.update(created.id, {
+        configuredParameters: null,
+      });
+      expect(cleared?.configuredParameters).toBeNull();
+    });
+
+    test("resolveEffectiveContextLength prefers a configured num_ctx over the architectural value", async () => {
+      const created = await ModelModel.create({
+        externalId: "ollama/nemotron",
+        provider: "ollama-native",
+        modelId: "nemotron",
+        contextLength: 262144,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      // No configured num_ctx → architectural value.
+      expect(ModelModel.resolveEffectiveContextLength(created)).toBe(262144);
+
+      const updated = await ModelModel.update(created.id, {
+        configuredParameters: { num_ctx: 8192 },
+      });
+      // Configured num_ctx wins (the window Ollama actually enforces).
+      expect(
+        ModelModel.resolveEffectiveContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(8192);
+    });
+
+    test("resolveEffectiveContextLength clamps a num_ctx above the architectural window", async () => {
+      const created = await ModelModel.create({
+        externalId: "ollama/clamped",
+        provider: "ollama-native",
+        modelId: "clamped",
+        contextLength: 131072,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      const updated = await ModelModel.update(created.id, {
+        configuredParameters: { num_ctx: 1310720 },
+      });
+
+      // An unclamped value drives the context ring and the step-context guard,
+      // so auto-compaction would fire 10x too late and conversations would die
+      // of context overflow while the ring still showed free space.
+      expect(
+        ModelModel.resolveEffectiveContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(131072);
+    });
+
+    test("resolveEffectiveContextLength ignores configuredParameters on other providers", async () => {
+      const created = await ModelModel.create({
+        externalId: "anthropic/claude",
+        provider: "anthropic",
+        modelId: "claude-test",
+        contextLength: 200000,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      const updated = await ModelModel.update(created.id, {
+        configuredParameters: { num_ctx: 100000000 },
+      });
+
+      // Nothing sends num_ctx to a paid provider, so honouring it here would
+      // only stop compaction and ship unbounded history — with the bill as the
+      // sole feedback signal.
+      expect(
+        ModelModel.resolveEffectiveContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(200000);
+    });
+
+    test("resolveEffectiveContextLength uses a Modelfile num_ctx when nothing is configured", async () => {
+      // Reproduced against Ollama 0.32.0: `qwen3-8k` is qwen3:4b built with
+      // `PARAMETER num_ctx 8192`. /api/show reports the architectural 262144 in
+      // model_info AND the 8192 cap in the parameters block, which we already
+      // parse into defaultParameters and previously never read — so the ring
+      // promised 262K while Ollama truncated at 8K and compaction never fired.
+      const created = await ModelModel.create({
+        externalId: "ollama/qwen3-8k",
+        provider: "ollama-native",
+        modelId: "qwen3-8k:latest",
+        contextLength: 262144,
+        defaultParameters: { num_ctx: 8192, temperature: 0.6 },
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      expect(ModelModel.resolveEffectiveContextLength(created)).toBe(8192);
+
+      // A configured value still outranks the Modelfile — Archestra sends it,
+      // and a request-level num_ctx is highest precedence in Ollama.
+      const updated = await ModelModel.update(created.id, {
+        configuredParameters: { num_ctx: 32768 },
+      });
+      expect(
+        ModelModel.resolveEffectiveContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(32768);
+    });
+
+    test("resolveEffectiveContextLength applies a Modelfile num_ctx on the /v1 transport too", async () => {
+      // The Modelfile cap is a property of the model, not of the transport.
+      const created = await ModelModel.create({
+        externalId: "ollama/qwen3-8k-v1",
+        provider: "ollama",
+        modelId: "qwen3-8k-v1",
+        contextLength: 262144,
+        defaultParameters: { num_ctx: 8192 },
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+
+      expect(ModelModel.resolveEffectiveContextLength(created)).toBe(8192);
+    });
+
+    test("resolveEffectiveContextLength ignores an unusable Modelfile num_ctx", async () => {
+      // defaultParameters is parsed from a free-form text block, so the value
+      // arrives as a string as often as a number and can be junk outright. A bad
+      // parse must fall back to the architectural window rather than propagate
+      // into the context ring and the compaction threshold.
+      const created = await ModelModel.create({
+        externalId: "ollama/stringy",
+        provider: "ollama-native",
+        modelId: "stringy",
+        contextLength: 262144,
+        defaultParameters: { num_ctx: "8192" },
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      // A numeric string is still a real cap — coerce it.
+      expect(ModelModel.resolveEffectiveContextLength(created)).toBe(8192);
+
+      for (const num_ctx of ["not-a-number", "0", "-1", "8192.5"]) {
+        const junk = await ModelModel.create({
+          externalId: `ollama/junk-${num_ctx}`,
+          provider: "ollama-native",
+          modelId: `junk-${num_ctx}`,
+          contextLength: 262144,
+          defaultParameters: { num_ctx },
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          lastSyncedAt: new Date(),
+        });
+        expect(ModelModel.resolveEffectiveContextLength(junk)).toBe(262144);
+      }
+    });
+
+    test("resolveEffectiveContextLength falls back when contextLength is null", async () => {
+      const created = await makeNativeModel();
+      expect(created.contextLength).toBeNull();
+      expect(ModelModel.resolveEffectiveContextLength(created)).toBeNull();
+
+      const updated = await ModelModel.update(created.id, {
+        configuredParameters: { num_ctx: 8192 },
+      });
+      // With no architectural value to clamp against, the configured window is
+      // the only thing known about the model.
+      expect(
+        ModelModel.resolveEffectiveContextLength(
+          updated as NonNullable<typeof updated>,
+        ),
+      ).toBe(8192);
+    });
+
+    test("findByIdForAudit includes configuredParameters", async () => {
+      const created = await makeNativeModel();
+      await ModelModel.update(created.id, {
+        configuredParameters: { num_predict: 1 },
+      });
+
+      // Omitting it made a parameters-only save produce an empty before/after
+      // diff: the only other field it moves is `updatedAt`, which the audit
+      // hook strips.
+      const snapshot = await ModelModel.findByIdForAudit(created.id, "org-1");
+      expect(snapshot?.configuredParameters).toEqual({ num_predict: 1 });
+    });
+
+    test("leaves configured parameters untouched when the field is omitted", async () => {
+      const created = await makeNativeModel();
+      await ModelModel.update(created.id, {
+        configuredParameters: { top_k: 40 },
+      });
+      // A pricing-only update must not wipe the stored parameters.
+      const afterUnrelated = await ModelModel.update(created.id, {
+        ignored: true,
+      });
+      expect(afterUnrelated?.configuredParameters).toEqual({ top_k: 40 });
     });
   });
 });

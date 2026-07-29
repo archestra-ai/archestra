@@ -12,15 +12,19 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
+import { resolveBedrockAwsPrices } from "@/services/bedrock-aws-pricing";
 import type {
   CreateModel,
   Model,
   ModelCapabilities,
+  ModelDefaultParameters,
   PatchModelBody,
   PriceSource,
 } from "@/types";
+import ModelTeamModel from "./model-team";
 
 /**
  * Effective pricing result with source tracking. All prices are per-million
@@ -38,6 +42,17 @@ interface EffectivePricing {
   /** Source of the cache price, or null when unpriced. */
   cacheSource: PriceSource | null;
 }
+
+/**
+ * Providers that charge no per-token rate, so their real price is zero rather
+ * than unknown: the operator runs the server (vLLM, self-hosted Ollama), or the
+ * vendor bills a flat subscription metered on compute time (Ollama's cloud).
+ */
+const PROVIDERS_BILLING_NO_TOKEN_RATE = new Set<SupportedProvider>([
+  "ollama",
+  "ollama-native",
+  "vllm",
+]);
 
 /**
  * Returns default token prices for a model.
@@ -133,6 +148,32 @@ function combineCacheSource(
  */
 function formatCachePrice(perMillion: number): string {
   return Number.parseFloat(perMillion.toFixed(8)).toString();
+}
+
+/**
+ * Read the Modelfile `num_ctx` out of the provider-reported defaults.
+ *
+ * `defaultParameters` is parsed from Ollama's free-form `parameters` text block,
+ * so the value arrives as a string as often as a number, and an unrecognised
+ * block can put anything here. Coerce narrowly and let the caller's
+ * `sanitizeOutputLimit` reject whatever is left — this feeds the context ring
+ * and the compaction threshold, so a bad parse must fall back rather than
+ * propagate.
+ */
+function readOllamaDefaultNumCtx(
+  defaultParameters: ModelDefaultParameters | null | undefined,
+): number | null {
+  // A Modelfile may set the same PARAMETER twice, which the fetcher collects
+  // into an array. Ollama itself is last-wins, so take the final entry rather
+  // than rejecting the whole value and falling back to the architectural
+  // window — that fallback is the very overstatement this resolution exists
+  // to prevent.
+  const collected = defaultParameters?.num_ctx;
+  const raw = Array.isArray(collected) ? collected.at(-1) : collected;
+  if (typeof raw === "number") return raw;
+  if (typeof raw !== "string") return null;
+  const parsed = Number(raw.trim());
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 class ModelModel {
@@ -579,6 +620,9 @@ class ModelModel {
     if (data.embeddingDimensions !== undefined) {
       set.embeddingDimensions = data.embeddingDimensions;
     }
+    if (data.configuredParameters !== undefined) {
+      set.configuredParameters = data.configuredParameters;
+    }
 
     const [result] = await db
       .update(schema.modelsTable)
@@ -598,8 +642,12 @@ class ModelModel {
   static async ensureModelExists(
     modelId: string,
     provider: SupportedProvider,
-  ): Promise<void> {
-    await db
+  ): Promise<Model | null> {
+    // RETURNING yields a row only when this call did the insert, which is what
+    // tells the caller a model was seen for the first time and still needs its
+    // registry data. On conflict it yields nothing, so a repeat sighting costs
+    // one statement and leaves the existing row untouched.
+    const [inserted] = await db
       .insert(schema.modelsTable)
       .values({
         externalId: `${provider}/${modelId}`,
@@ -608,7 +656,32 @@ class ModelModel {
         discoveredViaLlmProxy: true,
         lastSyncedAt: new Date(),
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning();
+
+    return inserted ?? null;
+  }
+
+  /**
+   * Write registry-sourced price and limits onto a model, leaving every other
+   * column (custom prices, team links, provenance) as it is.
+   */
+  static async applyRegistryCapabilities(
+    id: string,
+    capabilities: {
+      promptPricePerToken: string | null;
+      completionPricePerToken: string | null;
+      cacheReadPricePerToken: string | null;
+      cacheWritePricePerToken: string | null;
+      contextLength: number | null;
+      outputLength: number | null;
+      supportsToolCalling: boolean | null;
+    },
+  ): Promise<void> {
+    await db
+      .update(schema.modelsTable)
+      .set({ ...capabilities, lastSyncedAt: new Date() })
+      .where(eq(schema.modelsTable.id, id));
   }
 
   /**
@@ -634,7 +707,7 @@ class ModelModel {
     provider?: SupportedProvider,
   ): EffectivePricing {
     const { pricePerMillionInput, pricePerMillionOutput, source } =
-      ModelModel.getEffectiveBasePricing(model, modelId);
+      ModelModel.getEffectiveBasePricing(model, modelId, provider);
     const cache = ModelModel.getEffectiveCachePricing(
       model,
       pricePerMillionInput,
@@ -655,6 +728,7 @@ class ModelModel {
   private static getEffectiveBasePricing(
     model: Model | null,
     modelId?: string,
+    provider?: SupportedProvider,
   ): {
     pricePerMillionInput: string;
     pricePerMillionOutput: string;
@@ -672,11 +746,36 @@ class ModelModel {
       };
     }
 
-    // Tier 2: models.dev synced price (convert per-token to per-million)
+    // Tier 2: registry-synced price (convert per-token to per-million). The
+    // stored columns do not record which registry supplied them, so the source
+    // is re-derived by re-running the AWS snapshot lookup. AWS only fills what
+    // models.dev omits, so matching the stored value is what identifies it as
+    // the source; a mismatch means the registry won. When both agree the
+    // attribution is ambiguous and either label describes the same number.
     if (
       model?.promptPricePerToken != null &&
       model?.completionPricePerToken != null
     ) {
+      const awsPrices = resolveBedrockAwsPrices({
+        provider: model.provider,
+        modelId: model.modelId,
+      });
+      // Compared as numbers: both sides are decimal strings, but the stored one
+      // has been through Postgres numeric and carries its scale's trailing
+      // zeros, so "0.0000033" and "0.00000330" are the same price.
+      const samePrice = (a: string | null, b: string) =>
+        a != null && Number.parseFloat(a) === Number.parseFloat(b);
+      const syncedSource: PriceSource =
+        samePrice(
+          awsPrices?.promptPricePerToken ?? null,
+          model.promptPricePerToken,
+        ) &&
+        samePrice(
+          awsPrices?.completionPricePerToken ?? null,
+          model.completionPricePerToken,
+        )
+          ? "aws"
+          : "models_dev";
       return {
         pricePerMillionInput: (
           Number.parseFloat(model.promptPricePerToken) * 1_000_000
@@ -684,11 +783,33 @@ class ModelModel {
         pricePerMillionOutput: (
           Number.parseFloat(model.completionPricePerToken) * 1_000_000
         ).toFixed(2),
-        source: "models_dev",
+        source: syncedSource,
       };
     }
 
-    // Tier 3: Default fallback
+    // Tier 3: Default fallback. The generic estimate below assumes an unknown
+    // price exists to be approximated; for these providers none does, so it
+    // fabricates one — inflating recorded spend and burning cost limits against
+    // tokens nobody is billed for. vLLM is an inference server the operator
+    // runs. Ollama bills no per-token rate on either transport: a self-hosted
+    // server charges nothing, and its cloud offering is a flat monthly
+    // subscription metered on GPU time rather than tokens.
+    //
+    // Listed explicitly rather than derived from the self-hosted-provider set
+    // it currently matches, so that adding a keyless provider that does bill
+    // per token cannot silently make its traffic free.
+    const resolvedProvider = model?.provider ?? provider;
+    if (
+      resolvedProvider &&
+      PROVIDERS_BILLING_NO_TOKEN_RATE.has(resolvedProvider)
+    ) {
+      return {
+        pricePerMillionInput: "0.00",
+        pricePerMillionOutput: "0.00",
+        source: "default",
+      };
+    }
+
     const nameForDefault = model?.modelId ?? modelId ?? "";
     return {
       ...getDefaultModelPrice(nameForDefault),
@@ -811,6 +932,56 @@ class ModelModel {
    * Get model capabilities for API response.
    * Uses getEffectivePricing for pricing resolution.
    */
+  /**
+   * The context window to DISPLAY and gate on, resolved in three tiers:
+   *
+   * 1. A native-Ollama model with a configured `num_ctx` enforces exactly that
+   *    window, because Archestra sends it on every turn.
+   * 2. Otherwise, a Modelfile `num_ctx` reported by `/api/show` — Ollama applies
+   *    it whether or not we send anything, and it is what actually truncates.
+   * 3. Otherwise the architectural `context_length`.
+   *
+   * `context_length` alone overstates the window whenever Ollama is capped,
+   * producing the "ring shows 262K while Ollama truncates at 8K" symptom: no
+   * compaction fires, the model loses its system prompt, and nothing errors.
+   * Tier 2 costs nothing — `parseOllamaParameters` already stores the value and
+   * it was simply never read.
+   *
+   * Clamped to the architectural window, and tier 1 is gated on `ollama-native`
+   * since `/v1` cannot carry `num_ctx`. Both are defence in depth for the update
+   * route, which already rejects those cases: this drives the context ring, the
+   * A2A step-context guard and the output-token budget, so an inflated value
+   * pushes auto-compaction past the point where the conversation still fits.
+   *
+   * A server-level `OLLAMA_CONTEXT_LENGTH` cap remains invisible here — it is
+   * absent from `/api/show` and readable only from `/api/ps` while the model is
+   * loaded. Setting `num_ctx` explicitly is the escape hatch for that case.
+   */
+  static resolveEffectiveContextLength(model: Model): number | null {
+    const architectural = model.contextLength;
+    const isOllama =
+      model.provider === "ollama" || model.provider === "ollama-native";
+
+    const configured =
+      model.provider === "ollama-native"
+        ? sanitizeOutputLimit(model.configuredParameters?.num_ctx)
+        : null;
+    // Only Ollama's fetcher writes `defaultParameters` today, but gate it
+    // anyway: `num_ctx` means "the window Ollama enforces" and would be
+    // meaningless — and silently shrink the window — coming from anywhere else.
+    const modelfile = isOllama
+      ? sanitizeOutputLimit(readOllamaDefaultNumCtx(model.defaultParameters))
+      : null;
+
+    const resolved = configured ?? modelfile;
+    if (resolved === null) {
+      return architectural;
+    }
+    return architectural === null
+      ? resolved
+      : Math.min(resolved, architectural);
+  }
+
   static toCapabilities(model: Model | null): ModelCapabilities {
     if (!model) {
       return {
@@ -831,7 +1002,7 @@ class ModelModel {
     const pricing = ModelModel.getEffectivePricing(model);
 
     return {
-      contextLength: model.contextLength,
+      contextLength: ModelModel.resolveEffectiveContextLength(model),
       inputModalities: model.inputModalities,
       outputModalities: model.outputModalities,
       supportsToolCalling: model.supportsToolCalling,
@@ -892,16 +1063,28 @@ class ModelModel {
     if (!row) return null;
 
     const caps = ModelModel.toCapabilities(row);
+    const teamsByModelId = await ModelTeamModel.getTeamDetailsForModels([
+      row.id,
+    ]);
     return {
       id: row.id,
       modelId: row.modelId,
       provider: row.provider,
       description: row.description ?? null,
       ignored: row.ignored,
+      restrictedToTeams: (teamsByModelId.get(row.id) ?? []).map(
+        (team) => team.name,
+      ),
       embeddingDimensions: row.embeddingDimensions,
       inputModalities: row.inputModalities ?? null,
       outputModalities: row.outputModalities ?? null,
       discoveredViaLlmProxy: row.discoveredViaLlmProxy,
+      // The generation parameters Archestra SENDS on every turn. Without them
+      // a parameters-only save produces an empty before/after diff — the only
+      // other field it moves is `updatedAt`, which the audit hook strips — so
+      // "who set num_predict: 1 on a globally shared model row, and when" would
+      // be unanswerable. `contextLength` below only reflects `num_ctx`.
+      configuredParameters: row.configuredParameters ?? null,
       contextLength: caps.contextLength,
       pricePerMillionInput: caps.pricePerMillionInput,
       pricePerMillionOutput: caps.pricePerMillionOutput,

@@ -1,7 +1,7 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { describe, expect, test, useRouteTestApp } from "@/test";
 import skillRoutes from "./skill.routes";
-import { seedImportedSkill } from "./skill.test-helpers";
+import { seedBuiltInSkill, seedImportedSkill } from "./skill.test-helpers";
 
 describe("GET /api/skills/source-repos", () => {
   const ctx = useRouteTestApp(skillRoutes);
@@ -101,6 +101,42 @@ describe("GET /api/skills/source-repos", () => {
       "secret/private-repo",
       "shared/org-repo",
     ]);
+  });
+
+  test("built-in skills are not offered as repositories", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+
+    await seedBuiltInSkill({
+      organizationId: ctx.organizationId,
+      name: "Platform Operations",
+      builtInSkillId: "archestra-platform-operations",
+    });
+    await seedBuiltInSkill({
+      organizationId: ctx.organizationId,
+      name: "Build App",
+      builtInSkillId: "build-app",
+    });
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "org-imported",
+      sourceRef: "shared/org-repo@main:SKILL.md",
+      scope: "org",
+    });
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills/source-repos",
+    });
+
+    expect(response.statusCode).toBe(200);
+    // A built-in skill's `builtin:<id>` ref is an identity token, not a
+    // repository — and it embeds the unbranded product id, so surfacing it
+    // would leak that id into a white-labeled deployment's filter.
+    expect(response.json().repos).toEqual(["shared/org-repo"]);
   });
 
   test("non-admins with no accessible imported skills see no repositories", async ({

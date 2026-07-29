@@ -1,6 +1,7 @@
 import {
   type AppRecordingBundle,
-  pruneTrailingTrimEvents,
+  exceedsFinalCutLimit,
+  pruneCutEvents,
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
@@ -9,16 +10,20 @@ import {
   classifyCut,
   classifyTimelineGesture,
   consolidatedTranscript,
+  deferThirdPartyStylesheets,
+  defuseDomPaintPayload,
   dominantViewport,
   keptTimelineRanges,
   neutralizeAppScripts,
   planPaintFlush,
   presentedTranscript,
+  relocalizeSandboxAssets,
   replayRegionLayout,
   replayStageFit,
   revealSchedule,
   trimCutsToExportLimit,
   uncutRecording,
+  widenReplayImageCsp,
 } from "./app-session-player";
 
 type Recording = Parameters<typeof buildPlayback>[0];
@@ -105,6 +110,186 @@ describe("buildPlayback", () => {
     expect(gap).toBeLessThanOrEqual(900);
   });
 
+  // A reply inside a cut used to buy its own reveal time, so the cut spanned
+  // real playback seconds: resuming inside one crawled through the removed
+  // stretch instead of stepping over it, and a minute of kept material
+  // reported as longer than a minute.
+  const reply = (id: string, atMs: number) => ({
+    id,
+    role: "assistant" as const,
+    atMs,
+    parts: [
+      { type: "text" as const, text: "a fairly long reply. ".repeat(40) },
+    ],
+  });
+
+  it("a cut costs zero playback time, however much was said inside it", () => {
+    const base = {
+      durationMs: 80_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        { kind: "pointer", t: 10_000, type: "click", x: 1, y: 1 },
+        { kind: "pointer", t: 40_000, type: "click", x: 2, y: 2 },
+        { kind: "pointer", t: 70_000, type: "click", x: 3, y: 3 },
+      ] as Recording["events"],
+      transcript: [
+        reply("a1", 30_000),
+        reply("a2", 45_000),
+      ] as Recording["transcript"],
+      edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+    };
+    const playback = buildPlayback(recording(base));
+
+    // The whole cut is one instant — both edges land on the same moment.
+    expect(playback.toPlaybackMs(60_000)).toBe(playback.toPlaybackMs(20_000));
+    // And nothing inside it sits anywhere else.
+    expect(playback.toPlaybackMs(40_000)).toBe(playback.toPlaybackMs(20_000));
+
+    // Removing the two replies entirely cannot make the cut any cheaper —
+    // which is the point: what was said in a removed stretch costs nothing.
+    const withoutReplies = buildPlayback(
+      recording({ ...base, transcript: [] }),
+    );
+    expect(playback.duration).toBe(withoutReplies.duration);
+  });
+
+  it("resuming inside a cut steps to the next kept moment, not through the cut", () => {
+    const playback = buildPlayback(
+      recording({
+        durationMs: 80_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 10_000, type: "click", x: 1, y: 1 },
+          { kind: "pointer", t: 70_000, type: "click", x: 2, y: 2 },
+        ] as Recording["events"],
+        transcript: [reply("a1", 30_000)] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+      }),
+    );
+
+    // The playhead sat at 40s when the cut was made. Its clock lands on the
+    // collapse instant, and the very next moment of playback is the cut's far
+    // edge — there is no span of removed material to sit through first.
+    const clock = playback.toPlaybackMs(40_000);
+    expect(playback.toRawMs(clock)).toBe(60_000);
+    expect(playback.toRawMs(clock + 1)).toBeGreaterThanOrEqual(60_000);
+  });
+
+  it("still holds a reply that was mid-reveal when the cut began", () => {
+    // The defended case: trimming the pause AFTER a long answer cannot
+    // un-draw the answer — it is on screen, still typing, when the cut starts.
+    const withReply = buildPlayback(
+      recording({
+        durationMs: 80_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 10_000, type: "click", x: 1, y: 1 },
+          { kind: "pointer", t: 70_000, type: "click", x: 2, y: 2 },
+        ] as Recording["events"],
+        transcript: [reply("a1", 19_000)] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+      }),
+    );
+    const withoutReply = buildPlayback(
+      recording({
+        durationMs: 80_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 10_000, type: "click", x: 1, y: 1 },
+          { kind: "pointer", t: 70_000, type: "click", x: 2, y: 2 },
+        ] as Recording["events"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+      }),
+    );
+    expect(withReply.duration).toBeGreaterThan(withoutReply.duration);
+  });
+
+  it("leaves a head trim's chat animating — it starts the demo later, it does not delete conversation", () => {
+    // The regression this guards. A head trim is stored as ONE cut reaching the
+    // axis floor, and pre-recording chat carries large negative times: a real
+    // submission trims its first 25s and stores {fromMs: -58041135, toMs:
+    // 25073}. Treating everything in there as removed settled 73 of 73 messages
+    // on one live gallery card and 20 of 20 on another — both replayed a
+    // fully-formed chat that never typed a character.
+    const playback = buildPlayback(
+      recording({
+        durationMs: 40_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 30_000, type: "click", x: 1, y: 1 },
+        ] as Recording["events"],
+        transcript: [
+          reply("history-1", -8_047_639),
+          reply("history-2", -357_100),
+          reply("recorded", 5_000),
+        ] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: -8_048_839, toMs: 10_000 }] },
+      }),
+    );
+
+    // Nothing is settled: the trim removed app replay, not the conversation.
+    expect(playback.transcript.map((m) => m.settled)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    // And every reply still draws itself.
+    const { schedule } = revealSchedule(playback.transcript, playback.duration);
+    for (const message of playback.transcript) {
+      const slot = schedule.get(message.id);
+      expect(slot?.end).toBeGreaterThan(slot?.start ?? 0);
+    }
+  });
+
+  it("leaves an end trim's chat animating too", () => {
+    const playback = buildPlayback(
+      recording({
+        durationMs: 40_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 5_000, type: "click", x: 1, y: 1 },
+        ] as Recording["events"],
+        transcript: [
+          reply("kept", 1_000),
+          reply("in-tail", 30_000),
+        ] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 40_000 }] },
+      }),
+    );
+    expect(playback.transcript.map((m) => m.settled)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it("marks a collapsed reply as already sent so it never types over the app", () => {
+    const playback = buildPlayback(
+      recording({
+        durationMs: 80_000,
+        events: [
+          { kind: "segment", t: 0, version: 1 },
+          { kind: "pointer", t: 70_000, type: "click", x: 1, y: 1 },
+        ] as Recording["events"],
+        transcript: [
+          reply("kept", 10_000),
+          reply("cut", 30_000),
+        ] as Recording["transcript"],
+        edits: { cuts: [{ fromMs: 20_000, toMs: 60_000 }] },
+      }),
+    );
+    expect(playback.transcript.map((m) => m.settled)).toEqual([
+      undefined,
+      true,
+    ]);
+    // And the schedule gives it no typing time at all, so it renders complete
+    // the moment the playhead reaches it.
+    const { schedule } = revealSchedule(playback.transcript, playback.duration);
+    const slot = schedule.get("cut");
+    expect(slot?.end).toBe(slot?.start);
+    const keptSlot = schedule.get("kept");
+    expect(keptSlot?.end).toBeGreaterThan(keptSlot?.start ?? 0);
+  });
+
   it("collapses a cut range to zero time without dropping its events", () => {
     const base = {
       durationMs: 10_000,
@@ -177,7 +362,7 @@ describe("buildPlayback", () => {
     expect(playback.toRawMs(playback.duration)).toBe(6_000);
   });
 
-  it("drops chat messages inside a cut — nothing said during a removed stretch replays", () => {
+  it("keeps chat messages inside a cut — a cut trims app replay, never the chat", () => {
     const playback = buildPlayback(
       recording({
         durationMs: 10_000,
@@ -192,7 +377,7 @@ describe("buildPlayback", () => {
             id: "inside-cut",
             role: "assistant",
             atMs: 4_500,
-            parts: [{ type: "text", text: "edited out" }],
+            parts: [{ type: "text", text: "said during the cut" }],
           },
           {
             id: "keep-after",
@@ -209,14 +394,22 @@ describe("buildPlayback", () => {
       }),
     );
 
-    // The removed stretch's message is gone entirely — not replayed in a
-    // burst at the cut's collapse point — while its neighbors stay in order.
+    // Every message still replays, in order — the cut removed the app frames in
+    // its range, not the conversation.
     expect(playback.transcript.map((message) => message.id)).toEqual([
       "keep-before",
+      "inside-cut",
       "keep-after",
     ]);
-    expect(playback.transcript[0].atMs).toBeLessThan(
-      playback.transcript[1].atMs,
+    // The message said during the cut collapses onto the cut's instant, where
+    // the reveal cascade streams it in (sped up) rather than dropping it.
+    const insideCut = playback.transcript.find((m) => m.id === "inside-cut");
+    expect(insideCut?.atMs).toBe(playback.toPlaybackMs(3_000));
+    expect(playback.transcript[0].atMs).toBeLessThanOrEqual(
+      insideCut?.atMs ?? 0,
+    );
+    expect(insideCut?.atMs ?? 0).toBeLessThanOrEqual(
+      playback.transcript[2].atMs,
     );
   });
 
@@ -291,14 +484,20 @@ describe("buildPlayback", () => {
       }),
     );
 
-    // Playback genuinely ends at the trim: nothing inside the trimmed tail
-    // plays — its events and messages are left out, not applied at the end.
+    // Playback's app timeline genuinely ends at the trim: no app event inside
+    // the trimmed tail plays — those are left out, not applied at the end.
     expect(trimmed.duration).toBeLessThan(uncut.duration);
     expect(trimmed.duration).toBe(trimmed.toPlaybackMs(5_000));
     const pointers = trimmed.events.filter((event) => event.kind === "pointer");
     expect(pointers).toHaveLength(1);
     expect(pointers[0]).toMatchObject({ x: 1, y: 1 });
-    expect(trimmed.transcript.map((message) => message.id)).toEqual(["u1"]);
+    // The chat is NOT trimmed: the late message is kept and streams in at the
+    // trim point (the end of the app timeline), so nothing said is lost.
+    expect(trimmed.transcript.map((message) => message.id)).toEqual([
+      "u1",
+      "u2",
+    ]);
+    expect(trimmed.transcript[1].atMs).toBe(trimmed.duration);
   });
 
   it("maps playback time back to raw recording time for storing edits", () => {
@@ -339,7 +538,13 @@ describe("buildPlayback", () => {
   const enhancement = { description: "An app.", prompt: "Build me an app" };
 
   it("replays only the last app version and its events once enhanced", () => {
-    const playback = buildPlayback(recording({ ...twoVersions, enhancement }));
+    const playback = buildPlayback(
+      recording({
+        ...twoVersions,
+        enhancement,
+        edits: { cuts: [], chat: { enhancementEnabled: true } },
+      }),
+    );
 
     // The enhanced chat claims one prompt built the app, so the stage must not
     // swap versions behind it.
@@ -354,22 +559,21 @@ describe("buildPlayback", () => {
     );
   });
 
-  it("keeps every version when the enhancement is off or switched off", () => {
+  it("keeps every version by default — the enhancement is off until opted in", () => {
     const plain = buildPlayback(recording(twoVersions));
     expect(plain.segments.map((segment) => segment.version)).toEqual([1, 2]);
     expect(
       plain.events.filter((event) => event.kind === "pointer"),
     ).toHaveLength(2);
 
-    // The author can toggle the enhancement off; the real build comes back.
-    const disabled = buildPlayback(
-      recording({
-        ...twoVersions,
-        enhancement,
-        edits: { cuts: [], chat: { enhancementDisabled: true } },
-      }),
+    // An enhancement is present but not enabled: the real build still replays,
+    // version by version, because the AI consolidation is opt-in.
+    const notEnabled = buildPlayback(
+      recording({ ...twoVersions, enhancement, edits: { cuts: [], chat: {} } }),
     );
-    expect(disabled.segments.map((segment) => segment.version)).toEqual([1, 2]);
+    expect(notEnabled.segments.map((segment) => segment.version)).toEqual([
+      1, 2,
+    ]);
   });
 
   it("never compresses time across the app's own activity", () => {
@@ -497,28 +701,29 @@ describe("buildPlayback", () => {
 
   it("measures the uncut ruler against the same session that plays", () => {
     // The strip is built from the recording with its cuts dropped. Dropping the
-    // whole edits object also drops the chat's enhancement toggle, which left
-    // the ruler stuck at the enhanced length while playback ran the full chat.
-    const off = recording({
+    // whole edits object would also drop the chat's enhancement toggle, which
+    // left the ruler measuring a different session than playback ran.
+    const on = recording({
       ...twoVersions,
       enhancement,
       edits: {
         cuts: [{ fromMs: 1_000, toMs: 2_000 }],
-        chat: { enhancementDisabled: true },
+        chat: { enhancementEnabled: true },
       },
     });
-    const uncut = uncutRecording(off);
+    const uncut = uncutRecording(on);
     expect(uncut.edits?.cuts).toEqual([]);
-    expect(uncut.edits?.chat?.enhancementDisabled).toBe(true);
-    // The ruler therefore shows every version, exactly as playback does.
-    expect(buildPlayback(uncut).segments.map((s) => s.version)).toEqual([1, 2]);
+    expect(uncut.edits?.chat?.enhancementEnabled).toBe(true);
+    // The enhancement stays on through the uncut ruler, so it shows the single
+    // final version, exactly as playback does.
+    expect(buildPlayback(uncut).segments.map((s) => s.version)).toEqual([2]);
 
     // And the toggle genuinely changes what the ruler measures, or the above
-    // proves nothing.
-    const on = uncutRecording(
+    // proves nothing: off (the default) brings every version back.
+    const off = uncutRecording(
       recording({ ...twoVersions, enhancement, edits: { cuts: [] } }),
     );
-    expect(buildPlayback(on).segments.map((s) => s.version)).toEqual([2]);
+    expect(buildPlayback(off).segments.map((s) => s.version)).toEqual([1, 2]);
   });
 
   it("always leaves an app on the stage, even when a trim removes every version", () => {
@@ -605,7 +810,9 @@ describe("trimCutsToExportLimit", () => {
     const next = trimCutsToExportLimit(rec, 30_000);
     expect(next).not.toBeNull();
     const after = durationWith(rec, next ?? []);
-    expect(after).toBeLessThanOrEqual(30_000);
+    // Judged the way the gate judges it — a fraction of a second over is not
+    // something an author can trim, and is not refused (exceedsFinalCutLimit).
+    expect(exceedsFinalCutLimit(after, 30_000)).toBe(false);
     expect(after).toBeGreaterThan(29_900);
   });
 
@@ -617,7 +824,9 @@ describe("trimCutsToExportLimit", () => {
     expect(next).toContainEqual(mid);
     expect(next).toHaveLength(2);
     const after = durationWith(rec, next ?? []);
-    expect(after).toBeLessThanOrEqual(30_000);
+    // Judged the way the gate judges it — a fraction of a second over is not
+    // something an author can trim, and is not refused (exceedsFinalCutLimit).
+    expect(exceedsFinalCutLimit(after, 30_000)).toBe(false);
     expect(after).toBeGreaterThan(29_900);
   });
 
@@ -629,14 +838,18 @@ describe("trimCutsToExportLimit", () => {
     expect(next).not.toBeNull();
     expect(next).toHaveLength(1);
     const after = durationWith(rec, next ?? []);
-    expect(after).toBeLessThanOrEqual(30_000);
+    // Judged the way the gate judges it — a fraction of a second over is not
+    // something an author can trim, and is not refused (exceedsFinalCutLimit).
+    expect(exceedsFinalCutLimit(after, 30_000)).toBe(false);
     expect(after).toBeGreaterThan(29_900);
   });
 
   it("never lands a hair over the limit when it falls inside an idle-compressed gap", () => {
     // Activity to 28s, dead air to 120s (compressed to a beat), activity
     // again: the limit instant maps deep into the raw gap, where a naive
-    // rounded boundary re-expands to MORE than the limit.
+    // rounded boundary re-expands past the limit. It may now land a fraction
+    // of a second over — deliberate, and invisible at m:ss — but never past
+    // what the gate accepts, which is what "hair over" always meant.
     const rec = withEvents(125_000, [
       ...activity(0, 28_000),
       ...activity(120_000, 125_000),
@@ -644,7 +857,9 @@ describe("trimCutsToExportLimit", () => {
     const next = trimCutsToExportLimit(rec, 30_000);
     expect(next).not.toBeNull();
     const after = durationWith(rec, next ?? []);
-    expect(after).toBeLessThanOrEqual(30_000);
+    // Judged the way the gate judges it — a fraction of a second over is not
+    // something an author can trim, and is not refused (exceedsFinalCutLimit).
+    expect(exceedsFinalCutLimit(after, 30_000)).toBe(false);
     expect(after).toBeGreaterThan(29_900);
   });
 });
@@ -767,16 +982,33 @@ describe("consolidatedTranscript", () => {
   describe("presentedTranscript (chat edits layered on top)", () => {
     const enhancement = { description: "A blue app.", prompt: "One-shot ask" };
 
-    it("disabling the enhancement replays the original conversation", () => {
-      const result = presentedTranscript(transcript, enhancement, {
-        enhancementDisabled: true,
-      });
-      expect(result.map((message) => message.id)).toEqual([
+    it("replays the original conversation by default — enhancement is opt-in", () => {
+      const original = presentedTranscript(transcript, enhancement, undefined);
+      expect(original.map((message) => message.id)).toEqual([
         "u1",
         "a1",
         "u2",
         "a2",
       ]);
+      // An empty chat-edits object (not enabled) is the same as absent.
+      const notEnabled = presentedTranscript(transcript, enhancement, {});
+      expect(notEnabled.map((message) => message.id)).toEqual([
+        "u1",
+        "a1",
+        "u2",
+        "a2",
+      ]);
+    });
+
+    it("enabling the enhancement replays the consolidated prompt", () => {
+      const result = presentedTranscript(transcript, enhancement, {
+        enhancementEnabled: true,
+      });
+      // The consolidated prompt (its own :enhanced id) replaces the user prose.
+      expect(result.some((message) => message.id.endsWith(":enhanced"))).toBe(
+        true,
+      );
+      expect(result.some((message) => message.id === "u2")).toBe(false);
     });
 
     it("drops removed messages from the replay — user and assistant alike", () => {
@@ -799,6 +1031,7 @@ describe("consolidatedTranscript", () => {
 
     it("removals still apply while the enhancement consolidates the chat", () => {
       const result = presentedTranscript(transcript, enhancement, {
+        enhancementEnabled: true,
         removedMessageIds: ["a2"],
       });
       // The consolidated prompt survives (it has its own id); a2 is gone.
@@ -948,6 +1181,198 @@ describe("neutralizeAppScripts", () => {
     expect(html).toContain("scrollbar-width: none");
     expect(html).toContain("::-webkit-scrollbar");
     expect(html).toContain("<body>app</body>");
+  });
+});
+
+describe("replay navigation guard", () => {
+  it("injects a live navigation guard that survives the retype pass", () => {
+    const out = neutralizeAppScripts("<div>app</div>");
+    expect(out).toContain("<script data-archestra-replay-guard>");
+    expect(out).not.toContain("data-archestra-replay-guard type=");
+    expect(out).toContain("addEventListener('submit'");
+  });
+
+  it("empties inline handlers that navigate — a replayed click must not reload the document", () => {
+    const html =
+      '<button onclick="window.location.reload()">I connected it, reload page</button>';
+    const out = neutralizeAppScripts(html);
+    expect(out).not.toContain("location.reload");
+    expect(out).toContain('<button onclick="">');
+  });
+
+  it("empties other navigation shapes (assign, href, history, window.open)", () => {
+    const html =
+      "<a onclick=\"location.assign('/x')\">a</a>" +
+      "<b onclick=\"window.location.href = '/y'\">b</b>" +
+      '<i onclick="history.back()">c</i>' +
+      "<u onclick=\"window.open('https://e.com')\">d</u>";
+    const out = neutralizeAppScripts(html);
+    expect(out).not.toContain("location.assign");
+    expect(out).not.toContain("location.href");
+    expect(out).not.toContain("history.back");
+    expect(out).not.toContain("window.open");
+  });
+
+  it("keeps harmless inline handlers (dead app functions just throw quietly)", () => {
+    const html = `<button onclick="changePreset('all')">All</button>`;
+    expect(neutralizeAppScripts(html)).toContain(
+      `onclick="changePreset('all')"`,
+    );
+  });
+
+  it("drops meta refresh but keeps other meta tags", () => {
+    const html =
+      '<meta http-equiv="refresh" content="1;url=/restart">' +
+      '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'">';
+    const out = neutralizeAppScripts(html);
+    expect(out).not.toContain("refresh");
+    expect(out).toContain("Content-Security-Policy");
+  });
+});
+
+describe("defuseDomPaintPayload", () => {
+  it("defuses navigation handlers re-inserted by replayed DOM mutations, wherever they nest", () => {
+    const event = {
+      kind: "dom",
+      op: "html",
+      sel: "body",
+      html: '<button onclick="window.location.reload()">reload</button>',
+      nested: [{ value: '<a onclick="history.back()">b</a>' }],
+    };
+    const out = defuseDomPaintPayload(event);
+    expect(JSON.stringify(out)).not.toContain("location.reload");
+    expect(JSON.stringify(out)).not.toContain("history.back");
+    expect(out.sel).toBe("body");
+  });
+
+  it("passes non-string payloads through untouched", () => {
+    const blob = new Blob(["x"]);
+    const event = { kind: "video-chunk", data: blob, t: 5 };
+    const out = defuseDomPaintPayload(event);
+    expect(out.data).toBe(blob);
+    expect(out.t).toBe(5);
+  });
+});
+
+describe("deferThirdPartyStylesheets", () => {
+  it("parks a remote stylesheet on media=print and remembers what to restore", () => {
+    // A render-blocking third-party sheet has no browser timeout: until it
+    // resolves the replayed document paints NOTHING, which is how a recording
+    // whose app links Google Fonts replayed as a white stage for many seconds.
+    const html = deferThirdPartyStylesheets(
+      `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&amp;display=swap">`,
+    );
+    expect(html).toContain(`media="print"`);
+    expect(html).toContain(`data-archestra-replay-css="all"`);
+    expect(html).toContain("fonts.googleapis.com");
+  });
+
+  it("keeps the app's own media query so promotion restores it", () => {
+    const html = deferThirdPartyStylesheets(
+      `<link rel="stylesheet" media="screen and (min-width: 600px)" href="https://cdn.jsdelivr.net/x.css">`,
+    );
+    expect(html).toContain(`media="print"`);
+    expect(html).toContain(
+      `data-archestra-replay-css="screen and (min-width: 600px)"`,
+    );
+    expect(html).not.toContain(`media="screen and (min-width: 600px)"`);
+  });
+
+  it("leaves platform and relative stylesheets render-blocking", () => {
+    // The baseline theme IS the app's look and is same-origin + preloaded, so
+    // its (bounded) blocking is wanted — deferring it would flash unstyled.
+    const platform = `<link rel="stylesheet" href="https://abc.sandbox.example.com/_sandbox/archestra-app-base.css">`;
+    const relative = `<link rel="stylesheet" href="/styles/app.css">`;
+    expect(deferThirdPartyStylesheets(platform)).toBe(platform);
+    expect(deferThirdPartyStylesheets(relative)).toBe(relative);
+  });
+
+  it("ignores non-stylesheet links", () => {
+    const icon = `<link rel="icon" href="https://example.com/favicon.png">`;
+    expect(deferThirdPartyStylesheets(icon)).toBe(icon);
+  });
+
+  it("is opt-out for the offline renderer, which must film the real fonts", () => {
+    // Nobody waits on an export, and its frames are the artifact the gallery
+    // keeps — so filming keeps the sheet render-blocking rather than risking
+    // opening frames drawn in a fallback face.
+    const html = `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee">`;
+    expect(
+      neutralizeAppScripts(html, { deferRemoteStylesheets: false }),
+    ).toContain(html);
+    expect(neutralizeAppScripts(html)).toContain(`media="print"`);
+  });
+});
+
+describe("relocalizeSandboxAssets", () => {
+  const base = "https://abc123.sandbox.example.com";
+
+  it("points every recorded /_sandbox/ URL — script, CSP meta, bootstrap sdkUrl, stylesheet — at the replaying sandbox origin", () => {
+    // A segment captured on another deployment carries that deployment's
+    // absolute asset URLs in four shapes at once; all must move together or
+    // the frame mixes origins (and the CSP meta blocks the moved ones).
+    const recorded =
+      `<meta http-equiv="Content-Security-Policy" content="script-src 'unsafe-inline' https://frontend.other.dev/_sandbox/ext-apps-app.js https://frontend.other.dev/_sandbox/archestra-app-sdk.js; style-src https://frontend.other.dev/_sandbox/archestra-app-base.css">` +
+      `<link rel="stylesheet" href="https://frontend.other.dev/_sandbox/archestra-app-base.css">` +
+      `<script data-archestra-app-bootstrap>window.__ARCHESTRA_APP_CONTEXT__={"sdkUrl":"https://frontend.other.dev/_sandbox/ext-apps-app.js"};</script>` +
+      `<script data-archestra-app-sdk src="https://frontend.other.dev/_sandbox/archestra-app-sdk.js"></script>`;
+    const html = relocalizeSandboxAssets(recorded, base);
+    expect(html).not.toContain("frontend.other.dev");
+    expect(html).toContain(`src="${base}/_sandbox/archestra-app-sdk.js"`);
+    expect(html).toContain(`href="${base}/_sandbox/archestra-app-base.css"`);
+    expect(html).toContain(`"sdkUrl":"${base}/_sandbox/ext-apps-app.js"`);
+    expect(html).toContain(
+      `script-src 'unsafe-inline' ${base}/_sandbox/ext-apps-app.js ${base}/_sandbox/archestra-app-sdk.js;`,
+    );
+  });
+
+  it("leaves URLs outside /_sandbox/ alone and tolerates a trailing slash on the base", () => {
+    const recorded =
+      `<img src="https://cdn.jsdelivr.net/pic.png">` +
+      `<script src="https://frontend.other.dev/_sandbox/archestra-app-sdk.js"></script>`;
+    const html = relocalizeSandboxAssets(recorded, `${base}/`);
+    expect(html).toContain(`https://cdn.jsdelivr.net/pic.png`);
+    expect(html).toContain(`src="${base}/_sandbox/archestra-app-sdk.js"`);
+    expect(html).not.toContain(`${base}//_sandbox`);
+  });
+
+  it("returns the html unchanged when there is no base to point at", () => {
+    const recorded = `<script src="https://a.dev/_sandbox/x.js"></script>`;
+    expect(relocalizeSandboxAssets(recorded, "")).toBe(recorded);
+  });
+});
+
+describe("widenReplayImageCsp", () => {
+  // The exact meta shape the serve path bakes into every segment — with the
+  // fixed platform allowlist that blocks any other image host (the GitHub
+  // avatars of a recorded PR-dashboard app being the case that surfaced this).
+  const cspMeta =
+    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; ` +
+    `script-src 'unsafe-inline' https://a.dev/_sandbox/ext-apps-app.js; ` +
+    `img-src data: blob: cdn.jsdelivr.net fonts.gstatic.com; font-src data:">`;
+
+  it("admits any https image host in the replayed segment's CSP", () => {
+    const html = widenReplayImageCsp(
+      `${cspMeta}<img src="https://avatars.example.com/u/1">`,
+    );
+    expect(html).toContain(
+      "img-src https: data: blob: cdn.jsdelivr.net fonts.gstatic.com;",
+    );
+  });
+
+  it("touches only img-src — the script allowlist stays as recorded", () => {
+    const html = widenReplayImageCsp(cspMeta);
+    expect(html).toContain(
+      "script-src 'unsafe-inline' https://a.dev/_sandbox/ext-apps-app.js;",
+    );
+    expect(html.match(/https:/g)?.length).toBe(
+      (cspMeta.match(/https:/g)?.length ?? 0) + 1,
+    );
+  });
+
+  it("leaves a segment without a CSP meta unchanged", () => {
+    const html = `<body><img src="https://x.dev/a.png"> img-src </body>`;
+    expect(widenReplayImageCsp(html)).toBe(html);
   });
 });
 
@@ -1190,7 +1615,92 @@ describe("planPaintFlush", () => {
   });
 });
 
-describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
+describe("trimCutsToExportLimit finds a boundary instead of giving up", () => {
+  /**
+   * The dead-pill case. A closing reply's reveal is charged against however
+   * many raw milliseconds are left after it, so the final raw span can carry
+   * seconds of playback in ONE millisecond of recording. The limit instant
+   * then rounds onto the raw end, and the old guard read that as a degenerate
+   * recording and returned null — so "Trim to 1:00" did nothing while the
+   * tooltip demanded a trim, with a fitting boundary sitting right there.
+   */
+  function reveaClampedTail() {
+    const events: Recording["events"] = [{ kind: "segment", t: 0, version: 1 }];
+    for (let t = 0; t <= 40_000; t += 400) {
+      events.push({ kind: "pointer", t, type: "click", x: 1, y: 1 });
+    }
+    const long = "a fairly long assistant reply. ".repeat(60);
+    return recording({
+      durationMs: 40_001,
+      events,
+      // TWO replies on the same instant: their reveals SUM there, so the last
+      // raw millisecond carries more playback than the whole slack the limit
+      // check allows — which is what makes this reachable at all.
+      transcript: [
+        {
+          id: "r1",
+          role: "assistant",
+          atMs: 40_000,
+          parts: [{ type: "text", text: long }],
+        },
+        {
+          id: "r2",
+          role: "assistant",
+          atMs: 40_000,
+          parts: [{ type: "text", text: long }],
+        },
+      ] as Recording["transcript"],
+    });
+  }
+
+  it("trims a cut whose limit instant rounds onto the raw end", () => {
+    const rec = reveaClampedTail();
+    const playback = buildPlayback(rec);
+    const tailStart = playback.toPlaybackMs(40_000);
+    // A limit landing in the upper half of that one-millisecond span, so the
+    // mapped-and-rounded boundary lands ON the raw end.
+    const limit = Math.round(
+      tailStart + (playback.duration - tailStart) * 0.55,
+    );
+
+    // The geometry the old guard bailed on, asserted rather than assumed.
+    expect(Math.round(playback.toRawMs(limit))).toBe(40_001);
+    // …while the cut really is over the limit, by more than the second of
+    // slack the check allows — so a trim is genuinely owed.
+    expect(exceedsFinalCutLimit(playback.duration, limit)).toBe(true);
+
+    const next = trimCutsToExportLimit(rec, limit);
+    // The fix: a boundary, not null. Null here is the dead pill.
+    expect(next).not.toBeNull();
+    const after = buildPlayback({
+      ...rec,
+      edits: { ...rec.edits, cuts: next ?? [] },
+    }).duration;
+    expect(exceedsFinalCutLimit(after, limit)).toBe(false);
+  });
+
+  it("still returns null when the cut already fits", () => {
+    const rec = recording({
+      durationMs: 5_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        { kind: "pointer", t: 1_000, type: "click", x: 1, y: 1 },
+      ] as Recording["events"],
+    });
+    expect(trimCutsToExportLimit(rec, 60_000)).toBeNull();
+  });
+
+  it("does not refuse a cut that is over only by a fraction of a second", () => {
+    // The paradox at the player level: a hair over the limit displays as the
+    // limit, so there is nothing an author could trim. It must simply fit.
+    expect(exceedsFinalCutLimit(60_000.75, 60_000)).toBe(false);
+    expect(
+      trimCutsToExportLimit(recording({ durationMs: 60_000 }), 60_000),
+    ).toBeNull();
+  });
+});
+
+describe("pruneCutEvents keeps buildPlayback identical", () => {
   // The offline renderer drives buildPlayback frame by frame, so the prune is
   // lossless iff buildPlayback's output — events, segments, transcript, duration
   // and the time mapping — is byte-for-byte the same on the pruned bundle.
@@ -1221,7 +1731,7 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
   }
 
   function pruned(rec: Recording): Recording {
-    const out = pruneTrailingTrimEvents(recToBundle(rec));
+    const out = pruneCutEvents(recToBundle(rec));
     return {
       ...rec,
       events: out.recording.events as unknown as Recording["events"],
@@ -1294,7 +1804,7 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
     expectSamePlayback(rec);
   });
 
-  it("leaves a mid cut alone and keeps playback identical", () => {
+  it("leaves a mid cut's non-video events alone and keeps playback identical", () => {
     const rec = recording({
       durationMs: 5_000,
       events: [
@@ -1306,6 +1816,64 @@ describe("pruneTrailingTrimEvents keeps buildPlayback identical", () => {
     });
     expect(pruned(rec).events.length).toBe(rec.events.length);
     expectSamePlayback(rec);
+  });
+
+  it("drops a mid cut's hidden video without moving playback, and leaves a decodable stream", () => {
+    const vchunk = (t: number, type: "key" | "delta") => ({
+      kind: "video-chunk" as const,
+      t,
+      sel: "#v",
+      type,
+      tsUs: t * 1_000,
+      bytes: new Uint8Array([t % 256]),
+    });
+    const rec = recording({
+      durationMs: 7_000,
+      events: [
+        { kind: "segment", t: 0, version: 1 },
+        vchunk(1_000, "key"),
+        vchunk(1_500, "delta"),
+        vchunk(2_500, "delta"), // hidden, and nothing visible decodes through it
+        vchunk(3_000, "key"), // hidden, but what the resume decodes FROM
+        vchunk(3_500, "delta"),
+        vchunk(4_500, "delta"), // in view
+        { kind: "canvas", t: 6_000, sel: "#c", blob: new Blob(["end"]) },
+      ],
+      edits: { cuts: [{ fromMs: 2_000, toMs: 4_000 }] },
+    });
+
+    const before = buildPlayback(rec);
+    const after = buildPlayback(pruned(rec));
+    // The timing contract: a hidden chunk sits where playback collapses to
+    // zero time, so removing it cannot move the clock or anything on it.
+    expect(after.duration).toBe(before.duration);
+    expect(after.segments).toEqual(before.segments);
+    expect(after.transcript).toEqual(before.transcript);
+    for (const ms of [0, before.duration / 2, before.duration]) {
+      expect(after.toPlaybackMs(ms)).toBeCloseTo(before.toPlaybackMs(ms), 6);
+      expect(after.toRawMs(ms)).toBe(before.toRawMs(ms));
+    }
+    // Exactly one chunk left, and it is the one no visible frame needed.
+    // Tagged by the ENCODER timestamp, not `t`: playback collapses the cut, so
+    // every chunk inside it comes back mapped to the same instant.
+    const tag = (event: { kind: string; t: number; tsUs?: number }) =>
+      `${event.kind}@${event.tsUs ?? event.t}`;
+    expect(after.events.map(tag)).toEqual(
+      before.events.map(tag).filter((it) => it !== "video-chunk@2500000"),
+    );
+    // And what remains still decodes: the stream re-opens on a KEYFRAME after
+    // the gap, which is the whole reason 3000 and 3500 were kept.
+    const kept = after.events.filter(
+      (event): event is Extract<typeof event, { kind: "video-chunk" }> =>
+        event.kind === "video-chunk",
+    );
+    expect(kept.map((event) => [event.tsUs / 1_000, event.type])).toEqual([
+      [1_000, "key"],
+      [1_500, "delta"],
+      [3_000, "key"],
+      [3_500, "delta"],
+      [4_500, "delta"],
+    ]);
   });
 
   it("merges overlapping cuts that together reach the end", () => {

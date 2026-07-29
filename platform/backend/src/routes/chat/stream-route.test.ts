@@ -12,6 +12,7 @@ import {
 } from "@/agents/agent-system-prompt";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { REPEAT_CALL_TERMINATION_CEILING } from "@/clients/tool-call-repeat-tracker";
+import config from "@/config";
 import {
   FileModel,
   MessageModel,
@@ -45,6 +46,12 @@ const mockFetchToolUiResource = vi.hoisted(() => vi.fn());
 const mockExtractAndIngestDocuments = vi.hoisted(() => vi.fn());
 const mockStartActiveChatSpan = vi.hoisted(() => vi.fn());
 const mockCompactMessagesForChat = vi.hoisted(() => vi.fn());
+// Unset (→ awaited falsy) by default so turns request reasoning summaries;
+// the negative-cache test flips it. Mocked because the real check reads the
+// distributed cacheManager, which is not started in unit tests.
+const mockIsOpenAiReasoningSummaryMarkedUnsupported = vi.hoisted(() => vi.fn());
+// Observed by the verification-400 wiring test; mocked for the same reason.
+const mockMarkOpenAiReasoningSummaryUnsupported = vi.hoisted(() => vi.fn());
 
 vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ai")>();
@@ -62,6 +69,18 @@ vi.mock("@/clients/llm-client", async (importOriginal) => {
   return {
     ...actual,
     createLLMModelForAgent: mockCreateLLMModelForAgent,
+  };
+});
+
+vi.mock("@/agents/openai-reasoning-summary", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/agents/openai-reasoning-summary")>();
+  return {
+    ...actual,
+    isOpenAiReasoningSummaryMarkedUnsupported:
+      mockIsOpenAiReasoningSummaryMarkedUnsupported,
+    markOpenAiReasoningSummaryUnsupported:
+      mockMarkOpenAiReasoningSummaryUnsupported,
   };
 });
 
@@ -885,7 +904,9 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
 
     const systemPrompt = mockStreamText.mock.calls[0]?.[0].system;
     expect(systemPrompt).toContain(PROJECT_FILES_PREFIX);
-    expect(systemPrompt).toContain("`index.html`");
+    // Filenames are chosen by whoever uploaded the file, so the manifest
+    // renders them as quoted data rather than inline code.
+    expect(systemPrompt).toContain('"index.html"');
   });
 
   test("lists no project files for a project chat whose project has none", async () => {
@@ -1106,6 +1127,305 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
 
     expect(mockStreamText).toHaveBeenCalledTimes(1);
     expect(mockStreamText.mock.calls[0]?.[0].tools).toBeUndefined();
+  });
+
+  // Seeds a synced Gemini model row so resolveConversationModel dereferences
+  // the conversation to that model id + the gemini provider.
+  const makeGeminiModelRow = (geminiModelId: string) =>
+    ModelModel.create({
+      externalId: `gemini/${geminiModelId}`,
+      provider: "gemini",
+      modelId: geminiModelId,
+      description: geminiModelId,
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+  test("requests Gemini thought summaries for a default-thinking model", async ({
+    makeConversation,
+  }) => {
+    const model = await makeGeminiModelRow("gemini-2.5-pro");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      thinkingConfig: { includeThoughts: true },
+    });
+  });
+
+  test("omits thinkingConfig for a Gemini model with thinking off by default", async ({
+    makeConversation,
+  }) => {
+    // flash-lite does not think unless asked; a bare includeThoughts on it is
+    // rejected by the API with a 400, so the turn must not carry it.
+    const model = await makeGeminiModelRow("gemini-2.5-flash-lite");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(
+      mockStreamText.mock.calls[0]?.[0].providerOptions?.google,
+    ).toBeUndefined();
+  });
+
+  test("keeps Gemini image-model providerOptions free of thinkingConfig", async ({
+    makeConversation,
+  }) => {
+    const model = await makeGeminiModelRow("gemini-2.5-flash-image");
+    const geminiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: geminiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.google).toEqual({
+      responseModalities: ["TEXT", "IMAGE"],
+    });
+  });
+
+  // Seeds a synced OpenAI model row so resolveConversationModel dereferences
+  // the conversation to that model id + the openai provider.
+  const makeOpenAiModelRow = (openAiModelId: string) =>
+    ModelModel.create({
+      externalId: `openai/${openAiModelId}`,
+      provider: "openai",
+      modelId: openAiModelId,
+      description: openAiModelId,
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+  test("requests OpenAI reasoning summaries for a Responses-routed model", async ({
+    makeConversation,
+  }) => {
+    const model = await makeOpenAiModelRow("gpt-5.6");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
+      store: false,
+      reasoningSummary: "auto",
+    });
+  });
+
+  test("omits reasoningSummary for a chat-completions-routed OpenAI model", async ({
+    makeConversation,
+  }) => {
+    // Chat completions never returns reasoning content, and the summary
+    // option only exists on the Responses transport — the turn must carry
+    // neither it nor store:false, only the max_completion_tokens budget.
+    const model = await makeOpenAiModelRow("gpt-5-mini");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
+      maxCompletionTokens: expect.any(Number),
+    });
+  });
+
+  test("omits reasoningSummary while the credential is negative-cached as unsupported", async ({
+    makeConversation,
+  }) => {
+    const model = await makeOpenAiModelRow("gpt-5.6");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockIsOpenAiReasoningSummaryMarkedUnsupported.mockResolvedValueOnce(true);
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
+      store: false,
+    });
+  });
+
+  test("retries without summaries and negative-caches the resolved credential on the verification 400", async ({
+    makeConversation,
+  }) => {
+    const model = await makeOpenAiModelRow("gpt-5.6");
+    const openAiConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    // the turn runs on a resolved stored credential, not the agent's own key
+    mockCreateLLMModelForAgent.mockResolvedValueOnce({
+      model: "mock-model",
+      chatApiKeyId: "credential-1",
+    });
+    mockStreamText.mockClear();
+    mockMarkOpenAiReasoningSummaryUnsupported.mockClear();
+    // First attempt: the stream carries only the unverified-org rejection.
+    // The beforeEach default implementation then serves the retry.
+    mockStreamText.mockImplementationOnce(() => ({
+      fullStream: {
+        [Symbol.asyncIterator]: () => {
+          const events = [
+            {
+              type: "error",
+              error: new Error(
+                "Your organization must be verified to generate reasoning summaries.",
+              ),
+            },
+          ];
+          let index = 0;
+          return {
+            next: async () =>
+              index < events.length
+                ? { done: false, value: events[index++] }
+                : { done: true, value: undefined },
+          };
+        },
+      },
+    }));
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: openAiConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(2);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
+      store: false,
+      reasoningSummary: "auto",
+    });
+    // the retry dropped only the summary option; store:false must survive
+    expect(mockStreamText.mock.calls[1]?.[0].providerOptions?.openai).toEqual({
+      store: false,
+    });
+    // the verdict is keyed by the credential the turn ran on
+    expect(mockMarkOpenAiReasoningSummaryUnsupported).toHaveBeenCalledTimes(1);
+    expect(mockMarkOpenAiReasoningSummaryUnsupported).toHaveBeenCalledWith(
+      `openai-reasoning-summary-unsupported-${organizationId}:credential-1`,
+    );
   });
 
   test("adds load-tools guidance when the agent has no authored prompt", async () => {
@@ -2472,7 +2792,7 @@ describe("POST /api/chat handler composition", () => {
     expect(attachments).toHaveLength(0);
   });
 
-  test("rejects an unsupported attachment with no sandbox and persists nothing", async () => {
+  test("accepts an unsupported attachment with no sandbox and stores it as a conversation attachment", async () => {
     const dataUrl = `data:application/zip;base64,${Buffer.from("PK zip bytes").toString("base64")}`;
     const response = await postMessage([
       {
@@ -2490,9 +2810,91 @@ describe("POST /api/chat handler composition", () => {
       },
     ]);
 
-    // The gate runs before extraction and before the active run is acquired,
-    // so the request is rejected and no attachment row is written.
+    // A file the model can't read is no longer rejected: it lands as a
+    // conversation attachment surfaced in the chat Files panel, and the model
+    // is told about it via a notice at materialize time.
+    expect(response.statusCode).toBe(200);
+    const attachments =
+      await ConversationAttachmentModel.findByConversationIdWithoutData(
+        conversationId,
+      );
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].originalName).toBe("archive.zip");
+    expect(attachments[0].mimeType).toBe("application/zip");
+  });
+
+  test("accepts an attachment over the sandbox limit and stores it", async () => {
+    // Too big to stage into the sandbox, but well under the storage cap: the
+    // sandbox is bypassed and the file still lands in the Files panel. The
+    // staging limit defaults to the storage cap, so it is lowered here to
+    // keep that band non-empty (and the buffer small).
+    const original = config.skillsSandbox.artifactBytesLimit;
+    (
+      config.skillsSandbox as { artifactBytesLimit: number }
+    ).artifactBytesLimit = 1024;
+    try {
+      const overSandbox = Buffer.alloc(
+        config.skillsSandbox.artifactBytesLimit + 1,
+        0x61,
+      );
+      const dataUrl = `data:application/zip;base64,${overSandbox.toString("base64")}`;
+      const response = await postMessage([
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [
+            { type: "text", text: "process this" },
+            {
+              type: "file",
+              url: dataUrl,
+              mediaType: "application/zip",
+              filename: "big.zip",
+            },
+          ],
+        },
+      ]);
+
+      expect(response.statusCode).toBe(200);
+      const attachments =
+        await ConversationAttachmentModel.findByConversationIdWithoutData(
+          conversationId,
+        );
+      expect(attachments).toHaveLength(1);
+      expect(attachments[0].originalName).toBe("big.zip");
+      expect(attachments[0].fileSize).toBe(overSandbox.byteLength);
+    } finally {
+      (
+        config.skillsSandbox as { artifactBytesLimit: number }
+      ).artifactBytesLimit = original;
+    }
+  });
+
+  test("rejects an attachment over the attachment storage cap and persists nothing", async () => {
+    // Past the one remaining gate — no surface can hold it, so the request is
+    // refused before any bytes persist.
+    const oversized = Buffer.alloc(
+      config.chat.attachmentStorageBytesLimit + 1,
+      0x61,
+    );
+    const dataUrl = `data:application/zip;base64,${oversized.toString("base64")}`;
+    const response = await postMessage([
+      {
+        id: "msg-1",
+        role: "user",
+        parts: [
+          { type: "text", text: "process this" },
+          {
+            type: "file",
+            url: dataUrl,
+            mediaType: "application/zip",
+            filename: "huge.zip",
+          },
+        ],
+      },
+    ]);
+
     expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("is too large to attach");
     const attachments =
       await ConversationAttachmentModel.findByConversationIdWithoutData(
         conversationId,

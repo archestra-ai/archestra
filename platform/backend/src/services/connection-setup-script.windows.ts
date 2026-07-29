@@ -7,14 +7,26 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { ConnectionSetupClientId } from "@/types";
-import { buildClaudeCodeStartupGuardContext } from "./claude-code-startup-guard";
-import { buildWindowsClaudeCodeStartupGuardInstallSection } from "./claude-code-startup-guard.windows";
+import { archestraMarkWithText } from "./archestra-mark";
 import {
   claudeCodeOAuthNextStep,
   codexAttributionHeaderLines,
   type SetupScriptContext,
   type SetupScriptProxySection,
 } from "./connection-setup-script";
+import {
+  buildStartupGuardContext,
+  type StartupGuardClient,
+} from "./startup-guard";
+import {
+  CLAUDE_CODE_GUARD_CLIENT,
+  CODEX_GUARD_CLIENT,
+  COPILOT_GUARD_CLIENT,
+} from "./startup-guard.clients";
+import {
+  buildWindowsStartupGuardInstallSection,
+  buildWindowsStartupGuardUnshadowSection,
+} from "./startup-guard.windows";
 
 /**
  * PowerShell renderer for the Windows variant of the /connection one-command
@@ -96,6 +108,19 @@ function psq(value: string): string {
 const SCRIPT_HELPERS = `$ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 $ArchUseColor = [string]::IsNullOrEmpty($env:NO_COLOR)
+# Header-mark capability. Windows Terminal and PowerShell 7 render the Unicode
+# block mark (the exact macOS/Linux/guard logo); the legacy console (Windows
+# PowerShell 5.1 in conhost) mojibakes block glyphs on its OEM codepage, so it
+# falls back to the ASCII mark. Switching this session to UTF-8 is best-effort
+# and harmless if it fails — it only affects how the banner below is drawn.
+$ArchUtf8 = $false
+try {
+  if ($env:WT_SESSION -or $PSVersionTable.PSVersion.Major -ge 6) {
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+    $OutputEncoding = [System.Text.UTF8Encoding]::new()
+    $ArchUtf8 = $true
+  }
+} catch { }
 function Say($m)  { Write-Host ''; if ($ArchUseColor) { Write-Host ('==> ' + $m) -ForegroundColor Cyan } else { Write-Host ('==> ' + $m) } }
 function Ok($m)   { if ($ArchUseColor) { Write-Host ('==> ' + $m) -ForegroundColor Green } else { Write-Host ('==> ' + $m) } }
 function Warn($m) { if ($ArchUseColor) { Write-Host ('warning: ' + $m) -ForegroundColor Yellow } else { Write-Host ('warning: ' + $m) } }
@@ -123,9 +148,13 @@ Say ${psq(`${ctx.appName} setup: ${label}`)}${requireBinary}`;
 }
 
 /**
- * Splash printed at the top of every script: the Archestra ASCII mark (only
- * when not white-labeled) plus a plain-ASCII details block, emitted through a
- * single-quoted here-string so nothing in it is ever expanded by PowerShell.
+ * Splash printed at the top of every script: the Archestra mark plus a plain
+ * details block, emitted through single-quoted here-strings so nothing in them
+ * is ever expanded by PowerShell. The mark is the exact canonical logo (shared
+ * with the macOS/Linux banner and every startup guard) when the host can render
+ * UTF-8 block glyphs, and the portable ASCII rendition of the same composition
+ * otherwise — chosen at runtime by $ArchUtf8 (set in SCRIPT_HELPERS) so a legacy
+ * `irm | iex` console never mojibakes.
  */
 function banner(ctx: SetupScriptContext): string {
   const label = CLIENT_LABELS[ctx.clientId];
@@ -141,23 +170,6 @@ function banner(ctx: SetupScriptContext): string {
   }
   if (ctx.skills) configures.push("Skills marketplace");
 
-  // Pure-ASCII rendition of the Archestra mark — a filled tilted bar and dot
-  // echoing logo-icon.svg. The built-in Windows PowerShell 5.1 console can
-  // render block/quadrant Unicode glyphs as mojibake (legacy codepage), so this
-  // mirrors the macOS/Linux block-mark's composition with portable ASCII only.
-  const logo = isDefaultBrandedAppName(ctx.appName)
-    ? `   .------------------.
-   |                  |
-   |        ,##.      |
-   |        ####      |     ${ctx.appName}
-   |       ####       |     Secure access to your AI tools
-   |       #### ,.    |
-   |       \`##' \`'    |
-   |                  |
-   '------------------'`
-    : `   ${ctx.appName}
-   Secure access to your AI tools`;
-
   const details = [
     `   Client:     ${label}`,
     configures.length > 0 ? `   Configures: ${configures.join(", ")}` : null,
@@ -166,9 +178,26 @@ function banner(ctx: SetupScriptContext): string {
     .filter(Boolean)
     .join("\n");
 
-  return `Write-Host @'
+  const markBlock = isDefaultBrandedAppName(ctx.appName)
+    ? `if ($ArchUtf8) {
+Write-Host @'
 
-${logo}
+${archestraMarkWithText({ appName: ctx.appName, variant: "unicode" }).join("\n")}
+'@
+} else {
+Write-Host @'
+
+${archestraMarkWithText({ appName: ctx.appName, variant: "ascii" }).join("\n")}
+'@
+}`
+    : `Write-Host @'
+
+   ${ctx.appName}
+   Secure access to your AI tools
+'@`;
+
+  return `${markBlock}
+Write-Host @'
 
 ${details}
 '@`;
@@ -336,8 +365,45 @@ function psBareOrIndex(key: string): string {
 // Internal helpers — Claude Code
 // ===================================================================
 
+/**
+ * Prepend the guard-unshadow step for a client, gated exactly like its install
+ * so the two come as a pair (mirrors the POSIX renderer). Non-destructive: the
+ * reinstall at the end refreshes the on-disk guard, so a connect step failing
+ * under 'Stop' never strands the user without a startup screen. Call FIRST.
+ */
+function windowsStartupGuardUnshadowSection(
+  ctx: SetupScriptContext,
+  client: StartupGuardClient,
+  sections: string[],
+): void {
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    sections.push(buildWindowsStartupGuardUnshadowSection(client));
+  }
+}
+
+/**
+ * Append the guard install for a client when connect wired at least one remote.
+ * Call LAST in a client's builder.
+ */
+function windowsStartupGuardSection(
+  ctx: SetupScriptContext,
+  client: StartupGuardClient,
+  sections: string[],
+): void {
+  if (ctx.mcp || ctx.proxy || ctx.skills) {
+    sections.push(
+      buildWindowsStartupGuardInstallSection(
+        buildStartupGuardContext(ctx),
+        client,
+      ),
+    );
+  }
+}
+
 function claudeCodeSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
+
+  windowsStartupGuardUnshadowSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 
   if (ctx.mcp) {
     // Register at USER scope so the gateway is visible in every directory for
@@ -367,13 +433,7 @@ claude plugin install ${psq(pluginRef)}
 if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the skills automatically — run 'claude plugin install ${pluginRef}' or open /plugin inside Claude Code.`)} }`);
   }
 
-  if (ctx.mcp || ctx.proxy || ctx.skills) {
-    sections.push(
-      buildWindowsClaudeCodeStartupGuardInstallSection(
-        buildClaudeCodeStartupGuardContext(ctx),
-      ),
-    );
-  }
+  windowsStartupGuardSection(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 
   return sections;
 }
@@ -495,6 +555,8 @@ Write-Host 'Your existing AWS credentials keep working — only the base URL cha
 function codexSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
+  windowsStartupGuardUnshadowSection(ctx, CODEX_GUARD_CLIENT, sections);
+
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
@@ -553,6 +615,8 @@ codex plugin marketplace add ${psq(ctx.skills.cloneUrl)}
 if ($LASTEXITCODE -ne 0) { Warn 'Marketplace may already be registered — run /plugins inside Codex to inspect.' }`);
   }
 
+  windowsStartupGuardSection(ctx, CODEX_GUARD_CLIENT, sections);
+
   return sections;
 }
 
@@ -562,6 +626,8 @@ if ($LASTEXITCODE -ne 0) { Warn 'Marketplace may already be registered — run /
 
 function copilotSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
+
+  windowsStartupGuardUnshadowSection(ctx, COPILOT_GUARD_CLIENT, sections);
 
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
@@ -595,6 +661,8 @@ Set these environment variables (current session shown; use setx or System setti
 copilot plugin marketplace add ${psq(ctx.skills.cloneUrl)}
 if ($LASTEXITCODE -ne 0) { Warn "Marketplace may already be registered — run 'copilot plugin marketplace browse' to inspect." }`);
   }
+
+  windowsStartupGuardSection(ctx, COPILOT_GUARD_CLIENT, sections);
 
   return sections;
 }

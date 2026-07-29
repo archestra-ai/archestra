@@ -1,3 +1,4 @@
+import * as yaml from "js-yaml";
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
 import logger from "@/logging";
@@ -22,6 +23,7 @@ type InstallPolicyCatalogItem = Pick<
   | "localConfig"
   | "catalogItemApprovalStatus"
   | "authorId"
+  | "deploymentSpecYaml"
 >;
 
 // === Public API ===
@@ -44,7 +46,7 @@ export async function assertInstallAllowedOrBlock(params: {
     logger.info(
       {
         catalogId: params.catalogItem.id,
-        image: policy.image,
+        images: policy.images,
         environment: policy.environmentLabel,
       },
       "Install blocked: catalog image not in trusted registries (pending approval)",
@@ -86,34 +88,16 @@ export async function flagImageApprovalRequired(
   );
   if (gateable.length === 0) return required;
 
-  // Privileged authors (admin / team-admin) are exempt — only a plain member's
-  // untrusted image needs approval. Resolve privilege once per distinct author.
-  const privilegedByAuthor = new Map<string, boolean>();
-  await Promise.all(
-    [
-      ...new Set(
-        gateable
-          .map((c) => c.authorId)
-          .filter((id): id is string => id !== null),
-      ),
-    ].map(async (authorId) => {
-      privilegedByAuthor.set(
-        authorId,
-        await isAuthorPrivileged({ authorId, organizationId }),
-      );
-    }),
-  );
-  const candidates = gateable.filter(
-    (c) => !(c.authorId && privilegedByAuthor.get(c.authorId)),
-  );
-  if (candidates.length === 0) return required;
-
+  // Resolve trusted registries first: when no environment restricts images
+  // (the common case), nothing can be gated, and no author-privilege lookups
+  // are needed. Resolving privilege first cost a member+role lookup per
+  // distinct author on every registry listing — an N+1 on the list route.
   const registriesByEnv = new Map<
     string | null,
     TrustedImageRegistries | null
   >();
   await Promise.all(
-    [...new Set(candidates.map((c) => c.environmentId ?? null))].map(
+    [...new Set(gateable.map((c) => c.environmentId ?? null))].map(
       async (environmentId) => {
         const { registries } = await resolveTrustedImageRegistries({
           environmentId,
@@ -123,10 +107,36 @@ export async function flagImageApprovalRequired(
       },
     ),
   );
+  const gated = gateable.filter(
+    (item) =>
+      gatedImagesForRegistries(
+        item,
+        registriesByEnv.get(item.environmentId ?? null) ?? null,
+      ).length > 0,
+  );
+  if (gated.length === 0) return required;
 
-  for (const item of candidates) {
-    const registries = registriesByEnv.get(item.environmentId ?? null) ?? null;
-    if (imageIsGatedForRegistries(item, registries)) required.add(item.id);
+  // Privileged authors (admin / team-admin) are exempt — only a plain member's
+  // untrusted image needs approval. Resolve privilege once per distinct author,
+  // and only for authors of actually-gated items.
+  const privilegedByAuthor = new Map<string, boolean>();
+  await Promise.all(
+    [
+      ...new Set(
+        gated.map((c) => c.authorId).filter((id): id is string => id !== null),
+      ),
+    ].map(async (authorId) => {
+      privilegedByAuthor.set(
+        authorId,
+        await isAuthorPrivileged({ authorId, organizationId }),
+      );
+    }),
+  );
+
+  for (const item of gated) {
+    if (!(item.authorId && privilegedByAuthor.get(item.authorId))) {
+      required.add(item.id);
+    }
   }
   return required;
 }
@@ -135,7 +145,7 @@ export async function flagImageApprovalRequired(
 
 type InstallImagePolicy =
   | { gated: false }
-  | { gated: true; image: string; environmentLabel: string };
+  | { gated: true; images: string[]; environmentLabel: string };
 
 /**
  * Shared core for the gate: evaluates the policy and applies the flag side
@@ -170,13 +180,14 @@ async function applyImageGate(params: {
 }
 
 /**
- * Decide whether a local install's image is gated by the target environment's
+ * Decide whether a local install's images are gated by the target environment's
  * trusted image registries. Gated for any local catalog item with a custom image
  * (not the platform base image) authored by a NON-admin (anyone without
  * `mcpServerInstallation:admin` — admins curate the registry and are trusted to
- * vet images), when the resolved environment has a non-empty trusted list the
- * image does not match. Everything else (remote/builtin/app, base image, admin
- * author, no trusted list, or a matching image) is exempt.
+ * vet images), when the resolved environment has a non-empty trusted list that at
+ * least one of the item's images does not match. Everything else
+ * (remote/builtin/app, base image only, admin author, no trusted list, or all
+ * images matching) is exempt.
  */
 async function evaluateInstallImagePolicy(params: {
   catalogItem: InstallPolicyCatalogItem;
@@ -199,13 +210,12 @@ async function evaluateInstallImagePolicy(params: {
     environmentId: catalogItem.environmentId,
     organizationId,
   });
-  if (!imageIsGatedForRegistries(catalogItem, registries)) {
+  const images = gatedImagesForRegistries(catalogItem, registries);
+  if (images.length === 0) {
     return { gated: false };
   }
 
-  // isGateableLocalImage guarantees a non-empty custom image here.
-  const image = catalogItem.localConfig?.dockerImage?.trim() ?? "";
-  return { gated: true, image, environmentLabel: label };
+  return { gated: true, images, environmentLabel: label };
 }
 
 /**
@@ -227,27 +237,104 @@ async function isAuthorPrivileged(params: {
   return checker.isAdmin;
 }
 
-/** A local catalog item with a custom image that isn't the platform base image. */
+/** A local catalog item that would run at least one custom image. */
 function isGateableLocalImage(item: InstallPolicyCatalogItem): boolean {
-  if (item.serverType !== "local") return false;
-  const image = item.localConfig?.dockerImage?.trim();
-  if (!image) return false;
-  return image !== config.orchestrator.mcpServerBaseImage;
+  return collectGateableImages(item).length > 0;
 }
 
 /**
- * Given an already-gateable item, is its image actually disallowed by these
- * resolved trusted registries? A NULL/empty list means "no restriction".
+ * Given an already-gateable item, which of the images it would run are actually
+ * disallowed by these resolved trusted registries? A NULL/empty list means "no
+ * restriction", so nothing is gated.
  */
-function imageIsGatedForRegistries(
+function gatedImagesForRegistries(
   item: InstallPolicyCatalogItem,
   registries: TrustedImageRegistries | null,
-): boolean {
-  if (!isGateableLocalImage(item)) return false;
-  if (!registries || registries.length === 0) return false;
-  const image = item.localConfig?.dockerImage?.trim() ?? "";
-  return !imageMatchesTrustedRegistries(image, registries);
+): string[] {
+  if (!registries || registries.length === 0) return [];
+  return collectGateableImages(item).filter(
+    (image) => !imageMatchesTrustedRegistries(image, registries),
+  );
 }
+
+/**
+ * Every custom container image a local catalog item would actually run:
+ * `localConfig.dockerImage` plus every `containers`/`initContainers` image
+ * declared in a custom `deploymentSpecYaml`.
+ *
+ * The custom YAML must be included because it — not `localConfig` — is the
+ * deployment source when present: the runtime only overwrites metadata, labels,
+ * and selectors, so a container image written there reaches the pod verbatim.
+ * Checking `dockerImage` alone would let a trusted value there vouch for an
+ * untrusted image in the YAML.
+ *
+ * Dropped: the platform base image (the trusted default) and the
+ * `${archestra.docker_image}` placeholder, which the runtime substitutes with
+ * `localConfig.dockerImage` — already covered on its own. Any OTHER unresolved
+ * placeholder is kept as-is; it cannot match a trusted registry, so it gates.
+ */
+function collectGateableImages(item: InstallPolicyCatalogItem): string[] {
+  if (item.serverType !== "local") return [];
+
+  const images = new Set<string>();
+  const collect = (raw: string | null | undefined) => {
+    const image = raw?.trim();
+    if (!image) return;
+    if (image === config.orchestrator.mcpServerBaseImage) return;
+    if (image === DOCKER_IMAGE_PLACEHOLDER) return;
+    images.add(image);
+  };
+
+  collect(item.localConfig?.dockerImage);
+  for (const image of extractYamlContainerImages(item.deploymentSpecYaml)) {
+    collect(image);
+  }
+  return [...images];
+}
+
+/**
+ * Container and initContainer images declared by a custom deployment YAML.
+ *
+ * A YAML that fails to parse yields nothing on purpose: the runtime falls back
+ * to the generated spec in exactly that case, and that spec runs
+ * `localConfig.dockerImage`, which is collected separately.
+ */
+function extractYamlContainerImages(
+  deploymentSpecYaml: string | null | undefined,
+): string[] {
+  if (!deploymentSpecYaml?.trim()) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(deploymentSpecYaml);
+  } catch {
+    return [];
+  }
+
+  const podSpec = (
+    parsed as {
+      spec?: { template?: { spec?: Record<string, unknown> } };
+    } | null
+  )?.spec?.template?.spec;
+  if (!podSpec || typeof podSpec !== "object") return [];
+
+  const images: string[] = [];
+  for (const field of ["containers", "initContainers"] as const) {
+    const containers = podSpec[field];
+    if (!Array.isArray(containers)) continue;
+    for (const container of containers) {
+      const image = (container as { image?: unknown } | null)?.image;
+      if (typeof image === "string") images.push(image);
+    }
+  }
+  return images;
+}
+
+/**
+ * The runtime placeholder that resolves to `localConfig.dockerImage`. Built from
+ * parts so the literal doesn't trip the template-curly lint rule.
+ */
+const DOCKER_IMAGE_PLACEHOLDER = `\${archestra.docker_image}`;
 
 function blockedMessage(environmentLabel: string): string {
   return `This server's image is not in the trusted image registries for "${environmentLabel}" and is blocked pending administrator approval.`;

@@ -49,6 +49,14 @@ describe("classifyErrorForTracking", () => {
     }
   });
 
+  test("drops ApiErrors marked as relayed upstream provider failures", () => {
+    for (const statusCode of [500, 503]) {
+      const relay = new ApiError(statusCode, "provider is unavailable");
+      relay.upstream = true;
+      expect(classifyErrorForTracking(relay).report).toBe(false);
+    }
+  });
+
   test("drops the handled upstream-empty-response condition", () => {
     const error = new ApiError(
       500,
@@ -86,10 +94,61 @@ describe("classifyErrorForTracking", () => {
     }
   });
 
+  test("drops unmapped outbound connectivity failures", () => {
+    // undici's connect timeout, as surfaced by fetch and the proxy paths.
+    const connectTimeout = Object.assign(new Error("Connect Timeout Error"), {
+      code: "UND_ERR_CONNECT_TIMEOUT",
+    });
+    expect(classifyErrorForTracking(connectTimeout).report).toBe(false);
+
+    // A bare libuv errno (ECONNREFUSED in the cause chain) is claimed first
+    // by the transient-DB classification, which matches network codes without
+    // DB context — kept and grouped rather than dropped. Pinned so the
+    // precedence between the two rules stays explicit.
+    const refused = Object.assign(new Error("fetch failed"), {
+      cause: Object.assign(new Error("connect ECONNREFUSED"), {
+        code: "ECONNREFUSED",
+      }),
+    });
+    const refusedDecision = classifyErrorForTracking(refused);
+    expect(refusedDecision.report).toBe(true);
+    expect(refusedDecision.fingerprint?.[0]).toBe("db-transient");
+  });
+
+  test("drops reply-from upstream failures from the passthrough routes", () => {
+    // @fastify/reply-from's ServiceUnavailableError shape (code + 503),
+    // raised when a provider passthrough cannot reach its upstream.
+    const serviceUnavailable = Object.assign(new Error("Service Unavailable"), {
+      code: "FST_REPLY_FROM_SERVICE_UNAVAILABLE",
+      statusCode: 503,
+    });
+    expect(classifyErrorForTracking(serviceUnavailable).report).toBe(false);
+
+    // A reply-from 500 (arbitrary wrapped error) stays reported.
+    const internal = Object.assign(new Error("boom"), {
+      code: "FST_REPLY_FROM_INTERNAL_SERVER_ERROR",
+      statusCode: 500,
+    });
+    expect(classifyErrorForTracking(internal).report).toBe(true);
+  });
+
+  test("keeps and groups the chat MCP-gateway-unavailable condition", () => {
+    const error = new ApiError(
+      503,
+      "MCP tools unavailable: could not connect to MCP Gateway",
+      "mcp_tools_unavailable",
+    );
+    const decision = classifyErrorForTracking(error);
+    expect(decision.report).toBe(true);
+    expect(decision.fingerprint).toEqual(["mcp_tools_unavailable"]);
+  });
+
   test("drops MCP-server-unreachable errors by name", () => {
     for (const name of [
       "McpServerNotReadyError",
       "McpServerConnectionTimeoutError",
+      "McpServerUnreachableError",
+      "McpServerDeploymentFailedError",
     ]) {
       expect(classifyErrorForTracking(namedError(name)).report).toBe(false);
     }
@@ -106,6 +165,26 @@ describe("classifyErrorForTracking", () => {
     expect(decision.tags).toMatchObject({
       error_type: "db_transient",
       db_error_code: "ECONNREFUSED",
+    });
+  });
+
+  test("groups statement timeouts under one stable fingerprint", () => {
+    // The ORM wraps the cancellation per-query, so without a stable
+    // fingerprint every distinct SQL statement becomes its own issue.
+    const pgError = Object.assign(
+      new Error("canceling statement due to statement timeout"),
+      { code: "57014" },
+    );
+    const dbError = new Error(
+      'Failed query: select "id" from "agents" where "slug" = $1',
+      { cause: pgError },
+    );
+    const decision = classifyErrorForTracking(dbError);
+    expect(decision.report).toBe(true);
+    expect(decision.fingerprint).toEqual(["db-statement-timeout"]);
+    expect(decision.tags).toMatchObject({
+      error_type: "db_statement_timeout",
+      db_error_code: "57014",
     });
   });
 

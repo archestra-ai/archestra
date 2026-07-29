@@ -4,8 +4,8 @@ import LimitsPage, { getLimitModels } from "./page";
 
 const mockSetCostsAction = vi.fn();
 const mockUseLimits = vi.fn();
-const mockUseLimit = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
+const mockDataTableSearchParams = vi.fn(() => new URLSearchParams());
 
 // The ?edit= dialog deep-link syncs open state to the URL through
 // useDialogUrlParam, which reads next/navigation hooks. Bare vi.mock resolves
@@ -35,7 +35,6 @@ vi.mock("@/app/llm/(costs)/layout", () => ({
 
 vi.mock("@/lib/limits.query", () => ({
   useLimits: (...args: unknown[]) => mockUseLimits(...args),
-  useLimit: (...args: unknown[]) => mockUseLimit(...args),
   useCreateLimit: () => ({ mutateAsync: vi.fn() }),
   useUpdateLimit: () => ({ mutateAsync: vi.fn() }),
   useDeleteLimit: () => ({ mutateAsync: vi.fn() }),
@@ -94,7 +93,7 @@ vi.mock("@/lib/agent.query", () => ({
 
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
   useDataTableQueryParams: () => ({
-    searchParams: new URLSearchParams(),
+    searchParams: mockDataTableSearchParams(),
     updateQueryParams: vi.fn(),
   }),
 }));
@@ -249,7 +248,7 @@ vi.mock("@/components/ui/progress", () => ({
 }));
 
 vi.mock("@/components/ui/input", () => ({
-  Input: () => <input />,
+  Input: (props: React.ComponentProps<"input">) => <input {...props} />,
 }));
 
 vi.mock("@/components/ui/label", () => ({
@@ -335,7 +334,7 @@ describe("LimitsPage", () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
-    mockUseLimit.mockReturnValue({ data: undefined });
+    mockDataTableSearchParams.mockReturnValue(new URLSearchParams());
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
       isPending: false,
@@ -643,5 +642,33 @@ describe("LimitsPage", () => {
     render(<LimitsPage />);
     const row = screen.getByTestId("data-table-row-limit-proxy");
     expect(row).toHaveTextContent("Unknown LLM proxy");
+  });
+
+  it("opens the edit dialog seeded from an ?edit= deep link", async () => {
+    const limit = {
+      id: "limit-proxy",
+      entityType: "agent",
+      entityId: "proxy-1",
+      limitType: "token_cost",
+      limitValue: 1000,
+      model: null,
+      mcpServerName: null,
+      toolName: null,
+      lastCleanup: null,
+      createdAt: "2026-01-01",
+      updatedAt: "2026-01-01",
+      modelUsage: [],
+    };
+    mockUseLimits.mockReturnValue({ data: [limit], isPending: false });
+    const params = new URLSearchParams({ edit: limit.id });
+    mockDataTableSearchParams.mockReturnValue(params);
+    vi.mocked(useSearchParams).mockReturnValue(
+      params as unknown as ReturnType<typeof useSearchParams>,
+    );
+
+    render(<LimitsPage />);
+
+    expect(await screen.findByText("Save changes")).toBeInTheDocument();
+    expect(screen.getByLabelText("Limit value")).toHaveValue("1,000");
   });
 });

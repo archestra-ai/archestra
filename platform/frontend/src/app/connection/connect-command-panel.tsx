@@ -5,7 +5,14 @@ import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
-import { Check, CircleDashed, Copy, Loader2, RotateCcw } from "lucide-react";
+import {
+  Check,
+  CircleDashed,
+  Copy,
+  KeyRound,
+  Loader2,
+  RotateCcw,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -16,6 +23,7 @@ import {
 import { CreditWarningNotice } from "@/components/connection/credit-warning-notice";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
+import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -246,6 +254,13 @@ export function ConnectCommandPanel({
   // only joins the command when a provider is also resolved.
   const proxy = (llmProxies ?? []).find((p) => p.id === llmProxyId) ?? null;
   const proxyActive = !!(proxy && provider);
+  // Virtual-key auth was chosen, but nothing can back it: the client routes only
+  // providers with no configured key (and none are per-user), so no virtual key
+  // can be minted. Emitting the script anyway would silently drop the inference
+  // proxy, so — like the per-user connect gate — step 3 gates on adding a key
+  // instead of shipping a half-configured command.
+  const virtualKeyUnbacked =
+    !!proxy && !provider && proxyAuth === "virtual-key";
   const hasAnything = Boolean(gateway || proxyActive || includeSkills);
 
   // The setup command only registers the MCP gateway (`claude mcp add`); the
@@ -253,7 +268,8 @@ export function ConnectCommandPanel({
   // in their client. Surface that as an explicit final step — mirrors the
   // Claude Desktop panel's "Finish the OAuth flow" step. The gateway is the
   // thing being authorized, so the step is gateway-gated.
-  const showOAuthStep = client.id === "claude-code" && !!gateway;
+  const showOAuthStep =
+    client.id === "claude-code" && !!gateway && !virtualKeyUnbacked;
   const appName = useAppName();
   // The exact name the script registers the gateway under — referenced in the
   // OAuth step so the user can find it in the `claude /mcp` list.
@@ -353,14 +369,22 @@ export function ConnectCommandPanel({
   useEffect(() => {
     setResult(null);
     setFailed(false);
-    // Don't try to generate a command until the user has connected their
-    // per-user account — the backend would reject it (no key to mint from).
-    if (!hasAnything || needsPerUserConnect) return;
+    // Don't try to generate a command until the setup can actually be produced:
+    // not before a per-user account is connected, and not for a virtual key that
+    // has no provider key to mint from — either way the backend would reject it
+    // (or the script would silently drop the proxy).
+    if (!hasAnything || needsPerUserConnect || virtualKeyUnbacked) return;
     const timer = setTimeout(() => {
       void runGeneration(inputsKey);
     }, 350);
     return () => clearTimeout(timer);
-  }, [inputsKey, hasAnything, needsPerUserConnect, runGeneration]);
+  }, [
+    inputsKey,
+    hasAnything,
+    needsPerUserConnect,
+    virtualKeyUnbacked,
+    runGeneration,
+  ]);
 
   // Each summary line owns its inline editor. A line is editable only when it
   // has a real choice (e.g. more than one gateway); otherwise no "Change".
@@ -437,10 +461,34 @@ export function ConnectCommandPanel({
       : supportedNames.length === 1
         ? `${client.label} routes ${supportedNames[0]}, which has no key to mint a virtual key from.`
         : `${client.label} routes ${formatList(supportedNames)}, none of which has a key to mint a virtual key from.`;
+  // Brand the "add a key" CTA to the one provider a single-provider client
+  // routes (e.g. Codex → OpenAI), matching how the per-user gate is branded to
+  // its client. With several providers there's nothing single to name, so the
+  // wording stays generic.
+  const soleProvider =
+    supportedProviders.length === 1 ? supportedProviders[0] : null;
+  const addKeyPhrase = soleProvider
+    ? `${indefiniteArticle(providerDisplayNames[soleProvider])} ${providerDisplayNames[soleProvider]} key`
+    : "a provider key";
   const providerKeyDialogDescription =
     supportedNames.length === 0
       ? "Add a provider API key so a virtual key can be minted from it."
       : `Add a provider API key so a virtual key can be minted from it. ${client.label} routes ${formatList(supportedNames)}, so a key for one of those unlocks the virtual-key option for this client.`;
+
+  // A per-user provider (GitHub Copilot) forces virtual-key auth, so switching
+  // the toggle back to passthrough while it's selected would re-force virtual
+  // key and appear to do nothing. Move to the first passthrough-capable provider
+  // as well, so the toggle can never strand the user in the per-user state.
+  const handleProxyAuthChange = (value: string) => {
+    const next = value as ConnectProxyAuth;
+    setProxyAuth(next);
+    if (next === "provider-key" && providerIsPerUser) {
+      const firstPassthrough = supportedProviders.find(
+        (p) => !providerRequiresPerUserCredential(p),
+      );
+      if (firstPassthrough) onProviderSelect(firstPassthrough);
+    }
+  };
 
   const proxyEditor = proxy ? (
     <div className="grid gap-3">
@@ -460,56 +508,50 @@ export function ConnectCommandPanel({
       )}
       <EditorField label="Auth">
         <div className="grid gap-1.5">
-          {/* Per-user providers (GitHub Copilot) can't use passthrough — their
-              raw token must never be embedded in a shared command — so only the
-              virtual-key path is offered. */}
-          {providerIsPerUser ? (
-            <p className="text-xs text-muted-foreground">
-              {providerDisplayNames[provider]} runs through a personal virtual
-              key — connect your own account below.
-            </p>
-          ) : (
-            <>
-              <Tabs
-                value={proxyAuth}
-                onValueChange={(v) => setProxyAuth(v as ConnectProxyAuth)}
-              >
-                <TabsList>
-                  <TabsTrigger value="provider-key">
-                    Your provider key
-                  </TabsTrigger>
-                  <TabsTrigger value="virtual-key">Virtual key</TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <p className="text-xs text-muted-foreground">
-                {proxyAuth === "provider-key" ? (
-                  passthroughAttributes ? (
-                    "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan). Your personal auth key is created for you and wired into the command via ANTHROPIC_CUSTOM_HEADERS."
-                  ) : (
-                    "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
-                  )
-                ) : providers.length === 0 ? (
-                  canCreateProviderKey ? (
-                    <>
-                      {noVirtualKeyReason}{" "}
-                      <button
-                        type="button"
-                        className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
-                        onClick={() => setShowAddProviderKey(true)}
-                      >
-                        Add a provider key
-                      </button>{" "}
-                      or switch to your provider key.
-                    </>
-                  ) : (
-                    `${noVirtualKeyReason} Switch to your provider key, or ask an admin to add a provider key.`
-                  )
-                ) : (
-                  "A virtual key is created for you and wired into the command."
-                )}
-              </p>
-            </>
-          )}
+          {/* The toggle stays visible even for a per-user provider (GitHub
+              Copilot), which forces virtual-key auth. Hiding it there stranded
+              the user in virtual-key mode with no way back;
+              handleProxyAuthChange moves off the per-user provider when
+              switching to passthrough, so the choice sticks. */}
+          <Tabs
+            value={effectiveProxyAuth}
+            onValueChange={handleProxyAuthChange}
+          >
+            <TabsList>
+              <TabsTrigger value="provider-key">Your provider key</TabsTrigger>
+              <TabsTrigger value="virtual-key">Virtual key</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <p className="text-xs text-muted-foreground">
+            {effectiveProxyAuth === "provider-key" ? (
+              passthroughAttributes ? (
+                "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan). Your personal auth key is created for you and wired into the command via ANTHROPIC_CUSTOM_HEADERS."
+              ) : (
+                "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
+              )
+            ) : providerIsPerUser && provider ? (
+              `${providerDisplayNames[provider]} runs through a personal virtual key — connect your own account below.`
+            ) : providers.length === 0 ? (
+              canCreateProviderKey ? (
+                <>
+                  {noVirtualKeyReason}{" "}
+                  <button
+                    type="button"
+                    className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
+                    onClick={() => setShowAddProviderKey(true)}
+                    data-testid="connect-auth-add-provider-key"
+                  >
+                    Add {addKeyPhrase}
+                  </button>{" "}
+                  or switch to your provider key.
+                </>
+              ) : (
+                `${noVirtualKeyReason} Switch to your provider key, or ask an admin to add ${addKeyPhrase}.`
+              )
+            ) : (
+              "A virtual key is created for you and wired into the command."
+            )}
+          </p>
         </div>
       </EditorField>
     </div>
@@ -740,6 +782,14 @@ export function ConnectCommandPanel({
                   }
                 }}
               />
+            ) : virtualKeyUnbacked ? (
+              <ProviderKeyGate
+                reason={noVirtualKeyReason}
+                provider={soleProvider}
+                addKeyPhrase={addKeyPhrase}
+                canAddKey={canCreateProviderKey === true}
+                onAddKey={() => setShowAddProviderKey(true)}
+              />
             ) : (
               <CommandLine
                 command={result?.command ?? null}
@@ -802,7 +852,7 @@ export function ConnectCommandPanel({
       <CreateLlmProviderApiKeyDialog
         open={showAddProviderKey}
         onOpenChange={setShowAddProviderKey}
-        title="Add a provider key"
+        title={`Add ${addKeyPhrase}`}
         description={providerKeyDialogDescription}
         defaultValues={
           supportedProviders[0]
@@ -916,6 +966,57 @@ function PerUserConnectGate({
 }
 
 /**
+ * Step-3 gate for the virtual-key path when no provider key can back it. Mirrors
+ * the per-user connect gate: instead of emitting a script that silently drops
+ * the inference proxy, it names the blocker and offers the fix inline — add a
+ * provider key, or switch the proxy to your provider key up in the review step.
+ */
+function ProviderKeyGate({
+  reason,
+  provider,
+  addKeyPhrase,
+  canAddKey,
+  onAddKey,
+}: {
+  reason: string;
+  /** The lone provider to brand the CTA with, or null when several are routed. */
+  provider: SupportedProvider | null;
+  /** e.g. "an OpenAI key" / "a provider key" — used in both the copy and button. */
+  addKeyPhrase: string;
+  canAddKey: boolean;
+  onAddKey: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 px-5 py-4">
+      <p className="text-[13px] text-[#e5e7eb]">
+        {reason}{" "}
+        {canAddKey
+          ? `Add ${addKeyPhrase} to mint one from, or switch to your provider key in the review above.`
+          : `Ask an admin to add ${addKeyPhrase}, or switch to your provider key in the review above.`}
+      </p>
+      {canAddKey && (
+        <div>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={onAddKey}
+            data-testid="connect-gate-add-provider-key"
+          >
+            {provider ? (
+              <ProviderIcon provider={provider} size={16} />
+            ) : (
+              <KeyRound className="size-4" />
+            )}
+            Add {addKeyPhrase}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * One review line: a status icon, the summary text, and (when there's a real
  * choice) an inline "Change" that expands the row's own editor right below it.
  */
@@ -1021,6 +1122,11 @@ function formatList(items: string[]): string {
   if (items.length <= 1) return items[0] ?? "";
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
   return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
+/** "a" or "an" for `word`, by its leading letter (good enough for brand names). */
+function indefiniteArticle(word: string): string {
+  return /^[aeiou]/i.test(word) ? "an" : "a";
 }
 
 /** label + control row inside an inline editor. */

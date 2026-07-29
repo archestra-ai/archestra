@@ -1,7 +1,11 @@
-import { isAgentTool } from "@archestra/shared";
+import {
+  CLIENT_MCP_TOOL_NAME_PREFIX,
+  clientForExternalAgentIds,
+  isAgentTool,
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
-import { ToolModel } from "@/models";
+import { ToolModel, ToolObservationModel } from "@/models";
 import type { ToolInvocation, TrustedData } from "@/types";
 
 /**
@@ -22,6 +26,15 @@ export const persistTools = async (
   defaults?: {
     invocationAction?: ToolInvocation.ToolInvocationPolicyAction;
     resultAction?: TrustedData.TrustedDataPolicyAction;
+  },
+  /**
+   * Who is making the request and through which client app, when known.
+   * Recorded as tool observations so the guardrails page can filter observed
+   * tools by user and client.
+   */
+  observer?: {
+    userId?: string;
+    externalAgentId?: string | null;
   },
 ) => {
   logger.debug(
@@ -92,28 +105,74 @@ export const persistTools = async (
       { agentId },
       "[tools] persistTools: no new tools to auto-discover",
     );
-    return;
+  } else {
+    // A coding CLI's native tools (Bash, shell, apply_patch, …) default to
+    // "Allow always" regardless of the org's discovered-tool call policy: a
+    // strict default would block them on the first sensitive tool result and
+    // make the CLI unusable — which drives users to disconnect the proxy and
+    // lose every guardrail. The client namespaces its MCP-server tools with
+    // the mcp__ prefix, so those (and everything else) keep the org default,
+    // and the override is a visible per-tool policy an admin can tighten.
+    const observerClientFamily = clientForExternalAgentIds([
+      observer?.externalAgentId,
+    ]);
+    const nativeClientToolOverride = (toolName: string) =>
+      observerClientFamily && !toolName.startsWith(CLIENT_MCP_TOOL_NAME_PREFIX)
+        ? {
+            action: "allow_when_context_is_untrusted" as const,
+            reason: `Native ${observerClientFamily.label} client tool, allowed by default so the client keeps working in sensitive context`,
+          }
+        : undefined;
+
+    // Bulk create tools (single query to check existing + single insert for new)
+    logger.debug(
+      { agentId, toolCount: toolsToAutoDiscover.length },
+      "[tools] persistTools: bulk creating tools",
+    );
+    await ToolModel.bulkCreateProxyToolsIfNotExists(
+      toolsToAutoDiscover.map(
+        ({ toolName, toolParameters, toolDescription }) => ({
+          name: toolName,
+          parameters: toolParameters,
+          description: toolDescription,
+          invocationDefaultOverride: nativeClientToolOverride(toolName),
+        }),
+      ),
+      agentId,
+      defaults,
+    );
+
+    logger.debug(
+      { agentId, toolCount: toolsToAutoDiscover.length },
+      "[tools] persistTools: tool persistence complete",
+    );
   }
 
-  // Bulk create tools (single query to check existing + single insert for new)
-  logger.debug(
-    { agentId, toolCount: toolsToAutoDiscover.length },
-    "[tools] persistTools: bulk creating tools",
-  );
-  await ToolModel.bulkCreateProxyToolsIfNotExists(
-    toolsToAutoDiscover.map(
-      ({ toolName, toolParameters, toolDescription }) => ({
-        name: toolName,
-        parameters: toolParameters,
-        description: toolDescription,
-      }),
-    ),
-    agentId,
-    defaults,
-  );
-
-  logger.debug(
-    { agentId, toolCount: toolsToAutoDiscover.length },
-    "[tools] persistTools: tool persistence complete",
-  );
+  // Record who observed the request's tools — new and already-known alike — so
+  // the guardrails page can filter observed tools by user and client. Built-in
+  // and delegation tools are excluded, matching the discovery filter above.
+  // Best-effort: attribution must never fail the proxy request.
+  if (observer?.userId) {
+    const observableToolNames = tools
+      .map(({ toolName }) => toolName)
+      .filter(
+        (toolName) =>
+          !archestraMcpBranding.isLikelyToolName(toolName) &&
+          !isAgentTool(toolName),
+      );
+    if (observableToolNames.length > 0) {
+      try {
+        await ToolObservationModel.recordObservations({
+          toolNames: observableToolNames,
+          userId: observer.userId,
+          externalAgentId: observer.externalAgentId,
+        });
+      } catch (error) {
+        logger.warn(
+          { err: error, agentId },
+          "[tools] persistTools: failed to record tool observations",
+        );
+      }
+    }
+  }
 };

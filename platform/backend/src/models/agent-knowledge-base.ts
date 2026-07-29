@@ -2,6 +2,7 @@ import { and, eq, getTableColumns, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentKnowledgeBase } from "@/types";
+import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 
 class AgentKnowledgeBaseModel {
   static async findByAgent(agentId: string): Promise<AgentKnowledgeBase[]> {
@@ -34,6 +35,7 @@ class AgentKnowledgeBaseModel {
       .insert(schema.agentKnowledgeBasesTable)
       .values({ agentId, knowledgeBaseId })
       .onConflictDoNothing();
+    agentKnowledgeSourcesCache.invalidate(agentId);
   }
 
   static async unassign(
@@ -50,6 +52,7 @@ class AgentKnowledgeBaseModel {
       )
       .returning({ agentId: schema.agentKnowledgeBasesTable.agentId });
 
+    agentKnowledgeSourcesCache.invalidate(agentId);
     return deleted.length > 0;
   }
 
@@ -61,17 +64,18 @@ class AgentKnowledgeBaseModel {
       .delete(schema.agentKnowledgeBasesTable)
       .where(eq(schema.agentKnowledgeBasesTable.agentId, agentId));
 
-    if (knowledgeBaseIds.length === 0) return;
-
-    await db
-      .insert(schema.agentKnowledgeBasesTable)
-      .values(
-        knowledgeBaseIds.map((knowledgeBaseId) => ({
-          agentId,
-          knowledgeBaseId,
-        })),
-      )
-      .onConflictDoNothing();
+    if (knowledgeBaseIds.length > 0) {
+      await db
+        .insert(schema.agentKnowledgeBasesTable)
+        .values(
+          knowledgeBaseIds.map((knowledgeBaseId) => ({
+            agentId,
+            knowledgeBaseId,
+          })),
+        )
+        .onConflictDoNothing();
+    }
+    agentKnowledgeSourcesCache.invalidate(agentId);
   }
 
   static async getKnowledgeBaseIds(agentId: string): Promise<string[]> {

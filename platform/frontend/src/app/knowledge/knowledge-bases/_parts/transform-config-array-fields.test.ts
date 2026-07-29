@@ -28,11 +28,13 @@ describe("transformConfigArrayFields", () => {
       projectGids: "111, 222",
       tagsToSkip: "wip, archived",
       objects: "Account, Contact",
+      includePaths: "docs, packages/api/src",
     };
 
     const result = transformConfigArrayFields(config);
 
     expect(result.repos).toEqual(["a", "b"]);
+    expect(result.includePaths).toEqual(["docs", "packages/api/src"]);
     expect(result.teamIds).toEqual(["team-1", "team-2"]);
     expect(result.spaceKeys).toEqual(["TEAM", "DEV"]);
     expect(result.pageIds).toEqual(["page-1", "page-2"]);

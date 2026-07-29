@@ -21,10 +21,13 @@ import {
 } from "@/components/list-view-toggle";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
-import { ProjectScopeFilter } from "@/components/project-scope-filter";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  ResourceScopeFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
 import { ScopeBadge } from "@/components/scope-badge";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
@@ -37,10 +40,9 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
 import {
-  parseProjectScope,
-  toApiProjectScope,
-} from "@/lib/projects/project-list-scope";
-import { canManageProject } from "@/lib/projects/project-permissions";
+  canDeleteProject,
+  canManageProject,
+} from "@/lib/projects/project-permissions";
 import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
   useCreateProject,
@@ -68,22 +70,16 @@ const PROJECTS_DESCRIPTION =
 
 function ProjectsList() {
   const searchParams = useSearchParams();
-  const scope = parseProjectScope(searchParams.get("scope"));
+  const { scope, teamIds, authorIds, excludeAuthorIds, hasActiveScopeFilters } =
+    useScopeFilterParams();
   const search = searchParams.get("search") ?? undefined;
-  const csvParam = (key: string): string[] | undefined => {
-    const values = searchParams.get(key)?.split(",").filter(Boolean);
-    return values && values.length > 0 ? values : undefined;
-  };
-  const teamIds = csvParam("teamIds");
-  const authorIds = csvParam("authorIds");
-  const excludeAuthorIds = csvParam("excludeAuthorIds");
   const {
     data,
     isPending,
     isLoadingError: isProjectsLoadError,
     refetch: refetchProjects,
   } = useProjects({
-    scope: toApiProjectScope(scope),
+    scope,
     search,
     teamIds,
     authorIds,
@@ -119,12 +115,7 @@ function ProjectsList() {
   const pinProjectMutation = usePinProject();
   const togglePin = (project: ProjectListItem) =>
     pinProjectMutation.mutate({ id: project.id, pinned: !project.pinnedAt });
-  const hasActiveFilter =
-    scope !== "all" ||
-    !!search ||
-    !!teamIds ||
-    !!authorIds ||
-    !!excludeAuthorIds;
+  const hasActiveFilter = hasActiveScopeFilters || !!search;
 
   // The first keys fetch failed with no cached list (e.g. offline cold start).
   // Show a retry state rather than the setup prompt, which would wrongly imply
@@ -203,7 +194,11 @@ function ProjectsList() {
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-2">
           <SearchInput placeholder="Search projects" paramName="search" />
-          <ProjectScopeFilter />
+          <ResourceScopeFilter
+            ownerLabelPlural="projects"
+            allLabel="All projects"
+            adminPermission={{ project: ["admin"] }}
+          />
           <span className="ml-auto">
             <ListViewToggle value={viewMode} onChange={setViewMode} />
           </span>
@@ -310,6 +305,7 @@ function ProjectCard({
   onDelete: (project: ProjectListItem) => void;
 }) {
   const { data: isProjectAdmin } = useHasPermissions({ project: ["admin"] });
+  const { data: canShareOrg } = useHasPermissions({ project: ["share-org"] });
   return (
     // `relative` + the title link's stretched `::after` (after:inset-0) makes the
     // whole card a single click target for the project. Interactive children
@@ -333,6 +329,7 @@ function ProjectCard({
           <ScopeBadge
             scope={projectVisibilityToScope(project.visibility)}
             teamNames={project.shareTeamNames}
+            userNames={project.shareUserNames}
           />
           {project.viewerRole === "admin" && project.visibility === null && (
             <Badge variant="secondary">
@@ -345,6 +342,12 @@ function ProjectCard({
             pinned={!!project.pinnedAt}
             canPin={project.viewerRole !== "admin"}
             canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}
+            canDelete={canDeleteProject({
+              viewerRole: project.viewerRole,
+              visibility: project.visibility,
+              isProjectAdmin: !!isProjectAdmin,
+              canShareOrg: !!canShareOrg,
+            })}
             onTogglePin={() => onTogglePin(project)}
             onEdit={() => onEdit(project)}
             onDelete={() => onDelete(project)}

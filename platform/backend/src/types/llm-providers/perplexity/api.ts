@@ -9,21 +9,41 @@
  * @see https://docs.perplexity.ai/api-reference/chat-completions-post
  */
 
+import { z } from "zod";
 import {
-  ChatCompletionRequestSchema,
   ChatCompletionsHeadersSchema,
   ChatCompletionUsageSchema,
   FinishReasonSchema,
+  ChatCompletionRequestSchema as OpenAIChatCompletionRequestSchema,
   ChatCompletionResponseSchema as OpenAIChatCompletionResponseSchema,
 } from "../openai/api";
 
-// Re-export request and other schemas from OpenAI since Perplexity is compatible
+// Re-export the schemas Perplexity shares verbatim with OpenAI
 export {
-  ChatCompletionRequestSchema,
   ChatCompletionsHeadersSchema,
   ChatCompletionUsageSchema,
   FinishReasonSchema,
 };
+
+/**
+ * Perplexity's streaming format selector.
+ *
+ * `full` (the API default) streams complete message objects and emits no
+ * reasoning. `concise` streams deltas only and adds the `chat.reasoning` /
+ * `chat.reasoning.done` chunks that carry the model's chain of thought — the
+ * only way to obtain reasoning from the chat-completions endpoint.
+ *
+ * @see https://docs.perplexity.ai/docs/sonar/pro-search/stream-mode
+ */
+export const StreamModeSchema = z.enum(["full", "concise"]);
+
+/**
+ * Perplexity request schema: OpenAI-compatible plus `stream_mode`.
+ */
+export const ChatCompletionRequestSchema =
+  OpenAIChatCompletionRequestSchema.extend({
+    stream_mode: StreamModeSchema.optional(),
+  });
 
 /**
  * Perplexity response schema with passthrough for extra fields.

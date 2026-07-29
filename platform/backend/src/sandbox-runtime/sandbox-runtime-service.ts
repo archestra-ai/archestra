@@ -58,6 +58,11 @@ interface RunCommandParams extends SandboxLimits {
   timeoutSeconds: number;
   replayEntries?: ReplayEntry[];
   /**
+   * Client-local directory every host-synced replay upload (`hostPath`) must
+   * resolve under. Required whenever `replayEntries` carry a `hostPath`.
+   */
+  spoolRoot?: string;
+  /**
    * The environment isolation target. When set, the native session pool runs
    * this command on that environment's engine; omitted uses the process-default
    * engine.
@@ -83,6 +88,8 @@ interface ReadArtifactParams extends SandboxLimits {
    */
   defaultCwd: string;
   replayEntries?: ReplayEntry[];
+  /** See {@link RunCommandParams.spoolRoot}. */
+  spoolRoot?: string;
   /**
    * The environment isolation target. Artifact extraction replays the recorded
    * commands, so it must run on the same per-environment engine the sandbox ran
@@ -170,6 +177,7 @@ class SandboxRuntimeService {
           traceparent: getTraceparent(),
           replayEntries: params.replayEntries ?? [],
           limits: this.limits(params),
+          spoolRoot: params.spoolRoot,
           command: params.command,
           cwd: params.cwd,
           timeoutSeconds: params.timeoutSeconds,
@@ -193,6 +201,7 @@ class SandboxRuntimeService {
           traceparent: getTraceparent(),
           replayEntries: params.replayEntries ?? [],
           limits: this.limits(params),
+          spoolRoot: params.spoolRoot,
           path: params.path,
           defaultCwd: params.defaultCwd,
           environment: params.environment,
@@ -286,6 +295,32 @@ class SandboxRuntimeService {
     this.applyDaggerEnv();
     this.lastInitAttemptAt = Date.now();
     this.setStatus("initializing");
+
+    // Per-organization mode (no explicit runner host): there is no process-
+    // default engine to warm, so there is no session to health-check. Still load
+    // the native addon, so a missing or broken build fails here instead of on the
+    // first sandbox call while the runtime reports itself ready. A broken per-org
+    // engine surfaces at the run that targets it.
+    if (!config.daggerRuntime.runnerHost) {
+      try {
+        await loadNative();
+        if ((this.status as SandboxRuntimeStatus) === "stopped") return;
+        this.setStatus("ready");
+        logger.info(
+          "[SandboxRuntime] ready — per-organization engines warm on first use",
+        );
+      } catch (error) {
+        if ((this.status as SandboxRuntimeStatus) !== "stopped") {
+          this.setStatus("error");
+        }
+        logger.error(
+          { err: error },
+          "[SandboxRuntime] failed to load the sandbox addon — sandbox execution unavailable",
+        );
+        throw error;
+      }
+      return;
+    }
 
     try {
       const { checkSession } = await loadNative();

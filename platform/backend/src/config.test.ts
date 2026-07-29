@@ -1,4 +1,5 @@
 import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
 } from "@archestra/shared";
@@ -13,6 +14,7 @@ import {
 } from "@/test";
 import config, {
   betaFeatureEnabled,
+  deriveOllamaNativeBaseUrl,
   getAnalyticsConfig,
   getAppAssetBaseOrigin,
   getCorsOrigins,
@@ -22,22 +24,28 @@ import config, {
   getOtelExporterOtlpLogEndpoint,
   getOtlpAuthHeaders,
   getTrustedOrigins,
+  isCodeRuntimeEnabled,
+  k8sMemoryQuantityToBytes,
   parseActiveChatRunPollIntervalMs,
+  parseActiveUsersRefreshIntervalMs,
   parseAnthropicWifConfig,
   parseAuditLogRetentionDays,
   parseBodyLimit,
   parseChatMaxOutputTokens,
+  parseChatRateMeteredMaxOutputTokens,
   parseCodeRuntimeDaggerRunnerHost,
   parseCommaSeparatedList,
   parseConnectorSyncMaxDuration,
   parseContentMaxLength,
   parseDatabasePoolMax,
   parseDatabaseStatementTimeoutMillis,
+  parseEngineDeniedCidrs,
   parseFileStorageFilesystemRoot,
   parseFileStorageProvider,
   parseFileStorageS3Config,
   parseHackathonGalleryRepo,
   parseHackathonRecorderEnabled,
+  parseHackathonRecorderMaxFinalCutMs,
   parseK8sResourceQuantity,
   parseLogFormat,
   parseMetricsPort,
@@ -45,6 +53,7 @@ import config, {
   parseProcessType,
   parseRefreshTokenReuseGraceSeconds,
   parseSampleRate,
+  parseSandboxMemoryMaxBytes,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
   resolveRenderBaseUrl,
@@ -911,6 +920,30 @@ describe("parseChatMaxOutputTokens", () => {
   });
 });
 
+describe("parseChatRateMeteredMaxOutputTokens", () => {
+  test("should return default 4096 when no value provided", () => {
+    expect(parseChatRateMeteredMaxOutputTokens(undefined)).toBe(4096);
+  });
+
+  test("should parse and trim a valid value", () => {
+    expect(parseChatRateMeteredMaxOutputTokens("  16000  ")).toBe(16000);
+  });
+
+  test("should return default and warn naming its own env var", () => {
+    expect(parseChatRateMeteredMaxOutputTokens("abc")).toBe(4096);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Invalid ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS value "abc", using default 4096',
+    );
+  });
+
+  test("should reject fractional, out-of-range and trailing-garbage values", () => {
+    expect(parseChatRateMeteredMaxOutputTokens("1.5")).toBe(4096);
+    expect(parseChatRateMeteredMaxOutputTokens("4096abc")).toBe(4096);
+    expect(parseChatRateMeteredMaxOutputTokens("0")).toBe(4096);
+    expect(parseChatRateMeteredMaxOutputTokens("1000001")).toBe(4096);
+  });
+});
+
 describe("parseDatabasePoolMax", () => {
   test("should return default 50 when no value provided", () => {
     expect(parseDatabasePoolMax(undefined)).toBe(50);
@@ -1002,6 +1035,41 @@ describe("parseDatabaseStatementTimeoutMillis", () => {
     expect(parseDatabaseStatementTimeoutMillis("-1")).toBe(30000);
     expect(logger.warn).toHaveBeenCalledWith(
       'Invalid ARCHESTRA_DATABASE_STATEMENT_TIMEOUT_MILLIS value "-1", using default 30000',
+    );
+  });
+});
+
+describe("parseActiveUsersRefreshIntervalMs", () => {
+  const DEFAULT = 5 * 60 * 1000;
+  const FLOOR = 30 * 1000;
+
+  test("returns the default when no value provided", () => {
+    expect(parseActiveUsersRefreshIntervalMs(undefined)).toBe(DEFAULT);
+    expect(parseActiveUsersRefreshIntervalMs("")).toBe(DEFAULT);
+    expect(parseActiveUsersRefreshIntervalMs("   ")).toBe(DEFAULT);
+  });
+
+  test("parses a valid interval", () => {
+    expect(parseActiveUsersRefreshIntervalMs("600000")).toBe(600000);
+    expect(parseActiveUsersRefreshIntervalMs("  120000  ")).toBe(120000);
+  });
+
+  test("treats 0 as explicitly disabled rather than falling back to the default", () => {
+    expect(parseActiveUsersRefreshIntervalMs("0")).toBe(0);
+  });
+
+  test("raises sub-floor intervals to the floor so the DISTINCT count is not run continuously", () => {
+    expect(parseActiveUsersRefreshIntervalMs("1000")).toBe(FLOOR);
+    expect(logger.warn).toHaveBeenCalledWith(
+      `ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "1000" is below the ${FLOOR}ms floor, using the floor`,
+    );
+  });
+
+  test("returns the default and warns for non-numeric or negative values", () => {
+    expect(parseActiveUsersRefreshIntervalMs("abc")).toBe(DEFAULT);
+    expect(parseActiveUsersRefreshIntervalMs("-1")).toBe(DEFAULT);
+    expect(logger.warn).toHaveBeenCalledWith(
+      `Invalid ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "-1", using default ${DEFAULT}`,
     );
   });
 });
@@ -1762,10 +1830,342 @@ describe("parseCodeRuntimeDaggerRunnerHost", () => {
     ).toBe("tcp://dagger-runtime.dagger.svc.cluster.local:1234");
   });
 
+  // A blank host is the normal "no sandbox here" case, not a misconfiguration:
+  // it must stay silent. A malformed one is logged. The gate relies on exactly
+  // this distinction to decide whether to fail closed.
+  test("treats a whitespace-only host as unset, without logging an error", () => {
+    vi.mocked(logger.error).mockClear();
+    expect(parseCodeRuntimeDaggerRunnerHost("   ")).toBeUndefined();
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  test("rejects a supported scheme in the wrong case, and says so", () => {
+    vi.mocked(logger.error).mockClear();
+    expect(
+      parseCodeRuntimeDaggerRunnerHost("TCP://dagger:1234"),
+    ).toBeUndefined();
+    expect(logger.error).toHaveBeenCalled();
+  });
+
   test("should return undefined for unsupported runner hosts", () => {
     expect(
       parseCodeRuntimeDaggerRunnerHost("unix:///run/dagger/engine.sock"),
     ).toBeUndefined();
+  });
+});
+
+describe("isCodeRuntimeEnabled", () => {
+  const base = {
+    runnerHost: undefined,
+    runnerHostEnv: undefined,
+    codeRuntimeEnabledEnv: undefined,
+    kubeconfig: undefined,
+    loadKubeconfigFromCurrentCluster: undefined,
+  };
+
+  test("enabled when an explicit runner host is configured, even without k8s", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        runnerHost: "tcp://dagger.dagger.svc.cluster.local:1234",
+        runnerHostEnv: "tcp://dagger.dagger.svc.cluster.local:1234",
+      }),
+    ).toBe(true);
+  });
+
+  test("an explicit runner host wins even when the flag is unset", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        runnerHost: "kube-pod://engine?namespace=dagger",
+        codeRuntimeEnabledEnv: undefined,
+      }),
+    ).toBe(true);
+  });
+
+  // The documented kill switch: "To turn it off, set ARCHESTRA_CODE_RUNTIME_ENABLED
+  // =false". It must beat a runner host, or an operator cannot disable the sandbox
+  // on a deployment (quickstart, BYO) that supplies one.
+  // A host that is set but malformed parses to `undefined`, which is otherwise
+  // indistinguishable from "unset". Falling through to the k8s path would
+  // provision code-managed engines for an operator who asked for a BYO runner,
+  // while the parser logs "code runtime disabled".
+  test("a malformed runner host disables, it does not fall through to k8s", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        runnerHost: undefined,
+        runnerHostEnv: "http://not-a-dagger-scheme:1234",
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(false);
+  });
+
+  test("a blank runner host is 'unset', not malformed", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        runnerHost: undefined,
+        runnerHostEnv: "   ",
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(true);
+  });
+
+  // The contract that matters is the parser and the gate together: the parser is
+  // what turns a malformed host into `undefined` in production.
+  test("parser + gate: a malformed host fails closed end to end", () => {
+    const envValue = "https://dagger.example.com";
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        runnerHost: parseCodeRuntimeDaggerRunnerHost(envValue),
+        runnerHostEnv: envValue,
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(false);
+  });
+
+  test("parser + gate: a supported host enables", () => {
+    const envValue = "kube-pod://engine?namespace=dagger";
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        runnerHost: parseCodeRuntimeDaggerRunnerHost(envValue),
+        runnerHostEnv: envValue,
+      }),
+    ).toBe(true);
+  });
+
+  test('"false" disables even when an explicit runner host is set', () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "false",
+        runnerHost: "tcp://dagger:1234",
+        runnerHostEnv: "tcp://dagger:1234",
+      }),
+    ).toBe(false);
+  });
+
+  test('"false" disables even with the orchestrator configured', () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "false",
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(false);
+  });
+
+  test("enabled by the flag when the orchestrator loads the current cluster", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(true);
+  });
+
+  test("enabled by the flag when a kubeconfig path is set", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "true",
+        kubeconfig: "/home/app/.kube/config",
+      }),
+    ).toBe(true);
+  });
+
+  test("the flag alone (no orchestrator) does not enable", () => {
+    expect(
+      isCodeRuntimeEnabled({ ...base, codeRuntimeEnabledEnv: "true" }),
+    ).toBe(false);
+  });
+
+  test("the orchestrator alone (no flag) does not enable", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(false);
+  });
+
+  test("a whitespace-only kubeconfig is not configured", () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "true",
+        kubeconfig: "   ",
+      }),
+    ).toBe(false);
+  });
+
+  test('a non-"true" flag value does not enable', () => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "1",
+        loadKubeconfigFromCurrentCluster: "true",
+      }),
+    ).toBe(false);
+  });
+
+  // config.ts derives orchestrator.loadKubeconfigFromCurrentCluster with
+  // `env === "true"`, and k8s/shared.ts's isK8sConfigured() consumes that
+  // boolean. This gate recomputes the predicate from raw env (importing
+  // k8s/shared would be a circular dependency), so it must agree: any value
+  // other than the exact string "true" is NOT the orchestrator being configured.
+  test.each([
+    "TRUE",
+    "1",
+    "yes",
+    "True",
+    " true ",
+  ])("loadKubeconfigFromCurrentCluster=%s does not count as configured", (value) => {
+    expect(
+      isCodeRuntimeEnabled({
+        ...base,
+        codeRuntimeEnabledEnv: "true",
+        loadKubeconfigFromCurrentCluster: value,
+      }),
+    ).toBe(false);
+  });
+
+  test("nothing configured stays off", () => {
+    expect(isCodeRuntimeEnabled(base)).toBe(false);
+  });
+});
+
+describe("k8sMemoryQuantityToBytes", () => {
+  test("converts binary and decimal suffixes", () => {
+    expect(k8sMemoryQuantityToBytes("4Gi")).toBe(4 * 1024 ** 3);
+    expect(k8sMemoryQuantityToBytes("512Mi")).toBe(512 * 1024 ** 2);
+    expect(k8sMemoryQuantityToBytes("1536Mi")).toBe(1536 * 1024 ** 2);
+    // Decimal suffixes are a different size from their binary namesakes, so
+    // treating `G` as `Gi` would compare the ceiling against the wrong number.
+    expect(k8sMemoryQuantityToBytes("1G")).toBe(1000 ** 3);
+    expect(k8sMemoryQuantityToBytes("1048576")).toBe(1048576);
+  });
+
+  test("returns undefined for anything that is not a quantity", () => {
+    expect(k8sMemoryQuantityToBytes("4GB")).toBeUndefined();
+    expect(k8sMemoryQuantityToBytes("lots")).toBeUndefined();
+    expect(k8sMemoryQuantityToBytes("")).toBeUndefined();
+  });
+});
+
+describe("parseSandboxMemoryMaxBytes", () => {
+  test("defaults to 5Gi and resolves a quantity to bytes", () => {
+    expect(parseSandboxMemoryMaxBytes(undefined, "6Gi")).toBe(5 * 1024 ** 3);
+    expect(parseSandboxMemoryMaxBytes("1Gi", "6Gi")).toBe(1024 ** 3);
+    expect(parseSandboxMemoryMaxBytes("512Mi", "6Gi")).toBe(512 * 1024 ** 2);
+  });
+
+  // The value lands in a cgroup's memory.max. Read as a bare number, "5Gi"
+  // would become a 5-byte ceiling and kill every run that allocated anything,
+  // so an unparseable value has to fall back rather than be honoured.
+  test("falls back and reports a value that is not a quantity", () => {
+    const logged = vi.mocked(logger.error);
+    logged.mockClear();
+    expect(parseSandboxMemoryMaxBytes("5 gigabytes", "6Gi")).toBe(
+      5 * 1024 ** 3,
+    );
+    expect(logged).toHaveBeenCalledTimes(1);
+
+    logged.mockClear();
+    expect(parseSandboxMemoryMaxBytes("0", "6Gi")).toBe(5 * 1024 ** 3);
+    expect(logged).toHaveBeenCalledTimes(1);
+  });
+
+  // The ceiling bounds a cgroup the scheduler cannot see, so the request is the
+  // only thing reserving node capacity for it. At or above the request the
+  // engine can hold more than it reserved, and the shortfall is charged to
+  // whatever else the node runs — the value still applies, but it is flagged.
+  test("flags a ceiling that is not below the engine's memory request", () => {
+    const logged = vi.mocked(logger.error);
+    logged.mockClear();
+    expect(parseSandboxMemoryMaxBytes("4Gi", "4Gi")).toBe(4 * 1024 ** 3);
+    expect(logged).toHaveBeenCalledTimes(1);
+
+    logged.mockClear();
+    parseSandboxMemoryMaxBytes("1Gi", "512Mi");
+    expect(logged).toHaveBeenCalledTimes(1);
+
+    logged.mockClear();
+    parseSandboxMemoryMaxBytes("1Gi", "4Gi");
+    expect(logged).not.toHaveBeenCalled();
+  });
+
+  test("does not flag when the request is not a parseable quantity", () => {
+    const logged = vi.mocked(logger.error);
+    logged.mockClear();
+    expect(parseSandboxMemoryMaxBytes("4Gi", "not-a-quantity")).toBe(
+      4 * 1024 ** 3,
+    );
+    expect(logged).not.toHaveBeenCalled();
+  });
+});
+
+describe("parseEngineDeniedCidrs", () => {
+  test("returns an empty list when unset or empty", () => {
+    expect(parseEngineDeniedCidrs(undefined)).toEqual([]);
+    expect(parseEngineDeniedCidrs("")).toEqual([]);
+  });
+
+  test("keeps valid IPv4 CIDRs", () => {
+    expect(parseEngineDeniedCidrs("100.68.0.0/16,34.118.224.0/20")).toEqual([
+      "100.68.0.0/16",
+      "34.118.224.0/20",
+    ]);
+    expect(parseEngineDeniedCidrs("0.0.0.0/0,255.255.255.255/32")).toEqual([
+      "0.0.0.0/0",
+      "255.255.255.255/32",
+    ]);
+  });
+
+  // A malformed entry would make the Kubernetes API reject the whole egress
+  // NetworkPolicy. The engine StatefulSet is created before its policy, so that
+  // leaves a privileged engine running with no egress policy at all. Dropping
+  // the bad entry keeps the built-in denials in force.
+  test("trims whitespace around entries", () => {
+    expect(parseEngineDeniedCidrs(" 10.1.0.0/16 , 192.0.2.0/24 ")).toEqual([
+      "10.1.0.0/16",
+      "192.0.2.0/24",
+    ]);
+  });
+
+  test("drops every entry when none is valid, and logs them", () => {
+    vi.mocked(logger.error).mockClear();
+    expect(parseEngineDeniedCidrs("nonsense,also-bad")).toEqual([]);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("nonsense"),
+    );
+  });
+
+  // A leading zero makes an octet octal-ambiguous across parsers, so the whole
+  // entry is rejected rather than silently denying a different range.
+  test("rejects an octet with a leading zero", () => {
+    expect(parseEngineDeniedCidrs("010.0.0.0/8")).toEqual([]);
+  });
+
+  test.each([
+    "not-a-cidr",
+    "10.0.0.0", // no prefix
+    "10.0.0.0/33", // prefix out of range
+    "256.0.0.0/8", // octet out of range
+    "10.0.0.0/8/8",
+    "fc00::/7", // IPv6 goes on the v6 rule, not this list
+  ])("drops the invalid entry %s", (bad) => {
+    expect(parseEngineDeniedCidrs(`10.1.0.0/16,${bad},192.0.2.0/24`)).toEqual([
+      "10.1.0.0/16",
+      "192.0.2.0/24",
+    ]);
   });
 });
 
@@ -2330,5 +2730,103 @@ describe("parseAnthropicWifConfig", () => {
     expect(
       parseAnthropicWifConfig({ ...completeEnv, federationRuleId: "  " }),
     ).toBeNull();
+  });
+});
+
+describe("deriveOllamaNativeBaseUrl", () => {
+  test("strips a /v1 suffix from the OpenAI-compatible URL", () => {
+    // The native API is served from the server root, so a deployment can set
+    // ARCHESTRA_OLLAMA_BASE_URL alone and get both providers.
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: undefined,
+        ollamaBaseUrl: "http://ollama.internal:11434/v1",
+      }),
+    ).toBe("http://ollama.internal:11434");
+  });
+
+  test("prefers an explicit native URL", () => {
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: "http://native.internal:11434",
+        ollamaBaseUrl: "http://other.internal:11434/v1",
+      }),
+    ).toBe("http://native.internal:11434");
+  });
+
+  test("strips a /v1 suffix from an explicit native URL too", () => {
+    // Setting the native variable to a /v1 URL is the likeliest misconfiguration,
+    // and it points at the OpenAI-compatible API rather than the native one.
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: "http://native.internal:11434/v1",
+        ollamaBaseUrl: undefined,
+      }),
+    ).toBe("http://native.internal:11434");
+  });
+
+  test("strips trailing slashes", () => {
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: "http://native.internal:11434/v1///",
+        ollamaBaseUrl: undefined,
+      }),
+    ).toBe("http://native.internal:11434");
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: "http://native.internal:11434/",
+        ollamaBaseUrl: undefined,
+      }),
+    ).toBe("http://native.internal:11434");
+  });
+
+  test("falls back to localhost when neither is set", () => {
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: undefined,
+        ollamaBaseUrl: undefined,
+      }),
+    ).toBe("http://localhost:11434");
+  });
+
+  test("leaves a path that merely contains v1 alone", () => {
+    expect(
+      deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: "http://proxy.internal/v1/ollama",
+        ollamaBaseUrl: undefined,
+      }),
+    ).toBe("http://proxy.internal/v1/ollama");
+  });
+});
+
+describe("parseHackathonRecorderMaxFinalCutMs", () => {
+  test("defaults to the shared limit when unset", () => {
+    expect(parseHackathonRecorderMaxFinalCutMs(undefined)).toBe(60_000);
+    expect(parseHackathonRecorderMaxFinalCutMs("")).toBe(
+      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+    );
+    expect(parseHackathonRecorderMaxFinalCutMs("   ")).toBe(
+      APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
+    );
+  });
+
+  test("takes a deployment's own limit", () => {
+    expect(parseHackathonRecorderMaxFinalCutMs("30000")).toBe(30_000);
+    expect(parseHackathonRecorderMaxFinalCutMs(" 600000 ")).toBe(600_000);
+  });
+
+  test("refuses a value it cannot honour rather than silently defaulting", () => {
+    // Falling back would read as the platform ignoring the operator's limit —
+    // the one failure mode a length cap must not have.
+    expect(() => parseHackathonRecorderMaxFinalCutMs("abc")).toThrow(
+      /whole number of milliseconds/,
+    );
+    expect(() => parseHackathonRecorderMaxFinalCutMs("60.5")).toThrow();
+    expect(() => parseHackathonRecorderMaxFinalCutMs("-1000")).toThrow();
+  });
+
+  test("refuses a limit so small nothing could ever be submitted", () => {
+    expect(() => parseHackathonRecorderMaxFinalCutMs("10")).toThrow();
+    expect(parseHackathonRecorderMaxFinalCutMs("5000")).toBe(5_000);
   });
 });

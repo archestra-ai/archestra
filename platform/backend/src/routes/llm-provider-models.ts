@@ -26,6 +26,9 @@ import {
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
   type ModelSyncState,
+  ModelTeamModel,
+  ModelUserModel,
+  OrganizationModel,
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -38,6 +41,7 @@ import {
   type LlmProviderApiKeyWithScopeInfo,
   type Model,
   ModelCapabilitiesSchema,
+  type ModelTeamDetail,
   ModelWithApiKeysSchema,
   PatchModelBodySchema,
   SelectModelSchema,
@@ -50,6 +54,10 @@ const LAZY_MODEL_SYNC_TTL_BY_PROVIDER: Partial<
 > = {
   openrouter: TimeInMs.Hour,
   ollama: 5 * TimeInMs.Minute,
+  // Same server as `ollama`, so it needs the same TTL: on the default one-day
+  // fallback a freshly `ollama pull`-ed model appeared in one provider within
+  // five minutes and the other a day later, which reads as a failed pull.
+  "ollama-native": 5 * TimeInMs.Minute,
   vllm: 5 * TimeInMs.Minute,
 };
 
@@ -244,12 +252,32 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const models = [...keyLinkedModels, ...perUserModels];
 
+      // Hide models restricted to teams the caller is not part of. Catalog
+      // managers (llmModel:update) keep full visibility so they can see what
+      // they are restricting.
+      const isModelCatalogAdmin = await userHasPermission(
+        user.id,
+        organizationId,
+        "llmModel",
+        "update",
+      );
+      let visibleModels = models;
+      if (!isModelCatalogAdmin) {
+        const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
+          modelIds: models.map((model) => model.dbId),
+          principalTeamIds: userTeamIds,
+        });
+        visibleModels = models.filter((model) =>
+          allowedModelIds.has(model.dbId),
+        );
+      }
+
       logger.info(
-        { organizationId, provider, totalModels: models.length },
+        { organizationId, provider, totalModels: visibleModels.length },
         "Returning available LLM models from database",
       );
 
-      return reply.send(models);
+      return reply.send(visibleModels);
     },
   );
 
@@ -322,12 +350,33 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         (model) => !linkedModelIds.has(model.id),
       );
 
+      const enrichedModelIds = [
+        ...modelsWithApiKeys.map((item) => item.model.id),
+        ...unlinkedLlmProxyModels.map((model) => model.id),
+      ];
+      const [teamsByModelId, usersByModelId] = await Promise.all([
+        ModelTeamModel.getTeamDetailsForModels(enrichedModelIds),
+        ModelUserModel.getUserDetailsForModels(enrichedModelIds),
+      ]);
+
       const response = [
         ...modelsWithApiKeys.map(({ model, isBest, apiKeys }) =>
-          toModelWithApiKeysResponse({ model, isBest, apiKeys }),
+          toModelWithApiKeysResponse({
+            model,
+            isBest,
+            apiKeys,
+            teams: teamsByModelId.get(model.id) ?? [],
+            users: usersByModelId.get(model.id) ?? [],
+          }),
         ),
         ...unlinkedLlmProxyModels.map((model) =>
-          toModelWithApiKeysResponse({ model, isBest: false, apiKeys: [] }),
+          toModelWithApiKeysResponse({
+            model,
+            isBest: false,
+            apiKeys: [],
+            teams: teamsByModelId.get(model.id) ?? [],
+            users: usersByModelId.get(model.id) ?? [],
+          }),
         ),
       ];
 
@@ -361,9 +410,64 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Model not found");
       }
 
-      const updated = await ModelModel.update(id, body);
+      // Validated here rather than in the body schema, which carries neither the
+      // provider nor the context length. The route gate (`llmModel:update`) is
+      // the only permission check: model rows are global, but so are the pricing
+      // and `ignored` fields an editor can already write, so singling out
+      // generation parameters bought a 403 class without a matching guarantee.
+      if (body.configuredParameters !== undefined) {
+        if (existing.provider !== "ollama-native") {
+          throw new ApiError(
+            400,
+            `Generation parameters are only supported for Ollama (Native) models, not "${existing.provider}"`,
+          );
+        }
+
+        const numCtx = body.configuredParameters?.num_ctx;
+        if (
+          numCtx !== undefined &&
+          existing.contextLength !== null &&
+          numCtx > existing.contextLength
+        ) {
+          throw new ApiError(
+            400,
+            `num_ctx (${numCtx}) exceeds the model's context length of ${existing.contextLength}`,
+          );
+        }
+      }
+
+      // The knowledge base reads embedding dimensions from this row at embed
+      // time, so changing them — or clearing them, which turns the model back
+      // into a chat model — while an organization's embedding config points
+      // here would silently corrupt the existing index. Mirror the
+      // knowledge-settings lock: force changes through the drop-embedding flow.
+      if (
+        body.embeddingDimensions !== undefined &&
+        body.embeddingDimensions !== existing.embeddingDimensions &&
+        (await OrganizationModel.isKnowledgeEmbeddingModel({
+          provider: existing.provider,
+          modelId: existing.modelId,
+        }))
+      ) {
+        throw new ApiError(
+          400,
+          "This model is used as the knowledge base embedding model, so its embedding configuration cannot be changed. Drop the embedding configuration in Knowledge settings first — all documents will need to be re-embedded.",
+          "embedding_validation_failed",
+        );
+      }
+
+      const { teamIds, userIds, ...modelUpdates } = body;
+      const updated = await ModelModel.update(id, modelUpdates);
       if (!updated) {
         throw new ApiError(500, "Failed to update model");
+      }
+
+      if (teamIds !== undefined) {
+        await ModelTeamModel.syncModelTeams(id, teamIds);
+      }
+
+      if (userIds !== undefined) {
+        await ModelUserModel.syncModelUsers(id, userIds);
       }
 
       return reply.send(updated);
@@ -644,26 +748,35 @@ async function getPerUserProviderModels(params: {
 
 /**
  * Shape a model row into the models-with-API-keys response, attaching the
- * computed effective pricing (input/output + cache) and price sources.
+ * computed effective pricing (input/output + cache) and price sources, plus the
+ * context window the model actually enforces.
  */
 function toModelWithApiKeysResponse(params: {
   model: Model;
   isBest: boolean;
   apiKeys: LinkedApiKey[];
+  teams: ModelTeamDetail[];
+  users: Array<{ id: string; name: string; email: string }>;
 }) {
-  const { model, isBest, apiKeys } = params;
-  const pricing = ModelModel.toCapabilities(model);
+  const { model, isBest, apiKeys, teams, users } = params;
+  const capabilities = ModelModel.toCapabilities(model);
   return {
     ...model,
     isBest,
     apiKeys,
-    pricePerMillionInput: pricing.pricePerMillionInput,
-    pricePerMillionOutput: pricing.pricePerMillionOutput,
-    isCustomPrice: pricing.isCustomPrice,
-    priceSource: pricing.priceSource,
-    pricePerMillionCacheRead: pricing.pricePerMillionCacheRead,
-    pricePerMillionCacheWrite: pricing.pricePerMillionCacheWrite,
-    cachePriceSource: pricing.cachePriceSource,
+    teams,
+    users,
+    // The spread above carries the architectural `contextLength`, which stays
+    // the ceiling for `num_ctx` validation. Displaying it would over-promise
+    // when Ollama enforces a smaller window, so the resolved one rides along.
+    effectiveContextLength: capabilities.contextLength,
+    pricePerMillionInput: capabilities.pricePerMillionInput,
+    pricePerMillionOutput: capabilities.pricePerMillionOutput,
+    isCustomPrice: capabilities.isCustomPrice,
+    priceSource: capabilities.priceSource,
+    pricePerMillionCacheRead: capabilities.pricePerMillionCacheRead,
+    pricePerMillionCacheWrite: capabilities.pricePerMillionCacheWrite,
+    cachePriceSource: capabilities.cachePriceSource,
     isFree: isFreeModel(model),
   };
 }

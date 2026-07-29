@@ -370,7 +370,11 @@ test("parseAttachmentIdFromUrl validates the URL shape", () => {
 });
 
 describe("assertInlineAttachmentsAcceptable", () => {
-  const SANDBOX_LIMIT = 16 * 1024 * 1024;
+  // Scaled down from the real defaults (16 MiB / 50 MiB) so the cases below can
+  // allocate real buffers cheaply. Both must stay above INLINE_TEXT_MAX_BYTES
+  // for the oversized-text cases, and the storage cap above the sandbox limit.
+  const SANDBOX_LIMIT = 512 * 1024;
+  const STORAGE_LIMIT = 1024 * 1024;
 
   function policy(
     overrides: Partial<InlineAttachmentPolicy> = {},
@@ -379,6 +383,7 @@ describe("assertInlineAttachmentsAcceptable", () => {
       ingestibleMimeTypes: new Set(["image/png", "application/pdf"]),
       sandboxAvailable: false,
       sandboxByteLimit: SANDBOX_LIMIT,
+      fileStorageByteLimit: STORAGE_LIMIT,
       ...overrides,
     };
   }
@@ -407,7 +412,7 @@ describe("assertInlineAttachmentsAcceptable", () => {
   }
 
   test("accepts a model-ingestible type regardless of sandbox", () => {
-    expect(() => assert("image/png", 5_000_000, policy())).not.toThrow();
+    expect(() => assert("image/png", STORAGE_LIMIT, policy())).not.toThrow();
   });
 
   test("accepts a small inlineable text file without a sandbox", () => {
@@ -416,10 +421,10 @@ describe("assertInlineAttachmentsAcceptable", () => {
     ).not.toThrow();
   });
 
-  test("rejects an oversized text file when no sandbox is available", () => {
+  test("accepts an oversized text file without a sandbox (stored as a conversation file)", () => {
     expect(() =>
       assert("text/csv", INLINE_TEXT_MAX_BYTES + 1, policy()),
-    ).toThrow();
+    ).not.toThrow();
   });
 
   test("routes an oversized text file to the sandbox when available", () => {
@@ -432,8 +437,8 @@ describe("assertInlineAttachmentsAcceptable", () => {
     ).not.toThrow();
   });
 
-  test("rejects an unsupported binary type without a sandbox", () => {
-    expect(() => assert("application/zip", 1_000, policy())).toThrow();
+  test("accepts an unsupported binary type without a sandbox (stored as a conversation file)", () => {
+    expect(() => assert("application/zip", 1_000, policy())).not.toThrow();
   });
 
   test("accepts an arbitrary type within the limit when the sandbox is available", () => {
@@ -442,14 +447,39 @@ describe("assertInlineAttachmentsAcceptable", () => {
     ).not.toThrow();
   });
 
-  test("rejects a file over the sandbox artifact limit even when available", () => {
+  test("accepts a file over the sandbox limit but under the storage cap", () => {
+    // The sandbox is bypassed, not the gatekeeper: the file is still stored as
+    // a conversation attachment and reachable from the chat Files panel.
     expect(() =>
       assert(
         "application/zip",
         SANDBOX_LIMIT + 1,
         policy({ sandboxAvailable: true }),
       ),
-    ).toThrow();
+    ).not.toThrow();
+    expect(() =>
+      assert("application/zip", SANDBOX_LIMIT + 1, policy()),
+    ).not.toThrow();
+  });
+
+  test("rejects a file over the storage cap regardless of sandbox availability", () => {
+    for (const sandboxAvailable of [true, false]) {
+      expect(() =>
+        assert(
+          "application/zip",
+          STORAGE_LIMIT + 1,
+          policy({ sandboxAvailable }),
+        ),
+      ).toThrow('"file.zip" is too large to attach (max 1 MB).');
+    }
+  });
+
+  test("rejects a model-ingestible type over the storage cap", () => {
+    // Every accepted upload persists its bytes, so the cap binds readable types
+    // too — otherwise a huge PNG would slip past the only remaining gate.
+    expect(() => assert("image/png", STORAGE_LIMIT + 1, policy())).toThrow(
+      '"file.png" is too large to attach (max 1 MB).',
+    );
   });
 
   test("does not throw on a malformed (un-decodable) data: URL", () => {

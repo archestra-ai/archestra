@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-07-21
+lastUpdated: 2026-07-22
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,8 +15,9 @@ This document is the canonical reference for deployment Environments. Include:
 - Restricted environments and the per-resource deploy-to-restricted permissions
 - Environment isolation: how an environment scopes which tools, knowledge,
   skills, and delegation targets an agent / MCP gateway / LLM proxy can use
-  (strict matching; Default is a peer, not a wildcard; built-in servers and
-  built-in skills are exempt)
+  (strict matching; Default is a peer, not a wildcard; skills can be
+  restricted to several environments or none = everywhere; built-in servers
+  and built-in skills are exempt)
 - Network egress policies (namespace + egress policy applied to MCP server pods AND
   agent code sandboxes), provider support matrix, and domain presets
 - How environments scope per-environment cost limits
@@ -53,10 +54,10 @@ An agent, MCP gateway, or LLM proxy assigned to **Production** can only see and 
 
 - MCP tools whose server (catalog item) is in Production
 - knowledge connectors in Production
-- [Agent Skills](/docs/platform-agent-skills#environments) in Production
+- [Agent Skills](/docs/platform-agent-skills#environments) restricted to Production, or restricted to no environment at all
 - [subagent delegation targets](/docs/platform-agents#delegation) in Production
 
-Matching is strict: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available.
+Matching is strict for tools, knowledge, and subagents: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Skills differ — a skill can be restricted to any number of environments, and a skill with none is available everywhere. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available.
 
 This applies to both explicitly assigned resources and the implicit **Auto** access modes — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent dialog's explicit assignment pickers, resources from another environment are shown disabled. Skill filtering covers `list_skills`, `load_skill`, chat slash commands, and the skills offered on the [connect page](/docs/platform-llm-proxy#environment); a [skill that runs in a subagent](/docs/platform-agent-skills#running-a-skill-in-a-subagent) additionally requires its designated agent in the same environment.
 

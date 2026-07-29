@@ -70,7 +70,9 @@ test("create an app from a template and run it standalone", async ({
     urlSuffix: "/api/apps",
     data: { name, scope: "personal" },
   });
-  const app = (await createRes.json()) as { id: string };
+  const app = (await createRes.json()) as { id: string; slug: string };
+  // Every app gets a URL slug derived from its name; the name is unique per run.
+  expect(app.slug).toBe(name.toLowerCase());
 
   try {
     // Publish the SDK probe as the app's html (forks a new version).
@@ -82,7 +84,8 @@ test("create an app from a template and run it standalone", async ({
     });
     expect(patchRes.ok()).toBeTruthy();
 
-    await goToPage(page, `/a/${app.id}`);
+    // Addressed by its slug, not its id — the run page resolves either.
+    await goToPage(page, `/a/${app.slug}`);
     // The standalone runtime is chromeless: the app name is the browser tab
     // title, not on-page text.
     await expect(page).toHaveTitle(name);

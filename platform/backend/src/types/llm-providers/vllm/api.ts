@@ -19,22 +19,22 @@ export const ChatCompletionUsageSchema = z
   })
   .describe("Token usage statistics for the completion");
 
-export const FinishReasonSchema = z.enum([
-  "stop",
-  "length",
-  "tool_calls",
-  "content_filter",
-  "function_call",
-]);
+// Persist/read-back must tolerate nonconforming finish_reasons (same as OpenAI).
+export const FinishReasonSchema = z
+  .enum(["stop", "length", "tool_calls", "content_filter", "function_call"])
+  .or(z.string());
 
 const ChoiceSchema = z
   .object({
     finish_reason: FinishReasonSchema,
-    index: z.number(),
+    // Some OpenAI-compatible upstreams omit `index` on choices; without
+    // optional() the response fails serialization (500).
+    index: z.number().optional(),
     logprobs: z.any().nullable(),
     message: z
       .object({
-        content: z.string().nullable(),
+        // Tool-call-only replies often omit `content` entirely.
+        content: z.string().nullable().optional(),
         refusal: z.string().nullable().optional(),
         role: z.enum(["assistant"]),
         // Some OpenAI-compatible upstreams return `annotations: null` instead of
@@ -51,6 +51,10 @@ const ChoiceSchema = z
         tool_calls: z.array(ToolCallSchema).optional(),
         // vLLM-specific: reasoning field for models that support it
         reasoning: z.string().nullable().optional(),
+        // DeepSeek-style reasoning models return thinking in `reasoning_content`
+        // and require it passed back on tool-call turns; response serialization
+        // must preserve it.
+        reasoning_content: z.string().nullable().optional(),
       })
       .describe("The assistant message in the response"),
   })

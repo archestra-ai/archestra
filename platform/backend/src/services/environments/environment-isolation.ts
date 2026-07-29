@@ -65,30 +65,44 @@ export function connectorInEnvironmentPredicate(
 
 /**
  * SQL predicate selecting `skills` rows visible from `agentEnvironmentId`'s
- * environment (strict equality, null = Default). Built-in skills are exempt —
+ * environment. Unlike tools/connectors, a skill can be assigned to any number
+ * of environments (`skill_environment` junction): a skill with NO assignments
+ * is visible in every environment, a skill with assignments only in those.
+ * The Default environment has no `environments` row, so a Default-environment
+ * agent (null) sees only unassigned skills. Built-in skills are exempt —
  * always visible — mirroring the built-in catalog exemption on tools.
  */
 export function skillInEnvironmentPredicate(
   agentEnvironmentId: string | null,
   skills = schema.skillsTable,
 ): SQL {
+  const assignments = schema.skillEnvironmentsTable;
   return or(
     sql`${skills.sourceType} = 'built_in'`,
-    sql`${skills.environmentId} is not distinct from ${agentEnvironmentId}`,
+    sql`not exists (select 1 from ${assignments} where ${assignments.skillId} = ${skills.id})`,
+    ...(agentEnvironmentId !== null
+      ? [
+          sql`exists (select 1 from ${assignments} where ${assignments.skillId} = ${skills.id} and ${assignments.environmentId} = ${agentEnvironmentId})`,
+        ]
+      : []),
   ) as SQL;
 }
 
 /**
  * JS counterpart of {@link skillInEnvironmentPredicate} for callers that
- * already hold the skill row. Same rules: built-in skills are visible in every
- * environment; everything else matches strictly (null = Default).
+ * already hold the skill row and its environment assignments. Same rules:
+ * built-in skills and skills with no assignments are visible everywhere;
+ * everything else only where assigned (never the Default environment, which
+ * cannot be assigned).
  */
 export function skillVisibleInEnvironment(
-  skill: { sourceType: string; environmentId: string | null },
+  skill: { sourceType: string; environmentIds: string[] },
   agentEnvironmentId: string | null,
 ): boolean {
   return (
     skill.sourceType === "built_in" ||
-    skill.environmentId === agentEnvironmentId
+    skill.environmentIds.length === 0 ||
+    (agentEnvironmentId !== null &&
+      skill.environmentIds.includes(agentEnvironmentId))
   );
 }

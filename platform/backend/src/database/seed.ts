@@ -697,6 +697,7 @@ async function syncModelsForApiKey(
 function getProviderDisplayName(provider: SupportedProvider): string {
   const displayNames: Record<SupportedProvider, string> = {
     anthropic: "Anthropic",
+    archestra: "Archestra",
     openai: "OpenAI",
     openrouter: "OpenRouter",
     gemini: "Google",
@@ -706,7 +707,8 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     perplexity: "Perplexity AI",
     groq: "Groq",
     xai: "xAI",
-    ollama: "Ollama",
+    ollama: "Ollama (OpenAI-compatible)",
+    "ollama-native": "Ollama (Native)",
     vllm: "vLLM",
     zhipuai: "ZhipuAI",
     deepseek: "DeepSeek",
@@ -941,6 +943,10 @@ export async function seedDefaultAppsForPristineOrgs(): Promise<void> {
               organizationId: org.id,
               authorId: admin.userId,
               name: definition.name,
+              slug: await AppModel.generateUniqueSlug({
+                name: definition.name,
+                organizationId: org.id,
+              }),
               description: definition.description,
               templateId: definition.templateId,
             },

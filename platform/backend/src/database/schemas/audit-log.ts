@@ -47,6 +47,8 @@ const auditLogsTable = pgTable(
     outcome: text("outcome").$type<AuditOutcome>().notNull(),
     resourceType: text("resource_type"),
     resourceId: text("resource_id"),
+    /** Denormalized resource name as of event time; never updated on rename. */
+    resourceName: text("resource_name"),
     before: jsonb("before").$type<AuditableSnapshot>(),
     after: jsonb("after").$type<AuditableSnapshot>(),
     httpMethod: text("http_method"),
@@ -75,6 +77,13 @@ const auditLogsTable = pgTable(
       table.organizationId,
       table.resourceType,
       table.resourceId,
+    ),
+    // resourceId filter without a resourceType (the UI's resource picker) — the
+    // index above can't serve it past the org prefix.
+    index("audit_logs_org_resource_id_created_at_idx").on(
+      table.organizationId,
+      table.resourceId,
+      table.createdAt.desc(),
     ),
     // Action filter.
     index("audit_logs_org_action_created_at_idx").on(

@@ -13,6 +13,7 @@ import {
 } from "@archestra/shared";
 import {
   EnvironmentModel,
+  SkillEnvironmentModel,
   SkillFileModel,
   SkillModel,
   SkillVersionModel,
@@ -55,6 +56,7 @@ describe("skill tool execution", () => {
     overrides: {
       skill?: Partial<InsertSkill>;
       files?: Omit<InsertSkillFile, "skillId">[];
+      environmentIds?: string[];
     } = {},
   ) {
     return await SkillModel.createWithFiles({
@@ -69,6 +71,7 @@ describe("skill tool execution", () => {
         ...overrides.skill,
       },
       files: overrides.files ?? [],
+      environmentIds: overrides.environmentIds,
     });
   }
 
@@ -90,7 +93,7 @@ describe("skill tool execution", () => {
       organizationId,
       name: "Other Environment",
     });
-    await seedSkill({ skill: { environmentId: otherEnv.id } });
+    await seedSkill({ environmentIds: [otherEnv.id] });
 
     const result = await executeArchestraTool(
       TOOL_LOAD_SKILL_FULL_NAME,
@@ -140,7 +143,10 @@ describe("skill tool execution", () => {
       organizationId,
       "env-authored",
     );
-    expect(skill?.environmentId).toBe(otherEnv.id);
+    expect(skill).toBeDefined();
+    const environmentIds =
+      await SkillEnvironmentModel.getEnvironmentIdsForSkills([skill.id]);
+    expect(environmentIds.get(skill.id)).toEqual([otherEnv.id]);
   });
 
   test("all skill tools are registered as Archestra tools", () => {

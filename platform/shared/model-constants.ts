@@ -17,6 +17,7 @@ export const SupportedProvidersSchema = z.enum([
   "openrouter",
   "vllm",
   "ollama",
+  "ollama-native",
   "zhipuai",
   "deepseek",
   "minimax",
@@ -24,6 +25,7 @@ export const SupportedProvidersSchema = z.enum([
   "azure",
   "github-copilot",
   "microsoft-365-copilot",
+  "archestra",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -48,6 +50,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "openrouter:chatCompletions",
   "vllm:chatCompletions",
   "ollama:chatCompletions",
+  "ollama-native:chat",
   "zhipuai:chatCompletions",
   "deepseek:chatCompletions",
   "minimax:chatCompletions",
@@ -56,6 +59,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "azure:responses",
   "github-copilot:chatCompletions",
   "microsoft-365-copilot:chatCompletions",
+  "archestra:chatCompletions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -87,7 +91,8 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   xai: "xAI",
   openrouter: "OpenRouter",
   vllm: "vLLM",
-  ollama: "Ollama",
+  ollama: "Ollama (OpenAI-compatible)",
+  "ollama-native": "Ollama (Native)",
   zhipuai: "Zhipu AI",
   deepseek: "DeepSeek",
   minimax: "MiniMax",
@@ -95,6 +100,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   azure: "Azure AI Foundry",
   "github-copilot": "GitHub Copilot",
   "microsoft-365-copilot": "Microsoft 365 Copilot",
+  archestra: "Archestra",
 };
 
 /**
@@ -104,6 +110,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
  */
 const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
   "ollama",
+  "ollama-native",
   "vllm",
 ]);
 
@@ -118,6 +125,10 @@ const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
 export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
   "azure",
   "vllm",
+  // Archestra-as-provider points at another Archestra instance's OpenAI-compatible
+  // proxy endpoint (e.g. https://other/v1/proxy/openai/<agentId>); there is no
+  // default, so a key without a base URL would silently route to api.openai.com.
+  "archestra",
 ]);
 
 /**
@@ -172,6 +183,46 @@ export function isSelfHostedProvider(provider: SupportedProvider): boolean {
   return PROVIDERS_WITH_OPTIONAL_API_KEY.has(provider);
 }
 
+/**
+ * Providers reachable through the OpenAI-compatible Model Router — either
+ * because they already speak the OpenAI wire, or because the router translates
+ * for them. Single source of truth: the router builds its own lookup from this
+ * list, and the connection UI hides the router option for anything absent, so a
+ * provider cannot appear to support the router while 404ing on it.
+ *
+ * `ollama-native` is deliberately absent: it speaks Ollama's `/api/chat` wire,
+ * which the router has no translation for.
+ */
+export const MODEL_ROUTER_SUPPORTED_PROVIDERS = [
+  // OpenAI-wire
+  "openai",
+  "azure",
+  "cerebras",
+  "deepseek",
+  "groq",
+  "minimax",
+  "mistral",
+  "ollama",
+  "openrouter",
+  "perplexity",
+  "vllm",
+  "xai",
+  "zhipuai",
+  // Translated by the router
+  "anthropic",
+  "bedrock",
+  "cohere",
+  "gemini",
+] as const satisfies ReadonlyArray<SupportedProvider>;
+
+export function isModelRouterSupportedProvider(
+  provider: SupportedProvider,
+): boolean {
+  return (MODEL_ROUTER_SUPPORTED_PROVIDERS as readonly string[]).includes(
+    provider,
+  );
+}
+
 export function getProvidersWithOptionalApiKey(params?: {
   azureEntraIdEnabled?: boolean;
   anthropicWifEnabled?: boolean;
@@ -195,9 +246,28 @@ export const PERPLEXITY_MODELS = [
   { id: "sonar-pro", displayName: "Sonar Pro" },
   { id: "sonar", displayName: "Sonar" },
   { id: "sonar-reasoning-pro", displayName: "Sonar Reasoning Pro" },
-  { id: "sonar-reasoning", displayName: "Sonar Reasoning" },
   { id: "sonar-deep-research", displayName: "Sonar Deep Research" },
 ] as const;
+
+/**
+ * Perplexity models whose chain of thought is retrievable over the
+ * chat-completions API.
+ *
+ * Perplexity only emits reasoning when the request opts into the `concise`
+ * stream mode; the default `full` mode suppresses it entirely. The proxy sends
+ * that opt-in for these models only, so the plain Sonar models keep the
+ * default wire format.
+ *
+ * sonar-deep-research is deliberately absent: under `concise` it streams an
+ * empty reasoning stage (a bare `chat.reasoning.done`, no steps) — its
+ * research trace is not exposed on this API in any mode — so opting it in
+ * yields no reasoning while changing its wire format for nothing.
+ */
+export const PERPLEXITY_REASONING_MODELS = ["sonar-reasoning-pro"] as const;
+
+export function isPerplexityReasoningModel(model: string): boolean {
+  return (PERPLEXITY_REASONING_MODELS as readonly string[]).includes(model);
+}
 
 /**
  * MiniMax model definitions — single source of truth.
@@ -223,6 +293,61 @@ export const MICROSOFT_365_COPILOT_MODELS = [
 ] as const;
 
 /**
+ * AWS regions that serve the Bedrock runtime, for the key form's region picker.
+ * AWS adds regions faster than this list can track, so it is a convenience
+ * shortlist rather than an authoritative set — a region missing here is still
+ * reachable by typing its runtime endpoint into the form's custom-endpoint
+ * field, which is what `bedrockRegionFromBaseUrl` reads back.
+ */
+export const BEDROCK_REGIONS = [
+  { id: "us-east-1", label: "US East (N. Virginia)" },
+  { id: "us-east-2", label: "US East (Ohio)" },
+  { id: "us-west-2", label: "US West (Oregon)" },
+  { id: "ca-central-1", label: "Canada (Central)" },
+  { id: "sa-east-1", label: "South America (São Paulo)" },
+  { id: "eu-west-1", label: "Europe (Ireland)" },
+  { id: "eu-west-2", label: "Europe (London)" },
+  { id: "eu-west-3", label: "Europe (Paris)" },
+  { id: "eu-central-1", label: "Europe (Frankfurt)" },
+  { id: "eu-north-1", label: "Europe (Stockholm)" },
+  { id: "eu-south-1", label: "Europe (Milan)" },
+  { id: "ap-south-1", label: "Asia Pacific (Mumbai)" },
+  { id: "ap-northeast-1", label: "Asia Pacific (Tokyo)" },
+  { id: "ap-northeast-2", label: "Asia Pacific (Seoul)" },
+  { id: "ap-northeast-3", label: "Asia Pacific (Osaka)" },
+  { id: "ap-southeast-1", label: "Asia Pacific (Singapore)" },
+  { id: "ap-southeast-2", label: "Asia Pacific (Sydney)" },
+] as const;
+
+/**
+ * The region Bedrock falls back to when none can be determined. Mirrors the
+ * backend's `getBedrockRegion` default so the form shows the region a key would
+ * actually run against rather than an empty control.
+ */
+export const DEFAULT_BEDROCK_REGION = "us-east-1";
+
+/** The Bedrock runtime (data-plane) endpoint for a region. */
+export function bedrockRuntimeBaseUrl(region: string): string {
+  return `https://bedrock-runtime.${region}.amazonaws.com`;
+}
+
+/**
+ * Recover the AWS region from a Bedrock runtime endpoint. This is the single
+ * definition of that parse — the backend resolves a key's region with it at
+ * request time, and the key form uses it to show the region back when editing.
+ *
+ * Deliberately anchored on the `bedrock-runtime.` host label, so it also reads
+ * VPC/PrivateLink endpoints that embed it. Returns null when no region can be
+ * read, which is what makes an unparseable custom endpoint visible in the UI
+ * instead of silently resolving to the default region.
+ */
+export function bedrockRegionFromBaseUrl(
+  baseUrl: string | null | undefined,
+): string | null {
+  return baseUrl?.match(/bedrock-runtime\.([a-z0-9-]+)\./)?.[1] ?? null;
+}
+
+/**
  * Default provider base URLs.
  * Used as placeholder hints in the UI and as fallback values when no per-key base URL is configured.
  */
@@ -240,6 +365,7 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   openrouter: "https://openrouter.ai/api/v1",
   vllm: "",
   ollama: "http://localhost:11434/v1",
+  "ollama-native": "http://localhost:11434",
   zhipuai: "https://api.z.ai/api/paas/v4",
   deepseek: "https://api.deepseek.com",
   minimax: "https://api.minimax.io/v1",
@@ -247,6 +373,9 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   azure: "https://<resource>.openai.azure.com/openai",
   "github-copilot": "https://api.githubcopilot.com",
   "microsoft-365-copilot": "https://graph.microsoft.com/beta",
+  // No default: the upstream is another Archestra instance's proxy endpoint,
+  // supplied per key (e.g. https://your-archestra/v1/proxy/openai/<agentId>).
+  archestra: "",
 };
 
 /**
@@ -326,6 +455,12 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "deepseek/deepseek-v4-pro",
   ],
   ollama: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
+  "ollama-native": [
+    "gpt-oss:120b",
+    "llama4:maverick",
+    "llama4:scout",
+    "qwen3:235b",
+  ],
   vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
   zhipuai: ["glm-5.1", "glm-5", "glm-4.7", "glm-4"],
   deepseek: ["deepseek-v4-pro", "deepseek-v4", "deepseek-v3", "deepseek-chat"],
@@ -362,6 +497,9 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "gpt-4o",
   ],
   "microsoft-365-copilot": [MICROSOFT_365_COPILOT_MODELS[0].id],
+  // The upstream Archestra can front any provider, so match common flagship
+  // families across vendors (most- to least-preferred).
+  archestra: ["opus", "sonnet", "gpt-5", "gemini-3", "grok-4"],
 };
 
 /**
@@ -377,6 +515,7 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   groq: "openai/gpt-oss-120b",
   xai: "grok-4.3",
   ollama: "llama3.2",
+  "ollama-native": "llama3.2",
   vllm: "default",
   cerebras: "zai-glm-4.7",
   mistral: "mistral-medium-2604",
@@ -389,6 +528,8 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   azure: "gpt-5.5",
   "github-copilot": "gpt-4o",
   "microsoft-365-copilot": MICROSOFT_365_COPILOT_MODELS[0].id,
+  // Fallback only; users pick from the upstream's fetched model list.
+  archestra: "gpt-4o",
 };
 
 /**
@@ -413,6 +554,31 @@ export const CACHE_PRICE_MULTIPLIERS: Partial<
 };
 
 /**
+ * A bracketed context-variant marker some clients append to a Claude model id,
+ * such as the `[1m]` in `claude-opus-4-8[1m]`.
+ */
+const CLAUDE_CONTEXT_VARIANT_SUFFIX = /\[\d+[km]\]$/i;
+
+/**
+ * Drop a client-side context-variant marker from a Claude model id.
+ *
+ * The marker is a client convention, not part of any Anthropic model id: every
+ * Claude model with a 1M-token window has it by default, needs no beta header,
+ * and bills at standard pricing, so the marked id names the same model at the
+ * same price. Carried through to storage it becomes a second model record that
+ * no catalog lists, leaving it permanently unpriced and billed at the fallback
+ * estimate.
+ *
+ * Scoped to Claude ids, and to markers shaped like a token count, so an
+ * unrecognised bracketed segment on any other provider is left alone.
+ */
+export function stripClaudeContextVariantSuffix(modelId: string): string {
+  return /claude/i.test(modelId)
+    ? modelId.replace(CLAUDE_CONTEXT_VARIANT_SUFFIX, "")
+    : modelId;
+}
+
+/**
  * True for OpenAI models served only (or only fully) through the Responses API
  * (`/v1/responses`), so the chat client must route them to the Responses
  * transport instead of `/v1/chat/completions`:
@@ -433,6 +599,32 @@ export function requiresOpenAiResponsesApi(modelId: string): boolean {
     /(?:^|\/)gpt-5\.6(?:$|[-.])/i.test(modelId)
   );
 }
+
+/**
+ * True for Anthropic models where thinking is on by default (Claude Opus 5,
+ * Sonnet 5, Fable 5, Mythos 5, Mythos Preview): the model reasons — and bills
+ * those tokens — on every request, but the API returns the thinking text only
+ * when the request opts in with `thinking: {display: "summarized"}`. Matched
+ * as substrings so dated snapshots (`claude-sonnet-5-20250929`) are covered.
+ *
+ * Models where thinking is off until requested (Opus 4.8/4.7, Sonnet 4.6 and
+ * earlier) are deliberately excluded: turning thinking on there would add
+ * cost, which is a product decision rather than a display fix.
+ */
+export function anthropicThinksByDefault(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  return ANTHROPIC_DEFAULT_THINKING_MODEL_MARKERS.some((marker) =>
+    id.includes(marker),
+  );
+}
+
+const ANTHROPIC_DEFAULT_THINKING_MODEL_MARKERS = [
+  "opus-5",
+  "sonnet-5",
+  "fable-5",
+  "mythos-5",
+  "mythos-preview",
+];
 
 /**
  * Maps models.dev provider IDs to Archestra provider names.
@@ -475,3 +667,20 @@ export const MODELS_DEV_PROVIDER_MAP: Record<string, SupportedProvider | null> =
     perplexity: null,
     nvidia: null,
   };
+
+/**
+ * Absolute ceiling for a configured Ollama `num_ctx`, sitting comfortably above
+ * the largest advertised context window in circulation. This is only a guard
+ * against a runaway typo; the meaningful limit is the model's own
+ * `contextLength`, which the update route enforces per row — except on rows
+ * whose architectural length is unknown (proxy-discovered models), where this
+ * is the only ceiling.
+ *
+ * Shared so the models-page form can mirror the server rule rather than letting
+ * an out-of-range value reach the backend and come back as a bare 400.
+ */
+export const MAX_CONFIGURABLE_NUM_CTX = 10_000_000;
+
+/** Ollama only ever honours a handful of stop sequences. */
+export const MAX_STOP_SEQUENCES = 16;
+export const MAX_STOP_SEQUENCE_LENGTH = 256;

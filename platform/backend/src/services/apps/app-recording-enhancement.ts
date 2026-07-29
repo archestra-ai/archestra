@@ -1,8 +1,55 @@
-import { APP_RECORDING_DESCRIPTION_MAX_CHARS } from "@archestra/shared";
-import { createLLMModel } from "@/clients/llm-client";
+import {
+  APP_GALLERY_CATEGORIES,
+  APP_RECORDING_DESCRIPTION_MAX_CHARS,
+} from "@archestra/shared";
+import { createLLMModel, type LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import { generateTaggedText } from "@/utils/generate-tagged-text";
-import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
+import {
+  type ResolvedLlmSelection,
+  resolveAgentLlmOrDefault,
+} from "@/utils/llm-resolution";
+
+/** The four drafted fields; each is null when its generation was unavailable. */
+type EnhancementFields = {
+  description: string | null;
+  prompt: string | null;
+  response: string | null;
+  category: string | null;
+};
+
+const EMPTY_ENHANCEMENT: EnhancementFields = {
+  description: null,
+  prompt: null,
+  response: null,
+  category: null,
+};
+
+/**
+ * Why a draft came back without the build prompt — the field the whole feature
+ * turns on. An all-null draft is a 200, and the client's remedy for it is to
+ * degrade quietly to fallbacks (an app-name description, the opening chat
+ * message as the prompt), which reads to the builder exactly like a gallery
+ * card the platform chose to write badly. The reason travels with the draft so
+ * the builder is told which of the two actually happened, and which of them
+ * they can do something about.
+ *
+ * Only the two states the generator can genuinely distinguish:
+ * - `empty_transcript` — nothing to draft FROM; the rendered chat was empty.
+ * - `generation_failed` — there was a transcript, and no candidate model
+ *   returned a build prompt for it (each candidate errored, or produced none).
+ */
+export const ENHANCEMENT_FAILURE_REASONS = [
+  "empty_transcript",
+  "generation_failed",
+] as const;
+
+type EnhancementFailureReason = (typeof ENHANCEMENT_FAILURE_REASONS)[number];
+
+/** A draft plus, when it carries no build prompt, why it does not. */
+type EnhancementDraft = EnhancementFields & {
+  reason: EnhancementFailureReason | null;
+};
 
 /**
  * Draft the AI enhancement for a recorded app-building session: a one-line
@@ -13,15 +60,25 @@ import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
  * prose while the tool activity replays as-is). All are DRAFTS the builder
  * edits by hand before applying; each comes back null when no LLM is
  * configured or generation fails, so the caller can fall back (e.g. pre-draft
- * the description from the app name) rather than block. Runs over the org's
- * default model via the LLM proxy, one call per field
- * ({@link generateTaggedText} — tags, not JSON, for cross-model reliability).
+ * the description from the app name) rather than block.
+ *
+ * Generation runs over the conversation's CURRENT chat model first — so the
+ * draft follows whatever provider the builder picked in chat — and falls back
+ * to the agent's own configuration, then the org default, when that model
+ * errors (an out-of-balance key, say). One call per field via
+ * {@link generateTaggedText} — tags, not JSON, for cross-model reliability.
  */
 export async function draftRecordingEnhancement(params: {
   appName: string;
   conversationId: string;
-  /** The agent connected to the chat session: generation implicitly runs over
-   * its configured LLM (org default when it has none / when null). */
+  /**
+   * The model the conversation is currently on — the model FK and key the chat
+   * persisted. Tried FIRST so the enhancement follows the provider the builder
+   * switched to in chat; falls through to {@link agent} / the org default.
+   */
+  chatModel: { modelId: string | null; chatApiKeyId: string | null } | null;
+  /** The agent connected to the chat session: the fallback LLM when the chat
+   * model is unset or errors (org default when the agent has none / is null). */
   agent: {
     id: string;
     llmApiKeyId: string | null;
@@ -30,84 +87,292 @@ export async function draftRecordingEnhancement(params: {
   messages: unknown[];
   organizationId: string;
   userId: string;
-}): Promise<{
-  description: string | null;
-  prompt: string | null;
-  response: string | null;
-  category: string | null;
-}> {
+}): Promise<EnhancementDraft> {
   const transcript = renderTranscript(params.messages);
   if (!transcript) {
-    return { description: null, prompt: null, response: null, category: null };
+    // Logged, not silent: an empty render is one of the two ways the draft
+    // comes back all-null with nothing else in the logs — the conversation
+    // carried no user/assistant text or tool parts the renderer understands
+    // (unexpected message shape, an unloaded/streaming-only history).
+    logger.warn(
+      { messageCount: params.messages.length },
+      "Recording enhancement: rendered transcript is empty; returning an empty draft",
+    );
+    return { ...EMPTY_ENHANCEMENT, reason: "empty_transcript" };
   }
 
-  const llm = await resolveAgentLlmOrDefault({
+  const context = `App name: ${params.appName}\n\nChat session transcript:\n${transcript}`;
+
+  // Try the conversation's current chat model first, then the agent's own
+  // config / the org default. A candidate whose key is out of balance — or that
+  // fails for any other reason — drops to the next rather than failing the
+  // whole draft, so switching the chat to a funded provider is enough to
+  // unblock.
+  const selections = await resolveEnhancementLlms({
+    chatModel: params.chatModel,
     agent: params.agent,
     organizationId: params.organizationId,
     userId: params.userId,
     conversationId: params.conversationId,
   });
-  const model = createLLMModel({
-    provider: llm.provider,
-    apiKey: llm.apiKey,
-    modelName: llm.modelName,
-    baseUrl: llm.baseUrl,
-    agentId: params.agent?.id ?? params.conversationId,
-    userId: params.userId,
-    sessionId: params.conversationId,
-    source: "app:recording_enhancement",
-  });
-
-  const context = `App name: ${params.appName}\n\nChat session transcript:\n${transcript}`;
-  try {
-    const [description, prompt, response, category] = await Promise.all([
-      generateTaggedText({
-        model,
-        tag: "description",
-        system: DESCRIPTION_SYSTEM_PROMPT,
-        prompt: context,
-        // One sentence, capped at APP_RECORDING_DESCRIPTION_MAX_CHARS — a
-        // couple of hundred tokens is already generous, and providers that
-        // bill on reserved output make a large ceiling cost real money.
-        maxOutputTokens: 256,
-        sanitize: sanitizeOneLine,
-      }),
-      generateTaggedText({
-        model,
-        tag: "build_prompt",
-        system: BUILD_PROMPT_SYSTEM_PROMPT,
-        prompt: context,
-        // A one-sentence ask needs no room to sprawl; a generous ceiling is
-        // itself an invitation to write the spec this must never be.
-        maxOutputTokens: 512,
-        sanitize: sanitizeHumanAsk,
-      }),
-      generateTaggedText({
-        model,
-        tag: "closing_response",
-        system: CLOSING_RESPONSE_SYSTEM_PROMPT,
-        prompt: context,
-        maxOutputTokens: 4096,
-      }),
-      generateTaggedText({
-        model,
-        tag: "category",
-        system: CATEGORY_SYSTEM_PROMPT,
-        prompt: context,
-        maxOutputTokens: 1024,
-        sanitize: sanitizeCategory,
-      }),
-    ]);
-    return { description, prompt, response, category };
-  } catch (error) {
-    logger.error({ err: error }, "Failed to draft recording enhancement");
-    return { description: null, prompt: null, response: null, category: null };
+  // The richest partial seen across candidates — so a run that never lands a
+  // build prompt still returns whatever description (etc.) a candidate produced,
+  // rather than throwing a good description away with the missing prompt.
+  let best: EnhancementFields = EMPTY_ENHANCEMENT;
+  for (const llm of selections) {
+    try {
+      const model = createLLMModel({
+        provider: llm.provider,
+        apiKey: llm.apiKey,
+        modelName: llm.modelName,
+        baseUrl: llm.baseUrl,
+        agentId: params.agent?.id ?? params.conversationId,
+        userId: params.userId,
+        sessionId: params.conversationId,
+        source: "app:recording_enhancement",
+      });
+      const fields = await generateEnhancementFields({ model, context });
+      // The build prompt is the field the whole feature turns on. Accept the
+      // first candidate that produces one — a partial on the OTHER fields is
+      // fine (they have their own fallbacks) and must not send us to the next
+      // model. Only a missing prompt drops to the next candidate.
+      if (fields.prompt) return { ...fields, reason: null };
+      if (
+        !best.prompt &&
+        (fields.description || fields.response || fields.category)
+      ) {
+        best = fields;
+      }
+      logger.warn(
+        { provider: llm.provider, model: llm.modelName },
+        "Recording enhancement: candidate produced no build prompt; trying the next candidate",
+      );
+    } catch (error) {
+      logger.warn(
+        { err: error, provider: llm.provider, model: llm.modelName },
+        "Recording enhancement: candidate model failed; trying the next candidate",
+      );
+    }
   }
+  logger.error(
+    "Failed to draft a recording build prompt: no candidate model produced one",
+  );
+  return { ...best, reason: "generation_failed" };
 }
 
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/**
+ * The LLMs to try for a draft, in order: the conversation's current chat model
+ * first (so the enhancement follows the provider the builder picked in chat),
+ * then the agent's own configuration / the org default. Deduped by resolved
+ * target so an identical fallback isn't retried after the same failure — e.g. a
+ * chat with no model of its own resolves both entries to the org default.
+ */
+async function resolveEnhancementLlms(params: {
+  chatModel: { modelId: string | null; chatApiKeyId: string | null } | null;
+  agent: { llmApiKeyId: string | null; modelId: string | null } | null;
+  organizationId: string;
+  userId: string;
+  conversationId: string;
+}): Promise<ResolvedLlmSelection[]> {
+  const { chatModel, agent, organizationId, userId, conversationId } = params;
+  const candidates: ResolvedLlmSelection[] = [];
+
+  // The conversation's own model, resolved exactly as an agent selection is: a
+  // pinned key is used as-is; a bare model (per-user providers) resolves the
+  // acting user's credential downstream.
+  if (chatModel?.modelId) {
+    candidates.push(
+      await resolveAgentLlmOrDefault({
+        agent: {
+          llmApiKeyId: chatModel.chatApiKeyId,
+          modelId: chatModel.modelId,
+        },
+        organizationId,
+        userId,
+        conversationId,
+      }),
+    );
+  }
+
+  // The historical behavior — the agent's configured LLM, else the org default
+  // — kept as the fallback.
+  candidates.push(
+    await resolveAgentLlmOrDefault({
+      agent,
+      organizationId,
+      userId,
+      conversationId,
+    }),
+  );
+
+  const seen = new Set<string>();
+  return candidates.filter((s) => {
+    const key = [s.provider, s.modelName, s.baseUrl ?? "", s.apiKey ?? ""].join(
+      " ",
+    );
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * The four drafts, generated concurrently over one resolved model. Each field
+ * settles INDEPENDENTLY: a single field's failure (a content filter on the
+ * closing response, a rate-limited category call) resolves that field to null
+ * and never rejects the others — above all it never discards a build prompt
+ * that generated cleanly. A hard, model-wide error (an out-of-balance key)
+ * fails all four the same way, so the caller still sees an all-null draft and
+ * moves to the next candidate.
+ */
+async function generateEnhancementFields(params: {
+  model: LLMModel;
+  context: string;
+}): Promise<EnhancementFields> {
+  const { model, context } = params;
+  const [description, prompt, response, category] = await Promise.all([
+    // Description and build prompt are LENGTH-limited fields — but the limit is
+    // held on the output text (accept → ask to shorten → trim), never by a tight
+    // token ceiling that only truncates a reasoning model before its closing
+    // tag. The ceiling here is generous headroom, not the length lever.
+    generateBoundedField({
+      model,
+      context,
+      tag: "description",
+      system: DESCRIPTION_SYSTEM_PROMPT,
+      maxOutputTokens: ENHANCEMENT_PROSE_MAX_OUTPUT_TOKENS,
+      clean: cleanOneLine,
+      withinLimit: withinDescriptionLimit,
+      clamp: clampDescription,
+      limit: `one line of at most ${APP_RECORDING_DESCRIPTION_MAX_CHARS} characters`,
+    }).catch(fieldGenerationFailed("description")),
+    generateBoundedField({
+      model,
+      context,
+      tag: "build_prompt",
+      system: BUILD_PROMPT_SYSTEM_PROMPT,
+      maxOutputTokens: ENHANCEMENT_PROSE_MAX_OUTPUT_TOKENS,
+      clean: cleanHumanAsk,
+      withinLimit: withinHumanAskLimit,
+      clamp: clampHumanAsk,
+      limit: `one short message of at most ${HUMAN_ASK_MAX_WORDS} words`,
+    }).catch(fieldGenerationFailed("build_prompt")),
+    // The closing response and the category are not length-limited the same way
+    // — the response is meant to be the detailed half, and the category is a
+    // short label a sanitizer already bounds — so both keep a generous ceiling
+    // and rely on generateTaggedText's own truncation retry for reasoning models.
+    generateTaggedText({
+      model,
+      tag: "closing_response",
+      system: CLOSING_RESPONSE_SYSTEM_PROMPT,
+      prompt: context,
+      maxOutputTokens: 4096,
+    }).catch(fieldGenerationFailed("closing_response")),
+    generateTaggedText({
+      model,
+      tag: "category",
+      system: CATEGORY_SYSTEM_PROMPT,
+      prompt: context,
+      maxOutputTokens: 1024,
+      sanitize: sanitizeCategory,
+    }).catch(fieldGenerationFailed("category")),
+  ]);
+  return { description, prompt, response, category };
+}
+
+/**
+ * Generous headroom for the prose fields — enough that a reasoning model can
+ * finish and close its tag. It is a ceiling, NOT a length control: the output
+ * length is enforced on the text (see {@link generateBoundedField}). Matches
+ * what `skill-description.ts` already uses.
+ */
+const ENHANCEMENT_PROSE_MAX_OUTPUT_TOKENS = 2048;
+
+/**
+ * Generate one tagged prose field and hold it to a length LIMIT on the OUTPUT —
+ * never on the model's token budget (a tight token cap only truncates the reply
+ * before its closing tag, especially for reasoning models). The token ceiling
+ * stays generous so the model can finish; the length is enforced here:
+ *   1. accept whatever the model wrote (cleaned, not truncated);
+ *   2. if it is over the limit, ask the model to shorten its OWN reply to fit —
+ *      one re-ask, which reads far better than a hard trim mid-sentence;
+ *   3. if it is STILL over, hard-trim as the last resort.
+ * Returns null on any failure — the caller's remediations (the opening chat
+ * message as the build prompt, the app-name description, manual entry, and the
+ * never-block submission) then cover it.
+ */
+async function generateBoundedField(params: {
+  model: LLMModel;
+  context: string;
+  tag: string;
+  system: string;
+  maxOutputTokens: number;
+  /** Formatting cleanup only — NEVER a length trim (that would hide "over"). */
+  clean: (text: string) => string;
+  withinLimit: (text: string) => boolean;
+  /** Last-resort hard trim, applied only if the shorten re-ask is still over. */
+  clamp: (text: string) => string;
+  /** How the limit reads in the shorten re-ask, e.g. "at most 160 characters". */
+  limit: string;
+}): Promise<string | null> {
+  const first = await generateTaggedText({
+    model: params.model,
+    tag: params.tag,
+    system: params.system,
+    prompt: params.context,
+    maxOutputTokens: params.maxOutputTokens,
+    sanitize: params.clean,
+  });
+  if (first === null || params.withinLimit(first)) return first;
+
+  // Over the limit: ask the model to rewrite its own reply to fit.
+  const shortened = await generateTaggedText({
+    model: params.model,
+    tag: params.tag,
+    system: params.system,
+    prompt: shortenPrompt({
+      tag: params.tag,
+      limit: params.limit,
+      text: first,
+    }),
+    maxOutputTokens: params.maxOutputTokens,
+    sanitize: params.clean,
+  });
+  const candidate = shortened ?? first;
+  return params.withinLimit(candidate) ? candidate : params.clamp(candidate);
+}
+
+/** Ask the model to rewrite an over-length draft to fit, in the same tag. */
+function shortenPrompt(params: {
+  tag: string;
+  limit: string;
+  text: string;
+}): string {
+  return (
+    `Your previous ${params.tag.replace(/_/g, " ")} is too long. Rewrite it to ` +
+    `${params.limit}, keeping the same meaning, voice and specifics — cut only ` +
+    `what is least essential, and add nothing new.\n\n${params.text}`
+  );
+}
+
+/**
+ * Turn one field's generation failure into a logged null, so a single flaky
+ * field never rejects {@link generateEnhancementFields} and discards the fields
+ * — above all the build prompt — that generated cleanly.
+ */
+function fieldGenerationFailed(tag: string): (error: unknown) => null {
+  return (error) => {
+    logger.warn(
+      { err: error, tag },
+      "Recording enhancement: one field's generation failed; keeping the others",
+    );
+    return null;
+  };
+}
 
 const DESCRIPTION_SYSTEM_PROMPT =
   "You write the one-line description shown under an app's title on a public " +
@@ -127,8 +392,14 @@ const DESCRIPTION_SYSTEM_PROMPT =
   "reminders.' / 'Who owes whom a round — the ledger the London office " +
   "actually uses.'";
 
-/** Word ceiling for the drafted ask — a chat message, not a document. */
-const HUMAN_ASK_MAX_WORDS = 70;
+/**
+ * Word backstop for the drafted ask — generous headroom so a detailed
+ * consolidation (a feature-rich app folds many refinements into one ask) is not
+ * trimmed, rather than a tight target. The model is still guided to keep it a
+ * short casual message (see BUILD_PROMPT_SYSTEM_PROMPT); this only catches
+ * genuinely runaway output — the shorten re-ask, then a hard trim, apply above it.
+ */
+const HUMAN_ASK_MAX_WORDS = 256;
 
 const CLOSING_RESPONSE_SYSTEM_PROMPT =
   "You write the agent's ONE closing reply for a replayed app-building " +
@@ -170,42 +441,57 @@ const BUILD_PROMPT_SYSTEM_PROMPT =
   "drop dead ends that were reversed along with any incidental detail nobody " +
   "would have thought to request.";
 
+/**
+ * Draws on the same canonical categories the gallery's upload dropdown and
+ * the website offer ({@link APP_GALLERY_CATEGORIES}) — this draft is only a
+ * suggested default the builder confirms or overrides at share time, so it
+ * should usually already be one of the real choices.
+ */
 const CATEGORY_SYSTEM_PROMPT =
   "You file an app under ONE gallery category. Given the app's name and the " +
   "chat session in which it was built, answer with a single category and " +
-  "nothing else. Prefer one of: Development, Engineering, Finance, Sales, " +
-  "Marketing, Design, Productivity, Data, Operations, Support, Research, " +
-  "Games, Weird. Use another single word only when none of those fits. " +
-  "Title Case, one or two words, no punctuation, no explanation.";
+  "nothing else. Prefer one of: " +
+  APP_GALLERY_CATEGORIES.join(", ") +
+  ". Use a short category of your own only when none of those fits. " +
+  "Title Case, a few words at most, no punctuation, no explanation.";
 
 /** Bounds so a marathon session still fits one utility-generation request. */
 const MAX_TRANSCRIPT_CHARS = 24_000;
 const MAX_TURN_CHARS = 2_000;
 
-/** One short label, whatever shape the model answered in. */
-function sanitizeCategory(raw: string): string {
+/**
+ * One short label, whatever shape the model answered in. The word/char caps
+ * are only a backstop against a model that ignores the "a few words"
+ * instruction and returns a sentence — sized to pass every canonical
+ * {@link APP_GALLERY_CATEGORIES} through untouched (three of them are three
+ * words, and the longest, "Games & Experiments", is 19 characters).
+ *
+ * @public — exported for testability
+ */
+export function sanitizeCategory(raw: string): string {
   return raw
     .replace(/\s+/g, " ")
     .replace(/^["'`]+|["'`.]+$/g, "")
     .trim()
     .split(" ")
-    .slice(0, 2)
+    .slice(0, 4)
     .join(" ")
-    .slice(0, 40);
+    .slice(0, 48);
 }
 
 /**
- * Force a drafted build prompt back into something a person would have typed.
+ * Clean a drafted build prompt into something a person would have typed —
+ * WITHOUT enforcing the length. Length is held on the output (ask the model to
+ * shorten, then {@link clampHumanAsk} as a last resort), never by truncating the
+ * model, so this deliberately does not word-trim.
  *
  * Instructions alone do not hold: models drift into writing a requirements
  * document — an opening line, then "Features:" and a bullet list — which is the
  * opposite of the one casual ask this stands in for. The human ask is always
  * the prose BEFORE that drift, so the spec tail is cut rather than flattened
  * (flattening a bullet list into a paragraph just yields a run-on sentence).
- *
- * @public — exported for testability
  */
-export function sanitizeHumanAsk(raw: string): string {
+function cleanHumanAsk(raw: string): string {
   let text = raw.trim();
   // A spec section header, or the first bullet/numbered line, marks where the
   // model stopped writing like a person.
@@ -216,16 +502,29 @@ export function sanitizeHumanAsk(raw: string): string {
   const listAt = text.search(/(?:^|\n)\s*(?:[-*+•]|\d+[.)])\s+\S/);
   if (listAt > 0) text = text.slice(0, listAt);
 
-  text = text
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-    .replace(/^\s*(?:[-*+•]|\d+[.)])\s+/gm, "")
-    // Emphasis, code ticks and quote marks — a chat message carries none of
-    // them, and a quoted app title is the tell of a spec.
-    .replace(/[*_`>"“”]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    text
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+      .replace(/^\s*(?:[-*+•]|\d+[.)])\s+/gm, "")
+      // Emphasis, code ticks and quote marks — a chat message carries none of
+      // them, and a quoted app title is the tell of a spec.
+      .replace(/[*_`>"“”]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
 
+/** Whether a cleaned ask is within the word ceiling. */
+function withinHumanAskLimit(text: string): boolean {
+  return text.split(" ").filter(Boolean).length <= HUMAN_ASK_MAX_WORDS;
+}
+
+/**
+ * Hard-trim a cleaned ask to the word ceiling at a sentence boundary — the LAST
+ * resort, after the model has been asked to shorten and still came back over.
+ */
+function clampHumanAsk(text: string): string {
   const words = text.split(" ").filter(Boolean);
   if (words.length <= HUMAN_ASK_MAX_WORDS) return text;
   // Over the cap: keep whole sentences, never a dangling clause.
@@ -240,13 +539,36 @@ export function sanitizeHumanAsk(raw: string): string {
     : `${capped.replace(/[,;:]$/, "")}.`;
 }
 
-/** The prompt already demands the shared ceiling; the slice is the backstop
- * for a model that ignores it, so the UI never has to trim. */
-function sanitizeOneLine(raw: string): string {
-  const oneLine = raw.replace(/\s+/g, " ").trim();
-  return oneLine
-    .replace(/^["'`]+|["'`]+$/g, "")
-    .slice(0, APP_RECORDING_DESCRIPTION_MAX_CHARS);
+/**
+ * Clean + clamp a drafted build prompt: the full backstop, used when a caller
+ * wants the bounded result in one call (and by the tests that pin this shape).
+ *
+ * @public — exported for testability
+ */
+export function sanitizeHumanAsk(raw: string): string {
+  return clampHumanAsk(cleanHumanAsk(raw));
+}
+
+/**
+ * Clean a drafted description to one line — collapse whitespace, strip wrapping
+ * quotes — WITHOUT enforcing the character limit (that is held on the output,
+ * same as the build prompt).
+ */
+function cleanOneLine(raw: string): string {
+  return raw
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^["'`]+|["'`]+$/g, "");
+}
+
+/** Whether a cleaned description is within the character ceiling. */
+function withinDescriptionLimit(text: string): boolean {
+  return text.length <= APP_RECORDING_DESCRIPTION_MAX_CHARS;
+}
+
+/** Hard-trim a cleaned description to the character ceiling — the last resort. */
+function clampDescription(text: string): string {
+  return text.slice(0, APP_RECORDING_DESCRIPTION_MAX_CHARS);
 }
 
 /**

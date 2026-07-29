@@ -15,10 +15,10 @@ vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: (...args: unknown[]) => mockExecuteA2AMessage(...args),
 }));
 
-vi.mock("@/routes/mcp-gateway.utils", async () => {
+vi.mock("@/routes/mcp-gateway/utils", async () => {
   const actual = await vi.importActual<
-    typeof import("@/routes/mcp-gateway.utils")
-  >("@/routes/mcp-gateway.utils");
+    typeof import("@/routes/mcp-gateway/utils")
+  >("@/routes/mcp-gateway/utils");
   return {
     ...actual,
     validateMCPGatewayToken: (...args: unknown[]) =>
@@ -207,6 +207,45 @@ describe("a2a v2 streaming route", () => {
       .filter((id): id is string => typeof id === "string");
     expect(taskIds.length).toBeGreaterThan(0);
     expect(new Set(taskIds).size).toBe(1);
+  });
+
+  test("SendMessage with a blank text part on an existing context never starts the agent run", async () => {
+    const sendMessage = (id: number, parts: unknown[], contextId?: string) =>
+      app.inject({
+        method: "POST",
+        url: `/v2/a2a/${agentId}`,
+        headers: { authorization: "Bearer test-token" },
+        payload: {
+          jsonrpc: "2.0",
+          id,
+          method: "SendMessage",
+          params: {
+            message: {
+              messageId: crypto.randomUUID(),
+              role: "ROLE_USER",
+              ...(contextId ? { contextId } : {}),
+              parts,
+            },
+          },
+        },
+      });
+
+    // Seed the context so its history ends with an agent turn — the state that
+    // made a contentless follow-up send prior context alone, terminating on an
+    // assistant message that providers without prefill support reject.
+    const seeded = await sendMessage(10, [{ text: "Hello there" }]);
+    const contextId = seeded.json().result.message.contextId;
+    expect(contextId).toBeDefined();
+    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
+
+    const response = await sendMessage(11, [{ text: "   " }], contextId);
+
+    expect(response.headers["content-type"]).not.toContain("text/event-stream");
+    const body = response.json();
+    expect(body.result).toBeUndefined();
+    expect(body.error).toEqual({ code: -32602, message: "Nothing to execute" });
+    // Still 1: the blank follow-up added no run of its own.
+    expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
   });
 
   test("returns a buffered JSON-RPC error (not an SSE stream) when the token is unauthorized", async () => {

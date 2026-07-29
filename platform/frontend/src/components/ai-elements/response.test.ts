@@ -139,13 +139,27 @@ describe("Response app-link canonicalization", () => {
     );
   });
 
-  it("only repairs the exact app-id shape, not any slashless a/ prefix", () => {
-    // Slashless but not a UUID: the repair keys on the app-id shape, so it must
-    // NOT promote this to an absolute `/a/…` link. (harden then blocks the
-    // slashless relative link, so no anchor survives — the point is only that
-    // our plugin did not rewrite it.)
-    const { container } = renderResponse("[Docs](a/not-a-uuid)");
-    expect(container.querySelector('a[href="/a/not-a-uuid"]')).toBeNull();
+  it("repairs a slash-dropped custom-slug app link", () => {
+    // An app addressed by its slug is the same link shape as one addressed by
+    // its id, and the model drops the leading slash on both.
+    const { container } = renderResponse("[Open](a/sales-dashboard)");
+    expect(container.querySelector("a")?.getAttribute("href")).toBe(
+      "/a/sales-dashboard",
+    );
+  });
+
+  it.each([
+    ["uppercase, which no slug contains", "a/Sales-Dashboard"],
+    ["an underscore", "a/sales_dashboard"],
+    ["a trailing hyphen", "a/sales-"],
+    ["a nested path segment", "a/sales/dashboard"],
+  ])("does not repair a slashless a/ prefix with %s", (_label, url) => {
+    // The repair keys on the id and slug shapes only, so anything that could
+    // not be an app address is left alone. (harden then blocks the slashless
+    // relative link, so no anchor survives — the point is only that our plugin
+    // did not rewrite it.)
+    const { container } = renderResponse(`[Docs](${url})`);
+    expect(container.querySelector(`a[href="/${url}"]`)).toBeNull();
   });
 
   it("does not rewrite the pattern inside a code span", () => {

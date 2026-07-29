@@ -23,6 +23,7 @@ import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import {
   LlmProviderApiKeyModel,
   ModelModel,
+  ModelTeamModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -461,6 +462,76 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       expect(rows[0].inputTokens).toBe(0);
       expect(rows[0].outputTokens).toBe(0);
     });
+
+    test("streaming failure after SSE headers and content persists an error interaction", async () => {
+      // The provider fails mid-stream: SSE headers and content chunks are already
+      // on the wire, but the usage-bearing final chunk never arrives. The
+      // finally-block persist is gated on usage, so this must be covered by the
+      // catch path or the failure leaves no trace in LLM logs / session history.
+      openAiStubOptions.throwAtChunk = 2;
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: true,
+        },
+      });
+
+      // Headers were already committed, so the failure surfaces as an SSE error
+      // event on a 200 response rather than an HTTP error status.
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain("event: error");
+
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].response).toMatchObject({
+        error: expect.stringContaining("Simulated OpenAI stream failure"),
+      });
+      expect(rows[0].inputTokens).toBe(0);
+      expect(rows[0].outputTokens).toBe(0);
+    });
+
+    test("stream ending early without usage persists a partial interaction", async () => {
+      // The provider closes the stream cleanly mid-way (no throw) before the
+      // usage chunk. Nothing raises, so the catch path never runs and the
+      // finally-block persist is gated on usage — the call must still be
+      // recorded rather than vanishing from interaction history.
+      openAiStubOptions.interruptAtChunk = 2;
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          "user-agent": "test-client",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello!" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+    });
   });
 
   describe("Anthropic", () => {
@@ -583,6 +654,65 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
           value: expect.any(Number),
         }),
       );
+    });
+
+    test("records a context-variant id as the model it names, and forwards it unchanged", async () => {
+      const forwarded: string[] = [];
+      vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+        () =>
+          ({
+            messages: {
+              create: async (...args: unknown[]) => {
+                const [params] = args as [{ model: string }];
+                forwarded.push(params.model);
+                return (
+                  createAnthropicTestClient(anthropicStubOptions).messages
+                    .create as (...a: unknown[]) => unknown
+                )(...args);
+              },
+            },
+          }) as never,
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          // A client asking for the long-context variant of a model that is
+          // already priced under its plain id.
+          model: "claude-3-5-sonnet-20241022[1m]",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "Hello!" }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // The marker names the same model, so usage is attributed to the priced
+      // record rather than to a second one no catalog can describe.
+      expect(counterInc).toHaveBeenCalledWith(
+        expect.objectContaining({
+          labels: expect.objectContaining({
+            provider: "anthropic",
+            model: "claude-3-5-sonnet-20241022",
+          }),
+        }),
+      );
+      await expect(
+        ModelModel.findByProviderAndModelId(
+          "anthropic",
+          "claude-3-5-sonnet-20241022[1m]",
+        ),
+      ).resolves.toBeNull();
+
+      // The provider still receives the id the client asked for.
+      expect(forwarded).toEqual(["claude-3-5-sonnet-20241022[1m]"]);
     });
   });
 
@@ -1549,5 +1679,107 @@ describe("LLM Proxy Handler — per-user provider connect required", () => {
     expect(body.error.internal_code).toBe("provider_auth_required");
     expect(body.error.message).toContain("GitHub Copilot");
     expect(body.error.message).toContain("/settings");
+  });
+});
+
+describe("LLM Proxy Handler — team-restricted models", () => {
+  let app: FastifyInstance;
+  let testAgent: Agent;
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient({}) as never,
+    );
+    vi.spyOn(virtualKeyRateLimiter, "check").mockResolvedValue(undefined);
+    vi.spyOn(virtualKeyRateLimiter, "recordFailure").mockResolvedValue(
+      undefined,
+    );
+
+    testAgent = await makeAgent({ name: "Test Restricted Models Agent" });
+    metrics.llm.initializeMetrics([]);
+    mockEvaluatePolicies.mockResolvedValue(null);
+
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
+    });
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  async function injectChatCompletionAs(passthroughToken: string) {
+    return await app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        "x-archestra-virtual-key": passthroughToken,
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Hello!" }],
+        stream: false,
+      },
+    });
+  }
+
+  test("blocks a restricted model for users outside its teams and allows team members", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const model = await ModelModel.findByProviderAndModelId("openai", "gpt-4o");
+    if (!model) throw new Error("expected gpt-4o model row");
+
+    const insider = await makeUser();
+    await makeMember(insider.id, testAgent.organizationId);
+    const outsider = await makeUser();
+    await makeMember(outsider.id, testAgent.organizationId);
+
+    const devTeam = await makeTeam(testAgent.organizationId, insider.id);
+    await makeTeamMember(devTeam.id, insider.id);
+    await ModelTeamModel.syncModelTeams(model.id, [devTeam.id]);
+
+    const { value: outsiderToken } = await VirtualApiKeyModel.create({
+      organizationId: testAgent.organizationId,
+      name: "outsider-pt",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: outsider.id,
+    });
+    const blocked = await injectChatCompletionAs(outsiderToken);
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json().error).toMatchObject({
+      type: "api_authorization_error",
+      internal_code: "model_restricted_to_teams",
+    });
+
+    const { value: insiderToken } = await VirtualApiKeyModel.create({
+      organizationId: testAgent.organizationId,
+      name: "insider-pt",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: insider.id,
+    });
+    const allowed = await injectChatCompletionAs(insiderToken);
+    expect(allowed.statusCode).toBe(200);
   });
 });

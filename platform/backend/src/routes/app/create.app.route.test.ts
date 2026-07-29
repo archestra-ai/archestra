@@ -327,3 +327,101 @@ describe("POST /api/apps", () => {
     expect(response.json().environmentId).toBe(restricted.id);
   });
 });
+
+describe("POST /api/apps — slug", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & { organizationId: string; user: User }
+      ).organizationId = organizationId;
+      (request as typeof request & { user: User }).user = user;
+    });
+
+    const { default: appRoutes } = await import("./app.routes");
+    await app.register(appRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("derives a slug from the name when none is given", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Sales Dashboard", scope: "org" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().slug).toBe("sales-dashboard");
+  });
+
+  test("honours an explicitly requested slug", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Sales Dashboard", scope: "org", slug: "revenue" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().slug).toBe("revenue");
+  });
+
+  test("reports a duplicate slug as a URL conflict, not a name conflict", async () => {
+    await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "First", scope: "org", slug: "shared-url" },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Second", scope: "org", slug: "shared-url" },
+    });
+
+    expect(response.statusCode).toBe(409);
+    // The name is free — only the URL collided, and the message must say so.
+    expect(response.json().error.message).not.toContain("app named");
+    expect(response.json().error.message).toContain("URL");
+  });
+
+  test("still reports a duplicate name as a name conflict", async () => {
+    await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Twice", scope: "org", slug: "first-url" },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Twice", scope: "org", slug: "second-url" },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.message).toContain('app named "Twice"');
+  });
+
+  test("rejects a slug the shape rules refuse, before creating anything", async () => {
+    // AppSlugSchema owns which shapes are legal (types/app.test.ts); this only
+    // pins that the create route runs it rather than passing the value through.
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Bad", scope: "org", slug: "Not A Slug" },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+});

@@ -14,10 +14,28 @@ type AllVirtualApiKeysParams = Partial<AllVirtualApiKeysQuery> & {
 const {
   getAllVirtualApiKeys,
   getVirtualApiKey,
+  getVirtualApiKeyValue,
   createVirtualApiKey,
   updateVirtualApiKey,
   deleteVirtualApiKey,
 } = archestraApiSdk;
+
+/**
+ * Fetch a virtual key's raw value on demand (reveal/copy). Author-only —
+ * the backend 403s for keys created by someone else.
+ */
+export function useFetchVirtualApiKeyValue() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await getVirtualApiKeyValue({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data?.value ?? null;
+    },
+  });
+}
 
 export function useVirtualApiKeys(providerApiKeyId: string | null) {
   return useQuery({

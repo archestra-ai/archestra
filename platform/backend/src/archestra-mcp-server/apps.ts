@@ -467,13 +467,17 @@ const registry = defineArchestraTools([
             organizationId,
             authorId: userId,
             name: appName,
+            slug: await AppModel.generateUniqueSlug({
+              name: appName,
+              organizationId,
+            }),
             description: args.description ?? null,
             templateId: DEFAULT_APP_TEMPLATE_ID,
           },
           payload,
         });
       } catch (error) {
-        if (isUniqueConstraintError(error)) {
+        if (isUniqueConstraintError(error, "apps_org_author_name_uidx")) {
           const existingId = await AppModel.findIdByOrgAuthorName({
             organizationId,
             authorId: userId,
@@ -539,7 +543,7 @@ const registry = defineArchestraTools([
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app.id)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+        `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
       );
     },
   }),
@@ -698,7 +702,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_RENDER_APP_SHORT_NAME,
     title: "Render App",
     description:
-      "Render an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /a/<id>. This only displays the app — to read its HTML source use read_app, and to check how it rendered (runtime errors / CSP violations) use get_app_diagnostics or validate_app.",
+      "Render an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /a/<slug>, falling back to /a/<id>. This only displays the app — to read its HTML source use read_app, and to check how it rendered (runtime errors / CSP violations) use get_app_diagnostics or validate_app.",
     schema: GetAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -1015,7 +1019,7 @@ const registry = defineArchestraTools([
           latestVersion: updated.latestVersion,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `${summary}${nextEditBaseVersionHint(updated.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(updated.name, updated.id)}${replacementNote}${skippedNote}${warningsNote}${excerptsNote}`,
+        `${summary}${nextEditBaseVersionHint(updated.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(updated.name, updated)}${replacementNote}${skippedNote}${warningsNote}${excerptsNote}`,
       );
     },
   }),
@@ -1210,14 +1214,14 @@ const registry = defineArchestraTools([
       // just granted, and with its launch tool still withheld from the gateway.
       await AppModel.setEnabled(args.appId, true);
 
-      const runUrl = appRunUrl(updated.id);
+      const runUrl = appRunUrl(updated);
       const audience =
         updated.scope === "org"
           ? "the whole organization"
           : "the selected team(s)";
       return structuredSuccessResult(
         { id: updated.id, scope: updated.scope, runUrl },
-        `Published "${escapeAppNameForModelText(updated.name)}" to ${audience}. Standalone page: ${appRunLink(updated.name, updated.id)}`,
+        `Published "${escapeAppNameForModelText(updated.name)}" to ${audience}. Standalone page: ${appRunLink(updated.name, updated)}`,
       );
     },
   }),
@@ -1945,7 +1949,7 @@ export function scaffoldPartialToolFailureResult(
       latestVersion: app.latestVersion,
       status: "partial" as const,
     },
-    `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}, but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app.id)}\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${fencedBlock(seededHtml, "html")}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+    `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}, but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app)}\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${fencedBlock(seededHtml, "html")}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
   );
 }
 

@@ -1,7 +1,11 @@
 import crypto from "node:crypto";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import config from "@/config";
-import { SkillSandboxModel, SkillSandboxReplayEventModel } from "@/models";
+import {
+  SkillSandboxFileModel,
+  SkillSandboxModel,
+  SkillSandboxReplayEventModel,
+} from "@/models";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import {
@@ -91,7 +95,11 @@ describe("stageAttachmentsIntoSandbox (integration)", () => {
     expect(upload.upload.path).toBe(
       "/home/sandbox/attachments/weird_name_.sqlite",
     );
-    expect(upload.upload.data?.toString("utf8")).toBe("sqlite-bytes");
+    expect(
+      (
+        await SkillSandboxFileModel.findUploadDataById(upload.upload.id)
+      )?.toString("utf8"),
+    ).toBe("sqlite-bytes");
     expect(upload.upload.sourceAttachmentId).not.toBeNull();
   });
 

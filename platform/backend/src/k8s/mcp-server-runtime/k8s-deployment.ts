@@ -90,6 +90,19 @@ const AWS_APPLICATION_NETWORK_POLICY_RESOURCE = {
 // Ready before giving up. 5 minutes covers a slow image pull on first install.
 const POD_READY_WAIT_MS = 5 * TimeInMs.Minute;
 
+/**
+ * Thrown when a user's MCP server deployment fails to come up (crashing
+ * container, unschedulable pod, bad image/config). A condition of the user's
+ * server or environment, not a bug of ours: error tracking drops it by name,
+ * and routes surface it as an upstream failure.
+ */
+class McpServerDeploymentFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "McpServerDeploymentFailedError";
+  }
+}
+
 // Container waiting reasons that won't resolve without user action (bad
 // config, invalid image name, crashing server) — treat as terminal failures.
 const TERMINAL_CONTAINER_WAITING_REASONS = [
@@ -3210,7 +3223,7 @@ export default class K8sDeployment {
           if (eventCheck.hasFailure) {
             this.state = "failed";
             this.errorMessage = eventCheck.message || "Deployment failed";
-            throw new Error(
+            throw new McpServerDeploymentFailedError(
               `Deployment ${this.deploymentName} failed: ${eventCheck.message}`,
             );
           }
@@ -3236,7 +3249,7 @@ export default class K8sDeployment {
                 this.state = "failed";
                 this.errorMessage =
                   conditionCheck.message || "Pod scheduling failed";
-                throw new Error(
+                throw new McpServerDeploymentFailedError(
                   `Deployment ${this.deploymentName} failed: ${conditionCheck.message}`,
                 );
               }
@@ -3257,7 +3270,7 @@ export default class K8sDeployment {
                 ) {
                   this.state = "failed";
                   this.errorMessage = message;
-                  throw new Error(
+                  throw new McpServerDeploymentFailedError(
                     `Deployment ${this.deploymentName} failed: ${waitingReason} - ${message}`,
                   );
                 }

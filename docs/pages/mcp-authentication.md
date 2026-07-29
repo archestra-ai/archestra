@@ -3,7 +3,7 @@ title: "Authentication"
 category: MCP
 order: 4
 description: "How authentication works for MCP clients and upstream MCP servers"
-lastUpdated: 2026-07-20
+lastUpdated: 2026-07-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -67,7 +67,7 @@ Admins can change this in **Settings > Organization > Auth**. The setting is org
 
 When the caller is an application — a backend service, automation job, or another team's bot — rather than a human, register an MCP OAuth client and use the OAuth 2.0 `client_credentials` grant. This is the machine-to-machine equivalent of the user OAuth flow: the credential belongs to an application, not a person.
 
-Create and manage these clients under **Client Credentials > OAuth Clients** (pick the *Agents & MCP gateways* client type). Each client is scoped to an explicit list of gateways and returns a `client_id` and a one-time `client_secret` (which you can rotate later). A client can only mint tokens for the gateways on its list, so one team can hand a client to another team for access to a curated set of gateways and nothing else.
+Open the **Connect** dialog for an Agent or MCP Gateway, then use its OAuth client controls. Each client is scoped to an explicit list of Agents and gateways. Creation returns a `client_id` and a one-time `client_secret`, which you can rotate later. A client can only mint tokens for resources on its list.
 
 Like agents and gateways, each OAuth client has a visibility level — **Personal** (only its creator), **Teams** (members of selected teams), or **Organization** — controlling who can see, edit, rotate, and delete it. New clients default to Personal; sharing with teams requires `mcpOauthClient:team-admin`, organization-wide visibility requires `mcpOauthClient:admin`, and admins see every client regardless. Visibility only governs management access — it does not change which gateways the client's tokens can reach at runtime.
 
@@ -85,7 +85,7 @@ Because there is no acting user, per-user dynamic credential resolution does not
 
 When a pre-registered application needs to act with the **user's** Archestra identity — for example an agentic chat backend calling gateways for whoever is signed in — register an MCP OAuth client with the `authorization_code` grant. Its tokens are user-bound, so unlike client credentials, gateway tools resolve each caller's own permissions and connections, and **Resolve at call time** works.
 
-Create it under **Client Credentials > OAuth Clients** (pick the *Agents & MCP gateways* client type), choose the "On behalf of users" grant type, and add one or more redirect URIs. The client is confidential and returns a `client_id` and one-time `client_secret`; PKCE is required.
+Open the **Connect** dialog for an Agent or MCP Gateway. Create an OAuth client, choose **On behalf of users**, and add one or more redirect URIs. The client is confidential and returns a `client_id` and one-time `client_secret`. PKCE is required.
 
 The application runs the standard browser flow:
 
@@ -109,6 +109,8 @@ For direct API integrations, clients can authenticate using a static Bearer toke
 Bearer tokens authenticate the client to Archestra. They are not enterprise assertions by themselves. If Archestra also needs to exchange the matched user's IdP token and use the result on the downstream MCP request, it must still have a usable IdP token for that user.
 
 For per-user access to downstream systems like GitHub or Jira, bearer tokens should usually be **personal user tokens**. Team and organization tokens can authenticate to the gateway, but they do not identify a specific user strongly enough for Archestra to broker per-user downstream credentials on their own.
+
+Built-in Archestra tools that act for a person — querying a knowledge base, for example — are unavailable to team and organization tokens for the same reason. They are hidden from `tools/list`, and calling one returns an error naming the credential as the cause. Use a personal token, a user OAuth token, or an Identity Provider JWT.
 
 ### Identity Assertion JWT Authorization Grant (ID-JAG)
 
@@ -162,7 +164,7 @@ This credential resolution supports a common setup: an admin installs upstream M
 4. Client sends requests to the gateway with `Authorization: Bearer <jwt>`
 5. Gateway discovers the JWKS URL from the IdP's OIDC discovery endpoint
 6. Gateway validates the JWT signature, issuer, audience (IdP's client ID), and expiration
-7. Gateway extracts the `email` claim from the JWT and matches it to an Archestra user account
+7. Gateway reads the email claim from the JWT and matches it to an Archestra user account
 8. Gateway resolves upstream credentials: if the server has its own credentials, those are used; otherwise the original JWT is propagated
 
 #### Requirements
@@ -170,9 +172,17 @@ This credential resolution supports a common setup: an admin installs upstream M
 - The Identity Provider must be an **OIDC provider** (SAML providers do not support JWKS)
 - The IdP must expose a standard OIDC discovery endpoint (`.well-known/openid-configuration`) with a `jwks_uri`
 - The JWT `iss` claim must match the IdP's issuer URL
-- The JWT `aud` claim must match the IdP's client ID (if configured)
-- The JWT must contain an `email` claim that matches an existing Archestra user
+- The IdP must have a client ID, and the JWT `aud` claim must match it
+- The JWT must carry an email that matches an existing Archestra user
 - The user must have `profile:admin` permission or be a member of at least one team associated with the gateway they are trying to use
+
+#### Namespaced Email Claims
+
+The gateway reads the email from the `email` claim by default. Some IdPs namespace their custom claims — `https://example.com/email`, for example — and leave the standard `email` claim unset.
+
+Set **Email Claim** under the Identity Provider's Attribute Mapping to the claim that carries the email. The gateway reads that claim first and falls back to `email`.
+
+Use the Identity Provider's **Token Debugger** to see which claims your tokens actually carry.
 
 ## Upstream MCP Server Authentication
 
@@ -239,6 +249,14 @@ flowchart TD
     style G fill:#d4edda,stroke:#28a745
     style J fill:#f8d7da,stroke:#dc3545
 ```
+
+#### Called As
+
+Every tool call records the identity whose credential served it. Chat shows it on the tool call card. The MCP Gateway logs show it in the **Called as** column, next to the user who made the call. A call through a shared service account reads as that account, on behalf of the caller.
+
+The identity is a person, a team, or the organization. Calls that use a token minted for the caller — Identity Provider Token Exchange, or a forwarded JWKS token — run as that caller. A call made with a gateway token runs as the team or the organization that issued the token.
+
+MCP clients see the same identity on the tool result, under the `_meta.archestraExecutedAs` key.
 
 #### Missing Credentials
 

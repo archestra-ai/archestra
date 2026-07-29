@@ -1,3 +1,4 @@
+import { urlSlugify } from "@archestra/shared";
 import {
   and,
   count,
@@ -12,16 +13,26 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { softDelete } from "@/database/soft-delete";
 import { ApiError } from "@/types";
-import type { App, InsertApp } from "@/types/app";
+import {
+  APP_NAME_MAX_LENGTH,
+  type App,
+  type InsertApp,
+  isReservedAppSlug,
+} from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
 import { escapeLikePattern } from "@/utils/sql-search";
+import { isUuid } from "@/utils/uuid";
 import AppAccessModel from "./app-access";
 import AppToolModel from "./app-tool";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import McpCatalogTeamModel from "./mcp-catalog-team";
+import McpCatalogUserModel from "./mcp-catalog-user";
 
 /** Raw `apps` row (no `scope`/`environmentId` — those live on the backing catalog). */
 type AppRow = typeof schema.appsTable.$inferSelect;
+
+/** Length of the `-<hex>` a colliding generated slug is disambiguated with. */
+const COLLISION_SUFFIX_LENGTH = 7;
 
 // An app's visibility (`scope`) and `environmentId` are owned by its backing
 // catalog (FR-30). Reads JOIN apps→mcp_server→internal_mcp_catalog and surface
@@ -240,6 +251,85 @@ class AppModel {
     return result?.id ?? null;
   }
 
+  /**
+   * Resolve a `/a/<segment>` URL segment — a slug or an app id — to an app id
+   * within one organization, or null when nothing matches. Callers still run
+   * the view check on the resolved id; this only turns a segment into an id.
+   */
+  static async resolveIdFromIdOrSlug({
+    idOrSlug,
+    organizationId,
+  }: {
+    idOrSlug: string;
+    organizationId: string;
+  }): Promise<string | null> {
+    // `apps.id` is a uuid column. Casting it to text so it can be compared
+    // against a possibly-non-uuid slug defeats the primary-key index and forces
+    // a sequential scan, so only compare against `id` when the segment is
+    // itself a uuid, and otherwise rely on the indexed `slug` lookup.
+    const matchesIdOrSlug = isUuid(idOrSlug)
+      ? or(
+          eq(schema.appsTable.id, idOrSlug),
+          eq(schema.appsTable.slug, idOrSlug),
+        )
+      : eq(schema.appsTable.slug, idOrSlug);
+
+    const [row] = await db
+      .select({ id: schema.appsTable.id })
+      .from(schema.appsTable)
+      .where(
+        and(
+          matchesIdOrSlug,
+          eq(schema.appsTable.organizationId, organizationId),
+          notDeleted(schema.appsTable),
+        ),
+      )
+      .limit(1);
+
+    return row?.id ?? null;
+  }
+
+  /**
+   * A free `/a/` slug derived from an app name, suffixed on collision. Racy by
+   * construction — `apps_org_slug_uidx` is the real guard, and the caller maps
+   * its violation to a 409.
+   */
+  static async generateUniqueSlug({
+    name,
+    organizationId,
+  }: {
+    name: string;
+    organizationId: string;
+  }): Promise<string> {
+    // Everything AppSlugSchema refuses from a user must also be unreachable by
+    // derivation: an empty slugification (a punctuation-only name), a uuid shape
+    // (it would shadow an id in resolveIdFromIdOrSlug), and a reserved segment.
+    // The truncation leaves room for the collision suffix.
+    const slugified = urlSlugify(name)
+      .slice(0, APP_NAME_MAX_LENGTH - COLLISION_SUFFIX_LENGTH)
+      // Truncating mid-word can leave the trailing hyphen the shape forbids.
+      .replace(/-+$/, "");
+    const usable =
+      slugified !== "" && !isUuid(slugified) && !isReservedAppSlug(slugified);
+    const baseSlug = usable ? slugified : "app";
+
+    const [existing] = await db
+      .select({ id: schema.appsTable.id })
+      .from(schema.appsTable)
+      .where(
+        and(
+          eq(schema.appsTable.organizationId, organizationId),
+          eq(schema.appsTable.slug, baseSlug),
+          notDeleted(schema.appsTable),
+        ),
+      )
+      .limit(1);
+
+    return existing
+      ? `${baseSlug}-${crypto.randomUUID().slice(0, 6)}`
+      : baseSlug;
+  }
+
   /** A single active app, returned only if the caller may view it (else null). */
   static async findByIdForCaller(params: {
     id: string;
@@ -337,17 +427,27 @@ class AppModel {
   static async update(params: {
     id: string;
     patch?: Partial<
-      Pick<App, "name" | "description" | "scope" | "spec" | "environmentId">
+      Pick<
+        App,
+        "name" | "slug" | "description" | "scope" | "spec" | "environmentId"
+      >
     >;
     version?: VersionPayload;
     teamIds?: string[];
+    /**
+     * Individually-named grants, routed to the backing catalog like `teamIds`.
+     * Undefined leaves them untouched; an empty array revokes every grant.
+     */
+    userIds?: string[];
     expectedLatestVersion?: number;
   }): Promise<App | null> {
     const patch = params.patch ?? {};
     // App-row columns only; scope/environmentId are owned by the backing catalog.
-    const appRowPatch: Partial<Pick<AppRow, "name" | "description" | "spec">> =
-      {};
+    const appRowPatch: Partial<
+      Pick<AppRow, "name" | "slug" | "description" | "spec">
+    > = {};
     if (patch.name !== undefined) appRowPatch.name = patch.name;
+    if (patch.slug !== undefined) appRowPatch.slug = patch.slug;
     if (patch.description !== undefined)
       appRowPatch.description = patch.description;
     if (patch.spec !== undefined) appRowPatch.spec = patch.spec;
@@ -397,7 +497,8 @@ class AppModel {
         patch.scope !== undefined ||
         patch.environmentId !== undefined ||
         patch.name !== undefined ||
-        params.teamIds !== undefined;
+        params.teamIds !== undefined ||
+        params.userIds !== undefined;
       if (app.mcpServerId && routesToCatalog) {
         const [server] = await tx
           .select({ catalogId: schema.mcpServersTable.catalogId })
@@ -436,6 +537,13 @@ class AppModel {
             await McpCatalogTeamModel.syncCatalogTeams(
               server.catalogId,
               params.teamIds,
+              tx,
+            );
+          }
+          if (params.userIds !== undefined) {
+            await McpCatalogUserModel.syncCatalogUsers(
+              server.catalogId,
+              params.userIds,
               tx,
             );
           }

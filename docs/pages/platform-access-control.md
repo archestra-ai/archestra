@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-07-21
+lastUpdated: 2026-07-29
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -60,7 +60,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | GitHub App Configurations | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query`, `deploy-to-restricted` |
 | Chats | `read`, `create`, `update`, `delete` |
-| Projects | `read`, `create`, `update`, `delete` |
+| Projects | `read`, `create`, `update`, `delete`, `share-org` |
 | Files | `manage` |
 | Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
@@ -105,7 +105,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Environments | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
-| Projects | `read`, `create`, `update`, `delete` |
+| Projects | `read`, `create`, `update`, `delete`, `share-org` |
 | Files | `manage` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
@@ -195,7 +195,7 @@ The following table lists all available permissions that can be assigned to cust
 | `llmLimit:update` | Modify existing usage limits |
 | `llmLimit:delete` | Remove usage limits |
 | `llmModel:read` | View synced LLM models and capabilities |
-| `llmModel:update` | Modify LLM model pricing and modality settings |
+| `llmModel:update` | Modify LLM model pricing, modality and generation-parameter settings |
 | `llmOauthClient:read` | View LLM OAuth client registrations |
 | `llmOauthClient:create` | Create LLM OAuth client registrations |
 | `llmOauthClient:update` | Modify LLM OAuth client registrations |
@@ -257,6 +257,7 @@ The following table lists all available permissions that can be assigned to cust
 | `member:create` | Add new members to the organization |
 | `member:update` | Change member roles and settings |
 | `member:delete` | Remove members from the organization |
+| `member:impersonate` | Temporarily sign in as another member to see the app with their access (role debugging) |
 | `optimizationRule:read` | View optimization rules |
 | `optimizationRule:create` | Create new optimization rules |
 | `optimizationRule:update` | Modify optimization rules |
@@ -267,6 +268,7 @@ The following table lists all available permissions that can be assigned to cust
 | `project:create` | Create projects |
 | `project:update` | Edit project descriptions, instructions, and sharing |
 | `project:delete` | Delete projects |
+| `project:share-org` | Share projects with the entire organization, and change the sharing of or delete a project that is already org-wide. Without it, projects can still be shared with teams. Additive: sharing still requires project:update and deleting still requires project:delete. |
 | `project:admin` | Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role). |
 | `project:read-all` | View chats that other members started in any project you can access. Without this, you only see the chats you started yourself — including in projects you own. |
 | `sandbox:execute` | Run commands and upload/download files in code execution sandboxes |
@@ -327,6 +329,8 @@ Team membership has its own role, separate from organization RBAC:
 - `member`: belongs to the team and can access resources shared with that team
 - `admin`: can manage membership and team-scoped settings for that team, such as external group sync mappings
 
+Whoever creates a team joins it as that team's first admin, so they can manage its members straight away.
+
 Team admins do **not** automatically receive organization-level team permissions. Renaming a team, editing its description, creating teams, and deleting teams require the matching organization RBAC permission such as `team:update`, `team:create`, or `team:delete`.
 
 Team roles are also separate from resource actions named `:team-admin`. For example, `agent:team-admin` controls team-scoped agent management; it does not make the user an admin member of every team.
@@ -354,6 +358,12 @@ Examples:
 - Organization-wide records require the resource-specific admin permission such as `llmProviderApiKey:admin` or `llmVirtualKey:admin`
 
 These resources do **not** use `:team-admin`.
+
+### Team-Restricted Models
+
+You can limit an LLM model to specific teams. Open the model on the Models page and pick teams under "Limit to teams" — dev teams get frontier models while test teams use cheaper ones, for example.
+
+A model with no teams selected stays available to everyone. A restricted model is hidden from model pickers and `/models` listings for users outside its teams, and the LLM Proxy rejects their requests to it with `403`. Users with `llmModel:update`, including organization admins, keep full access.
 
 ### Chat Access And Optional UI Controls
 

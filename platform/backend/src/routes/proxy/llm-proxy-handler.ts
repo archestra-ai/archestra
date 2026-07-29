@@ -16,6 +16,7 @@ import {
   providerDisplayNames,
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
+  stripClaudeContextVariantSuffix,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
 import {
@@ -27,6 +28,8 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { LRUCacheManager } from "@/cache-manager";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
+import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -57,12 +60,14 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
+import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import {
   ApiError,
   type DualLlmAnalysis,
   type GatewayAgent,
   type InteractionAuthMethod,
   type InteractionRequest,
+  type InteractionResponse,
   type LLMProvider,
   type LLMStreamAdapter,
   type ToolCompressionStats,
@@ -588,12 +593,14 @@ export async function handleLLMProxy<
   // 5. Enforce authentication for keyless providers on external requests.
   // A passthrough key authenticates the user but carries no provider credential,
   // so it intentionally does not satisfy the keyless-provider requirement.
-  assertAuthenticatedForKeylessProvider(
+  assertAuthenticatedForKeylessProvider({
     apiKey,
-    wasVirtualKeyResolved || wasOAuthAuthenticated,
+    wasVirtualKeyResolved: wasVirtualKeyResolved || wasOAuthAuthenticated,
     wasJwksAuthenticated,
-    request.ip,
-  );
+    requestIp: request.ip,
+    providerSuppliesServerCredential:
+      providerSuppliesServerCredential(providerName),
+  });
 
   // All authenticated user-scoped credentials must resolve to the same user.
   assertConsistentUserCredentials([
@@ -602,6 +609,19 @@ export async function handleLLMProxy<
     oauthUserId,
     regularVirtualKeyUserId,
   ]);
+
+  // The acting user as proven by a credential, as opposed to `userId`, which
+  // starts from the unauthenticated X-Archestra-User-Id / OpenWebUI-email
+  // headers. Those headers are attribution hints — good enough for logging and
+  // usage records, never sufficient to unlock access — so authorization checks
+  // must read this instead. Undefined for org-scoped virtual keys, OAuth client
+  // credentials, and raw provider-key calls, none of which identify a user.
+  const authenticatedUserId =
+    authOverride?.userId ??
+    passthroughUserId ??
+    jwksUserId ??
+    oauthUserId ??
+    regularVirtualKeyUserId;
 
   // Fall back to the personal standard virtual key's owner for user attribution.
   // Higher-precedence sources — the passthrough key, JWKS, OAuth, and the
@@ -701,12 +721,19 @@ export async function handleLLMProxy<
                 resultAction: organization.defaultDiscoveredToolResultPolicy,
               }
             : undefined,
+          { userId, externalAgentId },
         );
       }
     }
 
     // Cost optimization - potentially switch to cheaper model
-    const baselineModel = requestAdapter.getModel();
+    // A client may mark a Claude id with a context variant (`…[1m]`). It names
+    // the same model at the same price, so it is dropped for bookkeeping —
+    // otherwise the request records a model no catalog lists, which can never be
+    // priced. The request itself is forwarded with the id the client sent.
+    const baselineModel = stripClaudeContextVariantSuffix(
+      requestAdapter.getModel(),
+    );
     const hasTools = requestAdapter.hasTools();
     const tools = requestAdapter.getTools();
     // Cast messages since getOptimizedModel expects specific provider types
@@ -736,13 +763,36 @@ export async function handleLLMProxy<
       );
     }
 
-    const actualModel = requestAdapter.getModel();
+    const actualModel = stripClaudeContextVariantSuffix(
+      requestAdapter.getModel(),
+    );
 
     // Ensure model entries exist for cost tracking
-    await ModelModel.ensureModelExists(baselineModel, providerName);
+    const discovered = [
+      await ModelModel.ensureModelExists(baselineModel, providerName),
+      actualModel !== baselineModel
+        ? await ModelModel.ensureModelExists(actualModel, providerName)
+        : null,
+    ].filter((model) => model !== null);
 
-    if (actualModel !== baselineModel) {
-      await ModelModel.ensureModelExists(actualModel, providerName);
+    // Only a first sighting reaches here, so the registry fetch (cached) and the
+    // update stay off the per-request path. Enrichment is best-effort: a model
+    // that cannot be priced must not fail the request it arrived on.
+    if (discovered.length > 0) {
+      try {
+        const modelsDevData = await modelsDevClient.fetchModelsFromApi();
+        for (const model of discovered) {
+          await enrichDiscoveredModel({ model, modelsDevData });
+        }
+      } catch (error) {
+        logger.warn(
+          {
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          },
+          "Failed to enrich proxy-discovered models",
+        );
+      }
     }
 
     // Prepare SSE headers for lazy commitment if streaming.
@@ -780,6 +830,52 @@ export async function handleLLMProxy<
           organizationId: resolvedAgent.organizationId,
         })
       : [];
+
+    // Enforce per-team model restrictions before any upstream call. Checked on
+    // the model actually being invoked (post cost-optimization rewrite), and
+    // against the AUTHENTICATED identity only — `userTeams` above is derived
+    // from `userId`, which a caller can seed with the X-Archestra-User-Id
+    // header, so it must not decide access.
+    const authenticatedUserTeamIds = !authenticatedUserId
+      ? []
+      : authenticatedUserId === userId
+        ? userTeams.map((team) => team.id)
+        : (
+            await TeamModel.getTeamLabelInfoForUser({
+              userId: authenticatedUserId,
+              organizationId: resolvedAgent.organizationId,
+            })
+          ).map((team) => team.id);
+
+    const modelTeamAccess = await utils.checkModelTeamAccess({
+      provider: providerName,
+      modelId: actualModel,
+      organizationId: resolvedAgent.organizationId,
+      authenticatedUserId,
+      userTeamIds: authenticatedUserTeamIds,
+    });
+    if (!modelTeamAccess.allowed) {
+      logger.info(
+        {
+          resolvedAgentId,
+          userId,
+          authenticatedUserId,
+          actualModel,
+          reason: "model_team_restricted",
+        },
+        `${providerName} request blocked: model is restricted to teams the caller is not part of`,
+      );
+      // Standard error envelope with a machine-readable `internal_code`
+      // (mirrors the provider_auth_required block above) so SDK clients
+      // surface a clear, non-retryable failure.
+      return reply.status(403).send({
+        error: {
+          message: modelTeamAccess.message,
+          type: "api_authorization_error",
+          internal_code: "model_restricted_to_teams",
+        },
+      });
+    }
 
     // Evaluate trusted data policies
     logger.debug(
@@ -1083,8 +1179,10 @@ export async function handleLLMProxy<
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
         response: { error: errorMessage },
-        model: requestAdapter.getModel(),
-        baselineModel: requestAdapter.getModel(),
+        model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
+        baselineModel: stripClaudeContextVariantSuffix(
+          requestAdapter.getModel(),
+        ),
         inputTokens: 0,
         outputTokens: 0,
       });
@@ -1101,6 +1199,7 @@ export async function handleLLMProxy<
       provider.extractErrorMessage,
       requestAdapter.isStreaming(),
       provider.extractInternalCode.bind(provider),
+      provider.formatStreamErrorFrame,
     );
   }
 }
@@ -1165,6 +1264,49 @@ async function handleStreaming<
   // Once a blocking tool is encountered, buffer all subsequent tool call chunks
   // to prevent streaming data for tools that appear after a blocked tool.
   let bufferAllToolCalls = false;
+
+  // The finally-block persist is gated on usage, so any stream that ends without
+  // the provider ever reporting usage — a mid-stream failure, or a stream the
+  // provider truncates cleanly — would otherwise leave no trace in LLM logs /
+  // session history. Both paths funnel through here; the flag keeps a failed
+  // stream from being recorded twice (the catch persists, then finally runs).
+  let usagelessInteractionRecorded = false;
+  const recordUsagelessInteraction = async (response: unknown) => {
+    if (usagelessInteractionRecorded) {
+      return;
+    }
+    usagelessInteractionRecorded = true;
+
+    try {
+      await InteractionModel.create({
+        profileId: agent.id,
+        externalAgentId,
+        executionId,
+        userId,
+        virtualKeyId,
+        passthroughVirtualKeyId,
+        sessionId,
+        sessionSource,
+        source,
+        authMethod,
+        authenticatedAppId: authenticatedApp?.id,
+        authenticatedAppName: authenticatedApp?.name,
+        type: provider.interactionType,
+        request: originalRequest as InteractionRequest,
+        processedRequest: request as InteractionRequest,
+        response: response as InteractionResponse,
+        model: actualModel,
+        baselineModel,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+    } catch (interactionError) {
+      logger.error(
+        { err: interactionError, profileId: agent.id },
+        "Failed to create interaction record for stream without usage",
+      );
+    }
+  };
 
   logger.debug(
     { model: actualModel },
@@ -1243,28 +1385,38 @@ async function handleStreaming<
             ensureStreamHeaders();
             reply.raw.write(result.sseData);
           } else if (result.isToolCallChunk) {
-            // Determine if the current tool call should be streamed.
+            // Determine whether the accumulated tool calls can be streamed.
             // Tools with no blocking policy stream immediately for low latency;
             // tools with blocking policies buffer until evaluation completes.
+            //
+            // Every known tool call is checked, not just the most recent one: a
+            // single chunk can carry several calls (Ollama's native wire
+            // delivers parallel calls in one `tool_calls` array rather than as
+            // per-index deltas), and streaming on the last one alone would
+            // write a blocked call's arguments to the client before
+            // `evaluatePolicies` ever ran. Repeat lookups are served by
+            // `toolPolicyCache`, so re-checking earlier calls is free.
             let shouldStream = false;
-            if (!shouldStream && !bufferAllToolCalls) {
-              const currentToolCall =
-                streamAdapter.state.toolCalls[
-                  streamAdapter.state.toolCalls.length - 1
-                ];
-              if (currentToolCall?.name) {
-                const cacheKey = `${agent.id}:${currentToolCall.name}:${contextIsTrusted}`;
+            if (!bufferAllToolCalls) {
+              let anyBlocking = false;
+              let sawNamedToolCall = false;
+              for (const toolCall of streamAdapter.state.toolCalls) {
+                if (!toolCall?.name) {
+                  continue;
+                }
+                sawNamedToolCall = true;
+                const cacheKey = `${agent.id}:${toolCall.name}:${contextIsTrusted}`;
                 let hasBlocking = toolPolicyCache.get(cacheKey);
                 if (hasBlocking === undefined) {
                   try {
                     hasBlocking =
                       await ToolInvocationPolicyModel.hasBlockingPolicy(
-                        currentToolCall.name,
+                        toolCall.name,
                         contextIsTrusted,
                       );
                   } catch (err) {
                     logger.warn(
-                      { err, toolName: currentToolCall.name },
+                      { err, toolName: toolCall.name },
                       "hasBlockingPolicy lookup failed, defaulting to buffer",
                     );
                     hasBlocking = true;
@@ -1272,10 +1424,13 @@ async function handleStreaming<
                   toolPolicyCache.set(cacheKey, hasBlocking);
                 }
                 if (hasBlocking) {
-                  bufferAllToolCalls = true;
+                  anyBlocking = true;
                 }
-                shouldStream = !hasBlocking;
               }
+              if (anyBlocking) {
+                bufferAllToolCalls = true;
+              }
+              shouldStream = sawNamedToolCall && !anyBlocking;
             }
 
             if (shouldStream) {
@@ -1414,6 +1569,10 @@ async function handleStreaming<
         {
           teamIds: teamIds ?? [],
           externalAgentId,
+          sensitiveContextOrigin:
+            utils.trustedData.sensitiveContextOriginFromBoundary(
+              unsafeContextBoundary,
+            ),
         },
         contextIsTrusted,
         enabledToolNames,
@@ -1453,17 +1612,19 @@ async function handleStreaming<
         actualModel,
         source,
       });
-    } else if (
-      toolCalls.length > 0 &&
-      streamedEventIndices.size < streamAdapter.getRawToolCallEvents().length
-    ) {
+    } else if (toolCalls.length > 0) {
       // Some tool call chunks were buffered during streaming (per-tool
-      // blocking policies). Policy allowed them, so flush un-streamed events now.
+      // blocking policies). Policy allowed them, so flush un-streamed events
+      // now. Read the events once: getRawToolCallEvents must not be called in
+      // a condition and again for the flush, or a snapshot-per-call adapter
+      // would still work but a draining one would silently discard events.
       const allEvents = streamAdapter.getRawToolCallEvents();
-      ensureStreamHeaders();
-      for (let i = 0; i < allEvents.length; i++) {
-        if (!streamedEventIndices.has(i)) {
-          reply.raw.write(allEvents[i]);
+      if (streamedEventIndices.size < allEvents.length) {
+        ensureStreamHeaders();
+        for (let i = 0; i < allEvents.length; i++) {
+          if (!streamedEventIndices.has(i)) {
+            reply.raw.write(allEvents[i]);
+          }
         }
       }
     }
@@ -1492,44 +1653,16 @@ async function handleStreaming<
       requestDurationRecorded = true;
     }
 
-    // The finally-block persist below is gated on usage, so a stream that
-    // fails before any usage arrives (e.g. a provider 400 rejecting the
-    // request) would otherwise leave no trace in LLM logs / session history.
+    // A stream that fails before any usage arrives (e.g. a provider 400
+    // rejecting the request, or a mid-stream failure once SSE headers and
+    // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
-      try {
-        const errorMessage = provider.extractErrorMessage(error);
-        logger.info(
-          { profileId: agent.id, errorMessage },
-          "Persisting error interaction record for failed stream",
-        );
-        await InteractionModel.create({
-          profileId: agent.id,
-          externalAgentId,
-          executionId,
-          userId,
-          virtualKeyId,
-          passthroughVirtualKeyId,
-          sessionId,
-          sessionSource,
-          source,
-          authMethod,
-          authenticatedAppId: authenticatedApp?.id,
-          authenticatedAppName: authenticatedApp?.name,
-          type: provider.interactionType,
-          request: originalRequest as InteractionRequest,
-          processedRequest: request as InteractionRequest,
-          response: { error: errorMessage },
-          model: actualModel,
-          baselineModel,
-          inputTokens: 0,
-          outputTokens: 0,
-        });
-      } catch (interactionError) {
-        logger.error(
-          { err: interactionError, profileId: agent.id },
-          "Failed to create error interaction record for failed stream",
-        );
-      }
+      const errorMessage = provider.extractErrorMessage(error);
+      logger.info(
+        { profileId: agent.id, errorMessage },
+        "Persisting error interaction record for failed stream",
+      );
+      await recordUsagelessInteraction({ error: errorMessage });
     }
 
     return handleError(
@@ -1538,6 +1671,7 @@ async function handleStreaming<
       provider.extractErrorMessage,
       true,
       provider.extractInternalCode.bind(provider),
+      provider.formatStreamErrorFrame,
     );
   } finally {
     // Always record interaction (whether stream completed or was aborted)
@@ -1639,6 +1773,12 @@ async function handleStreaming<
           "Failed to create interaction record (agent may have been deleted)",
         );
       }
+    } else {
+      // No usage ever arrived. On the error path the catch has already recorded
+      // the failure; otherwise the provider ended the stream early (a truncated
+      // response), and the partial content is all we have to log. Either way the
+      // call must not disappear from interaction history.
+      await recordUsagelessInteraction(streamAdapter.toProviderResponse());
     }
   }
 }
@@ -1849,6 +1989,10 @@ async function handleNonStreaming<
       {
         teamIds: teamIds ?? [],
         externalAgentId,
+        sensitiveContextOrigin:
+          utils.trustedData.sensitiveContextOriginFromBoundary(
+            unsafeContextBoundary,
+          ),
       },
       contextIsTrusted,
       enabledToolNames,
@@ -2073,6 +2217,23 @@ function createDownstreamAbortSignal(params: {
   }
 
   return controller.signal;
+}
+
+/**
+ * Whether the backend authenticates upstream with its OWN credentials for this
+ * provider and discards whatever the caller sent.
+ *
+ * Gemini in Vertex AI mode builds its client from the server's project and
+ * ADC/service-account credentials, never reading the caller's key — so a
+ * caller-supplied Authorization value is not a credential and cannot stand in
+ * for authentication.
+ *
+ * Azure (Entra ID) and Anthropic (workload identity) are deliberately absent:
+ * both fall back to server credentials only when no caller key is present, so a
+ * key supplied there is a genuine provider secret that the upstream validates.
+ */
+function providerSuppliesServerCredential(providerName: string): boolean {
+  return providerName === "gemini" && isVertexAiEnabled();
 }
 
 function shouldUseKeylessProviderApiKey(params: {

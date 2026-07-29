@@ -89,11 +89,14 @@ test("resolveProjectFileScope fails closed for a caller without project access",
 
 test("resolveProjectFileScope resolves for a member of an org-shared project", async ({
   makeUser,
+  makeMember,
   makeOrganization,
   makeAgent,
 }) => {
   const org = await makeOrganization();
   const owner = await makeUser();
+  // Org-wide sharing requires the member role's project:share-org.
+  await makeMember(owner.id, org.id);
   const agent = await makeAgent({ organizationId: org.id });
   const project = await ProjectModel.create({
     organizationId: org.id,

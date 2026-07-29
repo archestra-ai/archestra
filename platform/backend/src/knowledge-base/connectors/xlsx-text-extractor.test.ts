@@ -277,4 +277,84 @@ describe("extractTextFromXlsx", () => {
   test("returns an empty string for a non-ZIP buffer", async () => {
     expect(await extractTextFromXlsx(Buffer.from("not a zip"))).toBe("");
   });
+
+  describe("column references outside the addressable range", () => {
+    // A cell reference decides how many placeholder columns a row allocates, and
+    // the reference comes from the file, not from us. These pin the ceiling at
+    // the real worksheet limit so a crafted reference cannot turn one cell into
+    // an arbitrarily large allocation.
+
+    test("keeps the last addressable column (XFD)", async () => {
+      const buffer = await buildXlsx({
+        cells: `<c r="A1"><v>first</v></c><c r="XFD1"><v>last</v></c>`,
+      });
+      const text = await extractTextFromXlsx(buffer);
+      const [, row] = text.split("\n");
+      const fields = row.split(",");
+      // Row number, then 16384 columns: "first" at A, "last" at XFD.
+      expect(fields).toHaveLength(1 + 16_384);
+      expect(fields[0]).toBe("1");
+      expect(fields[1]).toBe("first");
+      expect(fields.at(-1)).toBe("last");
+    });
+
+    test("drops a cell one column past the limit (XFE) and keeps the rest", async () => {
+      const buffer = await buildXlsx({
+        cells: `<c r="A1"><v>kept</v></c><c r="XFE1"><v>dropped</v></c>`,
+      });
+      expect(await extractTextFromXlsx(buffer)).toBe("Sheet 1\n1,kept");
+    });
+
+    test("drops a reference whose letters exceed any real column", async () => {
+      // "ZZZZZZ" asks for ~321 million columns; before the bound this row alone
+      // allocated them one push at a time.
+      const buffer = await buildXlsx({
+        cells: `<c r="A1"><v>kept</v></c><c r="ZZZZZZ1"><v>dropped</v></c>`,
+      });
+      expect(await extractTextFromXlsx(buffer)).toBe("Sheet 1\n1,kept");
+    });
+
+    test("drops a pathologically long reference without walking it", async () => {
+      const buffer = await buildXlsx({
+        cells: `<c r="A1"><v>kept</v></c><c r="${"Z".repeat(400)}1"><v>dropped</v></c>`,
+      });
+      expect(await extractTextFromXlsx(buffer)).toBe("Sheet 1\n1,kept");
+    });
+
+    test("drops every out-of-range cell in a multi-row sheet", async () => {
+      // Each row is bounded on its own, so a file that repeats the trick per row
+      // cannot accumulate the cost either.
+      const rows = Array.from(
+        { length: 25 },
+        (_, i) =>
+          `<row r="${i + 1}"><c r="A${i + 1}"><v>${i}</v></c><c r="AAAAA${i + 1}"><v>x</v></c></row>`,
+      ).join("");
+      const zip = new JSZip();
+      zip.file(
+        "xl/worksheets/sheet1.xml",
+        `<?xml version="1.0"?><worksheet xmlns="${SHEET_NS}"><sheetData>${rows}</sheetData></worksheet>`,
+      );
+      const buffer = Buffer.from(
+        await zip.generateAsync({ type: "nodebuffer" }),
+      );
+
+      const expected = [
+        "Sheet 1",
+        ...Array.from({ length: 25 }, (_, i) => `${i + 1},${i}`),
+      ];
+      expect(await extractTextFromXlsx(buffer)).toBe(expected.join("\n"));
+    });
+
+    test("still places legitimate multi-letter columns by their real index", async () => {
+      const buffer = await buildXlsx({
+        cells: `<c r="A1"><v>a</v></c><c r="AA1"><v>aa</v></c>`,
+      });
+      const fields = (await extractTextFromXlsx(buffer))
+        .split("\n")[1]
+        .split(",");
+      expect(fields).toHaveLength(1 + 27);
+      expect(fields[1]).toBe("a");
+      expect(fields.at(-1)).toBe("aa");
+    });
+  });
 });

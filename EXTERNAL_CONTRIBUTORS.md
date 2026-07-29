@@ -719,3 +719,12 @@ To unblock real contributors without re-opening the floodgates, sign in via GitH
 - @harshitsinghbhandari
 - @harshkg948
 - @jishei-128
+- @chere005
+- @manulpatel
+- @sidd-92
+- @dreamsofbit
+- @VamshiReddy02
+- @aviral-bhardwaj
+- @Ayush7614
+- @kannabiran-v005
+- @princeakpabio8-prog

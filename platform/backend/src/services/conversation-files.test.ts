@@ -183,11 +183,14 @@ test("personal chat: projectFiles is empty even when the user has files in other
 
 test("project chat: projectFiles is every project file (any author, any chat), for any reader with access", async ({
   makeUser,
+  makeMember,
   makeOrganization,
   makeAgent,
 }) => {
   const org = await makeOrganization();
   const owner = await makeUser({});
+  // Org-wide sharing requires the member role's project:share-org.
+  await makeMember(owner.id, org.id);
   const member = await makeUser({ email: "files-member@test.com" });
   const agent = await makeAgent({ organizationId: org.id });
 
@@ -297,6 +300,114 @@ test("project chat: projectFiles is every project file (any author, any chat), f
     createdAt: looseFile.createdAt.toISOString(),
   });
   expect(result.projectName).toBe("filespanel");
+});
+
+test("project chat: the project's instructions file never lists as an ordinary row, even with this chat's conversation id", async ({
+  makeUser,
+  makeOrganization,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const owner = await makeUser({});
+  const agent = await makeAgent({ organizationId: org.id });
+
+  const project = await projectService.create({
+    organizationId: org.id,
+    userId: owner.id,
+    name: "instructionsdup",
+    description: null,
+  });
+  const conv = await ConversationModel.create({
+    userId: owner.id,
+    organizationId: org.id,
+    agentId: agent.id,
+    projectId: project.id,
+  });
+  const sandbox = await SkillSandboxModel.create({
+    organizationId: org.id,
+    userId: owner.id,
+    conversationId: conv.id,
+    defaultCwd: "/home/sandbox",
+    isDefault: true,
+  });
+  // The agent saved instructions.md in this chat (save_file / download_file
+  // stamp both project_id and conversation_id) — the same row shape a chat
+  // file gets when its chat seeds a project. The panel surfaces it only as the
+  // pinned Instructions entry, so it must not also list under `generated`.
+  await fileStore.put({
+    organizationId: org.id,
+    userId: owner.id,
+    projectId: project.id,
+    conversationId: conv.id,
+    sandboxId: sandbox.id,
+    filename: "instructions.md",
+    mimeType: "text/markdown",
+    sizeBytes: 5,
+    data: Buffer.from("rules"),
+  });
+  const ordinary = await fileStore.put({
+    organizationId: org.id,
+    userId: owner.id,
+    projectId: project.id,
+    conversationId: conv.id,
+    sandboxId: sandbox.id,
+    filename: "report.md",
+    mimeType: "text/markdown",
+    sizeBytes: 2,
+    data: Buffer.from("ok"),
+  });
+
+  const result = await conversationFilesService.list({
+    conversationId: conv.id,
+    organizationId: org.id,
+    requestingUserId: owner.id,
+  });
+  expect(result.generated.map((f) => f.name)).toEqual(["report.md"]);
+  expect(result.generated.map((f) => f.id)).toEqual([ordinary.id]);
+  // not duplicated into projectFiles either — it's this chat's own output
+  expect(result.projectFiles).toEqual([]);
+});
+
+test("personal chat: a file named instructions.md is an ordinary generated file", async ({
+  makeUser,
+  makeOrganization,
+  makeAgent,
+  makeConversation,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser({});
+  const agent = await makeAgent({ organizationId: org.id });
+  const conv = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: org.id,
+  });
+  const sandbox = await SkillSandboxModel.create({
+    organizationId: org.id,
+    userId: user.id,
+    conversationId: conv.id,
+    defaultCwd: "/home/sandbox",
+    isDefault: true,
+  });
+  // Outside a project there is no pinned entry, so the name is not special and
+  // the file must stay visible.
+  const file = await fileStore.put({
+    organizationId: org.id,
+    userId: user.id,
+    projectId: null,
+    conversationId: conv.id,
+    sandboxId: sandbox.id,
+    filename: "instructions.md",
+    mimeType: "text/markdown",
+    sizeBytes: 5,
+    data: Buffer.from("notes"),
+  });
+
+  const result = await conversationFilesService.list({
+    conversationId: conv.id,
+    organizationId: org.id,
+    requestingUserId: user.id,
+  });
+  expect(result.generated.map((f) => f.id)).toEqual([file.id]);
 });
 
 test("project chat: a requester without project access sees no project files", async ({

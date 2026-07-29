@@ -8,5 +8,5 @@ export default async function AppRunPageServer({
   params: Promise<{ appId: string }>;
 }) {
   const { appId } = await params;
-  return <AppRunPage appId={appId} />;
+  return <AppRunPage idOrSlug={appId} />;
 }

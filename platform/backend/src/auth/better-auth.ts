@@ -561,6 +561,54 @@ function consumeStashedSignOutSession(
   return v;
 }
 
+/**
+ * Org-level RBAC gate for starting impersonation. better-auth's own admin
+ * plugin check (system `users.role === "admin"`) still runs after this; an
+ * unauthenticated call is left for better-auth to reject so the error shape
+ * stays consistent.
+ */
+async function assertCallerCanImpersonate(
+  ctx: HookEndpointContext,
+): Promise<void> {
+  const { request, context } = ctx;
+
+  type SessionUser = { id: string };
+  let user = (context?.session as { user?: SessionUser } | undefined)?.user;
+
+  if (!user && request) {
+    try {
+      const headers = new Headers(request.headers as HeadersInit);
+      const resolved = await auth.api.getSession({ headers });
+      user = resolved?.user as SessionUser | undefined;
+    } catch (err) {
+      logger.debug(
+        { err },
+        "[auth:beforeHook] impersonation gate: getSession failed",
+      );
+    }
+  }
+
+  if (!user?.id) return;
+
+  const forbidden = () =>
+    new APIError("FORBIDDEN", {
+      message: "You do not have permission to impersonate users",
+    });
+
+  const userRecord = await UserModel.getById(user.id);
+  if (!userRecord?.organizationId) {
+    throw forbidden();
+  }
+
+  const permissions = await UserModel.getUserPermissions(
+    user.id,
+    userRecord.organizationId,
+  );
+  if (!permissions.member?.includes("impersonate")) {
+    throw forbidden();
+  }
+}
+
 function getBetterAuthLogLevel(
   logLevel: string,
 ): "debug" | "info" | "warn" | "error" | undefined {
@@ -675,6 +723,14 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
 
   if (isAuthSignOutPath(path)) {
     await stashSignOutSessionForAudit(ctx);
+  }
+
+  // better-auth's admin plugin only checks the system-level `users.role`
+  // before impersonating; layer the org-level RBAC permission on top so
+  // roles without member:impersonate cannot start an impersonated session.
+  // (/admin/stop-impersonating stays ungated — exiting must always work.)
+  if (path === "/admin/impersonate-user" && method === "POST") {
+    await assertCallerCanImpersonate(ctx);
   }
 
   if (
@@ -1246,6 +1302,12 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 
   // Capture sign-out audit event (session is often cleared before/without
   // reliable context in the after hook — see stashSignOutSessionForAudit).
+  //
+  // This block MUST return nothing (never `return ctx`). better-auth serializes
+  // an after-hook's return value as the HTTP response body, so returning `ctx`
+  // ships the entire AuthContext — including `secret` (ARCHESTRA_AUTH_SECRET) —
+  // to the (unauthenticated) sign-out caller. Return undefined to keep the
+  // endpoint's own `{ success: true }` body.
   if (isAuthSignOutPath(path)) {
     const fromBefore = consumeStashedSignOutSession(request);
     if (fromBefore) {
@@ -1261,7 +1323,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           "[auth:audit] failed to write sign-out audit row (pre-hook capture)",
         ),
       );
-      return ctx;
+      return;
     }
 
     const sessionCtx = context?.session as
@@ -1321,7 +1383,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         );
       }
     }
-    return ctx;
+    return;
   }
 
   if (path.startsWith("/sign-up")) {

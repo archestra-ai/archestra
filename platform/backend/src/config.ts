@@ -2,11 +2,14 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
   DEFAULT_APP_NAME,
+  DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
+  DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
   DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
   isValidK8sCpuQuantity,
@@ -254,6 +257,36 @@ export function resolveRenderBaseUrl(params: {
   );
 }
 
+/**
+ * Base URL for the `ollama-native` transport.
+ *
+ * Same Ollama server as the OpenAI-compatible provider, different endpoint: the
+ * native API is rooted at `/`, not `/v1`. So the native URL defaults from
+ * `ARCHESTRA_OLLAMA_BASE_URL` with any trailing slashes and `/v1` suffix
+ * stripped, letting a deployment configure one variable and get both providers.
+ *
+ * @public — exported for testability
+ */
+export function deriveOllamaNativeBaseUrl(params: {
+  nativeBaseUrl: string | undefined;
+  ollamaBaseUrl: string | undefined;
+}): string {
+  return stripOllamaV1Suffix(
+    params.nativeBaseUrl ?? params.ollamaBaseUrl ?? "http://localhost:11434",
+  );
+}
+
+/**
+ * Strip a trailing `/v1` (and any trailing slashes) so an OpenAI-compatible
+ * Ollama URL becomes the native root. Shared with the model fetcher, which
+ * normalizes the same way.
+ *
+ * @public — exported for testability
+ */
+export function stripOllamaV1Suffix(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+}
+
 const hackathonRecorderRenderBaseUrl = resolveRenderBaseUrl({
   // Undocumented on purpose, like the rest of the Apps Hackathon recorder (a
   // temporary, hackathon-only feature — see the recorder flag below). Do not add
@@ -357,6 +390,16 @@ const MAX_DATABASE_POOL_MAX = 500;
 const DEFAULT_CHAT_MAX_OUTPUT_TOKENS = 32_768;
 const MAX_CHAT_MAX_OUTPUT_TOKENS = 1_000_000;
 
+// Output-token budget for providers that charge a request's `max_tokens`
+// reservation against a per-minute token bucket (see the provider set in
+// agents/agent-output-budget.ts). Sized to leave prompt room inside the small
+// buckets those providers' entry tiers hand out — at 32_768 a single one-word
+// message is rejected before generating a token, and no amount of shortening
+// the conversation helps. Operators on higher tiers should raise it: the cost
+// of this cap is truncated long generations, the cost of not having it is that
+// every request fails.
+const DEFAULT_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS = 4_096;
+
 // Per-connection statement timeout (ms). Defense-in-depth: kills runaway
 // queries instead of letting them hang a connection indefinitely. 0 disables.
 const DEFAULT_DATABASE_STATEMENT_TIMEOUT_MILLIS = 30000;
@@ -366,6 +409,8 @@ const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
 const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
 const DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS = 60;
 const DEFAULT_METRICS_PORT = 9050;
+const DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS = 30 * 1000;
 const MIN_TCP_PORT = 1;
 const MAX_TCP_PORT = 65_535;
 const OTEL_TRACES_PATH = "/v1/traces";
@@ -528,10 +573,32 @@ export const parseDatabasePoolMax = (envValue?: string | undefined): number => {
 /** @public — exported for testability */
 export const parseChatMaxOutputTokens = (
   envValue?: string | undefined,
-): number => {
+): number =>
+  parseOutputTokenCeiling({
+    envValue,
+    envName: "ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS",
+    fallback: DEFAULT_CHAT_MAX_OUTPUT_TOKENS,
+  });
+
+/** @public — exported for testability */
+export const parseChatRateMeteredMaxOutputTokens = (
+  envValue?: string | undefined,
+): number =>
+  parseOutputTokenCeiling({
+    envValue,
+    envName: "ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS",
+    fallback: DEFAULT_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS,
+  });
+
+const parseOutputTokenCeiling = (params: {
+  envValue: string | undefined;
+  envName: string;
+  fallback: number;
+}): number => {
+  const { envValue, envName, fallback } = params;
   const value = envValue?.trim();
   if (!value) {
-    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
+    return fallback;
   }
 
   // Number() (not parseInt) so trailing garbage ("32768abc") and fractions
@@ -543,9 +610,9 @@ export const parseChatMaxOutputTokens = (
     parsed > MAX_CHAT_MAX_OUTPUT_TOKENS
   ) {
     logger.warn(
-      `Invalid ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS value "${value}", using default ${DEFAULT_CHAT_MAX_OUTPUT_TOKENS}`,
+      `Invalid ${envName} value "${value}", using default ${fallback}`,
     );
-    return DEFAULT_CHAT_MAX_OUTPUT_TOKENS;
+    return fallback;
   }
 
   return parsed;
@@ -685,6 +752,44 @@ export const parseMetricsPort = (envValue?: string | undefined): number => {
       `Invalid ARCHESTRA_METRICS_PORT value "${value}", using default ${DEFAULT_METRICS_PORT}`,
     );
     return DEFAULT_METRICS_PORT;
+  }
+
+  return parsed;
+};
+
+/**
+ * Parse the refresh interval for the `llm_active_users` gauge (milliseconds).
+ * `0` disables collection entirely. The value is clamped to a floor because the
+ * underlying query is a DISTINCT count over the (very large) interactions
+ * table, and every replica runs it — a small interval turns into steady
+ * background load for a number that barely moves.
+ * @public — exported for testability
+ */
+export const parseActiveUsersRefreshIntervalMs = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "${value}", using default ${DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS}`,
+    );
+    return DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS;
+  }
+
+  if (parsed === 0) {
+    return 0;
+  }
+
+  if (parsed < MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS) {
+    logger.warn(
+      `ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "${value}" is below the ${MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS}ms floor, using the floor`,
+    );
+    return MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS;
   }
 
   return parsed;
@@ -1194,6 +1299,152 @@ const isSupportedDaggerRunnerHost = (runnerHost: string): boolean =>
   runnerHost.startsWith("tcp://") || runnerHost.startsWith("kube-pod://");
 
 /**
+ * Extra IPv4 CIDRs an unrestricted engine may not reach. A malformed entry would
+ * be rejected by the Kubernetes API when the egress NetworkPolicy is applied —
+ * and because the engine StatefulSet is created before its policy, that would
+ * leave a privileged engine running with no egress policy at all. Drop the bad
+ * entries loudly instead: the engine still gets its built-in RFC1918,
+ * link-local and metadata denials, and the operator sees what was ignored.
+ *
+ * @public — exported for testability
+ */
+export const parseEngineDeniedCidrs = (
+  envValue: string | undefined,
+): string[] => {
+  const entries = parseCommaSeparatedList(envValue ?? "");
+  const valid = entries.filter((entry) => IPV4_CIDR.test(entry));
+  const invalid = entries.filter((entry) => !IPV4_CIDR.test(entry));
+  if (invalid.length > 0) {
+    logger.error(
+      `ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS ignoring invalid IPv4 CIDRs: ${invalid.join(", ")}`,
+    );
+  }
+  return valid;
+};
+
+/**
+ * Bytes in a Kubernetes memory quantity (`4Gi`, `512Mi`, `1G`, `1048576`), or
+ * undefined when it is not one.
+ *
+ * @public — exported for testability
+ */
+export const k8sMemoryQuantityToBytes = (
+  quantity: string,
+): number | undefined => {
+  const match = quantity
+    .trim()
+    .match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|k|M|G|T)?$/);
+  if (!match) return undefined;
+  const multipliers: Record<string, number> = {
+    Ki: 1024,
+    Mi: 1024 ** 2,
+    Gi: 1024 ** 3,
+    Ti: 1024 ** 4,
+    k: 1000,
+    M: 1000 ** 2,
+    G: 1000 ** 3,
+    T: 1000 ** 4,
+  };
+  // Floored because the only consumers are a cgroup limit and a byte
+  // comparison, neither of which takes a fraction.
+  return Math.floor(Number(match[1]) * (match[2] ? multipliers[match[2]] : 1));
+};
+
+const DEFAULT_ENGINE_SANDBOX_MEMORY_MAX_BYTES = 5 * 1024 ** 3;
+
+/**
+ * The sandbox memory ceiling, checked against the engine's memory request.
+ *
+ * The sandboxes are charged to a cgroup the scheduler cannot see, so the
+ * request is the only thing reserving node capacity for them. A ceiling at or
+ * above the request means the engine can hold more than it reserved and the
+ * shortfall lands on whatever else the node is running. Lowering the request
+ * alone is enough to get there, so say so rather than let it pass silently.
+ *
+ * @public — exported for testability
+ */
+export const parseSandboxMemoryMaxBytes = (
+  envValue: string | undefined,
+  memoryRequest: string,
+): number => {
+  let bytes = DEFAULT_ENGINE_SANDBOX_MEMORY_MAX_BYTES;
+  const configured = envValue?.trim();
+  if (configured) {
+    const parsed = k8sMemoryQuantityToBytes(configured);
+    // Falling back beats honouring a half-understood value: a ceiling read as a
+    // handful of bytes would kill every sandbox the moment it allocated.
+    if (parsed === undefined || parsed <= 0) {
+      logger.error(
+        `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX is not a Kubernetes quantity (${configured}); using the default`,
+      );
+    } else {
+      bytes = parsed;
+    }
+  }
+  const requestBytes = k8sMemoryQuantityToBytes(memoryRequest);
+  if (requestBytes !== undefined && bytes >= requestBytes) {
+    logger.error(
+      `ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX (${configured ?? "default"}) is not below ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST (${memoryRequest}): the engine can hold more memory than it reserves on the node`,
+    );
+  }
+  return bytes;
+};
+
+const IPV4_CIDR =
+  /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\/(3[0-2]|[12]?\d)$/;
+
+/**
+ * Whether the code execution sandbox is enabled.
+ *
+ * - `ARCHESTRA_CODE_RUNTIME_ENABLED=false` is the documented kill switch and
+ *   wins over everything, including an operator-supplied runner host.
+ * - Otherwise an explicit Dagger runner host turns it on and no engine is
+ *   provisioned in code. Whether that needs Kubernetes depends on the scheme: a
+ *   `kube-pod://` host is reached by exec'ing into a pod (the quickstart image
+ *   does this against its embedded cluster), while a `tcp://` host needs no
+ *   Kubernetes at all and is the only way to run the sandbox without it.
+ * - Otherwise `ARCHESTRA_CODE_RUNTIME_ENABLED=true` plus a configured
+ *   orchestrator turns it on, and the backend provisions a per-organization
+ *   engine in code. Kubernetes is required because that mode has to create
+ *   StatefulSets and reach them over `kube-pod://`; without it no engine can
+ *   exist, so the runtime would report ready and then fail on the first command.
+ *   Requiring the explicit flag also keeps an orchestrator configured purely for
+ *   MCP server pods from silently provisioning privileged Dagger engines.
+ *
+ * The K8s-configured test mirrors `isK8sConfigured()` (`k8s/shared.ts`) but is
+ * computed from raw env here: `k8s/shared.ts` imports this config module at load,
+ * so importing it back would be a circular dependency.
+ *
+ * @public — exported for testability
+ */
+export const isCodeRuntimeEnabled = ({
+  runnerHost,
+  runnerHostEnv,
+  codeRuntimeEnabledEnv,
+  kubeconfig,
+  loadKubeconfigFromCurrentCluster,
+}: {
+  runnerHost: string | undefined;
+  runnerHostEnv: string | undefined;
+  codeRuntimeEnabledEnv: string | undefined;
+  kubeconfig: string | undefined;
+  loadKubeconfigFromCurrentCluster: string | undefined;
+}): boolean => {
+  if (codeRuntimeEnabledEnv === "false") return false;
+  if (runnerHost !== undefined) return true;
+  // A runner host that was set but rejected by the parser reaches here as
+  // `undefined`, indistinguishable from "unset" without the raw value. Falling
+  // through would provision code-managed engines an operator who named a runner
+  // never asked for, contradicting the parser's own "code runtime disabled" log.
+  const runnerHostRejected = (runnerHostEnv?.trim().length ?? 0) > 0;
+  if (runnerHostRejected) return false;
+  const k8sConfigured =
+    loadKubeconfigFromCurrentCluster === "true" ||
+    (kubeconfig?.trim().length ?? 0) > 0;
+  return codeRuntimeEnabledEnv === "true" && k8sConfigured;
+};
+
+/**
  * Resolve an off-by-default `ARCHESTRA_*_ENABLED` feature gate with the
  * `ARCHESTRA_BETA` master switch as the fallback. An explicit per-flag value
  * always wins (`"true"`/`"false"`); a blank or unset value falls back to
@@ -1223,9 +1474,10 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
  * deployment needs no third switch of its own.
  *
  * `enterpriseOverride` is the single escape hatch: it turns the recorder on for
- * Archestra's own licensed staging AND bypasses the date window. It is
- * documented nowhere and named as an enterprise override on purpose, so no
- * customer stumbles onto the enterprise path.
+ * Archestra's own licensed staging. It affects this deployment gate only — the
+ * date window and the organization toggle still apply. It is documented
+ * nowhere and named as an enterprise override on purpose, so no customer
+ * stumbles onto the enterprise path.
  *
  * This is the DEPLOYMENT gate only. Two more gates sit above it at request
  * time — the organization's own toggle, and the hackathon date window —
@@ -1242,6 +1494,59 @@ export function parseHackathonRecorderEnabled(params: {
   }
   return true;
 }
+
+/**
+ * The longest final cut a recording may be submitted or exported at, in ms.
+ *
+ * One bound behind every length surface — the submit button, the submission
+ * flow's own backstop, the video export, the editor's trim-to-limit control and
+ * the tour's "keep it under N" note — so a deployment that raises it raises all
+ * of them together and no surface can quote a number the checks disagree with.
+ *
+ * Rejects a value that is not a positive integer number of milliseconds rather
+ * than silently falling back: a typo here would otherwise read as the platform
+ * ignoring the operator's limit. A hard floor keeps a fat-fingered tiny value
+ * from making every recording unsubmittable.
+ *
+ * Undocumented on purpose, like the rest of the recorder — not in .env.example
+ * or the deployment docs.
+ *
+ * @public — exported for testability
+ */
+export function parseHackathonRecorderMaxFinalCutMs(
+  value: string | undefined,
+): number {
+  const raw = value?.trim();
+  if (!raw) return APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < MIN_HACKATHON_FINAL_CUT_MS) {
+    throw new Error(
+      `ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS must be a whole number of milliseconds >= ${MIN_HACKATHON_FINAL_CUT_MS}, got "${raw}"`,
+    );
+  }
+  return parsed;
+}
+
+/**
+ * Floor for the configurable final-cut limit. Below a few seconds nothing is a
+ * demo and every recording would be born over the line.
+ */
+const MIN_HACKATHON_FINAL_CUT_MS = 5_000;
+
+/**
+ * Defaults for the "Archestra App Gallery" sharing surface — the PUBLIC
+ * device-flow OAuth client id and the public gallery repository. Baked in so
+ * every non-enterprise deployment (local dev and OSS included) offers sharing
+ * to the official gallery out of the box; an env override repoints a fork
+ * elsewhere. Enterprise has the whole hackathon recorder disabled, so these
+ * never surface there.
+ *
+ * @public — exported for testability
+ */
+export const DEFAULT_HACKATHON_GALLERY_GITHUB_CLIENT_ID =
+  "Ov23liqkaqAROe7B7ZZ4";
+/** @public — exported for testability (see the client-id default above) */
+export const DEFAULT_HACKATHON_GALLERY_REPO = "archestra-ai/apps-gallery";
 
 /**
  * The App Gallery repository a shared recording is submitted to, as
@@ -1269,21 +1574,58 @@ export function parseHackathonGalleryRepo(
   return { owner: match[1], name: match[2] };
 }
 
-// the code execution sandbox (run_command / upload_file / download_file, plus
-// skill activation-mounts) needs a Dagger runner host: it runs when a host is
-// configured and stays off otherwise — presence of the host is the switch. it
-// is independent of the skills *read* feature — skills can be listed/activated/
-// read with the sandbox off.
+/**
+ * The public App Gallery sharing config: each value is the env override, else
+ * the baked default (see DEFAULT_HACKATHON_GALLERY_*), so every non-enterprise
+ * deployment offers sharing to the official gallery out of the box. The
+ * explicit optional types are load-bearing: the values are never actually
+ * undefined here, but the route's "not configured" guard and its tests still
+ * drive them to undefined, and an object-property annotation (unlike an
+ * annotated const, which CFA narrows to its string initializer) keeps that
+ * assignable.
+ */
+const hackathonGallery: {
+  githubClientId: string | undefined;
+  repo: { owner: string; name: string } | undefined;
+} = {
+  githubClientId:
+    process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID?.trim() ||
+    DEFAULT_HACKATHON_GALLERY_GITHUB_CLIENT_ID,
+  repo: parseHackathonGalleryRepo(
+    process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO?.trim() ||
+      DEFAULT_HACKATHON_GALLERY_REPO,
+  ),
+};
+
+// The code execution sandbox (run_command / upload_file / download_file, plus
+// skill activation-mounts) runs on a Dagger engine. Two ways it turns on:
+//   1. An explicit ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST — an operator-
+//      supplied engine (BYO tcp:// or external kube-pod://). When set it both
+//      enables the sandbox and serves as the process-default engine.
+//   2. ARCHESTRA_CODE_RUNTIME_ENABLED=true with the orchestrator (Kubernetes)
+//      configured — the backend then provisions a per-organization engine in
+//      code and routes each unbound run to its org's engine.
+// It is independent of the skills *read* feature — skills can be listed/
+// activated/read with the sandbox off.
 const skillsSandboxDaggerRunnerHost = parseCodeRuntimeDaggerRunnerHost(
   process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
 );
-const skillsSandboxEnabled = skillsSandboxDaggerRunnerHost !== undefined;
-
-// the Dagger runtime fronts the sandbox; enabling the sandbox lights up the
-// shared session + warm base.
+const skillsSandboxEnabled = isCodeRuntimeEnabled({
+  runnerHost: skillsSandboxDaggerRunnerHost,
+  runnerHostEnv: process.env.ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST,
+  codeRuntimeEnabledEnv: process.env.ARCHESTRA_CODE_RUNTIME_ENABLED,
+  kubeconfig: process.env.ARCHESTRA_ORCHESTRATOR_KUBECONFIG,
+  loadKubeconfigFromCurrentCluster:
+    process.env.ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER,
+});
+// the Dagger runtime fronts the sandbox; enabling the sandbox lights it up.
+// runnerHost is the optional process-default/BYO engine — unset in the
+// code-managed per-organization mode, where each run carries its own target.
+// Read before the config object so the sandbox ceiling can be checked against it.
+const daggerEngineMemoryRequest =
+  process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_REQUEST || "6Gi";
 const daggerRuntimeRunnerHost = skillsSandboxDaggerRunnerHost;
-const daggerRuntimeEnabled =
-  skillsSandboxEnabled && daggerRuntimeRunnerHost !== undefined;
+const daggerRuntimeEnabled = skillsSandboxEnabled;
 
 // persistent "My Files" byte storage backend; the root is validated (required +
 // absolute) eagerly so a misconfigured filesystem provider fails boot loudly.
@@ -1412,7 +1754,16 @@ const config = {
     },
   },
   auth: {
-    secret: process.env.ARCHESTRA_AUTH_SECRET,
+    // Session-signing secret (better-auth session/cookie HMAC). Prefer the
+    // dedicated ARCHESTRA_AUTH_SESSION_SECRET; fall back to the legacy combined
+    // ARCHESTRA_AUTH_SECRET so existing single-secret deployments keep working.
+    // The new var is trimmed; the legacy fallback is deliberately left as-is —
+    // trimming it would change the key existing deployments already derive from
+    // it and break decryption of already-stored data. (Same for the
+    // encryption secrets below.)
+    secret:
+      process.env.ARCHESTRA_AUTH_SESSION_SECRET?.trim() ||
+      process.env.ARCHESTRA_AUTH_SECRET,
     trustedOrigins: getTrustedOrigins(),
     adminDefaultEmail:
       process.env[DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME] || DEFAULT_ADMIN_EMAIL,
@@ -1580,11 +1931,23 @@ const config = {
       baseUrl: process.env.ARCHESTRA_VLLM_BASE_URL,
     },
     ollama: {
-      enabled: Boolean(
-        process.env.ARCHESTRA_OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
-      ),
+      // Always on: unlike vLLM (which has no usable default endpoint, hence
+      // `Boolean(env)` above), Ollama falls back to localhost, so there is
+      // always a base URL to try. Stated literally — `Boolean(env ?? literal)`
+      // read as a real check while being unconditionally true.
+      enabled: true,
       baseUrl:
         process.env.ARCHESTRA_OLLAMA_BASE_URL ?? "http://localhost:11434/v1",
+    },
+    // Ollama native `/api/chat` transport. Same server as `ollama`, different
+    // endpoint (root, no `/v1`), so it defaults from the Ollama base URL with the
+    // `/v1` suffix stripped. Lets Archestra send/display num_ctx, num_predict,
+    // top_k, think, etc. that the OpenAI-compatible `/v1` endpoint discards.
+    "ollama-native": {
+      baseUrl: deriveOllamaNativeBaseUrl({
+        nativeBaseUrl: process.env.ARCHESTRA_OLLAMA_NATIVE_BASE_URL,
+        ollamaBaseUrl: process.env.ARCHESTRA_OLLAMA_BASE_URL,
+      }),
     },
     zhipuai: {
       baseUrl:
@@ -1594,6 +1957,14 @@ const config = {
     deepseek: {
       baseUrl:
         process.env.ARCHESTRA_DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+    },
+    archestra: {
+      // The "archestra" provider targets another Archestra instance's OpenAI-
+      // compatible LLM proxy. There is no meaningful global default — the
+      // upstream endpoint is supplied per key as a base URL. A global base URL
+      // only enables raw passthrough at the /v1/archestra proxy prefix.
+      enabled: Boolean(process.env.ARCHESTRA_ARCHESTRA_BASE_URL),
+      baseUrl: process.env.ARCHESTRA_ARCHESTRA_BASE_URL,
     },
     kimi: {
       baseUrl:
@@ -1721,6 +2092,9 @@ const config = {
     ollama: {
       apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
     },
+    "ollama-native": {
+      apiKey: process.env.ARCHESTRA_CHAT_OLLAMA_API_KEY || "",
+    },
     cohere: {
       apiKey: process.env.ARCHESTRA_CHAT_COHERE_API_KEY || "",
     },
@@ -1729,6 +2103,9 @@ const config = {
     },
     deepseek: {
       apiKey: process.env.ARCHESTRA_CHAT_DEEPSEEK_API_KEY || "",
+    },
+    archestra: {
+      apiKey: process.env.ARCHESTRA_CHAT_ARCHESTRA_API_KEY || "",
     },
     kimi: {
       apiKey: process.env.ARCHESTRA_CHAT_KIMI_API_KEY || "",
@@ -1788,6 +2165,30 @@ const config = {
     maxOutputTokensCeiling: parseChatMaxOutputTokens(
       process.env.ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS,
     ),
+    rateMeteredMaxOutputTokensCeiling: parseChatRateMeteredMaxOutputTokens(
+      process.env.ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS,
+    ),
+    /**
+     * Largest single upload a chat turn may store as a conversation
+     * attachment. Independent of the sandbox artifact limit: bigger files skip
+     * sandbox staging but still land in the Files panel. Raising this needs
+     * `ARCHESTRA_API_BODY_LIMIT` raised too — uploads arrive base64-encoded
+     * (~4/3 of the byte size) alongside the conversation JSON.
+     */
+    attachmentStorageBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT,
+      DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+    ),
+    /**
+     * Largest attachment that may be embedded in a provider request. Separate
+     * from the storage cap on purpose: a file over this is still stored and
+     * downloadable, it just never reaches the model. Keeps a big upload from
+     * inflating a request past what the provider accepts.
+     */
+    attachmentInlineBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT,
+      DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
+    ),
   },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
@@ -1807,17 +2208,28 @@ const config = {
         process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
     }),
     /**
-     * The staging override is active. It forces the recorder on for Archestra's
-     * own licensed staging (see parseHackathonRecorderEnabled) AND bypasses the
-     * hackathon date window, so staging can exercise the feature before it
-     * opens and after it closes. Undocumented, same as the override itself.
+     * Offering the offline VIDEO export (the player's download button and the
+     * render endpoints behind it). Off unless a deployment opts in: a render
+     * drives a headless Chromium for as long as the cut runs, which is a cost
+     * no deployment should pay by surprise — and the gallery submission, which
+     * is what the hackathon actually needs, does not depend on it.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
      */
-    overrideActive:
-      process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
+    videoDownloadEnabled:
+      process.env.ARCHESTRA_HACKATHON_RECORDER_VIDEO_DOWNLOAD_ENABLED ===
+      "true",
+    /** The longest final cut that may be submitted or exported (see the parser). */
+    maxFinalCutMs: parseHackathonRecorderMaxFinalCutMs(
+      process.env.ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS,
+    ),
     /**
      * Sharing a recording to the public App Gallery (a PR filed on the
-     * participant's own GitHub account). Both values must be set for the
-     * share surface to exist; the recorder works without them.
+     * participant's own GitHub account). Both values default to the official
+     * Archestra gallery + its public device-flow OAuth client (see
+     * DEFAULT_HACKATHON_GALLERY_*), so every non-enterprise deployment offers
+     * sharing out of the box; an env override repoints a fork elsewhere.
      *
      * `githubClientId` is the PUBLIC client id of the "Archestra App Gallery"
      * GitHub OAuth app with the device flow enabled — the device flow needs no
@@ -1829,14 +2241,7 @@ const config = {
      * Undocumented on purpose, like the rest of the recorder — not in
      * .env.example or the deployment docs.
      */
-    gallery: {
-      githubClientId:
-        process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID?.trim() ||
-        undefined,
-      repo: parseHackathonGalleryRepo(
-        process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO,
-      ),
-    },
+    gallery: hackathonGallery,
     /**
      * Escape hatch, not a requirement: the renderer finds or installs its own
      * Chromium (see app-recording-render-runtime). Set this only to pin a
@@ -1924,9 +2329,8 @@ const config = {
   /**
    * code execution sandbox runtime — the per-conversation Dagger container that
    * runs commands, holds uploaded files, and materializes activated skills.
-   * runs when a Dagger runner host is configured
-   * (`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`), off otherwise.
-   */
+   * On when a Dagger runner host is configured, or `ARCHESTRA_CODE_RUNTIME_ENABLED`
+   * is set with the orchestrator (Kubernetes) configured.   */
   skillsSandbox: {
     enabled: skillsSandboxEnabled,
     cpuLimit: parsePositiveInt(
@@ -1945,9 +2349,15 @@ const config = {
       process.env.ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT,
       256 * 1024,
     ),
+    /**
+     * Per-file byte cap at the sandbox boundary: attachment staging, uploads,
+     * saves/edits, inline reads, and artifact export. Defaults to the chat
+     * attachment storage cap so any stored attachment can be staged for the
+     * agent; tune independently via env.
+     */
     artifactBytesLimit: parsePositiveInt(
       process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
-      16 * 1024 * 1024,
+      DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
     ),
   },
   /**
@@ -1961,10 +2371,11 @@ const config = {
     enabled: skillsSandboxEnabled,
   },
   /**
-   * unified Dagger runtime — one shared session with a pre-warmed base
-   * container that hosts the code execution sandbox commands. The Rust crate
-   * (`@archestra/sandbox-rs`) owns the session; this block only carries
-   * enable + connection knobs.
+   * unified Dagger runtime — a per-target pool of pre-warmed base-container
+   * sessions that host the code execution sandbox commands. The Rust crate
+   * (`@archestra/sandbox-rs`) owns the sessions; this block only carries
+   * enable + connection knobs. `runnerHost` is the optional process-default
+   * engine; it is unset in the code-managed per-organization mode.
    */
   daggerRuntime: {
     enabled: daggerRuntimeEnabled,
@@ -1981,6 +2392,42 @@ const config = {
       process.env.ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH,
       50,
     ),
+    // Resource requests/limits for a code-managed engine StatefulSet (K8s
+    // quantity strings). Two separate budgets, because the workloads live in
+    // two separate cgroups: the pod's request/limit cover the buildkit daemon,
+    // while `sandboxMemoryMaxBytes` caps the sandbox containers buildkit runs
+    // beside it. The memory request is sized to hold node capacity for both,
+    // since the sandbox cgroup sits outside the pod's accounting and the
+    // scheduler cannot see it; the limit tracks the request because Kubernetes
+    // requires `request <= limit`, and it stays far above the daemon's own
+    // footprint so ordinary sandbox load can never OOM-kill the engine.
+    engine: {
+      cpuRequest:
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CPU_REQUEST || "2",
+      memoryRequest: daggerEngineMemoryRequest,
+      memoryLimit:
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_MEMORY_LIMIT || "6Gi",
+      cacheStorage:
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_CACHE_STORAGE || "50Gi",
+      // Ceiling on everything the sandboxes hold at once. Without it nothing
+      // bounds them: the per-run cap is an RLIMIT_AS, which the kernel applies
+      // per process, so one run that spawns N processes holds N times it. It is
+      // an engine-wide ceiling rather than a per-run allowance, so
+      // `maxConcurrent` runs each at the per-run limit can reach it; raise this
+      // and `memoryRequest` together, or lower `maxConcurrent`, for deployments
+      // that sustain that. Resolved to bytes because it lands in a cgroup.
+      sandboxMemoryMaxBytes: parseSandboxMemoryMaxBytes(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_SANDBOX_MEMORY_MAX,
+        daggerEngineMemoryRequest,
+      ),
+      // Extra IPv4 CIDRs to block from an unrestricted engine's public-egress
+      // floor (on top of the built-in RFC1918/link-local/metadata ranges). Set
+      // to the cluster's Service/Pod CIDRs when they fall outside RFC1918 so
+      // sandboxed code can't reach in-cluster ClusterIP services.
+      additionalDeniedCidrs: parseEngineDeniedCidrs(
+        process.env.ARCHESTRA_DAGGER_RUNTIME_ENGINE_ADDITIONAL_DENIED_CIDRS,
+      ),
+    },
   },
   /**
    * Persistent "My Files" byte storage backend. `db` (Postgres bytea, the
@@ -2043,6 +2490,9 @@ const config = {
       endpoint: "/metrics",
       port: parseMetricsPort(process.env.ARCHESTRA_METRICS_PORT),
       secret: process.env.ARCHESTRA_METRICS_SECRET,
+      activeUsersRefreshIntervalMs: parseActiveUsersRefreshIntervalMs(
+        process.env.ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS,
+      ),
     },
     sentry: {
       enabled: sentryDsn !== "",
@@ -2149,7 +2599,24 @@ const config = {
     type: process.env.ARCHESTRA_SECRETS_MANAGER?.toUpperCase() || "DB",
     vaultKvVersion: process.env.ARCHESTRA_HASHICORP_VAULT_KV_VERSION || "2",
     /**
-     * One-boot escape hatch for a deliberate ARCHESTRA_AUTH_SECRET rotation:
+     * Secret from which the AES key that encrypts DB-stored secrets is derived.
+     * Split out from the session-signing secret so the two rotate
+     * independently; falls back to the legacy combined ARCHESTRA_AUTH_SECRET so
+     * existing deployments are unchanged until they opt into the split.
+     */
+    encryptionSecret:
+      process.env.ARCHESTRA_SECRETS_ENCRYPTION_SECRET?.trim() ||
+      process.env.ARCHESTRA_AUTH_SECRET,
+    /**
+     * Previous encryption secret — used ONLY by the re-encryption migration to
+     * decrypt rows written under the prior key. Falls back to
+     * ARCHESTRA_AUTH_SECRET (the combined secret in use before the split).
+     */
+    encryptionSecretPrevious:
+      process.env.ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS?.trim() ||
+      process.env.ARCHESTRA_AUTH_SECRET,
+    /**
+     * One-boot escape hatch for a deliberate encryption-secret rotation:
      * lets startup accept an encryption key that cannot decrypt previously
      * stored secrets instead of aborting.
      */

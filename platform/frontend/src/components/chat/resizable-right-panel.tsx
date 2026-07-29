@@ -13,8 +13,15 @@ import { cn } from "@/lib/utils";
 
 /** Smallest the panel itself may shrink to. */
 const MIN_PANEL_WIDTH = 300;
-/** Width the main content column must always keep so it never squashes. */
-const MIN_CONTENT_WIDTH = 400;
+/**
+ * Width the main content column must always keep so it never squashes. Sized so
+ * the chat composer's footer toolbar stays uncramped at its narrowest: the Apps
+ * Hackathon recorder pill is fixed-width and sits between the (collapsible) tool
+ * row and the fixed send/mic controls, so the column needs a little extra width
+ * to keep a clear gap there — even as the recorder's live timer widens during a
+ * capture — rather than the pill and mic crowding together.
+ */
+const MIN_CONTENT_WIDTH = 420;
 /** Shared across surfaces so the panel keeps its width from page to page. */
 export const RIGHT_PANEL_WIDTH_STORAGE_KEY = "archestra-right-panel-width";
 /** Panel width before the user has ever resized it. */
@@ -53,6 +60,7 @@ export function aspectLockedPanelWidth({
 export function ResizableRightPanel({
   children,
   aspectLock,
+  preferredWidth,
 }: {
   children: React.ReactNode;
   /**
@@ -68,6 +76,16 @@ export function ResizableRightPanel({
    * resizable again.
    */
   aspectLock?: { ratio: number; hint: string };
+  /**
+   * An ideal width the panel should adopt — the docked review player asks for
+   * exactly the width its recording needs (chat card + app card), so the panel
+   * opens showing the whole replay instead of clipping it. Unlike `aspectLock`
+   * the panel stays hand-resizable, and this width is NOT persisted, so other
+   * surfaces (Files/Browser/Apps) keep their own saved width. Re-fits when the
+   * ideal or the window changes; a manual resize in between holds until then.
+   * `aspectLock` outranks it. Null/undefined leaves the saved/default width.
+   */
+  preferredWidth?: number | null;
 }) {
   const [width, setWidth] = useState(() => {
     if (typeof window !== "undefined") {
@@ -178,6 +196,19 @@ export function ResizableRightPanel({
     window.addEventListener("resize", clamp);
     return () => window.removeEventListener("resize", clamp);
   }, [getMaxWidth]);
+
+  // Adopt a caller's ideal width (the review player's exact chat+app width),
+  // clamped to the same bounds as a hand resize. Re-runs whenever the ideal
+  // changes — including when it recomputes on a window resize — so the panel
+  // and the docked player re-fit together. Deliberately does NOT write
+  // localStorage: this width belongs to the review surface, not the shared
+  // saved width. The aspect lock, when set, owns the width instead.
+  useEffect(() => {
+    if (locked || preferredWidth == null) return;
+    setWidth(
+      Math.max(MIN_PANEL_WIDTH, Math.min(getMaxWidth(), preferredWidth)),
+    );
+  }, [locked, preferredWidth, getMaxWidth]);
 
   // While locked, the panel's width follows its own height at the locked
   // ratio (the panel is full-height, so this tracks window resizes too),

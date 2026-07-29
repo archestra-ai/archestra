@@ -1,3 +1,4 @@
+import { ClientFilterSchema, TOOL_SEARCH_MAX_LENGTH } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -92,11 +93,18 @@ export const ToolWithAssignmentsSchema = z.object({
 
 // Filter schema for tools with assignments
 export const ToolFilterSchema = z.object({
-  search: z.string().optional(),
+  search: z.string().max(TOOL_SEARCH_MAX_LENGTH).optional(),
   origin: z
     .string()
     .optional()
     .describe("Can be 'llm-proxy', 'agent', or a catalogId"),
+  observedByUserId: z
+    .string()
+    .optional()
+    .describe("Only tools observed in this user's LLM proxy traffic"),
+  observedByClient: ClientFilterSchema.optional().describe(
+    "Only tools observed from this client app family (e.g. claude, codex)",
+  ),
   excludeArchestraTools: z.coerce
     .boolean()
     .optional()

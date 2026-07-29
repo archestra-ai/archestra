@@ -13,11 +13,10 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/hooks/use-mobile");
 
-/** Drive the two public flags the hook reads, one value each. */
-function mockFeatures(flags: { enabled: boolean; override: boolean }) {
+/** Drive the public flag the hook reads. */
+function mockFeatures(flags: { enabled: boolean }) {
   vi.mocked(useFeature).mockImplementation(((flag: string) => {
     if (flag === "hackathonRecorderEnabled") return flags.enabled;
-    if (flag === "hackathonRecorderOverrideActive") return flags.override;
     return undefined;
   }) as typeof useFeature);
 }
@@ -33,31 +32,31 @@ function mockOrgToggle(enabled: boolean | undefined) {
 }
 
 describe("useAppsHackathonOffered", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    // Before the window opens, so the date gate is the thing under test.
-    vi.setSystemTime(APPS_HACKATHON_OPENS_AT_MS - 60 * 60 * 1000);
-  });
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("is not offered before the window when only the deployment flag is on", () => {
-    mockFeatures({ enabled: true, override: false });
+  it("is not offered outside the window, whatever the deployment flag says", () => {
+    // The date window has no bypass — before the opening, nothing is offered.
+    vi.useFakeTimers();
+    vi.setSystemTime(APPS_HACKATHON_OPENS_AT_MS - 60 * 60 * 1000);
+    mockFeatures({ enabled: true });
     const { result } = renderHook(() => useAppsHackathonOffered());
     expect(result.current).toBe(false);
   });
 
-  it("is offered before the window when the staging override is active", () => {
-    // The override that forces the feature on for staging also bypasses the
-    // date window, so staging can exercise the recorder ahead of the opening.
-    mockFeatures({ enabled: true, override: true });
+  it("is offered inside the window when the deployment flag is on", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(APPS_HACKATHON_OPENS_AT_MS);
+    mockFeatures({ enabled: true });
     const { result } = renderHook(() => useAppsHackathonOffered());
     expect(result.current).toBe(true);
   });
 
-  it("is never offered when the deployment flag is off, override or not", () => {
-    mockFeatures({ enabled: false, override: true });
+  it("is never offered when the deployment flag is off, even inside the window", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(APPS_HACKATHON_OPENS_AT_MS);
+    mockFeatures({ enabled: false });
     const { result } = renderHook(() => useAppsHackathonOffered());
     expect(result.current).toBe(false);
   });
@@ -65,13 +64,18 @@ describe("useAppsHackathonOffered", () => {
 
 describe("useAppsHackathonAvailable", () => {
   // "Offered" is the composition of the deployment/date gates, tested above.
-  // Here we hold it true (deployment on + override, so no clock dependency) and
-  // pin how the device gate and the org toggle combine on top of it — each is
-  // an independent AND, so any one being wrong hides the recorder.
+  // Here we hold it true (deployment on, clock inside the window) and pin how
+  // the device gate and the org toggle combine on top of it — each is an
+  // independent AND, so any one being wrong hides the recorder.
   beforeEach(() => {
-    mockFeatures({ enabled: true, override: true });
+    vi.useFakeTimers();
+    vi.setSystemTime(APPS_HACKATHON_OPENS_AT_MS);
+    mockFeatures({ enabled: true });
     mockOrgToggle(true);
     vi.mocked(useIsMobile).mockReturnValue(false);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("is available when offered, on a desktop, and the org has it on", () => {
@@ -92,7 +96,7 @@ describe("useAppsHackathonAvailable", () => {
   });
 
   it("is not available when the deployment does not offer it", () => {
-    mockFeatures({ enabled: false, override: true });
+    mockFeatures({ enabled: false });
     const { result } = renderHook(() => useAppsHackathonAvailable());
     expect(result.current).toBe(false);
   });

@@ -582,15 +582,36 @@ export function isInlineableTextMimeType(mimeType: string): boolean {
 export const INLINE_TEXT_MAX_BYTES = 256 * 1024;
 
 /**
+ * Default cap on what a single chat upload may store as a conversation
+ * attachment. Deliberately independent of the sandbox artifact limit: a file
+ * too big for the sandbox still has the Files panel to land in, so the sandbox
+ * is bypassed rather than made the gatekeeper. Shared so the backend default
+ * and the frontend's pre-`/api/config` fallback can never drift.
+ */
+export const DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Default ceiling on what a single attachment may contribute to a provider
+ * request. Storing a file and sending it to a model are separate questions:
+ * anything heavier than this stays in the Files panel (and the sandbox, when it
+ * fits) rather than being embedded in the prompt, so a large upload can never
+ * inflate a request past what the provider accepts.
+ */
+export const DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES = 16 * 1024 * 1024;
+
+/**
  * Why an upload is not acceptable, or `null` when it is. Single source of truth
  * for the attachment policy shared by the backend ingest gate (authoritative)
  * and the frontend composer (mirrors it for UX). A file is acceptable when the
  * model can ingest its type, OR it is a small inlineable text document, OR a
- * sandbox is available to stage it within the sandbox artifact size limit.
+ * sandbox is available to stage it within the sandbox artifact size limit, OR
+ * (with `fileStorageByteLimit`) it is stored as a conversation file the user can
+ * reach from the chat Files panel.
  */
 export type ChatUploadRejectionReason =
   | "text_too_large"
   | "too_large_for_sandbox"
+  | "too_large_to_store"
   | "unsupported_type";
 
 export function chatUploadRejectionReason(params: {
@@ -599,6 +620,14 @@ export function chatUploadRejectionReason(params: {
   ingestibleMimeTypes: Set<string>;
   sandboxAvailable: boolean;
   sandboxByteLimit: number;
+  /**
+   * Cap on what may be stored as a conversation attachment surfaced in the chat
+   * Files panel, enabling that fallback for files the model can't read and the
+   * sandbox can't take. The chat upload path has that surface, so it passes its
+   * configured cap; A2A has no per-conversation Files panel for its callers, so
+   * it omits this and keeps rejecting.
+   */
+  fileStorageByteLimit?: number;
 }): ChatUploadRejectionReason | null {
   const {
     mimeType,
@@ -606,23 +635,40 @@ export function chatUploadRejectionReason(params: {
     ingestibleMimeTypes,
     sandboxAvailable,
     sandboxByteLimit,
+    fileStorageByteLimit,
   } = params;
 
+  // Every accepted upload is persisted as a conversation attachment — the Files
+  // panel and sandbox staging both read that one row — so when the fallback is
+  // active its cap bounds the turn, including types the model reads natively.
+  const fileStorageFallback = fileStorageByteLimit != null;
+  if (fileStorageFallback && byteLength > fileStorageByteLimit) {
+    return "too_large_to_store";
+  }
+
+  // Under the storage cap, the sandbox limit only decides whether the file can
+  // additionally be staged for the model — never whether it is accepted.
   const fitsSandbox = sandboxAvailable && byteLength <= sandboxByteLimit;
 
   // Inlineable text is size-gated even though a text-capable model lists these
   // MIMEs as readable: a large text file would otherwise blow the context
   // window. Checked before the generic ingestible short-circuit for that reason.
   if (isInlineableTextMimeType(mimeType)) {
-    if (byteLength <= INLINE_TEXT_MAX_BYTES || fitsSandbox) return null;
+    if (
+      byteLength <= INLINE_TEXT_MAX_BYTES ||
+      fitsSandbox ||
+      fileStorageFallback
+    ) {
+      return null;
+    }
     return sandboxAvailable ? "too_large_for_sandbox" : "text_too_large";
   }
 
   // Non-text types the model can ingest natively (images, PDFs, …) carry no
-  // inline-text budget; the request body limit is the only size bound.
+  // inline-text budget; only the storage cap above bounds them.
   if (ingestibleMimeTypes.has(mimeType)) return null;
 
-  if (fitsSandbox) return null;
+  if (fitsSandbox || fileStorageFallback) return null;
   return sandboxAvailable ? "too_large_for_sandbox" : "unsupported_type";
 }
 
@@ -659,14 +705,6 @@ const MODALITY_TO_MIME_TYPES: Record<
   video: ["video/mp4", "video/webm", "video/quicktime", "video/avi"],
   // PDF documents for document understanding models
   pdf: ["application/pdf"],
-};
-
-const MODALITY_TO_FILE_TYPE_DESCRIPTION: Record<ModelInputModality, string> = {
-  text: "chat prompts and text files (.txt, .md, .csv, .tsv, .json, .xml, .yaml, .toml)",
-  image: "images",
-  audio: "audio",
-  video: "video",
-  pdf: "PDFs",
 };
 
 type FileLikeWithMediaType = {
@@ -778,67 +816,18 @@ export function getMediaType(file: FileLikeWithMediaType): string {
 }
 
 /**
- * Converts an array of input modalities to a comma-separated string of MIME types
- * suitable for use with the HTML input accept attribute.
- *
- * @param modalities - Array of input modalities from model capabilities
- * @returns Comma-separated MIME types string, or undefined if no file uploads are supported
- *
- * @example
- * // Model that supports images and PDFs
- * getAcceptedFileTypes(["text", "image", "pdf"])
- * // Returns: "image/jpeg,image/png,image/gif,image/webp,image/svg+xml,application/pdf"
- *
- * @example
- * // Model that only supports text
- * getAcceptedFileTypes(["text"])
- * // Returns: "text/plain,text/csv"
- *
- * @example
- * // Model with full multimodal support
- * getAcceptedFileTypes(["text", "image", "audio", "video", "pdf"])
- * // Returns all supported MIME types
- */
-export function getAcceptedFileTypes(
-  modalities: ModelInputModality[] | null | undefined,
-): string | undefined {
-  if (!modalities || modalities.length === 0) {
-    return undefined;
-  }
-
-  const mimeTypes = new Set<SupportedChatUploadMimeType>();
-
-  for (const modality of modalities) {
-    const types = MODALITY_TO_MIME_TYPES[modality];
-    if (types) {
-      for (const type of types) {
-        mimeTypes.add(type);
-      }
-    }
-  }
-
-  // If no MIME types were collected, return undefined.
-  if (mimeTypes.size === 0) {
-    return undefined;
-  }
-
-  return [...mimeTypes].join(",");
-}
-
-/**
  * The MIME types a model can ingest directly, derived from its input
- * modalities. Unlike {@link getAcceptedFileTypes} (a comma-joined string for the
- * HTML `accept` attribute), this returns a Set for membership checks on the
- * provider-prep path: a file part whose mediaType is absent is not sent as a
- * document the provider would reject — it is referenced as a sandbox file
- * instead. Pass `undefined`/`null` modalities to fall back to a safe readable
- * default (text + images + PDF).
+ * modalities. Returns a Set for membership checks on the provider-prep path: a
+ * file part whose mediaType is absent is not sent as a document the provider
+ * would reject — it is referenced as a sandbox file instead. Pass
+ * `undefined`/`null` modalities to fall back to a safe readable default
+ * (text + images + PDF).
  */
 export function getModelReadableMimeTypes(
   modalities: ModelInputModality[] | null | undefined,
 ): Set<string> {
-  // Treat an empty array the same as null — "capabilities unknown" — matching
-  // getAcceptedFileTypes / supportsFileUploads rather than "reads nothing".
+  // Treat an empty array the same as null — "capabilities unknown" — rather
+  // than "reads nothing".
   const source =
     modalities && modalities.length > 0
       ? modalities
@@ -860,50 +849,3 @@ const DEFAULT_READABLE_MODALITIES: ModelInputModality[] = [
   "image",
   "pdf",
 ];
-
-/**
- * Checks if a model supports any file uploads based on its input modalities.
- *
- * @param modalities - Array of input modalities from model capabilities
- * @returns true if the model supports at least one file type, false otherwise
- */
-export function supportsFileUploads(
-  modalities: ModelInputModality[] | null | undefined,
-): boolean {
-  if (!modalities || modalities.length === 0) {
-    return false;
-  }
-
-  // Check if any modality enables file uploads
-  return modalities.some((modality) => {
-    const types = MODALITY_TO_MIME_TYPES[modality];
-    return types !== null && types.length > 0;
-  });
-}
-
-/**
- * Gets a human-readable description of supported file types for display.
- *
- * @param modalities - Array of input modalities from model capabilities
- * @returns Description string or null if no file types are supported
- */
-export function getSupportedFileTypesDescription(
-  modalities: ModelInputModality[] | null | undefined,
-): string | null {
-  if (!modalities || modalities.length === 0) {
-    return null;
-  }
-
-  const supportedTypes = modalities
-    .filter((modality) => {
-      const types = MODALITY_TO_MIME_TYPES[modality];
-      return types !== null && types.length > 0;
-    })
-    .map((modality) => MODALITY_TO_FILE_TYPE_DESCRIPTION[modality]);
-
-  if (supportedTypes.length === 0) {
-    return null;
-  }
-
-  return supportedTypes.join(", ");
-}

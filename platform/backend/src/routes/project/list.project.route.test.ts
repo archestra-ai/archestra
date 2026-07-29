@@ -70,8 +70,10 @@ describe("GET /api/projects (scope + search)", () => {
 
   test("scope filters by share visibility (personal / team / org)", async ({
     makeTeam,
+    makeTeamMember,
   }) => {
     const team = await makeTeam(organizationId, viewer.id, { name: "T" });
+    await makeTeamMember(team.id, viewer.id);
     await create(viewer, "private-one");
     const orgP = await create(viewer, "org-one");
     await share(viewer, orgP.id, "organization");
@@ -99,9 +101,12 @@ describe("GET /api/projects (scope + search)", () => {
 
   test("scope=team + teamIds narrows to the chosen team", async ({
     makeTeam,
+    makeTeamMember,
   }) => {
     const teamA = await makeTeam(organizationId, viewer.id, { name: "A" });
+    await makeTeamMember(teamA.id, viewer.id);
     const teamB = await makeTeam(organizationId, viewer.id, { name: "B" });
+    await makeTeamMember(teamB.id, viewer.id);
     const a = await create(viewer, "shared-A");
     await share(viewer, a.id, "team", [teamA.id]);
     const b = await create(viewer, "shared-B");
@@ -166,12 +171,15 @@ describe("GET /api/projects (scope + search)", () => {
     const other = await makeUser({ email: "list-other-all@test.com" });
     await makeMember(other.id, organizationId, {});
 
-    // A team the admin belongs to, and one they don't.
+    // A team the admin belongs to, and one they don't. `other` does the
+    // sharing, so they belong to both.
     const myTeam = await makeTeam(organizationId, admin.id, { name: "Mine" });
     await makeTeamMember(myTeam.id, admin.id);
+    await makeTeamMember(myTeam.id, other.id);
     const foreignTeam = await makeTeam(organizationId, other.id, {
       name: "Foreign",
     });
+    await makeTeamMember(foreignTeam.id, other.id);
 
     await create(admin, "admin-private");
     await create(other, "other-private");
@@ -204,12 +212,14 @@ describe("GET /api/projects (scope + search)", () => {
     makeUser,
     makeMember,
     makeTeam,
+    makeTeamMember,
   }) => {
     const admin = await makeUser({ email: "list-admin-teamnames@test.com" });
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
     const other = await makeUser({ email: "list-other-teamnames@test.com" });
     await makeMember(other.id, organizationId, {});
     const team = await makeTeam(organizationId, other.id, { name: "Finance" });
+    await makeTeamMember(team.id, other.id);
     const p = await create(other, "team-proj");
     await share(other, p.id, "team", [team.id]);
     actingUser = admin;

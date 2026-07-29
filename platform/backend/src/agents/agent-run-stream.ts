@@ -14,12 +14,17 @@
 // the underlying generation and break the subsequent `toUIMessageStream` merge.
 
 import { streamText } from "ai";
+import { isReasoningSummaryVerificationError } from "@/agents/openai-reasoning-summary";
 import logger from "@/logging";
 import {
   parseContextLengthError,
   trimMessagesToTokenLimit,
 } from "@/routes/chat/context-trimming";
 import { EmptyModelResponseError } from "@/routes/chat/errors";
+import {
+  parseTokenBucketError,
+  refitOutputBudgetToTokenBucket,
+} from "@/routes/chat/token-bucket-refit";
 
 // Maximum agent steps (tool round-trips) per run, shared by every surface. The
 // primitive does not inject this — callers pass `stopWhen: stepCountIs(MAX_AGENT_STEPS)`
@@ -69,6 +74,13 @@ export async function runAgentStream(params: {
      * consumer yet, so the caller can persist state it would otherwise lose.
      */
     onEmptyResponseExhausted?: () => Promise<void>;
+    /**
+     * Fires when a probed error shows the OpenAI credential cannot generate
+     * reasoning summaries (unverified organization) and the attempt is being
+     * retried without them — so the caller can negative-cache the verdict and
+     * skip the doomed request on later turns.
+     */
+    onReasoningSummaryUnsupported?: () => Promise<void> | void;
   };
 }): Promise<{
   result: ReturnType<typeof streamText>;
@@ -102,9 +114,19 @@ export async function runAgentStream(params: {
   // recovers most. On the cap we return the abortive result so the abortive-turn
   // tracker surfaces IncompleteToolCall, the same outcome as before this retry.
   const MAX_ABORTIVE_TOOL_CALL_ATTEMPTS = 2;
+  // requesting `reasoning.summary` from an unverified OpenAI org rejects the
+  // whole request; retrying once without the option recovers the turn (minus
+  // the thinking block). The strip is deterministic, so a second cannot help.
+  const MAX_REASONING_SUMMARY_STRIP_ATTEMPTS = 1;
+  // One refit is enough: the budget is recomputed from the allowance the
+  // provider itself reported, so a second rejection means something other than
+  // the reservation is over the limit.
+  const MAX_TOKEN_BUCKET_REFIT_ATTEMPTS = 1;
+  let tokenBucketRefitAttempts = 0;
   let emptyResponseAttempts = 0;
   let contextTrimAttempts = 0;
   let abortiveToolCallAttempts = 0;
+  let reasoningSummaryStripAttempts = 0;
 
   // Capture only the committed attempt's stream error. Reset before each
   // streamText call so a discarded retry's error never leaks into the mapping.
@@ -179,6 +201,66 @@ export async function runAgentStream(params: {
           prompt: undefined,
           messages: trimmed,
         };
+        result = runAttempt();
+        continue;
+      }
+      // The provider charges our output reservation against a per-minute token
+      // bucket and this request did not fit. Refit the budget from the
+      // allowance it reported and retry — trimming messages cannot help here,
+      // since the reservation is counted whether or not the conversation is
+      // empty.
+      const tokenBucket = parseTokenBucketError(probe.error);
+      if (
+        tokenBucket !== null &&
+        tokenBucketRefitAttempts < MAX_TOKEN_BUCKET_REFIT_ATTEMPTS &&
+        typeof currentConfig.maxOutputTokens === "number"
+      ) {
+        const refittedMaxOutputTokens = refitOutputBudgetToTokenBucket({
+          bucket: tokenBucket,
+          currentMaxOutputTokens: currentConfig.maxOutputTokens,
+        });
+        if (refittedMaxOutputTokens !== null) {
+          tokenBucketRefitAttempts++;
+          logger.info(
+            {
+              ...logContext,
+              limitTokens: tokenBucket.limitTokens,
+              requestedTokens: tokenBucket.requestedTokens,
+              previousMaxOutputTokens: currentConfig.maxOutputTokens,
+              refittedMaxOutputTokens,
+            },
+            "[TokenBucket] retrying with an output budget refitted to the provider's reported limit",
+          );
+          currentConfig = {
+            ...currentConfig,
+            maxOutputTokens: refittedMaxOutputTokens,
+          };
+          result = runAttempt();
+          continue;
+        }
+      }
+
+      if (
+        reasoningSummaryStripAttempts < MAX_REASONING_SUMMARY_STRIP_ATTEMPTS &&
+        configRequestsOpenAiReasoningSummary(currentConfig) &&
+        isReasoningSummaryVerificationError(probe.error)
+      ) {
+        reasoningSummaryStripAttempts++;
+        logger.warn(
+          logContext,
+          "[ReasoningSummary] OpenAI org not verified for reasoning summaries, retrying without",
+        );
+        try {
+          await recovery?.onReasoningSummaryUnsupported?.();
+        } catch (callbackError) {
+          // The callback is bookkeeping (negative-caching the verdict); its
+          // failure must not abort a recovery that can still save the turn.
+          logger.warn(
+            { ...logContext, error: callbackError },
+            "[ReasoningSummary] onReasoningSummaryUnsupported callback failed, continuing retry",
+          );
+        }
+        currentConfig = withoutOpenAiReasoningSummary(currentConfig);
         result = runAttempt();
         continue;
       }
@@ -387,4 +469,24 @@ export async function probeFirstRenderableEvent(
         break;
     }
   }
+}
+
+function configRequestsOpenAiReasoningSummary(
+  config: StreamTextConfig,
+): boolean {
+  return config.providerOptions?.openai?.reasoningSummary != null;
+}
+
+function withoutOpenAiReasoningSummary(
+  config: StreamTextConfig,
+): StreamTextConfig {
+  const { reasoningSummary: _stripped, ...openaiOptions } =
+    config.providerOptions?.openai ?? {};
+  return {
+    ...config,
+    providerOptions: {
+      ...config.providerOptions,
+      openai: openaiOptions,
+    },
+  };
 }

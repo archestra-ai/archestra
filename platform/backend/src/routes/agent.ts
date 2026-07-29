@@ -15,7 +15,14 @@ import {
   requireAgentModifyPermission,
   userHasPermission,
 } from "@/auth";
-import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
+// Imported from the module rather than the `@/auth` barrel on purpose: route
+// tests mock `@/auth` wholesale to open up permissions, and these are
+// validation rules (team existence, org ownership, the ≥1-team invariant) that
+// must keep running in those tests rather than silently becoming no-ops.
+import {
+  type AgentTypePermissionChecker,
+  assertAgentTeams,
+} from "@/auth/agent-type-permissions";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
@@ -49,6 +56,7 @@ import {
   UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
+import { isForeignKeyConstraintError } from "@/utils/db";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -524,11 +532,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       // A team-scoped agent with no teams is accessible to nobody (not even its
-      // author), so reject it. Applies to admins too — they can otherwise reach
-      // this via the API/UI (issue #6624).
-      assertTeamScopeHasTeams({
+      // author), so reject it, and reject teams outside this organization.
+      // Applies to admins too — they can otherwise reach this via the API/UI
+      // (issue #6624).
+      await assertAgentTeams({
         scope: body.scope ?? "personal",
-        teamCount: body.teams.length,
+        teamIds: body.teams,
+        organizationId,
       });
 
       // Omit teams if scope is not 'team' — scope takes precedence
@@ -668,12 +678,14 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const targetScope = body?.scope ?? sourceAgent.scope;
       const requestedTeams = body?.teams ?? [];
 
-      // A team-scoped clone must land on ≥1 team (issue #6624). Effective teams
-      // default to the source's when the caller omits them, matching
-      // AgentModel.cloneAgent. Applies to admins too.
-      assertTeamScopeHasTeams({
+      // A team-scoped clone must land on ≥1 team (issue #6624) and may only
+      // target teams in this organization. Effective teams default to the
+      // source's when the caller omits them, matching AgentModel.cloneAgent.
+      // Applies to admins too.
+      await assertAgentTeams({
         scope: targetScope,
-        teamCount: (body?.teams ?? sourceAgent.teams).length,
+        teamIds: body?.teams ?? sourceAgent.teams.map((t) => t.id),
+        organizationId,
       });
 
       if (!checker.isAdmin(sourceAgent.agentType)) {
@@ -1157,13 +1169,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(400, "Shared agents cannot be made personal");
       }
 
-      // A team-scoped agent must keep ≥1 team (issue #6624). Evaluate the merged
-      // result — the team-admin path above may have rewritten body.teams — so
-      // this catches switching to team scope with none, or clearing the teams of
-      // an already team-scoped agent. Applies to admins too.
-      assertTeamScopeHasTeams({
+      // A team-scoped agent must keep ≥1 team (issue #6624) and may only be
+      // assigned teams in this organization. Evaluate the merged result — the
+      // team-admin path above may have rewritten body.teams — so this catches
+      // switching to team scope with none, or clearing the teams of an already
+      // team-scoped agent. Applies to admins too.
+      await assertAgentTeams({
         scope: body.scope ?? existingAgent.scope,
-        teamCount: (body.teams ?? existingAgent.teams).length,
+        teamIds: body.teams ?? existingAgent.teams.map((t) => t.id),
+        organizationId,
       });
 
       // Validate knowledgeBaseIds if provided
@@ -1561,12 +1575,24 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      await MemberModel.setDefaultModelSelection({
-        userId: user.id,
-        organizationId,
-        modelId: body.modelId,
-        apiKeyId: body.chatApiKeyId,
-      });
+      try {
+        await MemberModel.setDefaultModelSelection({
+          userId: user.id,
+          organizationId,
+          modelId: body.modelId,
+          apiKeyId: body.chatApiKeyId,
+        });
+      } catch (error) {
+        // The referenced model or API key can be deleted between the client
+        // loading its options and saving the selection.
+        if (isForeignKeyConstraintError(error)) {
+          throw new ApiError(
+            400,
+            "The selected model or API key no longer exists",
+          );
+        }
+        throw error;
+      }
 
       return reply.send({
         modelId: body.modelId,
@@ -1670,23 +1696,6 @@ async function assertEnvironmentAssignable(params: {
     organizationId,
     canDeployToRestricted: hasResourceDeploy,
   });
-}
-
-/**
- * A team-scoped agent with zero teams matches no team membership, so it is
- * inaccessible to everyone including its author (issue #6624). Reject it at the
- * write paths. Callers pass the resolved effective scope and team count.
- */
-function assertTeamScopeHasTeams(params: {
-  scope: string;
-  teamCount: number;
-}): void {
-  if (params.scope === "team" && params.teamCount === 0) {
-    throw new ApiError(
-      400,
-      "A team-scoped agent must be assigned at least one team",
-    );
-  }
 }
 
 /**

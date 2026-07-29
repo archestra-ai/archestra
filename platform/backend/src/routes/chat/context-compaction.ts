@@ -529,14 +529,20 @@ async function shouldAutoCompact(params: {
     params.provider,
     params.selectedModel,
   );
-  if (!model?.contextLength) {
+  // The resolved window, not the raw column: an Ollama model capped by its
+  // Modelfile (or a configured `num_ctx`) truncates long before the
+  // architectural limit, so thresholding on the raw value means compaction
+  // never fires and the conversation silently loses its head.
+  const contextLength = model
+    ? ModelModel.resolveEffectiveContextLength(model)
+    : null;
+  if (!contextLength) {
     return { shouldCompact: false, estimatedTokens };
   }
 
   return {
     shouldCompact:
-      estimatedTokens >=
-      model.contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD,
+      estimatedTokens >= contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD,
     estimatedTokens,
   };
 }
@@ -849,7 +855,10 @@ async function hasContextHeadroomForRetry(params: {
     params.provider,
     params.selectedModel,
   );
-  if (!model?.contextLength) {
+  const contextLength = model
+    ? ModelModel.resolveEffectiveContextLength(model)
+    : null;
+  if (!contextLength) {
     // unknown limit; assume retry is safe rather than always skipping
     return true;
   }
@@ -860,8 +869,7 @@ async function hasContextHeadroomForRetry(params: {
     messages: params.compactionMessages,
   });
   return (
-    estimate * 2 <
-    model.contextLength * CONTEXT_COMPACTION_RETRY_MAX_CONTEXT_FRACTION
+    estimate * 2 < contextLength * CONTEXT_COMPACTION_RETRY_MAX_CONTEXT_FRACTION
   );
 }
 

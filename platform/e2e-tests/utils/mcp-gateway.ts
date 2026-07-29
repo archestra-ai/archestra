@@ -274,7 +274,10 @@ export async function callMcpTool(
     arguments?: Record<string, unknown>;
     timeoutMs?: number;
   },
-): Promise<{ content: Array<{ type: string; text?: string }> }> {
+): Promise<{
+  content: Array<{ type: string; text?: string }>;
+  _meta?: Record<string, unknown>;
+}> {
   const callToolResponse = await makeApiRequest({
     request,
     method: "post",
@@ -302,7 +305,7 @@ export async function callMcpTool(
   return callResult.result;
 }
 
-async function getTeamTokenForProfile(
+export async function getTeamTokenForProfile(
   request: APIRequestContext,
   teamName: string,
 ): Promise<string> {
@@ -650,6 +653,16 @@ export async function getVisibleCredentials(page: Page): Promise<string[]> {
 export async function getVisibleStaticCredentials(
   page: Page,
 ): Promise<string[]> {
+  // allTextContents() does not auto-wait: read at the wrong instant it
+  // answers [] for a dialog that is still rendering its options — which is
+  // exactly how this helper hard-failed two merge-queue runs in a row. Its
+  // only caller asserts a non-empty list, so wait for the first option to
+  // exist before reading the set.
+  await page
+    .getByTestId(E2eTestId.StaticCredentialToUse)
+    .first()
+    .waitFor({ state: "visible", timeout: 15_000 });
+
   const credentialLabels = await page
     .getByTestId(E2eTestId.StaticCredentialToUse)
     .allTextContents();

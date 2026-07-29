@@ -1,4 +1,5 @@
 import {
+  BUILT_IN_AGENT_IDS,
   ChatErrorCode,
   CLAUDE_CLIENT_FILTER,
   CLAUDE_CLIENT_ID,
@@ -1339,6 +1340,107 @@ describe("InteractionModel", () => {
       expect(Number(session?.totalCost)).toBeCloseTo(7, 5);
       expect(Number(session?.totalBilledCost)).toBeCloseTo(2, 5);
       expect(Number(session?.totalSubscriptionCost)).toBeCloseTo(5, 5);
+    });
+  });
+
+  describe("getSessions Archestra Chat session identity (T-894)", () => {
+    // A new Archestra Chat fires two LLM calls that share one session_id (the
+    // conversation id): the user's turn under their agent (source "chat") and
+    // the auto title-generation call under the built-in title subagent
+    // (source "chat:title_generation"). The sessions listing must treat this as
+    // ONE session, not two, and attribute it to the user's agent.
+    async function seedChatPlusTitleGen(sessionId: string) {
+      const chatAgent = await AgentModel.create({
+        name: "My Assistant",
+        teams: [],
+        scope: "org",
+      });
+      const titleAgent = await AgentModel.create({
+        name: "Chat Title Generation Subagent",
+        teams: [],
+        scope: "org",
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION },
+      });
+      const base = {
+        sessionId,
+        sessionSource: "header",
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Reply with just hello" }],
+        },
+        response: {
+          id: "r",
+          object: "chat.completion" as const,
+          created: Date.now(),
+          model: "gpt-4",
+          choices: [],
+        },
+        type: "openai:chatCompletions" as const,
+      };
+      await InteractionModel.create({
+        ...base,
+        profileId: chatAgent.id,
+        source: "chat",
+      });
+      await InteractionModel.create({
+        ...base,
+        profileId: titleAgent.id,
+        source: "chat:title_generation",
+      });
+      return { chatAgent, titleAgent };
+    }
+
+    test("collapses the chat and its title-generation subagent into a single session attributed to the primary agent", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const sessionId = "t894-session-collapse";
+      const { chatAgent } = await seedChatPlusTitleGen(sessionId);
+
+      const sessions = await InteractionModel.getSessions(
+        { limit: 100, offset: 0 },
+        admin.id,
+        true,
+        { sessionId },
+      );
+
+      // One chat => one session (previously it split into two because the
+      // GROUP BY keyed on profile_id/agent name).
+      expect(sessions.data).toHaveLength(1);
+      expect(sessions.pagination.total).toBe(1);
+      // Both interactions are counted within that one session.
+      expect(sessions.data[0].requestCount).toBe(2);
+      // Attributed to the user's (non-built-in) agent — id AND name from the
+      // same agent, never the built-in title subagent.
+      expect(sessions.data[0].profileId).toBe(chatAgent.id);
+      expect(sessions.data[0].profileName).toBe("My Assistant");
+    });
+
+    test("badges the auxiliary chat call as a subagent and the user turn as main in the session detail list", async ({
+      makeAdmin,
+    }) => {
+      const admin = await makeAdmin();
+      const sessionId = "t894-session-badges";
+      await seedChatPlusTitleGen(sessionId);
+
+      const result = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId },
+      );
+
+      const bySource = new Map(
+        result.data.map((i) => [
+          i.source,
+          i as unknown as { source: string | null; requestType: string },
+        ]),
+      );
+      expect(bySource.get("chat")?.requestType).toBe("main");
+      expect(bySource.get("chat:title_generation")?.requestType).toBe(
+        "subagent",
+      );
     });
   });
 
@@ -3010,6 +3112,76 @@ describe("InteractionModel", () => {
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(100);
       expect(usage[0].tokensOut).toBe(200);
+    });
+
+    test("skips limit accumulation for subscription-billed interactions", async ({
+      makeAgent,
+      makeUser,
+    }) => {
+      const agent = await makeAgent();
+      const user = await makeUser();
+
+      const userLimit = await LimitModel.create({
+        entityType: "user",
+        entityId: user.id,
+        limitType: "token_cost",
+        limitValue: 1000000,
+        model: ["gpt-4o"],
+      });
+
+      await InteractionModel.create({
+        profileId: agent.id,
+        userId: user.id,
+        model: "gpt-4o",
+        billingMode: "subscription",
+        inputTokens: 100,
+        outputTokens: 200,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      // Tick to the task queue effectively draining the microtask queue
+      // TODO: if calls to InteractionModel.updateUsageAfterInteraction change might want to change the test as well
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Subscription usage costs the org $0 and must not burn down the limit
+      let usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      expect(usage).toHaveLength(1);
+      expect(usage[0].tokensIn).toBe(0);
+      expect(usage[0].tokensOut).toBe(0);
+
+      // A metered interaction on the same limit still accrues
+      await InteractionModel.create({
+        profileId: agent.id,
+        userId: user.id,
+        model: "gpt-4o",
+        billingMode: "metered",
+        inputTokens: 10,
+        outputTokens: 20,
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r2",
+          object: "chat.completion",
+          created: Date.now(),
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      usage = await LimitModel.getModelUsageBreakdown(userLimit.id);
+      expect(usage).toHaveLength(1);
+      expect(usage[0].tokensIn).toBe(10);
+      expect(usage[0].tokensOut).toBe(20);
     });
 
     test("updates virtual_key limit usage when interaction has virtualKeyId", async ({

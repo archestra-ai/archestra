@@ -31,6 +31,9 @@ Combined, these endpoints expose metrics including:
 - `llm_blocked_tools_total` - Counter of tool calls blocked by tool invocation policies, grouped by provider, model, agent_id, agent_name, agent_type, and source
 - `llm_time_to_first_token_seconds` - Time to first token (TTFT) for streaming requests, by provider, agent_id, agent_name, agent_type, source, and model. Helps developers choose models with lower initial response latency.
 - `llm_tokens_per_second` - Output tokens per second throughput, by provider, agent_id, agent_name, agent_type, source, and model. Allows comparing model response speeds for latency-sensitive applications.
+- `llm_active_users` - Distinct users who made at least one attributed LLM request, by `window` (`24h` or `7d`). An org-wide adoption signal. The value is read from the database, so every replica reports the same number — aggregate it with `max()`, not `sum()`. Set `ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS` to change how often it refreshes, or to `0` to turn it off.
+
+> **Note:** `llm_active_users` counts users but does not identify them. There is no per-user metric label: Prometheus series count multiplies with each label's values, so a user label would multiply every LLM metric by the size of your organization and keep a series for every person who has since left. For per-user detail — who used what, on which models — use the [per-user statistics](platform-costs-and-limits#per-user-usage) API, which reads the database directly.
 
 > **Note:** `agent_id` and `agent_name` are the internal Archestra agent identifier and name. The external agent ID passed via the [`X-Archestra-Agent-Id`](/docs/platform-llm-proxy#custom-headers) header is not a metric label (client-supplied values would create unbounded label cardinality); it is recorded on interactions and available in [trace attributes](#distributed-tracing) as `archestra.external_agent_id`. `agent_type` indicates the type of agent: `agent`, `llm_proxy`, `mcp_gateway`, or `profile`. Knowledge Base operations (embeddings, reranking) emit the same LLM metrics with `agent_name="Knowledge Base"` and empty `agent_id`.
 
@@ -143,6 +146,8 @@ When enabled, traces include:
 - **LLM spans** - `gen_ai.content.prompt` event with the request messages, and `gen_ai.content.completion` event with the response text
 - **MCP spans** - `gen_ai.content.input` event with tool call arguments, and `gen_ai.content.output` event with tool call results
 
+When disabled, these events are omitted from spans entirely — they are not emitted with empty values. The rest of the span (model, tokens, durations, identity attributes) is unaffected.
+
 Content is truncated to 10,000 characters per event by default to avoid oversized spans. This limit is configurable via the `ARCHESTRA_OTEL_CONTENT_MAX_LENGTH` [environment variable](/docs/platform-deployment#observability--metrics).
 
 ### Metric-to-Trace Exemplars
@@ -214,6 +219,11 @@ Each LLM API call produces a span with `SpanKind.CLIENT` (indicating an outbound
 - `archestra.cost` - Estimated cost in USD (requires [model pricing](/docs/platform-costs-and-limits#model-pricing) configuration)
 - `gen_ai.response.finish_reasons` - Why the model stopped generating (e.g., `["stop"]`, `["tool_calls"]`, `["end_turn"]`)
 
+**Span Events:**
+
+- `gen_ai.content.prompt` - Carries the `gen_ai.prompt` attribute with the request messages. Not present when [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/platform-deployment#observability--metrics) is `false`.
+- `gen_ai.content.completion` - Carries the `gen_ai.completion` attribute with the response text. Not present when [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/platform-deployment#observability--metrics) is `false`.
+
 **Error Attributes:**
 
 - `error.type` - The error class name when an exception occurs during the LLM call
@@ -255,6 +265,11 @@ Each MCP tool call executed through the MCP Gateway produces a dedicated span:
 - `mcp.blocked_reason` - Human-readable reason why the tool call was blocked (only present when `mcp.blocked=true`). Possible values include policy-specific reasons (e.g., "Tool invocation blocked: policy is configured to always block tool call"), untrusted context reasons, or custom reasons configured on individual policies.
 - `mcp.is_error_result` - Whether the tool returned an error result (`true`/`false`). This is distinct from span status ERROR, which indicates an exception during execution. Only present on executed (non-blocked) tool calls.
 - `error.type` - The error class name when an exception occurs during tool execution
+
+**Span Events:**
+
+- `gen_ai.content.input` - Carries the tool call arguments. Not present when [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/platform-deployment#observability--metrics) is `false`.
+- `gen_ai.content.output` - Carries the tool call result. Not present when [`ARCHESTRA_OTEL_CAPTURE_CONTENT`](/docs/platform-deployment#observability--metrics) is `false`.
 
 **Span Names:**
 

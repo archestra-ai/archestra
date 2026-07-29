@@ -247,6 +247,12 @@ export function buildUnrestrictedFloorPolicy(params: {
   podSelectorLabels: Record<string, string>;
   labels: Record<string, string>;
   clusterDnsIps?: string[];
+  /**
+   * Extra IPv4 CIDRs to block from the public-egress rule, on top of the
+   * built-in RFC1918/link-local/metadata ranges. Empty for callers that don't
+   * set it (MCP pods), so their floor is unchanged.
+   */
+  additionalDeniedCidrs?: string[];
 }): k8s.V1NetworkPolicy {
   return {
     apiVersion: "networking.k8s.io/v1",
@@ -272,7 +278,7 @@ export function buildUnrestrictedFloorPolicy(params: {
         // public rule below blocks. Empty when the resolver is unknown; the
         // selector rule above still covers the standard kube-dns case.
         ...buildResolverIpDnsEgressRules(params.clusterDnsIps ?? []),
-        ...floorPublicEgressRules(),
+        ...floorPublicEgressRules(params.additionalDeniedCidrs ?? []),
       ],
     },
   };
@@ -385,10 +391,19 @@ const FLOOR_DENIED_IPV6_CIDRS = [
 // private, and cloud-metadata ranges above. Each floor variant prepends its own
 // provider-appropriate DNS rule (selector-based for the plain NetworkPolicy, the
 // cluster resolver ipBlock for the AWS ApplicationNetworkPolicy).
-function floorPublicEgressRules(): k8s.V1NetworkPolicyEgressRule[] {
+function floorPublicEgressRules(
+  additionalDeniedCidrs: string[] = [],
+): k8s.V1NetworkPolicyEgressRule[] {
   return [
     {
-      to: [{ ipBlock: { cidr: "0.0.0.0/0", except: FLOOR_DENIED_IPV4_CIDRS } }],
+      to: [
+        {
+          ipBlock: {
+            cidr: "0.0.0.0/0",
+            except: [...FLOOR_DENIED_IPV4_CIDRS, ...additionalDeniedCidrs],
+          },
+        },
+      ],
     },
     {
       to: [{ ipBlock: { cidr: "::/0", except: FLOOR_DENIED_IPV6_CIDRS } }],

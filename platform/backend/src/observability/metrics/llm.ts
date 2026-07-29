@@ -21,6 +21,7 @@ import { getUsageTokens as getAnthropicUsage } from "@/routes/proxy/adapters/ant
 import { getUsageTokens as getCohereUsage } from "@/routes/proxy/adapters/cohere";
 import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapters/gemini";
 import { getUsageTokens as getMinimaxUsage } from "@/routes/proxy/adapters/minimax";
+import { getUsageTokens as getOllamaNativeUsage } from "@/routes/proxy/adapters/ollama-native";
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapters/openai";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapters/zhipuai";
 import type { GatewayAgent } from "@/types";
@@ -44,9 +45,13 @@ type UsageExtractor =
  */
 const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   openai: getOpenAIUsage,
+  archestra: getOpenAIUsage,
   cerebras: getOpenAIUsage,
   vllm: getOpenAIUsage,
   ollama: getOpenAIUsage,
+  // Ollama's native response has no `usage` object at all — see
+  // `rootUsageExtractors` below, which handles it before the `data.usage` guard.
+  "ollama-native": null,
   mistral: getOpenAIUsage,
   perplexity: getOpenAIUsage,
   groq: getOpenAIUsage,
@@ -64,6 +69,23 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   "microsoft-365-copilot": getOpenAIUsage,
   gemini: null,
   bedrock: null,
+};
+
+/**
+ * Providers whose token counts live at the RESPONSE ROOT rather than under a
+ * `usage` object, and so are read from the whole parsed body.
+ *
+ * Ollama's native `/api/chat` reports `prompt_eval_count` / `eval_count` as
+ * top-level fields. The `if (!data.usage) return response` guard in the fetch
+ * wrapper would otherwise skip every native response before any extractor ran,
+ * leaving `llm_tokens_total` and `llm_tokens_per_second` permanently unemitted
+ * for non-streaming native requests — dashboards under-report while cost and DB
+ * rows stay correct, which makes the discrepancy hard to place.
+ */
+const rootUsageExtractors: Partial<
+  Record<SupportedProvider, NonNullable<UsageExtractor>>
+> = {
+  "ollama-native": getOllamaNativeUsage,
 };
 
 type Fetch = (
@@ -698,6 +720,20 @@ export function getObservableFetch(
         // Extract model from response if not in request
         if (!model && data.model) {
           model = data.model;
+        }
+        // Root-usage providers first: their counts are top-level, so the
+        // `data.usage` guard below would discard them unread.
+        const rootExtractor = rootUsageExtractors[provider];
+        if (rootExtractor) {
+          const { input, output, cacheRead, cacheWrite } = rootExtractor(data);
+          reportLLMTokens(
+            provider,
+            profile,
+            { input, output, cacheRead, cacheWrite },
+            model ?? "unknown",
+            source,
+          );
+          return response;
         }
         if (!data.usage) {
           return response;

@@ -16,30 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
+import { providerLogoUrl } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils";
-
-const PROVIDER_LOGO_NAME: Record<SupportedProvider, string> = {
-  openai: "openai",
-  anthropic: "anthropic",
-  gemini: "google",
-  bedrock: "amazon-bedrock",
-  cerebras: "cerebras",
-  cohere: "cohere",
-  mistral: "mistral",
-  perplexity: "perplexity",
-  groq: "groq",
-  xai: "xai",
-  openrouter: "openrouter",
-  vllm: "vllm",
-  ollama: "ollama-cloud",
-  zhipuai: "zhipuai",
-  deepseek: "deepseek",
-  minimax: "minimax",
-  kimi: "moonshotai",
-  azure: "azure",
-  "github-copilot": "github-copilot",
-  "microsoft-365-copilot": "microsoft-365-copilot",
-};
 
 export type LlmModelSelectOption = {
   value: string;
@@ -108,7 +86,7 @@ export function LlmModelOptionLabel({
   return (
     <div className="flex min-w-0 items-center gap-2">
       <Image
-        src={`https://models.dev/logos/${PROVIDER_LOGO_NAME[option.provider]}.svg`}
+        src={providerLogoUrl(option.provider)}
         alt={providerDisplayNames[option.provider]}
         width={16}
         height={16}
@@ -151,7 +129,7 @@ function LlmModelSelectedValue({
     return (
       <div className="flex min-w-0 items-center gap-2">
         <Image
-          src={`https://models.dev/logos/${PROVIDER_LOGO_NAME[option.provider]}.svg`}
+          src={providerLogoUrl(option.provider)}
           alt={providerDisplayNames[option.provider]}
           width={16}
           height={16}
@@ -166,7 +144,7 @@ function LlmModelSelectedValue({
   return (
     <div className="flex min-w-0 items-center gap-2 py-0.5">
       <Image
-        src={`https://models.dev/logos/${PROVIDER_LOGO_NAME[option.provider]}.svg`}
+        src={providerLogoUrl(option.provider)}
         alt={providerDisplayNames[option.provider]}
         width={16}
         height={16}
@@ -191,7 +169,7 @@ function LlmModelSelectedBadge({ option }: { option: LlmModelSelectOption }) {
   return (
     <div className="flex min-w-0 items-center gap-1.5">
       <Image
-        src={`https://models.dev/logos/${PROVIDER_LOGO_NAME[option.provider]}.svg`}
+        src={providerLogoUrl(option.provider)}
         alt={providerDisplayNames[option.provider]}
         width={14}
         height={14}

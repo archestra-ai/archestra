@@ -8,11 +8,16 @@ type ResponseProps = ComponentProps<typeof Streamdown> & {
   isStreaming?: boolean;
 };
 
-// An app's standalone-page link with the leading slash dropped (`a/<uuid>`).
-// A weak model sometimes emits this instead of `/a/<uuid>`; left as-is it
-// resolves against the chat path (`/chat/<id>/a/...`) instead of the app page.
+// An app's standalone-page link with the leading slash dropped (`a/<segment>`,
+// where the segment is the app's uuid or its custom slug). A weak model
+// sometimes emits this instead of `/a/<segment>`; left as-is it resolves
+// against the chat path (`/chat/<id>/a/...`) instead of the app page. The slug
+// alternative matches AppSlugSchema, so this stays as narrow as the uuid form
+// was — an arbitrary relative `a/...` link is still left untouched.
+// Case-sensitive: a uuid may be written in either case, but a slug is lowercase
+// by definition, so repairing an uppercase one would only produce a dead link.
 const APP_LINK_WITHOUT_LEADING_SLASH =
-  /^a\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  /^a\/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[a-z0-9]+(?:-[a-z0-9]+)*)$/;
 
 // Repair that exact owned-app shape at the markdown (mdast) stage — before
 // rehype-harden, which without a base origin blocks a slash-less relative link

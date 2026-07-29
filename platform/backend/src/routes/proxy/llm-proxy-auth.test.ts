@@ -445,7 +445,7 @@ describe("attemptJwksAuth", () => {
       identityProviderId: idp.id,
     });
 
-    const gatewayUtils = await import("@/routes/mcp-gateway.utils");
+    const gatewayUtils = await import("@/routes/mcp-gateway/utils");
     const spy = vi.spyOn(gatewayUtils, "validateExternalIdpToken");
 
     const result = await attemptJwksAuth(
@@ -473,7 +473,7 @@ describe("attemptJwksAuth", () => {
     });
 
     // Mock validateExternalIdpToken to throw an error
-    const gatewayUtils = await import("@/routes/mcp-gateway.utils");
+    const gatewayUtils = await import("@/routes/mcp-gateway/utils");
     const spy = vi
       .spyOn(gatewayUtils, "validateExternalIdpToken")
       .mockRejectedValue(new Error("OIDC discovery failed"));
@@ -503,7 +503,7 @@ describe("attemptJwksAuth", () => {
       identityProviderId: idp.id,
     });
 
-    const gatewayUtils = await import("@/routes/mcp-gateway.utils");
+    const gatewayUtils = await import("@/routes/mcp-gateway/utils");
     const spy = vi
       .spyOn(gatewayUtils, "validateExternalIdpToken")
       .mockResolvedValue(null);
@@ -546,7 +546,7 @@ describe("attemptJwksAuth", () => {
     await makeLlmProviderApiKey(org.id, secret.id, { provider: "openai" });
 
     // Mock successful JWKS validation
-    const gatewayUtils = await import("@/routes/mcp-gateway.utils");
+    const gatewayUtils = await import("@/routes/mcp-gateway/utils");
     const spy = vi
       .spyOn(gatewayUtils, "validateExternalIdpToken")
       .mockResolvedValue({
@@ -587,7 +587,7 @@ describe("attemptJwksAuth", () => {
       identityProviderId: idp.id,
     });
 
-    const gatewayUtils = await import("@/routes/mcp-gateway.utils");
+    const gatewayUtils = await import("@/routes/mcp-gateway/utils");
     const spy = vi
       .spyOn(gatewayUtils, "validateExternalIdpToken")
       .mockResolvedValue({
@@ -619,72 +619,125 @@ describe("attemptJwksAuth", () => {
 // =========================================================================
 
 describe("assertAuthenticatedForKeylessProvider", () => {
+  const keylessArgs = {
+    apiKey: undefined,
+    wasVirtualKeyResolved: false,
+    wasJwksAuthenticated: false,
+    requestIp: "1.2.3.4",
+  };
+
   test("allows request when apiKey is present", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider(
-        "sk-real-key",
-        false,
-        false,
-        "1.2.3.4",
-      ),
+      assertAuthenticatedForKeylessProvider({
+        ...keylessArgs,
+        apiKey: "sk-real-key",
+      }),
     ).not.toThrow();
   });
 
   test("allows request when virtual key was resolved", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider(undefined, true, false, "1.2.3.4"),
+      assertAuthenticatedForKeylessProvider({
+        ...keylessArgs,
+        wasVirtualKeyResolved: true,
+      }),
     ).not.toThrow();
   });
 
   test("allows request when JWKS authenticated", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider(undefined, false, true, "1.2.3.4"),
+      assertAuthenticatedForKeylessProvider({
+        ...keylessArgs,
+        wasJwksAuthenticated: true,
+      }),
     ).not.toThrow();
   });
 
   test("allows localhost IPv4 without any auth", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider(
-        undefined,
-        false,
-        false,
-        "127.0.0.1",
-      ),
+      assertAuthenticatedForKeylessProvider({
+        ...keylessArgs,
+        requestIp: "127.0.0.1",
+      }),
     ).not.toThrow();
   });
 
   test("allows localhost IPv6 without any auth", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider(undefined, false, false, "::1"),
+      assertAuthenticatedForKeylessProvider({
+        ...keylessArgs,
+        requestIp: "::1",
+      }),
     ).not.toThrow();
   });
 
   test("allows localhost IPv4-mapped IPv6 without any auth", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider(
-        undefined,
-        false,
-        false,
-        "::ffff:127.0.0.1",
-      ),
+      assertAuthenticatedForKeylessProvider({
+        ...keylessArgs,
+        requestIp: "::ffff:127.0.0.1",
+      }),
     ).not.toThrow();
   });
 
   test("rejects external request without any auth", () => {
-    expect(() =>
-      assertAuthenticatedForKeylessProvider(undefined, false, false, "1.2.3.4"),
-    ).toThrow("Authentication required");
+    expect(() => assertAuthenticatedForKeylessProvider(keylessArgs)).toThrow(
+      "Authentication required",
+    );
   });
 
   test("rejects external request with empty apiKey", () => {
     expect(() =>
-      assertAuthenticatedForKeylessProvider(
-        undefined,
-        false,
-        false,
-        "10.0.0.5",
-      ),
+      assertAuthenticatedForKeylessProvider({
+        ...keylessArgs,
+        requestIp: "10.0.0.5",
+      }),
     ).toThrow("Authentication required");
+  });
+
+  // When the backend authenticates upstream with its own credentials (Gemini on
+  // Vertex AI), the caller's Authorization value is discarded before it reaches
+  // the provider. Nothing ever validates it, so it cannot authenticate anyone.
+  test("rejects an arbitrary bearer value when the server supplies the credential", () => {
+    expect(() =>
+      assertAuthenticatedForKeylessProvider({
+        ...keylessArgs,
+        apiKey: "Bearer anything",
+        providerSuppliesServerCredential: true,
+      }),
+    ).toThrow("Authentication required");
+  });
+
+  test("still allows a resolved virtual key when the server supplies the credential", () => {
+    expect(() =>
+      assertAuthenticatedForKeylessProvider({
+        ...keylessArgs,
+        apiKey: "Bearer anything",
+        wasVirtualKeyResolved: true,
+        providerSuppliesServerCredential: true,
+      }),
+    ).not.toThrow();
+  });
+
+  test("still allows JWKS auth when the server supplies the credential", () => {
+    expect(() =>
+      assertAuthenticatedForKeylessProvider({
+        ...keylessArgs,
+        wasJwksAuthenticated: true,
+        providerSuppliesServerCredential: true,
+      }),
+    ).not.toThrow();
+  });
+
+  test("still allows loopback when the server supplies the credential", () => {
+    expect(() =>
+      assertAuthenticatedForKeylessProvider({
+        ...keylessArgs,
+        apiKey: "Bearer anything",
+        requestIp: "127.0.0.1",
+        providerSuppliesServerCredential: true,
+      }),
+    ).not.toThrow();
   });
 });
 

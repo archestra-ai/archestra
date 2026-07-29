@@ -1,4 +1,5 @@
 export { default as Anthropic } from "./anthropic";
+export { default as Archestra } from "./archestra";
 export { default as Azure } from "./azure";
 export { default as Bedrock } from "./bedrock";
 export { default as Cerebras } from "./cerebras";
@@ -12,6 +13,7 @@ export { default as Microsoft365Copilot } from "./microsoft-365-copilot";
 export { default as Minimax } from "./minimax";
 export { default as Mistral } from "./mistral";
 export { default as Ollama } from "./ollama";
+export { default as OllamaNative } from "./ollama-native";
 export { default as OpenAi } from "./openai";
 export { default as Openrouter } from "./openrouter";
 export { default as Perplexity } from "./perplexity";

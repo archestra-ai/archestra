@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-07-22
+lastUpdated: 2026-07-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,7 +22,7 @@ A script can set up three things, in any combination you selected on the page:
 - **LLM proxy** — routes the client's model calls through Archestra. In passthrough mode the script leaves your own provider credential untouched and changes only the base URL. In virtual-key mode it injects a key Archestra provisions for you.
 - **Skills** — installs a shared skills bundle into the client.
 
-For Claude Code the script also installs a [startup guard](#startup-guard) that checks these remotes before every launch.
+For Claude Code, Codex, and Copilot CLI the script also installs a [startup guard](#startup-guard) that checks these remotes before every launch.
 
 The exact commands and files differ per client — see [Supported Clients](#supported-clients) below.
 
@@ -61,9 +61,27 @@ bash archestra-setup.sh
 
 You can also read the generator. A deterministic renderer builds the script with no hidden network calls: `platform/backend/src/services/connection-setup-script.ts` for macOS and Linux, and `connection-setup-script.windows.ts` for Windows. What you receive is exactly what those files produce.
 
+## Startup Guard
+
+For Claude Code, Codex, and Copilot CLI, the script installs a startup guard — a pre-loader that checks your Archestra remotes each time you launch `claude`, `codex`, or `copilot`. It makes a single health request covering the configured remotes — the LLM proxy and the MCP gateway; the skills marketplace rides on the same origin — then plays each remote's check in turn with a brief spinner. When everything is healthy, the CLI starts in about a second. The guard draws on the terminal's alternate screen, so nothing lingers after the CLI exits.
+
+A remote the platform reports down gets a "Failed to connect to …" line. After the last check, one prompt covers every down remote — "Disconnect MCP gateway (name) from Codex now? (Y/n)", naming your client, or "Disconnect all 3 unreachable resources…" when several are down. Enter or `y` disconnects them all — the same reverse-of-connect steps as the Disconnect panel; `n` keeps them. Later launches skip a remote the guard disconnected. Once no connected remote is left, the guard removes itself — the script and the profile hook — so a stale wrapper can never break a launch. When the platform itself is unreachable, the guard retries its request for up to 15 seconds with a status line, showing the same disconnect prompt below it, then treats every remote as down. Every path ends with the CLI starting; the guard never blocks a launch. Non-interactive runs, `codex exec` or `claude -p` for example, only get a warning on stderr.
+
+Under the checks the guard always shows a reconfigure entry: "To reconfigure your Archestra connection press [C]". When everything is healthy it waits about a second and a half for that key, then starts the CLI. Press `C` and the rows turn into a numbered menu — one per remote — so you can disconnect any of them, reachable or not, by pressing its number. The row lands on a check, later launches skip it, and removing the last connected remote uninstalls the guard. Press `Esc` to leave the menu and start the CLI.
+
+The guard lives under `~/.archestra/`, hooked in by a marked wrapper block in your shell profile — on Windows, in each PowerShell edition's `profile.ps1`. Each client has its own file and its own disable variable:
+
+| Client | macOS / Linux | Windows | Disable with |
+| --- | --- | --- | --- |
+| Claude Code | `~/.archestra/claude-startup-guard.sh` | `~/.archestra/claude-startup-guard.ps1` | `ARCHESTRA_CLAUDE_GUARD=0` |
+| Codex | `~/.archestra/codex-startup-guard.sh` | `~/.archestra/codex-startup-guard.ps1` | `ARCHESTRA_CODEX_GUARD=0` |
+| Copilot CLI | `~/.archestra/copilot-startup-guard.sh` | `~/.archestra/copilot-startup-guard.ps1` | `ARCHESTRA_COPILOT_GUARD=0` |
+
+Set the disable variable to turn the guard off without uninstalling. The Disconnect panel has per-OS one-liners that remove everything the guard installed.
+
 ## Supported Clients
 
-Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop, n8n, and Any Client get copy-paste instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the connection's virtual key on the Virtual API Keys page and revoke any skills share link on the Skills page.
+Four clients get the one-command script: Claude Code, Codex, Cursor, and Copilot CLI. Claude Desktop, n8n, and Any Client get copy-paste instructions you apply in the app yourself. Each section lists what changes and how to undo it. To also cut off access on the server, delete the virtual key from the LLM Proxy's **Connect** dialog and revoke any skills share link on the Skills page.
 
 ### Claude Code
 
@@ -74,19 +92,9 @@ The `claude` CLI must be on your `PATH`.
 - **MCP gateway** — runs `claude mcp add --transport http <name> <url>`. Finish with `claude /mcp`, select the gateway, and sign in once in your browser.
 - **LLM proxy** — merges `ANTHROPIC_BASE_URL` and the Archestra attribution headers into `~/.claude/settings.json`. Virtual-key mode also sets `ANTHROPIC_AUTH_TOKEN`. For Amazon Bedrock it sets the Bedrock variables instead and prints an `AWS_BEARER_TOKEN_BEDROCK` line to add to your shell profile.
 - **Skills** — runs `claude plugin marketplace add` then `claude plugin install`.
-- **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch. See [Startup Guard](#startup-guard) below.
+- **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `claude` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.claude/settings.json.archestra-backup`.
 - **Revert** — open the Disconnect panel on the Connection page for the exact reverse steps. Or restore the backup, delete the Archestra env keys, run `claude mcp remove <name>`, and drop the exported Bedrock token from your profile.
-
-#### Startup Guard
-
-The guard runs each time you start `claude`. It makes a single health request to the platform covering the configured remotes — the LLM proxy and the MCP gateway; the skills marketplace rides on the same origin — and then plays each remote's check in turn with a brief spinner. When everything is healthy, `claude` starts in about a second. The guard draws on the terminal's alternate screen, so nothing lingers after `claude` exits.
-
-A remote the platform reports down gets a "Failed to connect to …" line. After the last check, one prompt covers every down remote: "Disconnect MCP gateway (name) from Claude now? (Y/n)" — or "Disconnect all 3 unreachable resources…" when several are down. Enter or `y` disconnects them all — the same reverse-of-connect steps as the Disconnect panel; `n` keeps them. Later launches skip a remote the guard disconnected. Once no connected remote is left, the guard removes itself — the script and the profile hook — so a stale wrapper can never break a launch. When the platform itself is unreachable, the guard retries its request for up to 15 seconds with a status line, showing the same disconnect prompt below it, then treats every remote as down. Every path ends with `claude` starting; the guard never blocks a launch. Non-interactive runs, `claude -p` for example, only get a warning on stderr.
-
-Under the checks the guard always shows a reconfigure entry: "To reconfigure your Archestra connection press [C]". When everything is healthy it waits about a second and a half for that key, then starts `claude`. Press `C` and the rows turn into a numbered menu — one per remote — so you can disconnect any of them, reachable or not, by pressing its number. The row lands on a check, later launches skip it, and removing the last connected remote uninstalls the guard. Press `Esc` to leave the menu and start `claude`.
-
-On macOS and Linux the guard lives at `~/.archestra/claude-startup-guard.sh`, hooked in by a marked `claude()` block in your shell profile. On Windows it is `~/.archestra/claude-startup-guard.ps1`, hooked in by the same marked block in each PowerShell edition's `profile.ps1`. Set `ARCHESTRA_CLAUDE_GUARD=0` to disable it without uninstalling. The Disconnect panel has per-OS one-liners that remove everything the guard installed.
 
 ### Codex
 
@@ -95,6 +103,7 @@ The `codex` CLI must be on your `PATH`.
 - **MCP gateway** — runs `codex mcp add <name> --url <url>`. Run `codex` once to finish the browser sign-in.
 - **LLM proxy** — adds a marker-delimited `[model_providers.<name>]` block to `~/.codex/config.toml`. Virtual-key mode signs in with `codex login --with-api-key`. Start Codex through the proxy with `codex -c model_provider=<name>`.
 - **Skills** — runs `codex plugin marketplace add`.
+- **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `codex` launch. See [Startup Guard](#startup-guard).
 - **Backup** — `~/.codex/config.toml.archestra-backup`.
 - **Revert** — restore the backup, or delete the `# >>> archestra:<name> >>>` block; run `codex mcp remove <name>`.
 
@@ -115,6 +124,7 @@ The `copilot` CLI must be on your `PATH`.
 - **MCP gateway** — runs `copilot mcp add --transport http <name> <url>`.
 - **LLM proxy** — prints the `COPILOT_PROVIDER_*` and `COPILOT_MODEL` `export` lines to add to your shell profile, because a piped script cannot set variables in your shell. For a GitHub Copilot subscription the script runs the GitHub device flow locally, so your token never leaves the machine.
 - **Skills** — runs `copilot plugin marketplace add`.
+- **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `copilot` launch. See [Startup Guard](#startup-guard).
 - **Backup** — none; the proxy settings are `export` lines you add yourself.
 - **Revert** — run `copilot mcp remove <name>`; delete the export lines from your shell profile.
 

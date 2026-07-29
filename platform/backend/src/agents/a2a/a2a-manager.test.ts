@@ -168,6 +168,212 @@ describe("A2AManager.sendMessage", () => {
     expect(await A2AMessageModel.getTotalCount()).toBe(prevMessageCount);
   });
 
+  test.for([
+    ["an empty", ""],
+    ["a whitespace-only", "   \n  "],
+  ])("%s text part is nothing to execute", async ([, text], { makeAgent }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = new A2AManager();
+    executeA2AMessage.mockClear();
+    const prevContextCount = await A2AContextModel.getTotalCount();
+    const prevTaskCount = await A2ATaskModel.getTotalCount();
+    const prevMessageCount = await A2AMessageModel.getTotalCount();
+
+    const err = await getThrown(async () =>
+      sendMessageWithParts(manager, agent.id, [{ text }]),
+    );
+
+    expect(err).toBeInstanceOf(A2AError);
+    expect((err as A2AError).kind).toBe(A2AErrorKind.NothingToExecute);
+    // The defect this pins was a *provider* call, not the error code: a blank
+    // turn reached the model as prior context alone, ending on an assistant
+    // message, which providers without prefill support reject.
+    expect(executeA2AMessage).not.toHaveBeenCalled();
+    expect(await A2AContextModel.getTotalCount()).toBe(prevContextCount);
+    expect(await A2ATaskModel.getTotalCount()).toBe(prevTaskCount);
+    expect(await A2AMessageModel.getTotalCount()).toBe(prevMessageCount);
+  });
+
+  test("a blank text part alongside a file still executes", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = new A2AManager();
+    executeA2AMessage.mockClear();
+    executeA2AMessage.mockReturnValue({
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "response" }],
+      },
+      text: "response(text)",
+    });
+
+    await sendMessageWithParts(manager, agent.id, [
+      { text: "" },
+      {
+        raw: new Uint8Array([1, 2, 3]),
+        mediaType: "image/png",
+        filename: "pixel.png",
+      },
+    ]);
+
+    expect(executeA2AMessage).toHaveBeenCalledTimes(1);
+    expect(executeA2AMessage.mock.calls[0][0].attachments).toHaveLength(1);
+  });
+
+  test("a single part carrying blank text and a file keeps the file", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = new A2AManager();
+    executeA2AMessage.mockClear();
+    executeA2AMessage.mockReturnValue({
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "response" }],
+      },
+      text: "response(text)",
+    });
+
+    await sendMessageWithParts(manager, agent.id, [
+      {
+        text: "",
+        raw: new Uint8Array([1, 2, 3]),
+        mediaType: "image/png",
+        filename: "pixel.png",
+      },
+    ]);
+
+    expect(executeA2AMessage).toHaveBeenCalledTimes(1);
+    expect(executeA2AMessage.mock.calls[0][0].attachments).toHaveLength(1);
+  });
+
+  test("a single part carrying text and a file sends both", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = new A2AManager();
+    executeA2AMessage.mockClear();
+    executeA2AMessage.mockReturnValue({
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "response" }],
+      },
+      text: "response(text)",
+    });
+
+    await sendMessageWithParts(manager, agent.id, [
+      {
+        text: "look at this",
+        raw: new Uint8Array([1, 2, 3]),
+        mediaType: "image/png",
+        filename: "pixel.png",
+      },
+    ]);
+
+    // The text branch returns before the file branch, so the file never becomes
+    // a message part — it still reaches the executor because attachments are
+    // collected from the request parts independently.
+    expect(executeA2AMessage).toHaveBeenCalledTimes(1);
+    const call = executeA2AMessage.mock.calls[0][0];
+    expect(call.message).toBe("look at this");
+    expect(call.attachments).toEqual([
+      {
+        contentType: "image/png",
+        contentBase64: Buffer.from([1, 2, 3]).toString("base64"),
+        name: "pixel.png",
+      },
+    ]);
+  });
+
+  test("multiple text parts are joined into the executed turn", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = new A2AManager();
+    executeA2AMessage.mockClear();
+    executeA2AMessage.mockReturnValue({
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "response" }],
+      },
+      text: "response(text)",
+    });
+
+    await sendMessageWithParts(manager, agent.id, [
+      { text: "first" },
+      { text: "second" },
+    ]);
+
+    expect(executeA2AMessage).toHaveBeenCalledTimes(1);
+    expect(executeA2AMessage.mock.calls[0][0].message).toBe("first\nsecond");
+  });
+
+  test("a blank text part does not pad the joined turn", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = new A2AManager();
+    executeA2AMessage.mockClear();
+    executeA2AMessage.mockReturnValue({
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "response" }],
+      },
+      text: "response(text)",
+    });
+
+    await sendMessageWithParts(manager, agent.id, [
+      { text: "" },
+      { text: "hi" },
+    ]);
+
+    expect(executeA2AMessage).toHaveBeenCalledTimes(1);
+    // Not "\nhi" — the blank part is gone before the join, so it contributes no
+    // separator to the text the model receives.
+    expect(executeA2AMessage.mock.calls[0][0].message).toBe("hi");
+  });
+
+  test("a message carrying only a file part executes", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = new A2AManager();
+    executeA2AMessage.mockClear();
+    executeA2AMessage.mockReturnValue({
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "response" }],
+      },
+      text: "response(text)",
+    });
+
+    await sendMessageWithParts(manager, agent.id, [
+      {
+        raw: new Uint8Array([1, 2, 3]),
+        mediaType: "image/png",
+        filename: "pixel.png",
+      },
+    ]);
+
+    expect(executeA2AMessage).toHaveBeenCalledTimes(1);
+    const call = executeA2AMessage.mock.calls[0][0];
+    expect(call.message).toBe("");
+    expect(call.attachments).toEqual([
+      {
+        contentType: "image/png",
+        contentBase64: Buffer.from([1, 2, 3]).toString("base64"),
+        name: "pixel.png",
+      },
+    ]);
+  });
+
   test("Text message", async ({ makeAgent }) => {
     const agent = await makeAgent({ name: "agent1", teams: [] });
     const manager = new A2AManager();

@@ -483,6 +483,7 @@ export class ModelsDevClient {
       xai: ["xai/"],
       bedrock: ["amazon-bedrock/"],
       ollama: ["ollama/"],
+      "ollama-native": ["ollama/"],
       vllm: ["vllm/"],
       zhipuai: ["zhipuai/"],
       deepseek: ["deepseek/"],
@@ -493,6 +494,8 @@ export class ModelsDevClient {
       "github-copilot": [],
       // Not synced via models.dev (single static pseudo-model)
       "microsoft-365-copilot": [],
+      // Not synced via models.dev (upstream is another Archestra instance)
+      archestra: [],
     };
 
     const getSourcePriority = (model: CreateModel): number => {

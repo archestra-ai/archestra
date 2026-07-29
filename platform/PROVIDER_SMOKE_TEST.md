@@ -87,7 +87,7 @@ Before starting, verify the development environment is running:
 1. Navigate to Chat (`http://localhost:3000/chat`)
 2. Select the profile with GitHub tools assigned
 3. Start a new conversation
-4. Send message: "Give a short overview of the open issues in https://github.com/archestra-ai/website"
+4. Send message: "Give a short overview of the open issues in https://github.com/archestra-ai/archestra"
 
 ### Expected Result
 
@@ -148,7 +148,7 @@ Create a tool invocation policy:
 2. Enable "Tool Result Compression (TOON)" at organization level
 3. Navigate to Chat and start a NEW conversation
 4. Select the profile with GitHub tools
-5. Send message: "Give a short overview of the open issues in https://github.com/archestra-ai/website"
+5. Send message: "Give a short overview of the open issues in https://github.com/archestra-ai/archestra"
 
 ### Expected Result
 
@@ -193,7 +193,7 @@ If `list_issues` is blocked in untrusted context due to Test 5:
    - Enabled: true
 3. Navigate to Chat and start a NEW conversation
 4. Send a short message that matches the rule condition:
-   "Give a short overview of the open issues in https://github.com/archestra-ai/website"
+   "Give a short overview of the open issues in https://github.com/archestra-ai/archestra"
 
 ### Expected Result
 

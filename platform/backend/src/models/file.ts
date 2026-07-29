@@ -13,6 +13,7 @@ type PersistedFileMeta = {
   mimeType: string;
   sizeBytes: number;
   createdAt: Date;
+  projectId: string | null;
 };
 
 const artifactColumns = {
@@ -270,6 +271,7 @@ class FileModel {
         mimeType: schema.filesTable.mimeType,
         sizeBytes: schema.filesTable.sizeBytes,
         createdAt: schema.filesTable.createdAt,
+        projectId: schema.filesTable.projectId,
       })
       .from(schema.filesTable)
       .where(

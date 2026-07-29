@@ -1,5 +1,41 @@
-import { archestraApiSdk, slugify } from "@archestra/shared";
-import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recording-store";
+import {
+  APP_RECORDING_VIEWPORT_ASPECT,
+  archestraApiSdk,
+  GITHUB_MAX_FILE_BYTES,
+  healBundleMcpServers,
+  slugify,
+} from "@archestra/shared";
+import {
+  fallbackRecordingBuildPrompt,
+  fallbackRecordingDescription,
+} from "@/lib/app-session-recording/app-recording.query";
+import type {
+  AppRecordingBundle,
+  AppRecordingEnhancement,
+} from "@/lib/app-session-recording/app-recording-store";
+
+/**
+ * The enhancement a submission ships, guaranteed non-empty on BOTH fields so a
+ * recording is NEVER blocked from the gallery on a missing AI draft: the
+ * builder's own description or an app-name fallback, and the builder's own build
+ * prompt or a fallback to the opening chat message (the ask that started the
+ * app). Whatever else the enhancement already carries — closing response,
+ * category — is preserved. The recorder UI nudges the builder to fill both in
+ * for a better gallery card, but an ignored nudge degrades to these fallbacks
+ * here rather than dead-ending the submission.
+ */
+export function ensureSubmittableEnhancement(
+  bundle: AppRecordingBundle,
+): AppRecordingEnhancement {
+  const existing = bundle.enhancement;
+  return {
+    ...existing,
+    description:
+      existing?.description?.trim() ||
+      fallbackRecordingDescription(bundle.app.name),
+    prompt: existing?.prompt?.trim() || fallbackRecordingBuildPrompt(bundle),
+  };
+}
 
 /**
  * Shares a recorded app session to the public App Gallery as a pull request
@@ -15,8 +51,11 @@ import type { AppRecordingBundle } from "@/lib/app-session-recording/app-recordi
  *
  * The submission is the standard fork workflow, so it needs nothing but the
  * `public_repo` scope the device flow asked for: fork the gallery repository,
- * branch the fork, commit the bundle (and a thumbnail when the recording
- * carries canvas frames), then open the pull request on the gallery.
+ * branch the fork, commit the bundle (and a thumbnail — a canvas app's last
+ * still, or a frame decoded from its video-stream capture, framed onto the
+ * canonical 4:5 app viewport so it matches the whole viewport the gallery
+ * shows rather than the bare canvas), then open the pull request on the
+ * gallery.
  *
  * One app, one submission: the branch name is stable per participant+app,
  * and a duplicate is blocked while an open pull request from it exists or
@@ -209,7 +248,11 @@ export async function submitRecordingToAppGallery(params: {
     stage: "check",
     label: `Checking ${galleryName} for an existing submission…`,
   });
-  const viewer = await gh<{ login: string }>("GET", "/user");
+  // GitHub's /user payload also carries an email — never read past login/name.
+  const viewer = await gh<{ login: string; name: string | null }>(
+    "GET",
+    "/user",
+  );
   const existing = await findBlockingSubmission({
     gh,
     repo,
@@ -218,6 +261,21 @@ export async function submitRecordingToAppGallery(params: {
     slug: appSlug,
   });
   if (existing) throw new DuplicateSubmissionError(existing);
+
+  // The submitter's public GitHub identity, stamped onto the bundle that
+  // actually gets committed — never the automatic path's local `bundle`,
+  // which stays untouched. Picks only `login`/`name`; the same GitHub
+  // response also carries an email, which is never read here.
+  const bundleWithGithub: AppRecordingBundle = {
+    ...bundle,
+    meta: {
+      ...bundle.meta,
+      // GitHub always sends `name` (null when the account has none set) —
+      // coerced defensively in case a response ever omits the key outright,
+      // since the schema requires the field present, never `undefined`.
+      github: { login: viewer.login, name: viewer.name ?? null },
+    },
+  };
 
   onProgress({
     stage: "fork",
@@ -274,7 +332,7 @@ export async function submitRecordingToAppGallery(params: {
   // The same builder backs the manual-submission download, so what a
   // participant hand-uploads is byte-identical to what this commits.
   const dir = gallerySubmissionFolder(viewer.login, appSlug);
-  for (const file of buildGallerySubmissionFiles(bundle)) {
+  for (const file of await buildGallerySubmissionFiles(bundleWithGithub)) {
     onProgress({
       stage: "upload",
       label: `Uploading ${file.name} to ${forkName}…`,
@@ -283,12 +341,14 @@ export async function submitRecordingToAppGallery(params: {
     // blob sha; on a fresh branch the lookup 404s and the PUT creates it.
     const path = `${forkPath}/contents/${dir}/${file.name}`;
     const priorSha = await fetchExistingFileSha({ gh, path, branch });
-    await gh("PUT", path, {
-      message: `Add ${file.name} for: ${bundle.app.name}`,
-      content: toBase64(file.bytes),
-      branch,
-      ...(priorSha ? { sha: priorSha } : {}),
-    });
+    await githubWithRetry(() =>
+      gh("PUT", path, {
+        message: `Add ${file.name} for: ${bundle.app.name}`,
+        content: toBase64(file.bytes),
+        branch,
+        ...(priorSha ? { sha: priorSha } : {}),
+      }),
+    );
   }
 
   onProgress({
@@ -301,7 +361,7 @@ export async function submitRecordingToAppGallery(params: {
       "POST",
       `/repos/${repo.owner}/${repo.name}/pulls`,
       {
-        ...buildGallerySubmissionPr(bundle),
+        ...buildGallerySubmissionPr(bundleWithGithub),
         head: `${viewer.login}:${branch}`,
         base: fork.default_branch,
         maintainer_can_modify: true,
@@ -326,20 +386,23 @@ export async function submitRecordingToAppGallery(params: {
 }
 
 /**
- * The signed-in participant's GitHub login, or null when it can't be had
- * (no token, revoked token, network). Best-effort — the manual-submission
- * screen uses it to spell the exact target folder instead of a placeholder.
+ * The signed-in participant's public GitHub identity, or null when it can't
+ * be had (no token, revoked token, network). Best-effort — the
+ * manual-submission screen uses `login` to spell the exact target folder
+ * instead of a placeholder, and stamps both fields onto the downloaded
+ * bundle. GitHub's /user payload also carries an email — never read past
+ * login/name.
  */
-export async function fetchGithubLogin(
+export async function fetchGithubIdentity(
   token: string,
   signal: AbortSignal,
-): Promise<string | null> {
+): Promise<{ login: string; name: string | null } | null> {
   try {
-    const viewer = await makeGithubClient(token, signal)<{ login: string }>(
-      "GET",
-      "/user",
-    );
-    return viewer.login;
+    const viewer = await makeGithubClient(token, signal)<{
+      login: string;
+      name: string | null;
+    }>("GET", "/user");
+    return { login: viewer.login, name: viewer.name };
   } catch {
     return null;
   }
@@ -390,46 +453,90 @@ export function buildGallerySubmissionPr(bundle: AppRecordingBundle): {
 }
 
 /**
- * The complete submission package: the recording itself, plus a thumbnail
- * when the recording carries canvas frames. The single source of the bytes
- * for BOTH paths — the automatic PR commits these, and the manual-submission
- * fallback downloads these — so the two are identical by construction.
+ * The complete submission package: the recording itself, plus a thumbnail when
+ * one can be produced — a canvas app's last still frame, or (for a canvas
+ * captured as an encoded video stream) its final frame decoded from the last
+ * keyframe — framed onto the canonical 4:5 app viewport. The single source of
+ * the bytes for BOTH paths — the automatic PR commits these, and the manual-
+ * submission fallback downloads these — so the two are identical by
+ * construction. Async because framing (and decoding a video frame) is.
  */
-export function buildGallerySubmissionFiles(
+export async function buildGallerySubmissionFiles(
   bundle: AppRecordingBundle,
-): GallerySubmissionFile[] {
-  const files: GallerySubmissionFile[] = [
-    {
-      name: "recording.json",
-      bytes: new TextEncoder().encode(JSON.stringify(bundle)),
-      mimeType: "application/json",
-    },
-  ];
-  const thumbnail = extractThumbnail(bundle);
-  if (thumbnail) {
-    files.push({
-      name: `thumbnail.${thumbnail.ext}`,
-      bytes: base64ToBytes(thumbnail.base64),
-      mimeType: `image/${thumbnail.ext === "jpg" ? "jpeg" : thumbnail.ext}`,
-    });
-  }
+): Promise<GallerySubmissionFile[]> {
+  const files: GallerySubmissionFile[] = [recordingFile(bundle)];
+  // Best-effort: an app with no decodable frame (a DOM app, an undecodable
+  // stream, a browser without WebCodecs) ships no thumbnail, and the gallery
+  // derives one from replay.
+  const thumbnail = await extractViewportThumbnail(bundle);
+  if (thumbnail) files.push(thumbnailFile(thumbnail));
   return files;
 }
 
 /**
- * The one size rule a submission must meet — GitHub's own per-file limit on
- * its contents API, NOT a product quota. Returns the refusal message when a
- * file is over it, null when everything fits. The dialog calls this at the
- * Share click so nobody signs in to GitHub only to learn the recording
- * can't be uploaded.
+ * Self-heal a bundle's connected-MCP list against the app as it stands NOW,
+ * right before it is submitted to the gallery: union the servers the recording
+ * already carries with every server the app is currently connected to (its
+ * assigned tools). A recording made before the connected list was captured —
+ * or one whose app has since gained servers — then advertises the app's full
+ * MCP surface on its gallery card, not only the servers that session happened
+ * to call.
+ *
+ * Deliberately best-effort and non-blocking: a from-scratch recording with no
+ * app, a deleted app, or a failed lookup submits the recording's existing list
+ * unchanged rather than failing the share. Never shrinks the list.
+ */
+export async function healSubmissionMcpServers(
+  bundle: AppRecordingBundle,
+): Promise<AppRecordingBundle> {
+  const appId = bundle.app.id;
+  if (!appId) return bundle;
+  try {
+    const { data, error } = await archestraApiSdk.getAppTools({
+      path: { appId },
+    });
+    if (error || !data) return bundle;
+    return healBundleMcpServers(bundle, data);
+  } catch {
+    return bundle;
+  }
+}
+
+/** The recording JSON — the one submission file, and the only one big enough
+ * to matter to the oversize pre-flight (the thumbnail is a single frame). */
+function recordingFile(bundle: AppRecordingBundle): GallerySubmissionFile {
+  return {
+    name: "recording.json",
+    bytes: new TextEncoder().encode(JSON.stringify(bundle)),
+    mimeType: "application/json",
+  };
+}
+
+/** A thumbnail (ext + base64) as the submission file the PR commits. */
+function thumbnailFile(thumbnail: {
+  ext: string;
+  base64: string;
+}): GallerySubmissionFile {
+  return {
+    name: `thumbnail.${thumbnail.ext}`,
+    bytes: base64ToBytes(thumbnail.base64),
+    mimeType: `image/${thumbnail.ext === "jpg" ? "jpeg" : thumbnail.ext}`,
+  };
+}
+
+/**
+ * The one size rule a submission must meet — GitHub's own strictest ceiling,
+ * NOT a product quota, and never tighter than GitHub's. Returns the refusal
+ * message when a file is over it, null when everything fits. The dialog calls
+ * this at the Share click so nobody signs in to GitHub only to learn the
+ * recording can't be uploaded.
  */
 export function oversizedGallerySubmissionFile(
   bundle: AppRecordingBundle,
 ): string | null {
-  for (const file of buildGallerySubmissionFiles(bundle)) {
-    if (file.bytes.byteLength > GITHUB_MAX_FILE_BYTES) {
-      return `This recording is ${mb(file.bytes.byteLength)}MB — GitHub refuses files over ${mb(GITHUB_MAX_FILE_BYTES)}MB. Re-record a shorter session.`;
-    }
+  const { bytes } = recordingFile(bundle);
+  if (bytes.byteLength > GITHUB_MAX_FILE_BYTES) {
+    return `This recording is ${mb(bytes.byteLength)}MB — GitHub refuses uploads over ${mb(GITHUB_MAX_FILE_BYTES)}MB. Trim it, or re-record a shorter session.`;
   }
   return null;
 }
@@ -625,6 +732,52 @@ async function toGithubRequestError(
     `GitHub refused the request.${detail ? ` ${detail}` : ""}`,
     status,
   );
+}
+
+/**
+ * Re-run a write that failed for a reason GitHub itself calls temporary.
+ *
+ * Large submissions draw transient refusals from the commit path — "Timed out
+ * validating rule" is the one seen in practice, a ruleset check giving up
+ * rather than a verdict on the request. Clicking the dialog's Try again does
+ * clear it, so this is not rescuing an unrecoverable state; it spends the
+ * retry on the participant's behalf instead of making them notice, read a
+ * scary error, and click through it.
+ *
+ * Only transient shapes retry. A refusal that is a VERDICT — too large, no
+ * permission, a bad token — must surface immediately: retrying it wastes the
+ * participant's time and buries the one message that tells them what to fix.
+ */
+async function githubWithRetry<T>(call: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < GITHUB_WRITE_ATTEMPTS; attempt++) {
+    try {
+      return await call();
+    } catch (error) {
+      if (!isTransientGithubRefusal(error)) throw error;
+      lastError = error;
+      // Linear, not exponential: two short waits inside one click, not a
+      // backoff schedule the participant sits through.
+      await new Promise((resolve) =>
+        setTimeout(resolve, GITHUB_RETRY_DELAY_MS * (attempt + 1)),
+      );
+    }
+  }
+  throw lastError;
+}
+
+/** Three tries total — enough for a blip, short enough to stay one click. */
+const GITHUB_WRITE_ATTEMPTS = 3;
+const GITHUB_RETRY_DELAY_MS = 1_500;
+
+/**
+ * A refusal GitHub is likely to answer differently a moment later: its own
+ * 5xx weather, and the ruleset-validation timeout that large commits provoke.
+ */
+function isTransientGithubRefusal(error: unknown): boolean {
+  if (!(error instanceof GithubRequestError)) return false;
+  if (error.status >= 500) return true;
+  return /timed out validating rule/i.test(error.message);
 }
 
 /** An api.github.com refusal, keeping the status for retry decisions. */
@@ -840,11 +993,33 @@ async function waitForForkRef(params: {
 }
 
 /**
- * Best effort: a canvas-drawing app's last recorded frame is a genuine
- * screenshot; a DOM app records no frames, and the gallery pipeline derives
- * its imagery from the bundle's replay instead.
+ * The recording's final frame framed onto the canonical 4:5 app viewport — the
+ * whole viewport the gallery shows, not the bare canvas. Prefers a canvas
+ * still (a genuine screenshot of the final state) and falls back to decoding
+ * the final frame of a video-stream capture; either source is centered over a
+ * neutral backdrop in a 4:5 box the same way the player's app stage frames it.
+ * Null when the recording carries no decodable frame (a DOM app, an
+ * undecodable stream, or a browser without the canvas/WebCodecs support this
+ * needs) — the gallery then derives one from replay.
  */
-function extractThumbnail(
+async function extractViewportThumbnail(
+  bundle: AppRecordingBundle,
+): Promise<{ ext: string; base64: string } | null> {
+  const still = extractStillFrame(bundle);
+  if (still) {
+    const framed = await stillFrameToViewportWebp(still);
+    if (framed) return framed;
+  }
+  return extractVideoThumbnail(bundle);
+}
+
+/**
+ * Best effort: a canvas-drawing app's last recorded still is a genuine
+ * screenshot of its final state. Null when the recording carries no
+ * `kind:"canvas"` stills — a DOM app (no frames at all), or a canvas captured
+ * as a video stream (see {@link extractVideoThumbnail}).
+ */
+function extractStillFrame(
   bundle: AppRecordingBundle,
 ): { ext: string; base64: string } | null {
   for (let i = bundle.recording.events.length - 1; i >= 0; i--) {
@@ -858,17 +1033,275 @@ function extractThumbnail(
   return null;
 }
 
+/** Decode a raw still frame and frame it onto the 4:5 viewport. Null when the
+ * frame can't be decoded here (invalid bytes, no createImageBitmap). */
+async function stillFrameToViewportWebp(still: {
+  ext: string;
+  base64: string;
+}): Promise<{ ext: string; base64: string } | null> {
+  if (typeof createImageBitmap === "undefined") return null;
+  const type = `image/${still.ext === "jpg" ? "jpeg" : still.ext}`;
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(
+      new Blob([base64ToBytes(still.base64) as BlobPart], { type }),
+    );
+  } catch {
+    return null;
+  }
+  try {
+    return await frameToViewportWebp(bitmap, bitmap.width, bitmap.height);
+  } finally {
+    bitmap.close();
+  }
+}
+
+type StoredVideoConfig = Extract<
+  AppRecordingBundle["recording"]["events"][number],
+  { kind: "video-config" }
+>;
+type StoredVideoChunk = Extract<
+  AppRecordingBundle["recording"]["events"][number],
+  { kind: "video-chunk" }
+>;
+
+/**
+ * A screenshot for a canvas captured as an encoded video stream: its FINAL
+ * frame, decoded from the stream's last keyframe forward. Best-effort and
+ * async — null when WebCodecs is unavailable, the codec can't be decoded here,
+ * or the stream has no keyframe. Recording is Chromium/WebCodecs-only, so this
+ * runs on exactly the browsers that produce these streams.
+ */
+async function extractVideoThumbnail(
+  bundle: AppRecordingBundle,
+): Promise<{ ext: string; base64: string } | null> {
+  if (
+    typeof VideoDecoder === "undefined" ||
+    typeof EncodedVideoChunk === "undefined"
+  ) {
+    return null;
+  }
+  const events = bundle.recording.events;
+
+  // The canvas most recently painted — whose last video chunk lands latest — so
+  // the thumbnail is the app's final visible state, matching the still path.
+  let targetSel: string | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.kind === "video-chunk") {
+      targetSel = event.sel;
+      break;
+    }
+  }
+  if (targetSel === null) return null;
+
+  // That stream's decoder config (codec, coded size, extradata) — emitted at
+  // stream start and on resize, so the most recent one governs the final frame.
+  let config: StoredVideoConfig | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.kind === "video-config" && event.sel === targetSel) {
+      config = event;
+      break;
+    }
+  }
+  if (!config) return null;
+
+  // Decode from the last keyframe forward: a keyframe stands alone and the
+  // deltas after it carry the stream to its end — the minimum for the final
+  // frame.
+  const chunks = events.filter(
+    (event): event is StoredVideoChunk =>
+      event.kind === "video-chunk" && event.sel === targetSel,
+  );
+  let start = -1;
+  for (let i = chunks.length - 1; i >= 0; i--) {
+    if (chunks[i].type === "key") {
+      start = i;
+      break;
+    }
+  }
+  if (start < 0) return null;
+
+  const decoderConfig: VideoDecoderConfig = {
+    codec: config.codec,
+    codedWidth: config.codedWidth,
+    codedHeight: config.codedHeight,
+    ...(config.description
+      ? { description: base64ToBytes(config.description) }
+      : {}),
+  };
+  const support = await VideoDecoder.isConfigSupported(decoderConfig).catch(
+    () => null,
+  );
+  if (!support?.supported) return null;
+
+  const frame = await decodeFinalVideoFrame(decoderConfig, chunks.slice(start));
+  if (!frame) return null;
+  try {
+    return await frameToViewportWebp(
+      frame,
+      frame.displayWidth,
+      frame.displayHeight,
+    );
+  } finally {
+    frame.close();
+  }
+}
+
+/**
+ * Feed a keyframe and the deltas after it to a one-shot decoder and resolve the
+ * LAST frame it emits — the stream's final state. Resolves null on any decoder
+ * error; every superseded frame is closed so only the winner outlives the call.
+ */
+function decodeFinalVideoFrame(
+  config: VideoDecoderConfig,
+  chunks: StoredVideoChunk[],
+): Promise<VideoFrame | null> {
+  return new Promise((resolve) => {
+    let latest: VideoFrame | null = null;
+    let settled = false;
+    const finish = (frame: VideoFrame | null) => {
+      if (settled) return;
+      settled = true;
+      try {
+        decoder.close();
+      } catch {
+        // already closed / never configured
+      }
+      resolve(frame);
+    };
+    const decoder = new VideoDecoder({
+      output: (frame) => {
+        latest?.close();
+        latest = frame;
+      },
+      error: () => finish(null),
+    });
+    try {
+      decoder.configure(config);
+      for (const chunk of chunks) {
+        decoder.decode(
+          new EncodedVideoChunk({
+            type: chunk.type,
+            timestamp: chunk.tsUs,
+            data: base64ToBytes(chunk.data),
+          }),
+        );
+      }
+      decoder
+        .flush()
+        .then(() => finish(latest))
+        .catch(() => finish(latest));
+    } catch {
+      finish(latest);
+    }
+  });
+}
+
+/**
+ * Draw a decoded frame (a canvas still bitmap or a video frame) centered into
+ * the smallest 4:5 box that contains it and encode the result as a WebP still
+ * (ext + base64, the submission's shape). The margins the framing adds are
+ * filled with a neutral backdrop, matching how the player's app stage seats a
+ * non-4:5 frame in the recorded viewport — so the thumbnail is the whole 4:5
+ * viewport rather than the bare canvas area. Null when a 2D context is
+ * unavailable (jsdom without the canvas backend) or encoding yields nothing.
+ */
+async function frameToViewportWebp(
+  source: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+): Promise<{ ext: string; base64: string } | null> {
+  if (!sourceWidth || !sourceHeight) return null;
+  const box = viewportBox(sourceWidth, sourceHeight);
+  const canvas = document.createElement("canvas");
+  canvas.width = box.width;
+  canvas.height = box.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  // The real app viewport shows its own page background in this margin, which
+  // the recording never captures as pixels — a neutral dark backdrop is the
+  // faithful-enough stand-in (and no margin at all exists for a frame already
+  // at the 4:5 aspect, the common full-viewport-canvas case).
+  ctx.fillStyle = THUMBNAIL_BACKDROP;
+  ctx.fillRect(0, 0, box.width, box.height);
+  ctx.drawImage(
+    source,
+    Math.round((box.width - sourceWidth) / 2),
+    Math.round((box.height - sourceHeight) / 2),
+    sourceWidth,
+    sourceHeight,
+  );
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((result) => resolve(result), "image/webp", 0.85);
+  });
+  if (!blob) return null;
+  return {
+    ext: "webp",
+    base64: toBase64(new Uint8Array(await blob.arrayBuffer())),
+  };
+}
+
+/**
+ * The smallest box at the canonical 4:5 viewport aspect that contains a
+ * `sourceWidth`×`sourceHeight` frame at its own resolution: the frame's own
+ * width or height binds (whichever the aspect makes the tight dimension) and
+ * the other grows to reach 4:5, so the frame is never scaled — only
+ * letterboxed. A frame already at 4:5 returns its own size unchanged.
+ *
+ * Exported for the framing unit test — the rasterization around it is browser
+ * plumbing, but this geometry is the behavior worth pinning.
+ */
+export function viewportBox(
+  sourceWidth: number,
+  sourceHeight: number,
+): { width: number; height: number } {
+  if (sourceWidth / sourceHeight >= APP_RECORDING_VIEWPORT_ASPECT) {
+    // Wider than 4:5 → width binds, pad top and bottom.
+    return {
+      width: sourceWidth,
+      height: Math.round(sourceWidth / APP_RECORDING_VIEWPORT_ASPECT),
+    };
+  }
+  // Taller than 4:5 → height binds, pad left and right.
+  return {
+    width: Math.round(sourceHeight * APP_RECORDING_VIEWPORT_ASPECT),
+    height: sourceHeight,
+  };
+}
+
+/** The backdrop the 4:5 framing paints behind a non-4:5 frame's letterbox. */
+const THUMBNAIL_BACKDROP = "#0b0b0f";
+
 function prBody(bundle: AppRecordingBundle): string {
+  // The editor's final cut (cuts applied, idle compressed) when the bundle
+  // carries one — otherwise the raw capture length, for older bundles.
+  const durationMs =
+    bundle.meta.finalCutDurationMs ?? bundle.recording.durationMs;
   const lines = [
     `Submits a recorded session of **${bundle.app.name}**.`,
     "",
-    `- Duration: ${Math.round(bundle.recording.durationMs / 1000)}s`,
+    `- Duration: ${Math.round(durationMs / 1000)}s`,
   ];
   if (bundle.enhancement?.category) {
     lines.push(`- Category: ${bundle.enhancement.category}`);
   }
+  if (bundle.meta.github) {
+    lines.push(
+      `- Submitted by: @${bundle.meta.github.login}${bundle.meta.github.name ? ` (${bundle.meta.github.name})` : ""}`,
+    );
+  }
   if (bundle.meta.authorName) {
     lines.push(`- Author: ${bundle.meta.authorName}`);
+  }
+  if (bundle.meta.model) {
+    lines.push(`- Model: ${bundle.meta.model}`);
+  }
+  // `!= null` so a genuine zero (a fully automated build) still reports "0"
+  // rather than dropping the line — only an absent count is omitted.
+  if (bundle.meta.userPromptCount != null) {
+    lines.push(`- Prompts: ${bundle.meta.userPromptCount}`);
   }
   if (bundle.meta.mcpServers?.length) {
     lines.push(`- MCP servers: ${bundle.meta.mcpServers.join(", ")}`);
@@ -908,9 +1341,6 @@ function base64ToBytes(base64: string): Uint8Array {
   }
   return bytes;
 }
-
-/** GitHub's ceiling for a file created through its contents API. */
-const GITHUB_MAX_FILE_BYTES = 100 * 1024 * 1024;
 
 function mb(bytes: number): number {
   return Math.round(bytes / (1024 * 1024));

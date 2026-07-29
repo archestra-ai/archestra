@@ -1,8 +1,13 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ClientFilter,
+} from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { throwOnApiError } from "@/lib/utils";
 
-const { getTool, getTools, getToolsWithAssignments } = archestraApiSdk;
+const { getTool, getToolObservers, getTools, getToolsWithAssignments } =
+  archestraApiSdk;
 
 /**
  * Fetch a single tool's policy-editor fields by id, scoped to what the caller
@@ -67,6 +72,8 @@ export function useToolsWithAssignments({
   filters?: {
     search?: string;
     origin?: string;
+    observedByUserId?: string;
+    observedByClient?: ClientFilter;
     excludeArchestraTools?: boolean;
     includeKnowledgeSourcesTool?: boolean;
   };
@@ -82,6 +89,8 @@ export function useToolsWithAssignments({
         sortDirection: sorting?.sortDirection,
         search: filters?.search,
         origin: filters?.origin,
+        observedByUserId: filters?.observedByUserId,
+        observedByClient: filters?.observedByClient,
         excludeArchestraTools: filters?.excludeArchestraTools,
         includeKnowledgeSourcesTool: filters?.includeKnowledgeSourcesTool,
       },
@@ -95,6 +104,8 @@ export function useToolsWithAssignments({
           sortDirection: sorting?.sortDirection,
           search: filters?.search,
           origin: filters?.origin,
+          observedByUserId: filters?.observedByUserId,
+          observedByClient: filters?.observedByClient,
           excludeArchestraTools: filters?.excludeArchestraTools,
           includeKnowledgeSourcesTool: filters?.includeKnowledgeSourcesTool,
         },
@@ -116,5 +127,20 @@ export function useToolsWithAssignments({
     },
     initialData,
     enabled,
+  });
+}
+
+/**
+ * Filter options for observed tools: the users who have observed tools in LLM
+ * proxy traffic, and the client families their observations came from.
+ */
+export function useToolObservers() {
+  return useQuery({
+    queryKey: ["tool-observers"],
+    queryFn: async () => {
+      const { data, error } = await getToolObservers();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? { users: [], clients: [] };
+    },
   });
 }

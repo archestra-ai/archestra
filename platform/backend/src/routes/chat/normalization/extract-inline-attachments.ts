@@ -101,14 +101,17 @@ export async function extractInlineAttachments(args: {
 
 /**
  * Policy describing which uploaded attachments this turn may accept, evaluated
- * before any bytes are persisted. A file is acceptable when the model can ingest
- * its type, OR it is an inlineable text document within the inline budget, OR a
- * sandbox is available to stage it (within the sandbox artifact size limit).
+ * before any bytes are persisted. Every accepted file lands as a conversation
+ * attachment the user reaches from the chat Files panel, so the only rejection
+ * is exceeding `fileStorageByteLimit`. `sandboxByteLimit` decides nothing about
+ * acceptance — it only bounds what is additionally staged into the sandbox for
+ * the model; a bigger file skips staging and is still stored.
  */
 export type InlineAttachmentPolicy = {
   ingestibleMimeTypes: Set<string>;
   sandboxAvailable: boolean;
   sandboxByteLimit: number;
+  fileStorageByteLimit: number;
 };
 
 /**
@@ -137,6 +140,9 @@ export function assertInlineAttachmentsAcceptable(args: {
         ingestibleMimeTypes: policy.ingestibleMimeTypes,
         sandboxAvailable: policy.sandboxAvailable,
         sandboxByteLimit: policy.sandboxByteLimit,
+        // Chat uploads always have a landing surface: the attachment row shows
+        // in the conversation's Files panel even when the model can't read it.
+        fileStorageByteLimit: policy.fileStorageByteLimit,
       });
       if (reason) {
         throw new ApiError(400, rejectionMessage(reason, inspected, policy));
@@ -378,6 +384,11 @@ function rejectionMessage(
 ): string {
   const { mimeType, filename } = file;
   switch (reason) {
+    // Chat always passes a storage cap, so "too_large_to_store" is the only
+    // reachable reason here; the rest stay for the shared union (A2A uses it
+    // without the Files-panel fallback).
+    case "too_large_to_store":
+      return `"${filename}" is too large to attach (max ${formatBytes(policy.fileStorageByteLimit)}).`;
     case "text_too_large":
       return `"${filename}" is too large to include (max ${formatBytes(INLINE_TEXT_MAX_BYTES)} of text without a sandbox).`;
     case "too_large_for_sandbox":

@@ -69,6 +69,8 @@ export { default as McpToolCallModel } from "./mcp-tool-call";
 export { default as MemberModel } from "./member";
 export { default as MessageModel } from "./message";
 export { default as ModelModel } from "./model";
+export { default as ModelTeamModel } from "./model-team";
+export { default as ModelUserModel } from "./model-user";
 export { default as OAuthAccessTokenModel } from "./oauth-access-token";
 export { default as OAuthClientModel } from "./oauth-client";
 export { default as OAuthRefreshTokenModel } from "./oauth-refresh-token";
@@ -91,6 +93,7 @@ export { default as ServiceAccountModel } from "./service-account";
 /** @public — re-exported for testability (consumed by src/test/fixtures.ts) */
 export { default as SessionModel } from "./session";
 export { default as SkillModel } from "./skill";
+export { default as SkillEnvironmentModel } from "./skill-environment";
 export { default as SkillFileModel } from "./skill-file";
 export {
   default as SkillSandboxModel,
@@ -103,6 +106,7 @@ export { default as SkillShareLinkModel } from "./skill-share-link";
 export { default as SkillShareLinkRevisionModel } from "./skill-share-link-revision";
 export { default as SkillTeamModel } from "./skill-team";
 export { default as SkillUsageEventModel } from "./skill-usage-event";
+export { default as SkillUserModel } from "./skill-user";
 export { default as SkillVersionModel } from "./skill-version";
 export { default as StatisticsModel } from "./statistics";
 export { default as TaskModel } from "./task";
@@ -111,6 +115,7 @@ export { default as TeamLabelModel } from "./team-label";
 export { default as TeamTokenModel } from "./team-token";
 export { default as ToolModel } from "./tool";
 export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";
+export { default as ToolObservationModel } from "./tool-observation";
 export { default as TrustedDataPolicyModel } from "./trusted-data-policy";
 export { default as UserModel } from "./user";
 export { default as UserOnboardingSeenItemModel } from "./user-onboarding-seen-item";

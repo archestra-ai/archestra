@@ -1,4 +1,5 @@
 export { anthropicAdapterFactory } from "./anthropic";
+export { archestraAdapterFactory } from "./archestra";
 export { azureAdapterFactory } from "./azure";
 export { azureResponsesAdapterFactory } from "./azure-responses";
 export { bedrockAdapterFactory } from "./bedrock";
@@ -15,6 +16,7 @@ export { microsoft365CopilotAdapterFactory } from "./microsoft-365-copilot";
 export { minimaxAdapterFactory } from "./minimax";
 export { mistralAdapterFactory } from "./mistral";
 export { ollamaAdapterFactory } from "./ollama";
+export { ollamaNativeAdapterFactory } from "./ollama-native";
 export {
   makeOpenAiCompatibleEmbeddingsAdapterFactory,
   openAiEmbeddingsAdapterFactory,

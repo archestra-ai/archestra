@@ -257,8 +257,10 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     # Bundle the Dagger Engine that backs the skill sandbox / code runtime
     # (archestra__run_command and friends). It runs as a privileged pod in the embedded KinD
     # cluster; the backend reaches it over kube-pod:// (kubectl exec + buildctl
-    # dial-stdio), so no Service or TCP port is needed. The manifest is the
-    # helm/dagger-runtime chart rendered with laptop-sized resources.
+    # dial-stdio), so no Service or TCP port is needed. Real deployments have the
+    # backend provision engines in code; the quickstart runs this one instead, so a
+    # demo container never waits on an engine coming up at first use. The manifest
+    # is docker/dagger-engine.quickstart.yaml, sized for a laptop.
     # Opt out with ARCHESTRA_CODE_RUNTIME_ENABLED=false.
     if [ "${ARCHESTRA_CODE_RUNTIME_ENABLED:-true}" = "true" ]; then
         echo "Deploying embedded Dagger Engine for code runtime..."

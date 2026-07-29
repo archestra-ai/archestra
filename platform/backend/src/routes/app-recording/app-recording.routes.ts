@@ -1,16 +1,51 @@
 import {
   APP_RECORDING_MAX_BUNDLE_BYTES,
+  GITHUB_MAX_FILE_BYTES,
   RouteId,
   validateRecordingBundle,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import logger from "@/logging";
 import { AgentModel, ConversationModel } from "@/models";
-import { draftRecordingEnhancement } from "@/services/apps/app-recording-enhancement";
+import {
+  draftRecordingEnhancement,
+  ENHANCEMENT_FAILURE_REASONS,
+} from "@/services/apps/app-recording-enhancement";
 import { renderJobClient } from "@/services/apps/app-recording-render-client";
 import { RENDER_BUNDLE_BODY_LIMIT_BYTES } from "@/services/apps/app-recording-render-protocol";
-import { assertAppsHackathonAvailable } from "@/services/apps/apps-hackathon-gate";
+import {
+  assertAppRecordingVideoDownloadAvailable,
+  assertAppsHackathonAvailable,
+} from "@/services/apps/apps-hackathon-gate";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
+
+/**
+ * The one host a review recording may be fetched from. Submissions live as
+ * `apps/<slug>/recording.json` in the public gallery repository, served raw by
+ * GitHub — so the only legitimate source is a raw.githubusercontent.com URL.
+ * Restricting to it is what keeps this endpoint from being an SSRF hop to
+ * arbitrary internal or external hosts.
+ */
+const REVIEW_BUNDLE_HOST = "raw.githubusercontent.com";
+/** Give up on a slow GitHub fetch rather than holding the request open. */
+const REVIEW_FETCH_TIMEOUT_MS = 15_000;
+/**
+ * Cap the fetched body at GitHub's own file ceiling — the same bound the
+ * gallery submission gate enforces. The cap exists so a reviewer's request
+ * cannot buffer an unbounded response an attacker points `src` at; it must
+ * never be tighter than what the gallery accepts, or a submission the gallery
+ * took becomes one the review player refuses to even load.
+ */
+const REVIEW_BUNDLE_MAX_BYTES = GITHUB_MAX_FILE_BYTES;
+
+/** The four endpoints that make up one video render's lifecycle. */
+const VIDEO_ROUTE_IDS = new Set<string | undefined>([
+  RouteId.RenderAppRecordingVideo,
+  RouteId.GetAppRecordingRenderStatus,
+  RouteId.DownloadAppRecordingVideo,
+  RouteId.CancelAppRecordingRender,
+]);
 
 /**
  * App session recordings are captured, stored (IndexedDB, one per
@@ -25,8 +60,24 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // registered once here rather than repeated in each handler — a per-handler
   // check is one forgotten line away from an endpoint that answers on a
   // deployment where the feature is switched off.
-  fastify.addHook("preHandler", async ({ organizationId }) => {
-    await assertAppsHackathonAvailable(organizationId);
+  fastify.addHook("preHandler", async (request) => {
+    // Reviewing a submitted recording is not recording a session: a reviewer
+    // may open a submission independent of the hackathon recording window (it
+    // is public GitHub data, only authenticated org members reach it). Every
+    // OTHER route here is a recorder/render action and stays behind the gate.
+    // Match by operationId (the route's stable identity), not the URL string, so
+    // a later path rename can't silently drop the exemption and start gating the
+    // review route behind the recorder feature flag.
+    if (request.routeOptions.schema?.operationId === RouteId.ReviewAppRecording)
+      return;
+    await assertAppsHackathonAvailable(request.organizationId);
+    // The video export is a second, narrower opt-in on top of the recorder.
+    // Gated here rather than per handler for the same reason the hackathon gate
+    // is: four endpoints make up one render's lifecycle, and a fifth added
+    // later would otherwise have to remember.
+    if (VIDEO_ROUTE_IDS.has(request.routeOptions.schema?.operationId)) {
+      assertAppRecordingVideoDownloadAvailable();
+    }
   });
 
   fastify.post(
@@ -35,7 +86,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.EnhanceAppRecording,
         description:
-          "Draft the AI enhancement for a recorded app-building session: a one-sentence app description, one consolidated build prompt, one closing agent response, and a gallery category, all generated from the full chat. All are drafts the builder edits before applying; nulls mean generation was unavailable and the client falls back.",
+          "Draft the AI enhancement for a recorded app-building session: a one-sentence app description, one consolidated build prompt, one closing agent response, and a gallery category, all generated from the full chat. All are drafts the builder edits before applying; nulls mean generation was unavailable and the client falls back, with `reason` naming why the build prompt is missing so the client can say so instead of degrading silently.",
         tags: ["App Recordings"],
         body: z.object({
           conversationId: UuidIdSchema,
@@ -47,6 +98,7 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
             prompt: z.string().nullable(),
             response: z.string().nullable(),
             category: z.string().nullable(),
+            reason: z.enum(ENHANCEMENT_FAILURE_REASONS).nullable(),
           }),
         ),
       },
@@ -73,6 +125,13 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const draft = await draftRecordingEnhancement({
         appName: body.appName,
         conversationId: conversation.id,
+        // The model this chat is actually on — tried first so the draft follows
+        // whatever provider the builder picked in chat, with the agent / org
+        // default as the fallback.
+        chatModel: {
+          modelId: conversation.modelId ?? null,
+          chatApiKeyId: conversation.chatApiKeyId ?? null,
+        },
         agent:
           conversation.agentId && agentLlm
             ? { id: conversation.agentId, ...agentLlm }
@@ -216,6 +275,177 @@ const appRecordingRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ cancelled: true });
     },
   );
+
+  fastify.get(
+    "/api/app-recording/review",
+    {
+      schema: {
+        operationId: RouteId.ReviewAppRecording,
+        description:
+          "Fetch a hackathon submission's recording bundle from GitHub (raw.githubusercontent.com only), validate it against the recording contract, and return it for the on-platform, read-only review player. The fetch runs server-side so the frontend's CSP never has to reach GitHub; the bundle is public data and nothing is stored.",
+        tags: ["App Recordings"],
+        querystring: z.object({
+          src: z
+            .string()
+            .min(1)
+            .describe(
+              "Absolute https://raw.githubusercontent.com/... URL of the submission's recording.json.",
+            ),
+        }),
+        // Passed through verbatim — the bundle was just validated, and
+        // re-describing the whole recording schema here would only invite drift.
+        response: constructResponseSchema(z.unknown()),
+      },
+    },
+    async ({ query }, reply) => {
+      const bundle = await fetchReviewBundleFromGithub(query.src);
+      return reply.send(bundle);
+    },
+  );
 };
 
 export default appRecordingRoutes;
+
+// ===== Internal helpers =====
+
+/**
+ * Fetch and validate a submission's recording bundle from GitHub for the review
+ * player.
+ *
+ * Hardened against being used as a general-purpose fetch proxy: the source must
+ * be an absolute https URL on {@link REVIEW_BUNDLE_HOST}, the request times out,
+ * the body is capped, and redirects are only honored while they stay on that
+ * host. The parsed bundle is held to the same contract the player enforces, so a
+ * malformed submission fails here with a reason rather than in the browser.
+ */
+async function fetchReviewBundleFromGithub(src: string): Promise<unknown> {
+  let url: URL;
+  try {
+    url = new URL(src);
+  } catch {
+    throw new ApiError(400, "The recording source must be an absolute URL.");
+  }
+  if (url.protocol !== "https:" || url.hostname !== REVIEW_BUNDLE_HOST) {
+    throw new ApiError(
+      400,
+      `The recording source must be a https://${REVIEW_BUNDLE_HOST}/... URL.`,
+    );
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REVIEW_FETCH_TIMEOUT_MS);
+  try {
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        signal: controller.signal,
+        redirect: "follow",
+        headers: { accept: "application/json, text/plain, */*" },
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new ApiError(
+          504,
+          "Timed out fetching the submission recording from GitHub.",
+        );
+      }
+      logger.error(
+        { err: error, host: url.hostname },
+        "[AppRecordingReview] fetch failed",
+      );
+      throw new ApiError(
+        502,
+        "Could not fetch the submission recording from GitHub.",
+      );
+    }
+
+    // A redirect that left the allowed host would defeat the host check above.
+    try {
+      if (new URL(response.url).hostname !== REVIEW_BUNDLE_HOST) {
+        throw new ApiError(
+          400,
+          `The recording source redirected off ${REVIEW_BUNDLE_HOST}.`,
+        );
+      }
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      // An unparseable response URL is as untrustworthy as an off-host one.
+      throw new ApiError(502, "GitHub returned an unexpected response.");
+    }
+
+    if (response.status === 404) {
+      throw new ApiError(
+        404,
+        "The submission recording could not be found on GitHub.",
+      );
+    }
+    if (!response.ok) {
+      throw new ApiError(
+        502,
+        `GitHub returned ${response.status} for the submission recording.`,
+      );
+    }
+
+    const declared = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > REVIEW_BUNDLE_MAX_BYTES) {
+      throw new ApiError(
+        413,
+        `The submission recording is larger than the ${Math.round(
+          REVIEW_BUNDLE_MAX_BYTES / (1024 * 1024),
+        )}MB review limit.`,
+      );
+    }
+
+    const text = await readCappedBody(response, controller);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new ApiError(422, "The submission recording is not valid JSON.");
+    }
+
+    const validation = validateRecordingBundle(parsed);
+    if (!validation.ok) {
+      throw new ApiError(
+        422,
+        `This submission can't be reviewed. ${validation.reason}`,
+      );
+    }
+    return validation.bundle;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Read a fetch response body as text, aborting the moment it exceeds the cap —
+ * so a `content-length`-less response can't stream past the limit before it is
+ * noticed.
+ */
+async function readCappedBody(
+  response: Response,
+  controller: AbortController,
+): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new ApiError(502, "GitHub returned an empty response.");
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > REVIEW_BUNDLE_MAX_BYTES) {
+      controller.abort();
+      throw new ApiError(
+        413,
+        `The submission recording is larger than the ${Math.round(
+          REVIEW_BUNDLE_MAX_BYTES / (1024 * 1024),
+        )}MB review limit.`,
+      );
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}

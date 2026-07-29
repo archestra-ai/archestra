@@ -19,13 +19,17 @@ import {
   Eye,
   EyeOff,
   Fingerprint,
+  Globe,
   Pencil,
   RefreshCw,
   RotateCcw,
   Server,
+  UserRoundCheck,
+  Users,
   X,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -58,6 +62,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -68,12 +73,22 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  UserShareField,
+  useUserShareOption,
+} from "@/components/user-share-field";
+import {
+  type VisibilityOption,
+  VisibilitySelector,
+} from "@/components/visibility-selector";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -83,14 +98,23 @@ import {
   useUpdateModel,
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
+import { useAssignableTeams } from "@/lib/teams/team.query";
 import { formatContextLength } from "@/lib/utils";
 import { MODEL_NAV_TABS } from "../model-nav-tabs";
 import {
+  buildConfiguredParameters,
+  type ConfiguredParametersFormValues,
   canFilterFreeModelsForApiKey,
   filterModelsForPage,
+  getConfiguredParameterDefaults,
+  isKnowledgeBaseEmbeddingModel,
   type ModelsPageModelTypeFilter,
   OBSERVED_MODEL_SOURCE_DESCRIPTION,
   OBSERVED_MODEL_SOURCE_LABEL,
+  type OLLAMA_NATIVE_PARAM_RULES,
+  resolveDisplayContextLength,
+  validateConfiguredParameter,
 } from "./models-page-utils";
 
 export default function ModelsPage() {
@@ -219,6 +243,54 @@ export default function ModelsPage() {
                 {row.original.embeddingDimensions !== null && (
                   <EmbeddingModelBadge />
                 )}
+                {row.original.teams.length > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="text-xs gap-1">
+                          <Users className="h-3 w-3 shrink-0" />
+                          <span>
+                            {row.original.teams.length === 1
+                              ? "1 team"
+                              : `${row.original.teams.length} teams`}
+                          </span>
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>
+                          Limited to:{" "}
+                          {row.original.teams
+                            .map((team) => team.name)
+                            .join(", ")}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {row.original.users.length > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="text-xs gap-1">
+                          <UserRoundCheck className="h-3 w-3 shrink-0" />
+                          <span>
+                            {row.original.users.length === 1
+                              ? "1 person"
+                              : `${row.original.users.length} people`}
+                          </span>
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>
+                          Limited to:{" "}
+                          {row.original.users
+                            .map((user) => user.name)
+                            .join(", ")}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
               </div>
             </div>
           );
@@ -315,17 +387,39 @@ export default function ModelsPage() {
         },
       },
       {
-        accessorKey: "contextLength",
+        id: "contextLength",
+        // Sorting must follow what the cell shows, not the architectural column.
+        accessorFn: (row) => resolveDisplayContextLength(row).display,
         size: 100,
         header: "Context",
         cell: ({ row }) => {
           if (hasUnknownCapabilities(row.original)) {
             return <UnknownCapabilitiesBadge />;
           }
+          const { display, architectural, isCapped } =
+            resolveDisplayContextLength(row.original);
+          if (!isCapped) {
+            return (
+              <span className="text-sm">{formatContextLength(display)}</span>
+            );
+          }
           return (
-            <span className="text-sm">
-              {formatContextLength(row.original.contextLength ?? null)}
-            </span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-sm underline decoration-dotted underline-offset-4">
+                    {formatContextLength(display)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p>
+                    This model supports {formatContextLength(architectural)}{" "}
+                    tokens, but is capped at {formatContextLength(display)} by
+                    its Ollama Modelfile or a configured num_ctx.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           );
         },
       },
@@ -553,15 +647,39 @@ type EditModelEmbeddingDimensionsValue =
   | ""
   | keyof typeof EMBEDDING_DIMENSION_MAP;
 
+// "user" shares the model with named individuals — the finer-grained peer of a
+// team restriction. Stored as grants beside the team list, not as a scope.
+type ModelAccessScope = "everyone" | "team" | "user";
+
+const modelAccessScopeOptions: VisibilityOption<ModelAccessScope>[] = [
+  {
+    value: "everyone",
+    label: "Everyone",
+    description: "All members of the organization can see and use this model.",
+    icon: Globe,
+  },
+  {
+    value: "team",
+    label: "Specific teams",
+    description:
+      "Only members of the selected teams can see and use this model.",
+    icon: Users,
+  },
+];
+
 interface EditModelFormValues {
   customPricePerMillionInput: string;
   customPricePerMillionOutput: string;
   customPricePerMillionCacheRead: string;
   customPricePerMillionCacheWrite: string;
   ignored: boolean;
+  accessScope: ModelAccessScope;
+  teamIds: string[];
+  userIds: string[];
   embeddingDimensions: EditModelEmbeddingDimensionsValue;
   inputModalities: string[];
   outputModalities: string[];
+  configuredParameters: ConfiguredParametersFormValues;
 }
 
 function EditModelDialog({
@@ -577,8 +695,44 @@ function EditModelDialog({
   const [inputModalityToAdd, setInputModalityToAdd] = useState("");
   const [outputModalityToAdd, setOutputModalityToAdd] = useState("");
   const updateModel = useUpdateModel();
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  // Model catalog managers restrict models across the whole org, so the
+  // picker offers every team (not just the editor's own).
+  const { data: assignableTeams = [] } = useAssignableTeams({
+    isResourceAdmin: true,
+    enabled: !!canReadTeams,
+  });
+  const { data: organization } = useOrganization();
+  const { data: apiKeys = [] } = useLlmProviderApiKeys();
   const providerConfig = PROVIDER_CONFIG[model.provider];
+  const embeddingConfigLocked = isKnowledgeBaseEmbeddingModel({
+    model,
+    embeddingModel: organization?.embeddingModel,
+    embeddingChatApiKeyId: organization?.embeddingChatApiKeyId,
+    availableApiKeys: apiKeys,
+  });
   const fallbackPricing = getFallbackPricing(model);
+  const teamScopeUnavailable = !canReadTeams || assignableTeams.length === 0;
+  const userShareOption = useUserShareOption<ModelAccessScope>("user");
+  const accessScopeOptions: VisibilityOption<ModelAccessScope>[] = [
+    ...modelAccessScopeOptions.map((option) =>
+      option.value === "team" && teamScopeUnavailable
+        ? {
+            ...option,
+            disabled: true,
+            disabledLabel: !canReadTeams
+              ? "Requires permission"
+              : "No teams available",
+            disabledReason: !canReadTeams
+              ? "Team selection requires permission to view teams."
+              : "There are no teams to share with yet. Create one from Settings → Teams.",
+          }
+        : option,
+    ),
+    // Shown even with nobody to share with, disabled and explained, so the
+    // capability is discoverable rather than silently absent.
+    { ...userShareOption, label: "Specific people" },
+  ];
   // The model's provider supports prompt caching when the backend resolved a
   // cache price for it (synced, custom, or multiplier-derived).
   const supportsCachePricing = model.cachePriceSource !== null;
@@ -594,6 +748,15 @@ function EditModelDialog({
     defaultValues: getDefaults(model),
   });
   const selectedEmbeddingDimensions = form.watch("embeddingDimensions");
+  const accessScope = form.watch("accessScope");
+
+  // Top-level field errors, surfaced next to the submit button — see the footer
+  // for why. Nested `configuredParameters.*` errors are deliberately not
+  // included: those inputs spread `field` onto a real DOM node, so
+  // react-hook-form focuses and scrolls to them on its own.
+  const blockingErrors = Object.values(form.formState.errors)
+    .map((error) => (error as { message?: string } | undefined)?.message)
+    .filter((message): message is string => Boolean(message));
 
   useEffect(() => {
     if (open) {
@@ -618,9 +781,27 @@ function EditModelDialog({
       customPricePerMillionCacheRead: cacheReadPrice,
       customPricePerMillionCacheWrite: cacheWritePrice,
       ignored: values.ignored,
+      // Both lists always go, so switching between Teams and Users revokes
+      // what the previous choice left behind instead of stranding it.
+      teamIds: values.accessScope === "team" ? values.teamIds : [],
+      userIds: values.accessScope === "user" ? values.userIds : [],
       embeddingDimensions,
       inputModalities: values.inputModalities as ModelInputModality[],
       outputModalities: values.outputModalities as ModelOutputModality[],
+      // Configured parameters are only applied by the native Ollama provider;
+      // for other providers leave the field untouched. Sent only when actually
+      // edited: the update replaces the object wholesale, so including it on an
+      // unrelated save (a price tweak) would rewrite parameters the form no
+      // longer renders — `seed` among them.
+      ...(model.provider === "ollama-native" &&
+      form.formState.dirtyFields.configuredParameters
+        ? {
+            configuredParameters: buildConfiguredParameters(
+              values.configuredParameters,
+              model.configuredParameters,
+            ),
+          }
+        : {}),
     });
     if (result) {
       onOpenChange(false);
@@ -644,6 +825,20 @@ function EditModelDialog({
       onSubmit={form.handleSubmit(handleSubmit)}
       footer={
         <>
+          {/* The dialog body scrolls while this footer is pinned, so a field
+              error can render hundreds of pixels above the fold — and the
+              modality fields never forward a ref, so react-hook-form cannot
+              scroll to them either. Without this, a blocked submit looks
+              exactly like a button that does nothing. */}
+          {blockingErrors.length > 0 && (
+            <p
+              role="alert"
+              className="mr-auto text-sm text-destructive"
+              data-testid="edit-model-form-errors"
+            >
+              {blockingErrors.join(". ")}
+            </p>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -659,30 +854,133 @@ function EditModelDialog({
     >
       <Form {...form}>
         <div className="space-y-4">
-          {/* Read-only: Provider */}
-          <div className="space-y-1">
-            <span className="text-sm font-medium">Provider</span>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {providerConfig && (
-                <Image
-                  src={providerConfig.icon}
-                  alt={providerConfig.name}
-                  width={20}
-                  height={20}
-                  className="rounded dark:invert"
-                />
-              )}
-              <span>{providerConfig?.name ?? model.provider}</span>
+          {/* Read-only: Provider + Model ID */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <span className="text-sm font-medium">Provider</span>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {providerConfig && (
+                  <Image
+                    src={providerConfig.icon}
+                    alt={providerConfig.name}
+                    width={20}
+                    height={20}
+                    className="rounded dark:invert"
+                  />
+                )}
+                <span>{providerConfig?.name ?? model.provider}</span>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <span className="text-sm font-medium">Model ID</span>
+              <p className="text-sm font-mono text-muted-foreground break-all">
+                {model.modelId}
+              </p>
             </div>
           </div>
 
-          {/* Read-only: Model ID */}
-          <div className="space-y-1">
-            <span className="text-sm font-medium">Model ID</span>
-            <p className="text-sm font-mono text-muted-foreground">
-              {model.modelId}
-            </p>
+          <Separator />
+
+          {/* Availability: hide toggle + team restriction */}
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <span className="text-sm font-medium">Availability</span>
+              <p className="text-sm text-muted-foreground">
+                Control who can see and use this model.
+              </p>
+            </div>
+
+            <FormField
+              control={form.control}
+              name="ignored"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <FormLabel>Hide this model</FormLabel>
+                      <p className="text-sm text-muted-foreground">
+                        Hidden models remain synced and editable in this
+                        catalog, but they are excluded anywhere {appName} offers
+                        model selection.
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="teamIds"
+              rules={{
+                validate: (teamIds) =>
+                  form.getValues("accessScope") === "team" &&
+                  teamIds.length === 0
+                    ? "Select at least one team"
+                    : true,
+              }}
+              render={({ field }) => (
+                <FormItem>
+                  <VisibilitySelector
+                    label="Who can use this model"
+                    value={accessScope}
+                    options={accessScopeOptions}
+                    onValueChange={(scope) => {
+                      form.setValue("accessScope", scope);
+                      // Re-run the teamIds rule so a stale "select at least
+                      // one team" error clears when switching back.
+                      void form.trigger("teamIds");
+                    }}
+                  >
+                    {accessScope === "user" && (
+                      <UserShareField
+                        value={form.watch("userIds")}
+                        onValueChange={(ids) => {
+                          form.setValue("userIds", ids);
+                          void form.trigger("userIds");
+                        }}
+                        label="People"
+                      />
+                    )}
+
+                    {accessScope === "team" && (
+                      <FormControl>
+                        <MultiSelectCombobox
+                          disabled={
+                            !canReadTeams || assignableTeams.length === 0
+                          }
+                          options={assignableTeams.map((team) => ({
+                            value: team.id,
+                            label: team.name,
+                          }))}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder={
+                            !canReadTeams
+                              ? "Teams unavailable"
+                              : assignableTeams.length === 0
+                                ? "No teams available"
+                                : "Search teams..."
+                          }
+                          emptyMessage="No teams found."
+                        />
+                      </FormControl>
+                    )}
+                  </VisibilitySelector>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
+
+          <Separator />
 
           {/* Pricing */}
           <div className="space-y-2">
@@ -929,6 +1227,7 @@ function EditModelDialog({
                 <FormItem>
                   <Select
                     value={field.value || NOT_EMBEDDING_MODEL_VALUE}
+                    disabled={embeddingConfigLocked}
                     onValueChange={(value) =>
                       field.onChange(
                         value === NOT_EMBEDDING_MODEL_VALUE ? "" : value,
@@ -954,39 +1253,25 @@ function EditModelDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                  {embeddingConfigLocked && (
+                    <p className="text-sm text-muted-foreground">
+                      This model is used for knowledge base embeddings, so its
+                      embedding configuration is locked. To change it, drop the
+                      embedding configuration in{" "}
+                      <Link
+                        href="/settings/knowledge"
+                        className="underline underline-offset-2"
+                      >
+                        Knowledge settings
+                      </Link>{" "}
+                      first — all documents will need to be re-embedded.
+                    </p>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
             />
           </div>
-
-          <Separator />
-
-          <FormField
-            control={form.control}
-            name="ignored"
-            render={({ field }) => (
-              <FormItem className="rounded-lg border p-3">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <FormLabel>Hide this model</FormLabel>
-                    <p className="text-sm text-muted-foreground">
-                      Hidden models remain synced and editable in this catalog,
-                      but they are excluded anywhere {appName} offers model
-                      selection.
-                    </p>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
 
           {model.provider === "ollama" &&
             model.defaultParameters &&
@@ -1023,10 +1308,162 @@ function EditModelDialog({
                 </div>
               </>
             )}
+
+          {model.provider === "ollama-native" && (
+            <>
+              <Separator />
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <span className="text-sm font-medium">Model parameters</span>
+                  <p className="text-sm text-muted-foreground">
+                    Sent to Ollama on every chat turn. Leave a field empty to
+                    inherit Ollama's own default
+                    {model.defaultParameters &&
+                    Object.keys(model.defaultParameters).length > 0
+                      ? " (shown as the placeholder)."
+                      : "."}
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {OLLAMA_NATIVE_PARAM_FIELDS.map((param) => (
+                    <FormField
+                      key={param.name}
+                      control={form.control}
+                      name={`configuredParameters.${param.name}`}
+                      rules={{
+                        validate: (value: string) =>
+                          validateConfiguredParameter({
+                            name: param.name,
+                            value,
+                            contextLength: model.contextLength,
+                          }),
+                      }}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="font-mono text-xs">
+                            {param.name}
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              inputMode="decimal"
+                              placeholder={ollamaDefaultPlaceholder(
+                                model,
+                                param.name,
+                              )}
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="configuredParameters.stop"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="font-mono text-xs">
+                          stop
+                        </FormLabel>
+                        <FormControl>
+                          <Textarea
+                            rows={3}
+                            placeholder={ollamaDefaultPlaceholder(
+                              model,
+                              "stop",
+                            )}
+                            {...field}
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">
+                          One sequence per line.
+                        </p>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="configuredParameters.reasoning_effort"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Thinking</FormLabel>
+                        <Select
+                          // Rows saved before this control collapsed to on/off
+                          // still hold "low"/"high"; both mean thinking is on.
+                          value={
+                            field.value
+                              ? field.value === "none"
+                                ? "none"
+                                : "medium"
+                              : "inherit"
+                          }
+                          onValueChange={(value) =>
+                            field.onChange(value === "inherit" ? "" : value)
+                          }
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Inherit" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {/* Ollama's `think` is a boolean on this provider,
+                                so low/medium/high would all be identical on the
+                                wire — offering them implied a granularity that
+                                does not exist. */}
+                            <SelectItem value="inherit">Inherit</SelectItem>
+                            <SelectItem value="medium">On</SelectItem>
+                            <SelectItem value="none">Off</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Thinking-capable models only. "Inherit" uses Ollama's
+                          own default.
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </Form>
     </StandardFormDialog>
   );
+}
+
+/**
+ * The numeric native-Ollama parameters rendered as a grid in the model dialog.
+ * `stop` (a newline-delimited textarea) and `reasoning_effort` (a select) are
+ * rendered separately.
+ */
+const OLLAMA_NATIVE_PARAM_FIELDS: Array<{
+  name: keyof typeof OLLAMA_NATIVE_PARAM_RULES;
+}> = [
+  { name: "num_ctx" },
+  { name: "num_predict" },
+  { name: "temperature" },
+  { name: "top_p" },
+  { name: "top_k" },
+  { name: "repeat_penalty" },
+];
+
+function ollamaDefaultPlaceholder(
+  model: ModelWithApiKeys,
+  name: string,
+): string {
+  const value = model.defaultParameters?.[name];
+  if (value === undefined || value === null) return "inherit";
+  // Newline-joined, matching the delimiter `buildConfiguredParameters` parses.
+  // `/api/show` routinely reports several `stop` sequences, and a comma-joined
+  // placeholder invited admins to copy it back in as one sequence containing a
+  // comma — the exact value the newline switch was made to stop producing.
+  return Array.isArray(value) ? value.join("\n") : String(value);
 }
 
 // --- Internal helpers ---
@@ -1118,7 +1555,13 @@ function hasUnknownCapabilities(model: ModelWithApiKeys): boolean {
   const hasOutputModalities =
     model.outputModalities && model.outputModalities.length > 0;
   const hasToolCalling = model.supportsToolCalling !== null;
-  const hasContextLength = model.contextLength !== null;
+  // Effective as well as architectural: a freshly pulled Ollama model is absent
+  // from the public catalog (`contextLength` null) but still reports the window
+  // it actually runs with. Keying on the architectural value alone hid that
+  // number behind an "unknown capabilities" badge — the one figure the chat
+  // context ring is enforcing.
+  const hasContextLength =
+    model.contextLength !== null || model.effectiveContextLength !== null;
   const hasPricing =
     model.pricePerMillionInput !== null || model.pricePerMillionOutput !== null;
   return (
@@ -1159,11 +1602,16 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
     customPricePerMillionCacheWrite:
       model.customPricePerMillionCacheWrite ?? "",
     ignored: model.ignored,
+    accessScope:
+      model.teams.length > 0 ? ("team" as const) : ("everyone" as const),
+    teamIds: model.teams.map((team) => team.id),
+    userIds: model.users?.map((user) => user.id) ?? [],
     embeddingDimensions: model.embeddingDimensions
       ? getEmbeddingDimensionsString(model.embeddingDimensions)
       : "",
     inputModalities: model.inputModalities ?? [],
     outputModalities: model.outputModalities ?? [],
+    configuredParameters: getConfiguredParameterDefaults(model),
   };
 }
 

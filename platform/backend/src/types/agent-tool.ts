@@ -1,3 +1,4 @@
+import { TOOL_SEARCH_MAX_LENGTH } from "@archestra/shared";
 import {
   createInsertSchema,
   createSelectSchema,
@@ -65,7 +66,7 @@ export const BulkAgentToolAssignmentSchema =
   });
 
 export const AgentToolFilterSchema = z.object({
-  search: z.string().optional(),
+  search: z.string().max(TOOL_SEARCH_MAX_LENGTH).optional(),
   agentId: UuidIdSchema.optional(),
   origin: z.string().optional().describe("A catalogId to filter by"),
   mcpServerOwnerId: z
@@ -105,4 +106,6 @@ export type McpToolAssignment = {
   catalogId: string | null;
   catalogName: string | null;
   meta: Record<string, unknown> | null;
+  /** Tool input schema, for x-mcp-header extraction on the call path. */
+  parameters?: Record<string, unknown> | null;
 };

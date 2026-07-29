@@ -390,8 +390,10 @@ class OptimizationRuleModel {
         openrouter: [], // OpenRouter optimization rules - no defaults
         vllm: [], // vLLM optimization rules are deployment-specific, no defaults
         ollama: [], // Ollama optimization rules are deployment-specific, no defaults
+        "ollama-native": [],
         zhipuai: [],
         deepseek: [],
+        archestra: [], // upstream is another Archestra instance, no defaults
         kimi: [],
         "github-copilot": [], // Copilot model availability is subscription-specific, no defaults
         "microsoft-365-copilot": [], // single pseudo-model, nothing to optimize between

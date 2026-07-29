@@ -1,7 +1,10 @@
-import { AUTO_PROVISIONED_INVITATION_STATUS } from "@archestra/shared";
+import {
+  AUTO_PROVISIONED_INVITATION_STATUS,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { UserModel } from "@/models";
+import { MemberModel, OrganizationModel, UserModel } from "@/models";
 import { describe, expect, test, vi } from "@/test";
 import { ensureProvisionedUser } from "./auto-provision";
 
@@ -73,6 +76,49 @@ describe("ensureProvisionedUser", () => {
     expect(invitation.status).toBe(
       `${AUTO_PROVISIONED_INVITATION_STATUS}:slack`,
     );
+  });
+
+  test("new user gets the org's configured default role (member + invitation)", async ({
+    makeOrganization,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization();
+    const customRole = await makeCustomRole(org.id);
+    await OrganizationModel.patch(org.id, {
+      defaultMemberRole: customRole.role,
+    });
+
+    const email = `default-role-${crypto.randomUUID()}@example.com`;
+    const result = await ensureProvisionedUser({
+      email,
+      resolveDisplayName: vi.fn(async () => "Role User"),
+      provider: "slack",
+    });
+    expect(result).not.toBeNull();
+
+    const member = await MemberModel.getByUserId(result?.user.id ?? "", org.id);
+    expect(member?.role).toBe(customRole.role);
+
+    const [invitation] = await db
+      .select()
+      .from(schema.invitationsTable)
+      .where(eq(schema.invitationsTable.id, result?.invitationId ?? ""));
+    expect(invitation.role).toBe(customRole.role);
+  });
+
+  test("new user falls back to member when no default role is configured", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const email = `fallback-role-${crypto.randomUUID()}@example.com`;
+    const result = await ensureProvisionedUser({
+      email,
+      resolveDisplayName: vi.fn(async () => "Fallback User"),
+      provider: "slack",
+    });
+
+    const member = await MemberModel.getByUserId(result?.user.id ?? "", org.id);
+    expect(member?.role).toBe(MEMBER_ROLE_NAME);
   });
 
   test("concurrent race resolves to the existing user with no invitation (suppresses the welcome)", async ({

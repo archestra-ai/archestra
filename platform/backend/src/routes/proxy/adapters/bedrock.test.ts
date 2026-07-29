@@ -525,6 +525,108 @@ describe("Bedrock tool name encoding", () => {
   });
 });
 
+describe("Bedrock stream reasoning delta forwarding", () => {
+  test("forwards reasoningContent text deltas without folding them into state.text", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest(),
+    );
+
+    const result = adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { reasoningContent: { text: "weighing the options" } },
+        },
+      }),
+    );
+
+    expect(result.isToolCallChunk).toBe(false);
+    expect(result.isFinal).toBe(false);
+    expect(result.sseData).not.toBeNull();
+    const decoded = decodeEventStreamJson(result.sseData as Uint8Array);
+    expect(decoded.headers[":event-type"]?.value).toBe("contentBlockDelta");
+    expect(decoded.body).toMatchObject({
+      contentBlockIndex: 0,
+      delta: { reasoningContent: { text: "weighing the options" } },
+    });
+    expect(adapter.state.text).toBe("");
+  });
+
+  test("forwards reasoning signature and redacted-data deltas", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest(),
+    );
+
+    for (const reasoningContent of [
+      { signature: "sig_abc123" },
+      { data: "cmVkYWN0ZWQ=" },
+    ]) {
+      const result = adapter.processChunk(
+        asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+          contentBlockDelta: {
+            contentBlockIndex: 0,
+            delta: { reasoningContent },
+          },
+        }),
+      );
+
+      expect(result.isToolCallChunk).toBe(false);
+      expect(result.sseData).not.toBeNull();
+      const decoded = decodeEventStreamJson(result.sseData as Uint8Array);
+      expect(decoded.body).toMatchObject({
+        contentBlockIndex: 0,
+        delta: { reasoningContent },
+      });
+    }
+  });
+
+  test("passes reasoning deltas through as the original raw bytes when present", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest(),
+    );
+    const rawBytes = new Uint8Array([1, 2, 3, 4]);
+
+    const result = adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { reasoningContent: { text: "thinking" } },
+        },
+        __rawBytes: rawBytes,
+      }),
+    );
+
+    expect(result.sseData).toBe(rawBytes);
+  });
+
+  test("keeps buffering toolUse deltas for policy evaluation", () => {
+    const adapter = bedrockAdapterFactory.createStreamAdapter(
+      createConverseRequest(),
+    );
+
+    adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockStart: {
+          contentBlockIndex: 0,
+          start: { toolUse: { toolUseId: "tooluse_1", name: "get_weather" } },
+        },
+      }),
+    );
+    const result = adapter.processChunk(
+      asStreamChunk<Parameters<typeof adapter.processChunk>[0]>({
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { toolUse: { input: '{"city":"Berlin"}' } },
+        },
+      }),
+    );
+
+    expect(result.isToolCallChunk).toBe(true);
+    expect(result.sseData).toBeNull();
+    expect(adapter.state.toolCalls[0].arguments).toBe('{"city":"Berlin"}');
+  });
+});
+
 describe("Bedrock client creation", () => {
   test("uses the custom base URL override", () => {
     const customBaseUrl =

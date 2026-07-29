@@ -33,6 +33,17 @@ export const PublicIdentityProviderSchema = SelectIdentityProviderSchema.pick({
   providerId: true,
 });
 
+/**
+ * Identity provider projection for the team External Group Sync section:
+ * enough to pick a provider and understand how group identifiers are
+ * extracted, without exposing any provider configuration or secrets.
+ */
+export const TeamSyncIdentityProviderOptionSchema = z.object({
+  id: z.string(),
+  providerId: z.string(),
+  groupsExpression: z.string().nullable(),
+});
+
 export const IdentityProviderLatestIdTokenClaimsSchema = z.object({
   providerId: z.string(),
   claims: z.record(z.string(), z.unknown()).nullable(),
@@ -58,6 +69,9 @@ export const UpdateIdentityProviderSchema = createUpdateSchema(
 export type IdentityProvider = z.infer<typeof SelectIdentityProviderSchema>;
 export type PublicIdentityProvider = z.infer<
   typeof PublicIdentityProviderSchema
+>;
+export type TeamSyncIdentityProviderOption = z.infer<
+  typeof TeamSyncIdentityProviderOptionSchema
 >;
 export type IdentityProviderLatestIdTokenClaims = z.infer<
   typeof IdentityProviderLatestIdTokenClaimsSchema

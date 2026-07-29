@@ -1,5 +1,7 @@
 import {
   FileModel,
+  ProjectModel,
+  ProjectShareModel,
   ScheduleTriggerModel,
   ScheduleTriggerRunModel,
 } from "@/models";
@@ -90,5 +92,78 @@ describe("projectService.delete (schedule cascade)", () => {
     // keep firing but no longer surface in any project.
     expect(await ScheduleTriggerModel.findById(trigger.id)).toBeNull();
     expect(await ScheduleTriggerRunModel.findById(run.id)).toBeNull();
+  });
+});
+
+describe("projectService.delete (org-wide share gate)", () => {
+  test("an owner whose role lacks project:share-org cannot delete an org-wide project", async ({
+    makeOrganization,
+    makeUser,
+    makeCustomRole,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const owner = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: { project: ["read", "create", "update", "delete"] },
+    });
+    await makeMember(owner.id, organizationId, { role: role.role });
+
+    const project = await projectService.create({
+      organizationId,
+      userId: owner.id,
+      name: "org-wide",
+      description: null,
+    });
+    await ProjectShareModel.upsert({
+      projectId: project.id,
+      organizationId,
+      createdByUserId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+
+    await expect(
+      projectService.delete({
+        id: project.id,
+        organizationId,
+        userId: owner.id,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      message: expect.stringContaining("organization-wide"),
+    });
+    expect(await ProjectModel.findById(project.id)).not.toBeNull();
+  });
+
+  test("an owner with the default member role can delete their own org-wide project", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const owner = await makeUser();
+    await makeMember(owner.id, organizationId);
+
+    const project = await projectService.create({
+      organizationId,
+      userId: owner.id,
+      name: "org-wide-deletable",
+      description: null,
+    });
+    await projectService.setShare({
+      id: project.id,
+      organizationId,
+      userId: owner.id,
+      visibility: "organization",
+      teamIds: [],
+    });
+
+    await projectService.delete({
+      id: project.id,
+      organizationId,
+      userId: owner.id,
+    });
+    expect(await ProjectModel.findById(project.id)).toBeNull();
   });
 });

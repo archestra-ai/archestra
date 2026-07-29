@@ -3,7 +3,7 @@ title: Model Router Client Credentials
 category: Examples
 order: 2
 description: Build a service app that calls the OpenAI-compatible Model Router with OAuth client credentials
-lastUpdated: 2026-07-14
+lastUpdated: 2026-07-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -18,7 +18,7 @@ The full example is available at [github.com/archestra-ai/examples/tree/main/mod
 
 ## What the App Does
 
-1. Uses an OAuth client created in **Client Credentials > OAuth Clients**
+1. Uses an OAuth client created from an LLM Proxy's **Connect** dialog
 2. Exchanges `client_id` and `client_secret` for an access token
 3. Sends the access token to `/v1/model-router/{proxyId}/chat/completions`
 
@@ -26,7 +26,7 @@ OAuth client credentials do not use a browser consent screen and do not inherit 
 
 ## Run the Example
 
-Create an OAuth client in **Client Credentials > OAuth Clients** (pick the *LLM proxies* client type). Select the LLM proxy it can access, map the provider keys it can use, and copy the generated secret.
+Open the LLM Proxy's **Connect** dialog and create an OAuth client. Select the proxies it can access, map the provider keys it can use, and copy the generated secret.
 
 Then run:
 

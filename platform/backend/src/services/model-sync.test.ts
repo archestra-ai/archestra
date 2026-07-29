@@ -342,6 +342,54 @@ describe("ModelSyncService", () => {
     expect(bad.outputLength).toBeNull();
   });
 
+  test("gives Ollama models text modalities so the edit dialog is not born invalid", () => {
+    // Ollama's endpoints report no modalities and models.dev only covers the
+    // `ollama/` namespace, so a locally built or fine-tuned model stored null
+    // for both. The edit dialog requires at least one input modality, so every
+    // save on such a row failed react-hook-form validation with the message
+    // rendered far above the fold — indistinguishable from a dead button.
+    for (const provider of ["ollama", "ollama-native"] as const) {
+      const capabilities = resolveModelCapabilities({
+        provider,
+        modelId: "qwen3-8k:latest",
+      });
+      expect(capabilities.inputModalities).toEqual(["text"]);
+      expect(capabilities.outputModalities).toEqual(["text"]);
+    }
+  });
+
+  test("an Ollama embedding model produces no output modality", () => {
+    const capabilities = resolveModelCapabilities({
+      provider: "ollama",
+      modelId: "nomic-embed-text",
+      fetched: { embeddingDimensions: 768 },
+    });
+
+    expect(capabilities.inputModalities).toEqual(["text"]);
+    expect(capabilities.outputModalities).toEqual([]);
+  });
+
+  test("models.dev still outranks the Ollama fallback", () => {
+    const capabilities = resolveModelCapabilities({
+      provider: "ollama",
+      modelId: "llava",
+      capabilities: {
+        description: "LLaVA",
+        contextLength: null,
+        outputLength: null,
+        inputModalities: ["text", "image"],
+        outputModalities: ["text"],
+        supportsToolCalling: false,
+        promptPricePerToken: null,
+        completionPricePerToken: null,
+        cacheReadPricePerToken: null,
+        cacheWritePricePerToken: null,
+      },
+    });
+
+    expect(capabilities.inputModalities).toEqual(["text", "image"]);
+  });
+
   test("prefers fetcher capabilities over models.dev with per-field fallthrough", () => {
     const capabilities = resolveModelCapabilities({
       provider: "openrouter",
@@ -636,6 +684,26 @@ describe("ModelSyncService", () => {
     expect(
       selectableEmbeddingModels.map((model) => model.modelId).sort(),
     ).toEqual(["nomic-ai/nomic-embed-text", "openai/text-embedding-3-small"]);
+  });
+
+  test("collapses duplicate model ids so one batch never carries the same (provider, model_id) twice", () => {
+    // Azure AI Foundry lists an entry per model/SKU, so the same id repeats.
+    // Postgres rejects a whole INSERT whose rows share the ON CONFLICT target,
+    // which previously rolled the entire model sync back to zero.
+    const built = buildModelsToUpsert({
+      provider: "azure",
+      models: [
+        { id: "claude-opus-5" },
+        { id: "DeepSeek-R1" },
+        { id: "claude-opus-5" },
+      ],
+      modelsDevData: {},
+    });
+
+    expect(built.map((model) => model.modelId)).toEqual([
+      "claude-opus-5",
+      "DeepSeek-R1",
+    ]);
   });
 
   test("uses an authoritative fetched embedding dimension over the name heuristic", () => {

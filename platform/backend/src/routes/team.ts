@@ -62,7 +62,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const { limit, offset, name, mine } = request.query;
       const labels = parseLabelsParam(request.query.labels);
       const { success: canManageAllTeams } = await hasPermission(
-        { team: ["create"] },
+        { team: ["update"] },
         request.headers,
       );
 
@@ -107,7 +107,11 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (
-      { body: { name, description, labels }, user, organizationId },
+      {
+        body: { name, description, convertToolResultsToToon, labels },
+        user,
+        organizationId,
+      },
       reply,
     ) => {
       return reply.send(
@@ -116,6 +120,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           description,
           organizationId,
           createdBy: user.id,
+          convertToolResultsToToon,
           labels,
         }),
       );
@@ -142,7 +147,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { success: isOrgTeamManager } = await hasPermission(
-        { team: ["create"] },
+        { team: ["update"] },
         headers,
       );
       const canRead = await canReadTeam({
@@ -260,7 +265,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { success: isOrgTeamManager } = await hasPermission(
-        { team: ["create"] },
+        { team: ["update"] },
         headers,
       );
       const canRead = await canReadTeam({
@@ -503,13 +508,22 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const { success: canManageAllTeams } = await hasPermission(
-        { team: ["create"] },
+        { team: ["update"] },
         headers,
       );
       if (!canManageAllTeams) {
-        const isMember = await TeamModel.isUserInTeam(id, user.id);
-        if (!isMember) {
-          throw new ApiError(404, "Team not found");
+        // Group-sync mappings are identity-provider configuration, so a role
+        // that can read identity providers may view them without being on the
+        // team (mutations stay team-admin-gated below).
+        const { success: canReadIdentityProviders } = await hasPermission(
+          { identityProvider: ["read"] },
+          headers,
+        );
+        if (!canReadIdentityProviders) {
+          const isMember = await TeamModel.isUserInTeam(id, user.id);
+          if (!isMember) {
+            throw new ApiError(404, "Team not found");
+          }
         }
       }
 
@@ -649,8 +663,15 @@ async function assertCanManageTeam(params: {
 }) {
   // Resolve the org-level "team manager" flag from the request session/API key
   // (honoring API-key scoping), then defer the shared rule to the service.
+  //
+  // This is deliberately NOT team:create. Creating a team says nothing about
+  // the teams the caller does not belong to, so reading it as blanket
+  // administration let a role holding only team:read + team:create manage
+  // membership on — and reach the tokens of — every other team. Callers who
+  // legitimately administer their own team still pass via the team-admin
+  // branch inside canManageTeamMembers.
   const { success: isOrgTeamManager } = await hasPermission(
-    { team: ["create"] },
+    { team: ["update"] },
     params.headers,
   );
 

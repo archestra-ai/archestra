@@ -96,7 +96,19 @@ function getMessageText(
 function computeRequestType(
   request: unknown,
   sessionSource: string | null,
+  source: string | null,
 ): "main" | "subagent" {
+  // Archestra Chat marks its auxiliary LLM calls with a `chat:<subtype>` source
+  // (title generation, context compaction, tool-call repair); the user's own
+  // turn is plain "chat". These auxiliary calls are sub-agent work — title
+  // generation and compaction even run under dedicated built-in sub-agents — so
+  // the session detail view must badge them as "subagent". A chat session's
+  // session_source is not a Claude source, so without this the heuristics below
+  // would fall through to "main" and mislabel every auxiliary chat call.
+  if (source?.startsWith("chat:")) {
+    return "subagent";
+  }
+
   // Only apply detection heuristics for Claude sessions (claude_metadata, plus
   // the legacy claude_code / claude_desktop values on older rows).
   if (!isClaudeSessionSource(sessionSource)) {
@@ -498,6 +510,7 @@ class InteractionModel {
         requestType: computeRequestType(
           full?.request ?? interaction.request,
           interaction.sessionSource,
+          interaction.source,
         ),
         // Resolve externalAgentId to human-readable label (supports delegation chains)
         externalAgentIdLabel: resolveExternalAgentIdLabel(
@@ -789,6 +802,15 @@ class InteractionModel {
     interaction: InsertInteraction & { id: string },
   ): Promise<void> {
     try {
+      // Subscription-billed interactions (e.g. Claude Pro/Max OAuth credentials)
+      // cost the organization $0, so they must not burn down token-cost limits.
+      if (interaction.billingMode === "subscription") {
+        logger.debug(
+          `Interaction ${interaction.id} is subscription-billed - skipping limit update`,
+        );
+        return;
+      }
+
       // Calculate token usage for this interaction
       const inputTokens = interaction.inputTokens || 0;
       const outputTokens = interaction.outputTokens || 0;
@@ -1101,8 +1123,20 @@ class InteractionModel {
           firstRequestTime: min(schema.interactionsTable.createdAt),
           lastRequestTime: max(schema.interactionsTable.createdAt),
           models: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.model}, ',')`,
-          profileId: sql<string | null>`MAX(${schema.agentsTable.id}::text)`,
-          profileName: max(schema.agentsTable.name),
+          // Attribute the session to its primary (non-built-in) agent. A chat
+          // session mixes the user's agent with built-in utility subagents (e.g.
+          // title generation), all sharing one session_id; without the FILTER,
+          // MAX(id) and MAX(name) could resolve to different interactions and
+          // surface the utility subagent. Preferring built_in = false keeps id
+          // and name from the same agent; COALESCE falls back to any agent for
+          // sessions that only ran built-in agents. API/Claude-Code sessions have
+          // a single profile per session, so this is a no-op for them.
+          profileId: sql<
+            string | null
+          >`COALESCE(MAX(${schema.agentsTable.id}::text) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.id}::text))`,
+          profileName: sql<
+            string | null
+          >`COALESCE(MAX(${schema.agentsTable.name}) FILTER (WHERE ${schema.agentsTable.builtIn} = false), MAX(${schema.agentsTable.name}))`,
           externalAgentIds: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.externalAgentId}, ',')`,
           authMethods: sql<string>`STRING_AGG(DISTINCT ${schema.interactionsTable.authMethod}, ',')`,
           authenticatedAppNames: sql<
@@ -1131,11 +1165,14 @@ class InteractionModel {
         )
         .leftJoin(schema.conversationsTable, sessionIdMatchesConversation())
         .where(whereClause)
-        .groupBy(
-          sessionGroupExpr,
-          schema.interactionsTable.profileId,
-          schema.agentsTable.name,
-        )
+        // A session is identified by its session id alone (COALESCE(session_id,
+        // id) for sessionless rows). profile_id / agent name must NOT be part of
+        // the group key: an Archestra Chat writes its title-generation call under
+        // a separate built-in subagent, so grouping by agent split one chat into
+        // two "sessions". This now matches the `total` count below, which already
+        // counts distinct session ids only. Agent attribution is aggregated in
+        // the SELECT (MAX) instead of being part of the key.
+        .groupBy(sessionGroupExpr)
         .orderBy(desc(max(schema.interactionsTable.createdAt)))
         .limit(pagination.limit)
         .offset(pagination.offset),
@@ -1424,6 +1461,31 @@ class InteractionModel {
     }
 
     return result;
+  }
+
+  /**
+   * Number of distinct users with at least one attributed interaction since
+   * `since`. Backs the `llm_active_users` gauge.
+   *
+   * Deliberately an aggregate: per-user identity is not exported to Prometheus
+   * (a user_id label would multiply every LLM metric's series count by the size
+   * of the org — the same reason external_agent_id is not a label). Per-user
+   * detail belongs to the statistics API, which reads this table directly.
+   */
+  static async countDistinctActiveUsersSince(since: Date): Promise<number> {
+    const [row] = await db
+      .select({
+        activeUsers: sql<number>`CAST(COUNT(DISTINCT ${schema.interactionsTable.userId}) AS INTEGER)`,
+      })
+      .from(schema.interactionsTable)
+      .where(
+        and(
+          gte(schema.interactionsTable.createdAt, since),
+          isNotNull(schema.interactionsTable.userId),
+        ),
+      );
+
+    return Number(row?.activeUsers) || 0;
   }
 }
 

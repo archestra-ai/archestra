@@ -7,13 +7,17 @@ import {
   ilike,
   inArray,
   isNotNull,
+  isNull,
   like,
+  ne,
+  notInArray,
   or,
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
+import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
 import type {
   InsertSkill,
   InsertSkillFile,
@@ -47,6 +51,18 @@ class SkillModel {
      * Omit for management surfaces that list every environment.
      */
     environmentId?: string | null;
+    scope?: ResourceVisibilityScope;
+    /** Restrict team-scoped results to skills assigned to these teams. */
+    teamIds?: string[];
+    /** Restrict personal-scoped results to these authors. */
+    authorIds?: string[];
+    /** Hide skills authored by these users (authorless rows are kept). */
+    excludeAuthorIds?: string[];
+    /**
+     * When set, hides personal skills owned by other users (the admin
+     * default view; mirrors the agents list).
+     */
+    excludeOtherPersonalForUserId?: string;
     sorting?: { sortBy?: SkillSortBy; sortDirection?: SortDirection };
   }): Promise<Skill[]> {
     let query = db
@@ -73,6 +89,11 @@ class SkillModel {
     accessibleSkillIds?: string[];
     /** Same environment-visibility filter as `findByOrganization`. */
     environmentId?: string | null;
+    scope?: ResourceVisibilityScope;
+    teamIds?: string[];
+    authorIds?: string[];
+    excludeAuthorIds?: string[];
+    excludeOtherPersonalForUserId?: string;
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -86,6 +107,12 @@ class SkillModel {
    * Distinct `owner/repo` strings across the org's imported skills, derived
    * from the `source_ref` provenance column (formatted as
    * `owner/repo@ref:path`).
+   *
+   * Built-in skills also carry a `source_ref`, but it is a `builtin:<id>`
+   * identity token rather than a repository — and one that embeds the
+   * unbranded product id, which would leak into the white-labeled repository
+   * filter. They are excluded, matching how the skills table suppresses the
+   * same refs in favor of the app-name badge.
    */
   static async findDistinctSourceRepos(params: {
     organizationId: string;
@@ -105,6 +132,7 @@ class SkillModel {
     const repos = new Set<string>();
     for (const { sourceRef } of rows) {
       if (!sourceRef) continue;
+      if (isBuiltInSkillSourceRef(sourceRef)) continue;
       const atIdx = sourceRef.indexOf("@");
       const repo = atIdx === -1 ? sourceRef : sourceRef.slice(0, atIdx);
       if (repo) repos.add(repo);
@@ -215,14 +243,17 @@ class SkillModel {
    * visibility namespace (personal names per author, team/org names per org).
    * The insert is atomic (`ON CONFLICT DO NOTHING`, matching whichever partial
    * unique index applies), so this is race-free against concurrent creates.
-   * When `teamIds` is supplied the team rows are inserted in the same
-   * transaction, so a failed assignment cannot leave a scoped skill orphaned.
+   * When `teamIds` / `environmentIds` are supplied the junction rows are
+   * inserted in the same transaction, so a failed assignment cannot leave a
+   * scoped skill orphaned.
    */
   static async createWithFiles(
     params: {
       skill: InsertSkill;
       files: Omit<InsertSkillFile, "skillId">[];
       teamIds?: string[];
+      /** Environments the skill is restricted to; empty/omitted = every environment. */
+      environmentIds?: string[];
     },
     tx?: Transaction,
   ): Promise<Skill | null> {
@@ -247,6 +278,15 @@ class SkillModel {
           .values(
             params.teamIds.map((teamId) => ({ skillId: skill.id, teamId })),
           );
+      }
+
+      if (params.environmentIds && params.environmentIds.length > 0) {
+        await tx.insert(schema.skillEnvironmentsTable).values(
+          params.environmentIds.map((environmentId) => ({
+            skillId: skill.id,
+            environmentId,
+          })),
+        );
       }
 
       // every skill starts at immutable version 1.
@@ -274,11 +314,12 @@ class SkillModel {
    * Update a skill's metadata, resource files, and team assignments atomically.
    *
    * Passing `files` replaces the full set; omitting it leaves files untouched.
-   * Passing `teamIds` replaces the team assignments (an empty array clears
-   * them); omitting it leaves them untouched. Doing the metadata, file, and
-   * team writes in one transaction means a failed team sync (e.g. a team
-   * deleted mid-request) rolls the whole update back, so a scope change can
-   * never be committed with a team set that leaves the skill orphaned.
+   * Passing `teamIds` / `environmentIds` replaces those assignments (an empty
+   * array clears them); omitting them leaves them untouched. Doing the
+   * metadata, file, and junction writes in one transaction means a failed sync
+   * (e.g. a team deleted mid-request) rolls the whole update back, so a scope
+   * change can never be committed with a team set that leaves the skill
+   * orphaned.
    *
    * When `expectedLatestVersion` is set, the update is a compare-and-set: it
    * throws `ApiError(409)` (rolling back) if the skill's head has already moved
@@ -291,6 +332,8 @@ class SkillModel {
     skill: UpdateSkill;
     files?: Omit<InsertSkillFile, "skillId">[];
     teamIds?: string[];
+    /** Replaces the environment assignments; [] clears them (every environment). */
+    environmentIds?: string[];
     expectedLatestVersion?: number;
   }): Promise<Skill | null> {
     return await withDbTransaction(async (tx) => {
@@ -340,6 +383,21 @@ class SkillModel {
             .values(
               params.teamIds.map((teamId) => ({ skillId: params.id, teamId })),
             );
+        }
+      }
+
+      if (params.environmentIds !== undefined) {
+        await tx
+          .delete(schema.skillEnvironmentsTable)
+          .where(eq(schema.skillEnvironmentsTable.skillId, params.id));
+
+        if (params.environmentIds.length > 0) {
+          await tx.insert(schema.skillEnvironmentsTable).values(
+            params.environmentIds.map((environmentId) => ({
+              skillId: params.id,
+              environmentId,
+            })),
+          );
         }
       }
 
@@ -545,8 +603,20 @@ class SkillModel {
         ),
       )
       .limit(1);
+    if (!row) return null;
 
-    return row ?? null;
+    // environment assignments live in a junction table; include them (sorted
+    // for a stable diff) so an environment change shows up in the audit record.
+    const environmentIds = await db
+      .select({
+        environmentId: schema.skillEnvironmentsTable.environmentId,
+      })
+      .from(schema.skillEnvironmentsTable)
+      .where(eq(schema.skillEnvironmentsTable.skillId, id));
+    return {
+      ...row,
+      environmentIds: environmentIds.map((r) => r.environmentId).sort(),
+    };
   }
 }
 
@@ -593,6 +663,11 @@ function buildOrgFilters(params: {
   sourceRepo?: string;
   accessibleSkillIds?: string[];
   environmentId?: string | null;
+  scope?: ResourceVisibilityScope;
+  teamIds?: string[];
+  authorIds?: string[];
+  excludeAuthorIds?: string[];
+  excludeOtherPersonalForUserId?: string;
 }) {
   const normalizedSearch = params.search?.trim();
   const normalizedSourceRepo = params.sourceRepo?.trim();
@@ -603,6 +678,40 @@ function buildOrgFilters(params: {
       : []),
     ...(params.environmentId !== undefined
       ? [skillInEnvironmentPredicate(params.environmentId)]
+      : []),
+    ...(params.scope ? [eq(schema.skillsTable.scope, params.scope)] : []),
+    ...(params.teamIds?.length
+      ? [
+          inArray(
+            schema.skillsTable.id,
+            db
+              .select({ skillId: schema.skillTeamsTable.skillId })
+              .from(schema.skillTeamsTable)
+              .where(inArray(schema.skillTeamsTable.teamId, params.teamIds)),
+          ),
+        ]
+      : []),
+    ...(params.authorIds?.length
+      ? [inArray(schema.skillsTable.authorId, params.authorIds)]
+      : []),
+    ...(params.excludeAuthorIds?.length
+      ? [
+          or(
+            isNull(schema.skillsTable.authorId),
+            notInArray(schema.skillsTable.authorId, params.excludeAuthorIds),
+          ),
+        ]
+      : []),
+    ...(params.excludeOtherPersonalForUserId
+      ? [
+          or(
+            ne(schema.skillsTable.scope, "personal"),
+            eq(
+              schema.skillsTable.authorId,
+              params.excludeOtherPersonalForUserId,
+            ),
+          ),
+        ]
       : []),
     ...(normalizedSearch
       ? [

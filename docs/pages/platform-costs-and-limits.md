@@ -2,7 +2,7 @@
 title: Costs & Limits
 category: LLM Proxy
 order: 4
-lastUpdated: 2026-06-22
+lastUpdated: 2026-07-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,6 +27,18 @@ Archestra stores both raw spend and savings. Savings can come from:
 - TOON compression that reduces tool-result tokens before the result is sent to the model
 - prompt caching that reuses an unchanged request prefix instead of reprocessing it each turn
 
+## Per-User Usage
+
+The People section of the statistics view breaks usage down by person. For each user it shows requests, tokens, the models they use, how many days they were active, and their cost. Use it to see who has adopted AI, and which models they reach for.
+
+A request only appears here when Archestra knows who made it. Identity comes from an authenticated credential — a [passthrough virtual key](platform-llm-proxy-authentication#passthrough-virtual-keys) or your identity provider. A request made with a shared credential and no user context is not attributed to anyone, so per-user totals read lower than org-wide totals when some traffic is unattributed.
+
+Tokens and requests are the honest measure of adoption. Cost is not: a person whose traffic runs on a flat-rate subscription is billed nothing, however much they use. See [Subscription vs Metered Cost](#subscription-vs-metered-cost).
+
+The same data is available from the API at `GET /api/statistics/users`, which returns one row per user with their email, so you can join it to an external roster. The response is paginated. Two options are off by default because each one costs extra work: `includeModels` adds the per-model breakdown, and `includeTimeSeries` adds a cost series per user.
+
+Per-user usage is employee-level data. Seeing other people's usage requires permission to read the member list; without it, both the UI and the API show you only your own.
+
 ## Subscription vs Metered Cost
 
 Some LLM traffic is not billed per token. A flat-rate subscription — Claude Code on a Max or Pro plan, for example — covers usage for a fixed monthly fee. Pricing that traffic at per-token API rates would report a cost that was never charged.
@@ -35,11 +47,11 @@ Each interaction records a billing mode. Metered traffic is billed per token, so
 
 The "Actual Cost" line and the per-team, per-agent, and per-model cost figures show billed spend. Subscription usage appears as a separate "Subscription (Not Billed)" line on the Costs chart and as a badge on the affected sessions.
 
-Archestra detects the billing mode from the credential itself. Anthropic subscription logins (Claude Code on a Max or Pro plan, for example) use OAuth tokens with a distinct format, so no configuration is needed. Turn detection off with `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false` to treat all traffic as metered.
+Archestra detects the billing mode from the credential itself. Anthropic subscription logins (Claude Code on a Max or Pro plan, for example) and ChatGPT subscription logins (Codex) use credentials with a distinct format, so no configuration is needed. Turn detection off with `ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false` to treat all traffic as metered.
 
 Detection applies to new interactions. Traffic recorded before detection existed stays metered.
 
-Cost-based usage limits are the one exception: they still count the list-price estimate, including subscription usage. A subscription-heavy setup can therefore reach a dollar limit on usage that was never billed. Use token-based limits for those setups.
+Usage limits follow the same rule: subscription traffic does not count toward them. A limit only tracks usage that is billed.
 
 ## Usage Limits
 
@@ -81,7 +93,7 @@ Model pricing is configured on the provider model settings pages. Pricing is the
 - optimization reports use it to calculate savings
 - TOON compression savings are reported in dollars using the configured model price
 
-When you add a provider, Archestra syncs known input, output, and cache prices from a public model registry. You can override any of these per model, including cache read and write prices. A model the registry does not recognize falls back to an estimated flat price, shown as "estimated" in the model editor — set a custom price so cost reporting stays accurate. Amazon Bedrock and Azure model ids do not match the registry directly, so Archestra maps them back to the underlying vendor model to recover real prices (including cache prices) where possible.
+When you add a provider, Archestra syncs known input, output, and cache prices from a public model registry. You can override any of these per model, including cache read and write prices. A model the registry does not recognize falls back to an estimated flat price, shown as "estimated" in the model editor — set a custom price so cost reporting stays accurate. Amazon Bedrock and Azure model ids do not match the registry directly. Archestra maps them back to the underlying vendor model to recover real prices — cache prices included — and the context window.
 
 If you use custom or self-hosted models, add pricing explicitly so cost reporting stays meaningful.
 
@@ -120,6 +132,8 @@ You can enable TOON compression at:
 
 - organization level for all traffic
 - team level when only certain teams should use it
+
+A team-level opt-in works on its own. A team with compression enabled uses it even when the organization-wide setting is off. Choosing Disabled in LLM settings clears every team opt-in and turns compression off.
 
 See the upstream TOON format project for the format specification and benchmarks: [toon-format/toon](https://github.com/toon-format/toon).
 

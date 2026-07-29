@@ -105,7 +105,11 @@ export default function LlmSettingsPage() {
     compressionMode !== serverCompressionMode ||
     (compressionMode === "team" &&
       JSON.stringify([...selectedTeamIds].sort()) !==
-        JSON.stringify(serverTeamIds));
+        JSON.stringify(serverTeamIds)) ||
+    // Team-level opt-ins (set via the API) are honored by the backend even
+    // when the org-level setting is off, so stored opt-ins under "disabled"
+    // are a pending change: saving clears them and fully disables compression.
+    (compressionMode === "disabled" && serverTeamIds.length > 0);
 
   const isInitialLoading =
     isOrganizationPending || areTeamsPending || !hasSyncedInitialSettings;
@@ -115,13 +119,23 @@ export default function LlmSettingsPage() {
     if (!hasCompressionChanges) return;
 
     const llmSettingsBody: UpdateLlmSettingsBody = {};
-    let shouldUpdateTeams = false;
+    // Teams whose stored TOON flag must change along with the org settings.
+    let teamUpdates: {
+      team: (typeof loadedTeams)[number];
+      enabled: boolean;
+    }[] = [];
 
     if (compressionMode === "disabled") {
       Object.assign(llmSettingsBody, {
         compressionScope: "organization",
         convertToolResultsToToon: false,
       });
+      // The backend honors team-level opt-ins even when the org-level setting
+      // is off, so disabling must also clear them — otherwise compression
+      // would silently stay on for previously enabled teams.
+      teamUpdates = loadedTeams
+        .filter((team) => team.convertToolResultsToToon)
+        .map((team) => ({ team, enabled: false }));
     } else if (compressionMode === "organization") {
       Object.assign(llmSettingsBody, {
         compressionScope: "organization",
@@ -132,20 +146,23 @@ export default function LlmSettingsPage() {
         compressionScope: "team",
         convertToolResultsToToon: false,
       });
-      shouldUpdateTeams = true;
+      teamUpdates = loadedTeams.map((team) => ({
+        team,
+        enabled: selectedTeamIds.includes(team.id),
+      }));
     }
 
     try {
       await updateLlmSettingsMutation.mutateAsync(llmSettingsBody);
-      if (shouldUpdateTeams) {
+      if (teamUpdates.length > 0) {
         await Promise.all(
-          loadedTeams.map((team) =>
+          teamUpdates.map(({ team, enabled }) =>
             archestraApiSdk.updateTeam({
               path: { id: team.id },
               body: {
                 name: team.name,
                 description: team.description ?? undefined,
-                convertToolResultsToToon: selectedTeamIds.includes(team.id),
+                convertToolResultsToToon: enabled,
               },
             }),
           ),

@@ -4,6 +4,7 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { Globe, Lock, UserRound, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ConversationAppAccessNotice } from "@/components/chat/conversation-app-access-notice";
 import { CopyableCode } from "@/components/copyable-code";
 import { FormDialog } from "@/components/form-dialog";
 import { AssignmentCombobox } from "@/components/ui/assignment-combobox";
@@ -32,10 +33,16 @@ type ShareVisibility =
 
 export function ShareConversationDialog({
   conversationId,
+  appIds = [],
   open,
   onOpenChange,
 }: {
   conversationId: string;
+  /**
+   * Owned apps rendered in this conversation. Sharing the chat does not share
+   * them, so the dialog warns when recipients won't be able to open one.
+   */
+  appIds?: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -260,6 +267,13 @@ export function ShareConversationDialog({
             </div>
           )}
         </VisibilitySelector>
+
+        <ConversationAppAccessNotice
+          appIds={appIds}
+          visibility={visibility}
+          teamIds={teamIds}
+          userIds={userIds}
+        />
 
         {hasVisibleShareLink && shareLink && (
           <CopyableCode

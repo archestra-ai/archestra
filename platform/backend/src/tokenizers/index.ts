@@ -36,6 +36,7 @@ const getAnthropicTokenizer = (): AnthropicTokenizer =>
  */
 const tokenizerCache: Record<SupportedProvider, () => Tokenizer> = {
   anthropic: getAnthropicTokenizer,
+  archestra: getTiktokenTokenizer,
   azure: getTiktokenTokenizer,
   openai: getTiktokenTokenizer,
   cerebras: getTiktokenTokenizer,
@@ -47,6 +48,7 @@ const tokenizerCache: Record<SupportedProvider, () => Tokenizer> = {
   openrouter: getTiktokenTokenizer,
   vllm: getTiktokenTokenizer,
   ollama: getTiktokenTokenizer,
+  "ollama-native": getTiktokenTokenizer,
   zhipuai: getTiktokenTokenizer,
   deepseek: getTiktokenTokenizer,
   kimi: getTiktokenTokenizer,

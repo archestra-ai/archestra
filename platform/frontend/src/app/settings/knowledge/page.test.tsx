@@ -1,7 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -70,6 +70,7 @@ let mockApiKeys: Array<{
   name: string;
   provider: string;
   scope: string;
+  isChatgptSubscription?: boolean;
 }> = [];
 let mockEmbeddingModels: Array<{
   id: string;
@@ -591,11 +592,19 @@ describe("KnowledgeSettingsPage", () => {
       });
       fireEvent.click(providerTrigger);
 
+      // Anchored, because an unanchored substring is ambiguous: "Ollama"
+      // contains no "OpenAI" but "OpenAI-compatible" did. The accessible name
+      // repeats the label (the option renders an icon whose alt text is the
+      // provider name), so an exact string will not match either.
       expect(
-        screen.getByRole("option", { name: /OpenAI/i }),
+        screen.getByRole("option", { name: /^OpenAI\b/ }),
       ).not.toHaveAttribute("data-disabled");
+      // The two Ollama transports collapse to one "Ollama" entry. Embeddings
+      // only work over `/v1`, so this entry must resolve to that transport —
+      // collapsing to `ollama-native` (which reports supportsEmbeddings: false)
+      // would render it disabled and leave no way to add an Ollama embedding key.
       expect(
-        screen.getByRole("option", { name: /Ollama/i }),
+        screen.getByRole("option", { name: /^Ollama\b/ }),
       ).not.toHaveAttribute("data-disabled");
       expect(
         screen.getByRole("option", { name: /Anthropic/i }),
@@ -673,6 +682,46 @@ describe("KnowledgeSettingsPage", () => {
         rerankerChatApiKeyId: null,
         rerankerModel: null,
       });
+    });
+
+    it("does not offer personal subscriptions for organization reranking", async () => {
+      const user = userEvent.setup();
+      mockOrganization = {
+        embeddingChatApiKeyId: null,
+        embeddingModel: null,
+        rerankerChatApiKeyId: "key-1",
+        rerankerModel: "gpt-4o",
+      };
+      mockApiKeys = [
+        {
+          id: "key-1",
+          name: "OpenAI Key",
+          provider: "openai",
+          scope: "org",
+        },
+        {
+          id: "chatgpt-subscription",
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          scope: "personal",
+          isChatgptSubscription: true,
+        },
+      ];
+      renderPage();
+
+      const rerankingCard = screen
+        .getByText("Reranking Configuration")
+        .closest('[data-slot="card"]');
+      expect(rerankingCard).not.toBeNull();
+      await user.click(
+        within(rerankingCard as HTMLElement).getByRole("button", {
+          name: /OpenAI Key/i,
+        }),
+      );
+
+      expect(
+        screen.queryByRole("option", { name: /ChatGPT Subscription/i }),
+      ).not.toBeInTheDocument();
     });
   });
 

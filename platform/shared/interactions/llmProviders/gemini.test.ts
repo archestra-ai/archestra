@@ -162,4 +162,70 @@ describe("GeminiGenerateContentInteraction", () => {
       expect(gemini.getLastUserMessage()).toBe("Second message");
     });
   });
+
+  describe("modelName", () => {
+    // Every other provider mapper resolves `interaction.model` first, and the
+    // logs UI builds its model badges from that same column — Gemini reading
+    // `response.modelVersion` made the detail view disagree with the list.
+    it("prefers the stored interaction.model over response.modelVersion", () => {
+      const gemini = new GeminiGenerateContentInteraction({
+        model: "gemini-2.5-pro",
+        request: { contents: [] },
+        response: { modelVersion: "gemini-2.5-pro-preview-03-25" },
+      } as unknown as Interaction);
+
+      expect(gemini.modelName).toBe("gemini-2.5-pro");
+    });
+
+    it("falls back to response.modelVersion when no model is stored", () => {
+      const gemini = new GeminiGenerateContentInteraction({
+        request: { contents: [] },
+        response: { modelVersion: "gemini-2.5-pro-preview-03-25" },
+      } as unknown as Interaction);
+
+      expect(gemini.modelName).toBe("gemini-2.5-pro-preview-03-25");
+    });
+
+    it("is an empty string rather than undefined when neither is present", () => {
+      const gemini = new GeminiGenerateContentInteraction({
+        request: { contents: [] },
+        response: {},
+      } as unknown as Interaction);
+
+      expect(gemini.modelName).toBe("");
+    });
+  });
+
+  describe("getLastToolCallId", () => {
+    it("returns the last functionResponse id in a multi-tool user turn", () => {
+      const gemini = new GeminiGenerateContentInteraction({
+        request: {
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  functionResponse: {
+                    id: "fr_first",
+                    name: "a",
+                    response: {},
+                  },
+                },
+                {
+                  functionResponse: {
+                    id: "fr_second",
+                    name: "b",
+                    response: {},
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        response: { modelVersion: "gemini-2.5-pro" },
+      } as unknown as Interaction);
+
+      expect(gemini.getLastToolCallId()).toBe("fr_second");
+    });
+  });
 });

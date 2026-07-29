@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-07-21
+lastUpdated: 2026-07-27
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,7 +12,7 @@ Agent Skills are markdown instruction sets an agent loads on demand. A skill is 
 
 This keeps specialized knowledge out of every system prompt. Write the steps for parsing a PDF or drafting a release note once; any agent in the org can pull it in mid-chat and pay the token cost only when the skill actually runs.
 
-Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, file count, and use count. Every activation — a `load_skill` call, a slash command, or a delegated run — counts one use. The list shows the most-used skills first, so you can see which skills your organization actually relies on.
+Skills live under **Studio** in the sidebar. The page lists every skill in the organization with its visibility, source repository, file count, and use count. Filter the list by visibility — personal, team, or organization — or by source repository. Every activation — a `load_skill` call, a slash command, or a delegated run — counts one use. The list shows the most-used skills first, so you can see which skills your organization actually relies on.
 
 Click a skill's use count (or its chart action) to open usage analytics — a chart of who activated the skill over the last 30 days, and how often.
 
@@ -90,7 +90,7 @@ Each import records the source (`owner/repo@ref:path`) and the resolved commit S
 
 ### Sync
 
-Every import stays synced with the repository. **Keep in sync** in the dialog picks the schedule for the batch — every 15 minutes, every hour, or once a day (the default). Synced skills carry a **synced** badge in the list. Their `SKILL.md` and files are read-only in Archestra; the repository is the place to edit them. Visibility scope, teams, and environment stay editable. A failed pull keeps the last good content and shows the error in the editor.
+Every import stays synced with the repository. **Keep in sync** in the dialog picks the schedule for the batch — every 15 minutes, every hour, or once a day (the default). Synced skills carry a **synced** badge in the list. Their `SKILL.md` and files are read-only in Archestra; the repository is the place to edit them. Visibility scope, teams, and environments stay editable. A failed pull keeps the last good content and shows the error in the editor.
 
 **Stop syncing** in the skill editor breaks the link: the skill keeps its current content, becomes editable, and stops updating. **Sync now** pulls immediately instead of waiting for the schedule.
 
@@ -117,9 +117,9 @@ Creating an org-scoped skill requires `skill:admin`; creating a team-scoped skil
 
 ## Environments
 
-A skill belongs to an [environment](./platform-environments). Unassigned skills use the Default environment. An agent only sees skills in its own environment — `list_skills`, `load_skill`, and slash commands are all filtered the same way. Built-in skills are the exception: they are visible in every environment, like built-in tools.
+A skill can be restricted to one or more [environments](./platform-environments). A skill with no environments is available to agents in every environment. A restricted skill is only visible to agents in one of its environments — `list_skills`, `load_skill`, and slash commands are all filtered the same way. Built-in skills are visible everywhere, like built-in tools.
 
-Set the environment in the skill editor. A skill authored from chat inherits the authoring agent's environment. Converting an agent to a skill carries the agent's environment over.
+Pick the environments in the skill editor; leave the field empty to keep the skill available everywhere. A skill authored from chat inherits the authoring agent's environment. Converting an agent to a skill carries the agent's environment over. Restricting a skill to a `restricted` environment requires the `skill:deploy-to-restricted` permission.
 
 ## Running a Skill in a Subagent
 

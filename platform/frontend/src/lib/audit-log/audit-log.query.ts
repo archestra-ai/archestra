@@ -11,7 +11,10 @@ type AuditLogsQuery = NonNullable<archestraApiTypes.GetAuditLogsData["query"]>;
 type AuditLogsResponse = archestraApiTypes.GetAuditLogsResponses["200"];
 
 export type AuditLog = AuditLogsResponse["data"][number];
-export type AuditEventName = AuditLog["action"];
+// Derived from the query filter enum, not the response: the response `action`
+// is deliberately open (accepts unknown legacy names), so only the query side
+// carries the strict catalog of known event names.
+export type AuditEventName = NonNullable<AuditLogsQuery["action"]>;
 export type AuditActorType = AuditLog["actorType"];
 export type AuditOutcome = AuditLog["outcome"];
 
@@ -40,6 +43,7 @@ export function useAuditLogs({
   outcome,
   actorType,
   resourceType,
+  resourceId,
   search,
 }: {
   limit?: number;
@@ -52,6 +56,7 @@ export function useAuditLogs({
   outcome?: AuditOutcome;
   actorType?: AuditActorType;
   resourceType?: string;
+  resourceId?: string;
   search?: string;
 } = {}) {
   return useQuery({
@@ -68,6 +73,7 @@ export function useAuditLogs({
         outcome,
         actorType,
         resourceType,
+        resourceId,
         search,
       },
     ],
@@ -84,6 +90,7 @@ export function useAuditLogs({
           ...(outcome ? { outcome } : {}),
           ...(actorType ? { actorType } : {}),
           ...(resourceType ? { resourceType } : {}),
+          ...(resourceId ? { resourceId } : {}),
           ...(search ? { search } : {}),
         },
       });

@@ -64,12 +64,9 @@ frontend_env_vars = get_frontend_env()
 code_runtime_enabled = os.getenv('ARCHESTRA_CODE_RUNTIME_ENABLED') == 'true'
 backend_resource_deps = ['db-migrate']
 if code_runtime_enabled:
-  # Skip the local port-forward dep when pointing at an external engine — that
-  # resource isn't created (see Tiltfile.coderuntime), so depending on it would
-  # wedge the backend waiting on a resource that never appears.
-  if not os.getenv('ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST'):
-    backend_resource_deps.append('dagger-runtime-port-forward')
-  # build the napi addon before the backend boots, so it never loads a stale .node
+  # The backend provisions the Dagger engine in-cluster on startup (no external
+  # engine or port-forward to wait on); just build the napi addon before it boots
+  # so it never loads a stale .node.
   backend_resource_deps.append('sandbox-rs-build')
 # The MCP App runtime addon must be built before the backend boots.
 backend_resource_deps.append('app-runtime-rs-build')
@@ -188,25 +185,12 @@ else:
     }
   )
 
-  # App-recording video render service — its own process, matching staging's
-  # dedicated single-pod renderer. Opt-in: created only when a renderer URL is
-  # configured, which also makes the backend proxy render/status/download/cancel
-  # to it (app-recording-render-client). Unset ⇒ the backend renders in-process
-  # and this resource does not exist. The renderer takes its port from the URL
-  # (via ARCHESTRA_INTERNAL_API_BASE_URL, e.g. http://localhost:9100).
-  renderer_url = os.getenv('ARCHESTRA_APP_RECORDING_RENDERER_URL', '')
-  if renderer_url:
-    local_resource(
-      dev_resource_name + '-renderer',
-      serve_cmd='sh run-renderer-dev.sh',
-      labels=['dev'],
-      resource_deps=[dev_resource_name + '-backend'],
-      deps=['../.env', '../backend/dist/server.mjs', 'run-renderer-dev.sh'],
-      serve_env={
-        'ARCHESTRA_PROCESS_TYPE': 'renderer',
-        'ARCHESTRA_INTERNAL_API_BASE_URL': renderer_url,
-      },
-    )
+# App-recording video rendering runs in-process in local dev — the single `all`
+# backend renders in its own memory (InProcessRenderJobClient), the same path the
+# OSS single container uses. The dedicated single-replica render service is a
+# multi-replica staging/prod concern wired via Helm (archestra-renderer.yaml), not
+# a Tilt resource here: nothing local has to rerun the backend's own dist bundle
+# out-of-band to stand one up.
 
 # Port-forward for MCP servers using streamable-http transport
 # Docker Desktop / kind K8s don't expose NodePorts on localhost, so we use

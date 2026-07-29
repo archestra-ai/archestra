@@ -351,6 +351,8 @@ export function handleError(
   extractInternalCode: (
     error: unknown,
   ) => ArchestraInternalErrorCode | undefined,
+  /** Provider-specific mid-stream error framing; defaults to SSE. */
+  formatStreamErrorFrame?: (event: unknown) => string,
 ): FastifyReply | never {
   logger.error(error);
 
@@ -362,12 +364,18 @@ export function handleError(
     const errorObj = error as Error & {
       status?: number;
       statusCode?: number;
+      $metadata?: { httpStatusCode?: number };
     };
     if (typeof errorObj.status === "number") {
       statusCode = errorObj.status;
       hasExplicitStatus = true;
     } else if (typeof errorObj.statusCode === "number") {
       statusCode = errorObj.statusCode;
+      hasExplicitStatus = true;
+    } else if (typeof errorObj.$metadata?.httpStatusCode === "number") {
+      // AWS SDK errors (Bedrock) carry the HTTP status on $metadata, so
+      // without this a throttling 429 or provider 503 surfaced as a 500.
+      statusCode = errorObj.$metadata.httpStatusCode;
       hasExplicitStatus = true;
     }
   }
@@ -381,19 +389,44 @@ export function handleError(
   }
 
   // The internal code preserves overload semantics after streaming starts.
+  // Any non-ApiError 503 in the proxy's catch is the provider saying it is
+  // unavailable — whether stated explicitly (e.g. Google's UNAVAILABLE "high
+  // demand" errors) or classified from a status-less SDK failure — our own
+  // service-unavailable paths always throw ApiError.
   const isUpstreamOverload =
-    statusCode === 529 ||
-    (statusCode === 503 &&
-      !(error instanceof ApiError) &&
-      classifyUpstreamOverload(error) !== undefined);
+    statusCode === 529 || (statusCode === 503 && !(error instanceof ApiError));
+
+  // Provider-returned 5xx relays (an SDK error carrying the provider's own
+  // HTTP failure) are upstream faults, not crashes of ours — marked so error
+  // tracking drops the relay as noise while clients still get the status.
+  const isUpstreamProviderFailure =
+    hasExplicitStatus &&
+    statusCode >= 500 &&
+    !(error instanceof ApiError) &&
+    hasProviderHttpErrorShape(error);
 
   const errorMessage = extractErrorMessage(error);
+  const adapterInternalCode = extractInternalCode(error);
   const internalCode =
-    extractInternalCode(error) ??
+    adapterInternalCode ??
     (error instanceof ApiError ? error.internalCode : undefined) ??
     (isUpstreamOverload
       ? ArchestraInternalErrorCode.ProviderOverloaded
       : undefined);
+
+  // Provider rate limits and overloads are relayed uncorrupted. Rewrapping
+  // them in the Archestra error envelope rewrites the provider's error type
+  // (e.g. Anthropic's `rate_limit_error` became `unknown_api_error`), which
+  // makes native clients misclassify the failure — a subscription usage-limit
+  // 429 gets reported to the user as server-side throttling. Internal
+  // ApiErrors (Archestra's own limit blocks) and errors the adapter
+  // intentionally reclassifies (adapterInternalCode) keep the envelope.
+  const upstreamPassthroughBody =
+    !(error instanceof ApiError) &&
+    adapterInternalCode === undefined &&
+    (statusCode === 429 || statusCode === 529)
+      ? extractUpstreamErrorBody(error)
+      : undefined;
 
   // Headers cannot be changed after streaming starts.
   if (!reply.raw.headersSent) {
@@ -401,18 +434,26 @@ export function handleError(
     if (retryAfter !== undefined) {
       reply.header("retry-after", retryAfter);
     }
+    forwardUpstreamRateLimitHeaders(error, reply);
   }
 
   // If headers already sent (mid-stream error), write error to stream.
   // Clients (like AI SDK) detect errors via HTTP status code, but we can't change
-  // the status after headers are committed - so SSE error event is our only option.
+  // the status after headers are committed - so an in-stream error event is our
+  // only option. The framing must match the stream the client is already
+  // parsing, hence formatStreamErrorFrame (SSE for everyone but Ollama native).
   // Check reply.raw.headersSent (set after writeHead) rather than reply.sent
   // (which is only set after hijack or full send).
   if (isStreaming && reply.raw.headersSent) {
     const errorEvent = {
       type: "error",
       error: {
-        type: "api_error",
+        // Keep the provider's own error type for rate limits/overloads so
+        // native streaming clients classify the failure correctly.
+        type:
+          (upstreamPassthroughBody !== undefined && error instanceof Error
+            ? nestedProviderErrorType(error)
+            : undefined) ?? "api_error",
         message: errorMessage,
         // Surface the normalized code (e.g. provider_insufficient_balance)
         // mid-stream too, so a failure after headers commit stays classifiable.
@@ -420,7 +461,11 @@ export function handleError(
       },
     };
     try {
-      reply.raw.write(`event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`);
+      reply.raw.write(
+        formatStreamErrorFrame
+          ? formatStreamErrorFrame(errorEvent)
+          : `event: error\ndata: ${JSON.stringify(errorEvent)}\n\n`,
+      );
       reply.raw.end();
     } catch (writeError) {
       // Connection already closed by the client — nothing more we can do.
@@ -432,9 +477,30 @@ export function handleError(
     return reply;
   }
 
+  // Provider rate-limit/overload body is relayed verbatim (bypassing the
+  // Archestra envelope the central handler would build): the proxy's provider
+  // routes speak each provider's wire format, and native clients parse this
+  // body for the error type. Statuses 429/529 have no response schema entry,
+  // so the payload is serialized as-is.
+  if (upstreamPassthroughBody !== undefined) {
+    return reply.status(statusCode).send(upstreamPassthroughBody);
+  }
+
   // Headers not sent yet - throw ApiError to let central handler return proper status code
   // This matches V1 handler behavior and ensures clients receive correct HTTP status
-  throw new ApiError(statusCode, errorMessage, internalCode);
+  const apiError = new ApiError(statusCode, errorMessage, internalCode);
+  apiError.upstream = isUpstreamProviderFailure || isUpstreamOverload;
+  throw apiError;
+}
+
+/**
+ * Whether the error looks like a provider SDK's HTTP error (a parsed error
+ * body, response headers, or the AWS SDK's response metadata) rather than an
+ * internal error that merely carries a status code.
+ */
+function hasProviderHttpErrorShape(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return "error" in error || "headers" in error || "$metadata" in error;
 }
 
 /**
@@ -512,6 +578,68 @@ function nestedProviderErrorType(error: Error): string | undefined {
   }
   return undefined;
 }
+
+/**
+ * The parsed upstream error body carried by a provider SDK error. The
+ * Anthropic SDK stores the full response envelope
+ * (`{ type: "error", error: { type, message } }`) on `.error`, while
+ * OpenAI-compatible SDKs store only the body's `error` member — the latter is
+ * re-wrapped so the relayed body matches what the provider originally sent.
+ */
+function extractUpstreamErrorBody(error: unknown): object | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const body = (error as Error & { error?: unknown }).error;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return undefined;
+  }
+  if ("error" in body) return body;
+  return { error: body };
+}
+
+/**
+ * Forward the provider's rate-limit state headers so native clients can tell
+ * an account/usage limit apart from server-side throttling and show reset
+ * times (e.g. Anthropic's `anthropic-ratelimit-unified-status` drives the
+ * "usage limit" vs "server is limiting requests" distinction in clients).
+ * Values are validated to printable ASCII so junk is not relayed.
+ */
+function forwardUpstreamRateLimitHeaders(
+  error: unknown,
+  reply: FastifyReply,
+): void {
+  if (!(error instanceof Error)) return;
+  const headers = (error as Error & { headers?: unknown }).headers;
+
+  let entries: [string, unknown][];
+  if (headers instanceof Headers) {
+    entries = [...headers.entries()];
+  } else if (headers && typeof headers === "object") {
+    entries = Object.entries(headers);
+  } else {
+    return;
+  }
+
+  for (const [name, value] of entries) {
+    const lowerName = name.toLowerCase();
+    if (
+      !RATE_LIMIT_HEADER_PREFIXES.some((prefix) => lowerName.startsWith(prefix))
+    ) {
+      continue;
+    }
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (
+      trimmed.length === 0 ||
+      trimmed.length > 256 ||
+      /[^\t\x20-\x7e]/.test(trimmed)
+    ) {
+      continue;
+    }
+    reply.header(lowerName, trimmed);
+  }
+}
+
+const RATE_LIMIT_HEADER_PREFIXES = ["anthropic-ratelimit-", "x-ratelimit-"];
 
 /**
  * Read a valid Retry-After value from current or legacy SDK error headers.

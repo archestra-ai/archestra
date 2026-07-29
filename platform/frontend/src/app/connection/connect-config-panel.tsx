@@ -123,6 +123,13 @@ export function ConnectConfigPanel({
   const skillIds = useMemo(() => skills.map((s) => s.id), [skills]);
   const [includeSkills, setIncludeSkills] = useState(true);
 
+  // The steps after the download — importing the profile and finishing the
+  // OAuth flow — only make sense once a profile can actually be produced. When
+  // the download is blocked for good (no virtual-key permission, or no Anthropic
+  // key to back the embedded key), they're just noise, so we hide them and let
+  // step 3 carry the explanation.
+  const { unavailable: downloadBlocked } = useConfigProfileAvailability();
+
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
   const proxy = (llmProxies ?? []).find((p) => p.id === llmProxyId) ?? null;
 
@@ -295,7 +302,11 @@ export function ConnectConfigPanel({
         </ul>
       </WizardStep>
 
-      <WizardStep n={3} title="Download your configuration profile">
+      <WizardStep
+        n={3}
+        title="Download your configuration profile"
+        last={downloadBlocked}
+      >
         <div className="flex flex-col gap-3">
           <Alert variant="info">
             <Info />
@@ -319,49 +330,51 @@ export function ConnectConfigPanel({
         </div>
       </WizardStep>
 
-      <WizardStep
-        n={4}
-        title="Import the profile into Claude Desktop"
-        last={!gateway}
-      >
-        <div className="space-y-4 text-sm text-muted-foreground">
-          <ol className="list-decimal space-y-2 pl-5">
-            <li>
-              From the Claude menu choose{" "}
-              <strong className="font-medium text-foreground">
-                Help → Troubleshooting → Enable Developer Mode
-              </strong>
-              .
-            </li>
-            <li>
-              From the Claude menu choose{" "}
-              <strong className="font-medium text-foreground">
-                Developer → Configure Third-Party Inference…
-              </strong>
-              .
-            </li>
-            <li>
-              Click the{" "}
-              <strong className="font-medium text-foreground">Default</strong>{" "}
-              dropdown in the top-right corner and choose{" "}
-              <strong className="font-medium text-foreground">
-                Import configuration…
-              </strong>
-              .
-            </li>
-            <li>Select the configuration file you downloaded above.</li>
-            <li>
-              Click{" "}
-              <strong className="font-medium text-foreground">
-                Apply Changes
-              </strong>{" "}
-              and restart Claude Desktop.
-            </li>
-          </ol>
-        </div>
-      </WizardStep>
+      {!downloadBlocked && (
+        <WizardStep
+          n={4}
+          title="Import the profile into Claude Desktop"
+          last={!gateway}
+        >
+          <div className="space-y-4 text-sm text-muted-foreground">
+            <ol className="list-decimal space-y-2 pl-5">
+              <li>
+                From the Claude menu choose{" "}
+                <strong className="font-medium text-foreground">
+                  Help → Troubleshooting → Enable Developer Mode
+                </strong>
+                .
+              </li>
+              <li>
+                From the Claude menu choose{" "}
+                <strong className="font-medium text-foreground">
+                  Developer → Configure Third-Party Inference…
+                </strong>
+                .
+              </li>
+              <li>
+                Click the{" "}
+                <strong className="font-medium text-foreground">Default</strong>{" "}
+                dropdown in the top-right corner and choose{" "}
+                <strong className="font-medium text-foreground">
+                  Import configuration…
+                </strong>
+                .
+              </li>
+              <li>Select the configuration file you downloaded above.</li>
+              <li>
+                Click{" "}
+                <strong className="font-medium text-foreground">
+                  Apply Changes
+                </strong>{" "}
+                and restart Claude Desktop.
+              </li>
+            </ol>
+          </div>
+        </WizardStep>
+      )}
 
-      {gateway && (
+      {!downloadBlocked && gateway && (
         <WizardStep n={5} title={FINISH_OAUTH_FLOW_TITLE} last>
           <p className="mb-3 text-sm text-muted-foreground">
             The profile only registers the connector — the gateway grants tool
@@ -422,6 +435,47 @@ type ProvisionState =
   | { status: "error" };
 
 /**
+ * The two prerequisites for producing a configuration profile: permission to
+ * mint virtual keys, and an {Anthropic} provider key for the embedded key to be
+ * minted from. Read both by the download step (which explains a missing one)
+ * and by the panel (which hides the import/OAuth steps once the download is
+ * known impossible).
+ *
+ * `unavailable` flips true only once a prerequisite is *known* missing — never
+ * while the checks are still loading — so the happy path never flashes the
+ * later steps out and back in. A transient provisioning error is deliberately
+ * not "unavailable": it's retryable, so the follow-up steps stay put.
+ */
+function useConfigProfileAvailability(): {
+  canCreateVirtualKey: boolean | undefined;
+  canCreateProviderKey: boolean | undefined;
+  anthropicHasKey: boolean;
+  unavailable: boolean;
+} {
+  const { data: canCreateVirtualKey } = useHasPermissions({
+    llmVirtualKey: ["create"],
+  });
+  const { data: canCreateProviderKey } = useHasPermissions({
+    llmProviderApiKey: ["create"],
+  });
+  const { data: availableKeys } = useAvailableLlmProviderApiKeys();
+  const anthropicHasKey = (availableKeys ?? []).some(
+    (k) => k.provider === "anthropic",
+  );
+  const unavailable =
+    canCreateVirtualKey === false ||
+    (canCreateVirtualKey === true &&
+      availableKeys !== undefined &&
+      !anthropicHasKey);
+  return {
+    canCreateVirtualKey,
+    canCreateProviderKey,
+    anthropicHasKey,
+    unavailable,
+  };
+}
+
+/**
  * The artifact step. Provisions the caller's passthrough + standard virtual
  * keys (the standard key needs a configured Anthropic provider key — mirrors
  * the command panel's handling), builds the profile, and offers the download.
@@ -445,17 +499,8 @@ function ConfigDownloadStep({
   includeSkills: boolean;
   skillIds: string[];
 }) {
-  const { data: canCreateVirtualKey } = useHasPermissions({
-    llmVirtualKey: ["create"],
-  });
-  const { data: canCreateProviderKey } = useHasPermissions({
-    llmProviderApiKey: ["create"],
-  });
-  const { data: availableKeys } = useAvailableLlmProviderApiKeys();
-  const anthropicHasKey = useMemo(
-    () => (availableKeys ?? []).some((k) => k.provider === "anthropic"),
-    [availableKeys],
-  );
+  const { canCreateVirtualKey, canCreateProviderKey, anthropicHasKey } =
+    useConfigProfileAvailability();
 
   const { mutateAsync: provisionPassthrough } =
     useCreateConnectionPassthroughKey();
@@ -549,12 +594,13 @@ function ConfigDownloadStep({
     return (
       <p className="text-sm text-muted-foreground">
         You don't have permission to create virtual keys. Ask an admin to
-        generate a configuration profile, or create the keys on the{" "}
+        generate a configuration profile, or open a proxy&apos;s Connect dialog
+        from the{" "}
         <Link
-          href="/credentials/virtual-keys"
+          href="/llm/proxies"
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
-          Virtual API Keys
+          LLM Proxies
         </Link>{" "}
         page.
       </p>
@@ -567,9 +613,9 @@ function ConfigDownloadStep({
     return (
       <>
         <p className="text-sm text-muted-foreground">
-          A configuration profile embeds a virtual key minted from your{" "}
-          {providerDisplayNames.anthropic} provider key, but none is configured
-          yet.{" "}
+          You need an {providerDisplayNames.anthropic} provider key before you
+          can download a profile — the profile uses it to authorize inference,
+          and none is configured yet.{" "}
           {canCreateProviderKey ? (
             <button
               type="button"

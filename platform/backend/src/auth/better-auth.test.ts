@@ -1,3 +1,4 @@
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
@@ -344,6 +345,87 @@ describe("handleBeforeHook", () => {
           callbackURL: "/chat",
           invitationId: invitation.id,
         },
+      });
+
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+  });
+
+  describe("impersonation permission gate", () => {
+    const impersonateCtx = (user: { id: string; email: string }) =>
+      createMockContext({
+        path: "/admin/impersonate-user",
+        method: "POST",
+        body: { userId: "some-target-user" },
+        context: {
+          session: {
+            user,
+            session: { id: "session-id" },
+          },
+        },
+      });
+
+    test("allows callers whose role grants member:impersonate", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const adminUser = await makeUser({ role: "admin" });
+      await makeMember(adminUser.id, org.id, { role: ADMIN_ROLE_NAME });
+
+      const ctx = impersonateCtx(adminUser);
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+
+    test("throws FORBIDDEN when the caller's role lacks member:impersonate", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      // System-level admin (passes better-auth's own gate) whose org role
+      // has broad member management but not member:impersonate.
+      const restrictedAdmin = await makeUser({ role: "admin" });
+      const customRole = await makeCustomRole(org.id, {
+        permission: { member: ["read", "create", "update", "delete"] },
+      });
+      await makeMember(restrictedAdmin.id, org.id, { role: customRole.role });
+
+      const ctx = impersonateCtx(restrictedAdmin);
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+        body: { message: "You do not have permission to impersonate users" },
+      });
+    });
+
+    test("throws FORBIDDEN when the caller has no organization membership", async ({
+      makeUser,
+    }) => {
+      const orphanUser = await makeUser({ role: "admin" });
+
+      const ctx = impersonateCtx(orphanUser);
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+    });
+
+    test("leaves unauthenticated calls for better-auth to reject", async () => {
+      const ctx = createMockContext({
+        path: "/admin/impersonate-user",
+        method: "POST",
+        body: { userId: "some-target-user" },
+      });
+
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+
+    test("does not gate stop-impersonating", async () => {
+      const ctx = createMockContext({
+        path: "/admin/stop-impersonating",
+        method: "POST",
       });
 
       const result = await handleBeforeHook(ctx);
@@ -2096,6 +2178,39 @@ describe("handleAfterHook", () => {
       const member = await MemberModel.getByUserId(user.id, org.id);
       expect(member?.role).toBe("admin");
     });
+  });
+});
+
+describe("sign-out response body", () => {
+  // Regression guard. better-auth serializes whatever an after-hook returns as
+  // the HTTP response body. handleAfterHook used to `return ctx` on the
+  // sign-out path, which turned the unauthenticated POST /sign-out 200 into a
+  // ~168 KB dump of the entire internal AuthContext — including `secret`
+  // (ARCHESTRA_AUTH_SECRET, which signs session cookies and encrypts stored
+  // secrets). The sign-out body must stay the minimal `{ success: true }`.
+  test("unauthenticated sign-out returns only { success: true } and never the auth secret", async () => {
+    const req = new Request("http://localhost:3000/api/auth/sign-out", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost:3000",
+      },
+      body: JSON.stringify({}),
+    });
+
+    const res = await auth.handler(req);
+    const text = await res.text();
+
+    expect(res.status).toBe(200);
+    expect(JSON.parse(text)).toEqual({ success: true });
+
+    const secret = process.env.ARCHESTRA_AUTH_SECRET as string;
+    expect(secret.length).toBeGreaterThan(0);
+    expect(text).not.toContain(secret);
+    // Structural guard: catch any future full-context dump even if the secret
+    // string itself changes. `internalAdapter` is an AuthContext-only key.
+    expect(text).not.toContain("internalAdapter");
+    expect(text.length).toBeLessThan(200);
   });
 });
 

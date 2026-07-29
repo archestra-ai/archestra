@@ -67,6 +67,14 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
               sandboxArtifactBytesLimit: z.number(),
+              // Max size of a chat upload the conversation can store (Files
+              // panel). Bounds the composer's file picker and its per-file
+              // policy; independent of what the sandbox can stage.
+              chatAttachmentStorageBytesLimit: z.number(),
+              // Request body ceiling. A turn's attachments travel base64-encoded
+              // in one request, so the composer needs this to stop a send that
+              // the body parser would reject with an opaque 413.
+              apiBodyLimitBytes: z.number(),
               byosEnabled: z.boolean(),
               byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
               azureOpenAiEntraIdEnabled: z.boolean(),
@@ -94,8 +102,18 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               kbAutoSyncPermissionsEnabled: z.boolean(),
               /** App session recording (record/replay/download app demos). */
               hackathonRecorderEnabled: z.boolean(),
-              /** Staging override active: recorder bypasses the hackathon date window. */
-              hackathonRecorderOverrideActive: z.boolean(),
+              /**
+               * The offline video export is offered. Off by default: a render
+               * drives a headless browser for as long as the cut runs, and the
+               * gallery submission does not depend on it.
+               */
+              hackathonVideoDownloadEnabled: z.boolean(),
+              /**
+               * The longest final cut this deployment accepts, in ms. Every
+               * length surface reads it from here, so the number the author is
+               * shown is always the number the checks enforce.
+               */
+              hackathonMaxFinalCutMs: z.number().int().positive(),
               /**
                * The public App Gallery repository shared recordings are
                * submitted to, or null when this deployment does not offer
@@ -135,6 +153,9 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
           sandbox: skillSandboxRuntimeService.isEnabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
+          chatAttachmentStorageBytesLimit:
+            config.chat.attachmentStorageBytesLimit,
+          apiBodyLimitBytes: config.api.bodyLimit,
           byosEnabled: isByosEnabled(),
           byosVaultKvVersion: getByosVaultKvVersion(),
           azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
@@ -157,8 +178,9 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
           kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,
           hackathonRecorderEnabled: config.hackathonRecorder.enabled,
-          hackathonRecorderOverrideActive:
-            config.hackathonRecorder.overrideActive,
+          hackathonVideoDownloadEnabled:
+            config.hackathonRecorder.videoDownloadEnabled,
+          hackathonMaxFinalCutMs: config.hackathonRecorder.maxFinalCutMs,
           hackathonGalleryRepo:
             (config.hackathonRecorder.gallery.githubClientId &&
               config.hackathonRecorder.gallery.repo) ||
@@ -178,9 +200,11 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           xai: config.llm.xai.baseUrl || null,
           vllm: config.llm.vllm.baseUrl || null,
           ollama: config.llm.ollama.baseUrl || null,
+          "ollama-native": config.llm["ollama-native"].baseUrl || null,
           zhipuai: config.llm.zhipuai.baseUrl || null,
           minimax: config.llm.minimax.baseUrl || null,
           deepseek: config.llm.deepseek.baseUrl || null,
+          archestra: config.llm.archestra.baseUrl || null,
           kimi: config.llm.kimi.baseUrl || null,
           "github-copilot": config.llm["github-copilot"].baseUrl || null,
           "microsoft-365-copilot":

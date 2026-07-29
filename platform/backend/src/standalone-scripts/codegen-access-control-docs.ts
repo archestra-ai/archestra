@@ -126,6 +126,8 @@ Team membership has its own role, separate from organization RBAC:
 - \`member\`: belongs to the team and can access resources shared with that team
 - \`admin\`: can manage membership and team-scoped settings for that team, such as external group sync mappings
 
+Whoever creates a team joins it as that team's first admin, so they can manage its members straight away.
+
 Team admins do **not** automatically receive organization-level team permissions. Renaming a team, editing its description, creating teams, and deleting teams require the matching organization RBAC permission such as \`team:update\`, \`team:create\`, or \`team:delete\`.
 
 Team roles are also separate from resource actions named \`:team-admin\`. For example, \`agent:team-admin\` controls team-scoped agent management; it does not make the user an admin member of every team.
@@ -153,6 +155,12 @@ Examples:
 - Organization-wide records require the resource-specific admin permission such as \`llmProviderApiKey:admin\` or \`llmVirtualKey:admin\`
 
 These resources do **not** use \`:team-admin\`.
+
+### Team-Restricted Models
+
+You can limit an LLM model to specific teams. Open the model on the Models page and pick teams under "Limit to teams" — dev teams get frontier models while test teams use cheaper ones, for example.
+
+A model with no teams selected stays available to everyone. A restricted model is hidden from model pickers and \`/models\` listings for users outside its teams, and the LLM Proxy rejects their requests to it with \`403\`. Users with \`llmModel:update\`, including organization admins, keep full access.
 
 ### Chat Access And Optional UI Controls
 

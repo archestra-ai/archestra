@@ -24,6 +24,7 @@ import {
   Minimax,
   Mistral,
   Ollama,
+  OllamaNative,
   OpenAi,
   Openrouter,
   Perplexity,
@@ -178,6 +179,12 @@ const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit(
   DELTA_ENCODING_COLUMNS,
 ).extend({
   chatErrors: z.array(SelectConversationChatErrorSchema).optional(),
+  /**
+   * Name of `connectorId`'s knowledge base connector, resolved within the
+   * caller's organization. Null once the connector is gone; absent on endpoints
+   * that do not resolve it.
+   */
+  connectorName: z.string().nullable().optional(),
 });
 
 /**
@@ -394,6 +401,14 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .nullable()
       .optional(),
     response: withErrorResponse(Ollama.API.ChatCompletionResponseSchema),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["ollama-native:chat"]),
+    request: withReadFallback(OllamaNative.API.ChatRequestSchema),
+    processedRequest: withReadFallback(OllamaNative.API.ChatRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(OllamaNative.API.ChatResponseSchema),
   }),
   BaseSelectInteractionResponseSchema.extend({
     type: z.enum(["cohere:chat"]),

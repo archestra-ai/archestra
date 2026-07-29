@@ -4,7 +4,7 @@ import config from "@/config";
 import logger from "@/logging";
 import type { Gemini } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
-import type { ModelInfo } from "./types";
+import { type ModelInfo, modelFetchError } from "./types";
 
 export async function fetchGeminiModels(
   apiKey: string,
@@ -27,7 +27,7 @@ export async function fetchGeminiModels(
       { status: response.status, error: errorText },
       "Failed to fetch Gemini models",
     );
-    throw new Error(`Failed to fetch Gemini models: ${response.status}`);
+    throw modelFetchError("Gemini models", response.status);
   }
 
   const data = (await response.json()) as {

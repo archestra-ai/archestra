@@ -53,6 +53,7 @@ export { default as agentLabelsTable } from "./agent-label";
 export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt";
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
+export { default as agentUsersTable } from "./agent-user";
 export { default as apikeysTable } from "./api-key";
 export { default as appsTable } from "./app";
 export { default as appDataTable } from "./app-data";
@@ -117,6 +118,7 @@ export { default as llmProviderApiKeysTable } from "./llm-provider-api-key";
 export { default as llmProviderApiKeyModelsTable } from "./llm-provider-api-key-model";
 export { default as mcpCatalogLabelsTable } from "./mcp-catalog-label";
 export { default as mcpCatalogTeamsTable } from "./mcp-catalog-team";
+export { default as mcpCatalogUsersTable } from "./mcp-catalog-user";
 export { default as mcpHttpSessionsTable } from "./mcp-http-session";
 export { default as mcpPresetEntriesTable } from "./mcp-preset-entry";
 export { default as mcpServersTable } from "./mcp-server";
@@ -126,6 +128,8 @@ export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as membersTable } from "./member";
 export { default as messagesTable } from "./message";
 export { default as modelsTable } from "./model";
+export { default as modelTeamsTable } from "./model-team";
+export { default as modelUsersTable } from "./model-user";
 export { default as oauthAccessTokensTable } from "./oauth-access-token";
 export { default as oauthClientsTable } from "./oauth-client";
 export { default as oauthClientTeamsTable } from "./oauth-client-team";
@@ -139,6 +143,7 @@ export {
   default as projectsTable,
   projectSharesTable,
   projectShareTeamsTable,
+  projectShareUsersTable,
 } from "./project";
 export { default as projectPinsTable } from "./project-pin";
 export { default as scheduleTriggersTable } from "./schedule-trigger";
@@ -149,6 +154,7 @@ export { default as serviceAccountTokensTable } from "./service-account-token";
 export { default as sessionsTable } from "./session";
 export { default as siteNotificationsTable } from "./site-notification";
 export { default as skillsTable } from "./skill";
+export { default as skillEnvironmentsTable } from "./skill-environment";
 export { default as skillFilesTable } from "./skill-file";
 export { default as skillSandboxesTable } from "./skill-sandbox";
 export { default as skillSandboxCommandsTable } from "./skill-sandbox-command";
@@ -162,6 +168,7 @@ export {
 export { default as skillShareLinkRevisionsTable } from "./skill-share-link-revision";
 export { default as skillTeamsTable } from "./skill-team";
 export { default as skillUsageEventsTable } from "./skill-usage-event";
+export { default as skillUsersTable } from "./skill-user";
 export { default as skillVersionsTable } from "./skill-version";
 export { default as skillVersionFilesTable } from "./skill-version-file";
 export { default as tasksTable } from "./task";
@@ -172,6 +179,7 @@ export { default as teamTokensTable } from "./team-token";
 export { default as teamVaultFoldersTable } from "./team-vault-folder";
 export { default as toolsTable } from "./tool";
 export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";
+export { default as toolObservationsTable } from "./tool-observation";
 export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";

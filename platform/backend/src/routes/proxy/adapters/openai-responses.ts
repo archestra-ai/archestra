@@ -13,7 +13,10 @@ import type {
 } from "openai/resources/responses/responses";
 import config from "@/config";
 import { metrics } from "@/observability";
-import { decodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
+import {
+  decodeOpenAiCodexCredential,
+  isOpenAiCodexCredential,
+} from "@/services/openai-codex-credentials";
 import type {
   ChunkProcessingResult,
   CommonMcpToolDefinition,
@@ -75,6 +78,17 @@ export const openAiResponsesAdapterFactory: LLMProvider<
 
   extractApiKey(headers: OpenAiResponsesHeaders): string | undefined {
     return headers.authorization;
+  },
+
+  isSubscriptionCredential(apiKey: string | undefined): boolean {
+    // ChatGPT-subscription (Codex) credentials travel through the proxy as
+    // marker-prefixed encoded strings (`chatgpt-oauth:…`). They are covered by
+    // a flat-rate plan, so they must classify as subscription — the same rule
+    // as Anthropic `sk-ant-oat…` OAuth tokens. `extractApiKey` returns the
+    // authorization header as-is, so strip an optional `Bearer ` prefix before
+    // the format check; plain `sk-…` API keys stay metered.
+    const token = apiKey?.startsWith("Bearer ") ? apiKey.slice(7) : apiKey;
+    return isOpenAiCodexCredential(token);
   },
 
   getBaseUrl(): string | undefined {
@@ -641,10 +655,6 @@ class OpenAiResponsesStreamAdapter
   }
 
   toProviderResponse(): OpenAiResponsesResponse {
-    if (this.replacedText === null && this.completedResponse) {
-      return this.completedResponse;
-    }
-
     const outputItems: OpenAiResponsesResponse["output"] = [];
 
     const messageText = this.replacedText ?? this.state.text;
@@ -675,6 +685,24 @@ class OpenAiResponsesStreamAdapter
           status: "completed" as const,
         })),
       );
+    }
+
+    // The upstream `response.completed` envelope is the richest record (it
+    // echoes tools, reasoning config and the real ids), so it wins — but only
+    // when it actually carries the turn. Reasoning turns finish with an empty
+    // `output` even though the text arrived in `response.output_text.delta`
+    // chunks; persisting that verbatim lost the whole assistant side of the
+    // interaction, leaving LLM Logs with nothing to render. Keep the envelope
+    // and restore the items we accumulated.
+    if (this.replacedText === null && this.completedResponse) {
+      const upstreamOutput = this.completedResponse.output;
+      if (
+        (Array.isArray(upstreamOutput) && upstreamOutput.length > 0) ||
+        outputItems.length === 0
+      ) {
+        return this.completedResponse;
+      }
+      return { ...this.completedResponse, output: outputItems };
     }
 
     return {

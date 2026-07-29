@@ -4,6 +4,7 @@ import {
   type Resource,
 } from "@archestra/shared";
 import { buildForbiddenErrorMessage } from "@archestra/shared/access-control";
+import { TeamModel } from "@/models";
 import {
   type AgentScope,
   type AgentType,
@@ -231,6 +232,73 @@ export function requireScopedModifyPermission(params: {
     // fall through and implicitly grant.
     default:
       throw new ApiError(403, `Unknown ${resourceLabel} scope`);
+  }
+}
+
+/**
+ * Validate an agent's team assignments before persisting. A `team`-scoped agent
+ * must have at least one team (otherwise it matches no team membership and is
+ * invisible to everyone, including its author), and every assigned team must
+ * exist within the caller's organization — a stale, bogus, or foreign-org id
+ * fails with a clean 400 instead of an FK violation mid-write.
+ *
+ * Existence is checked for any non-empty assignment rather than only at `team`
+ * scope: `agent_team` rows are written whenever teams are supplied, and the
+ * foreign key points at the global `team` table, so an id belonging to another
+ * organization would otherwise persist unnoticed. Mirrors
+ * {@link assertMcpCatalogTeams} and its skill equivalent.
+ */
+export async function assertAgentTeams(params: {
+  scope: AgentScope;
+  teamIds: string[];
+  organizationId: string;
+}): Promise<void> {
+  if (params.scope === "team" && params.teamIds.length === 0) {
+    throw new ApiError(
+      400,
+      "A team-scoped agent must be assigned at least one team",
+    );
+  }
+  if (params.teamIds.length === 0) return;
+
+  const teams = await TeamModel.findByIds(params.teamIds);
+  const validIds = new Set(
+    teams
+      .filter((team) => team.organizationId === params.organizationId)
+      .map((team) => team.id),
+  );
+  const missing = params.teamIds.filter((id) => !validIds.has(id));
+  if (missing.length > 0) {
+    throw new ApiError(400, `Unknown team id(s): ${missing.join(", ")}`);
+  }
+}
+
+/**
+ * Enforce that a non-admin only assigns teams they belong to. Admins may assign
+ * any team in the organization, which is how an agent is set up on a team's
+ * behalf.
+ *
+ * Teams already on the agent are exempt: a team-admin editing an agent that is
+ * also shared with teams they don't belong to can still save unrelated changes,
+ * and echoing the current assignment back is never rejected. Only newly added
+ * teams are checked.
+ */
+export function assertAssignableAgentTeams(params: {
+  checker: AgentTypePermissionChecker;
+  agentType: AgentType;
+  requestedTeamIds: string[];
+  existingTeamIds: string[];
+  userTeamIds: string[];
+}): void {
+  if (params.checker.isAdmin(params.agentType)) return;
+
+  const existingTeamIdSet = new Set(params.existingTeamIds);
+  const userTeamIdSet = new Set(params.userTeamIds);
+  const invalidAdds = params.requestedTeamIds.filter(
+    (id) => !existingTeamIdSet.has(id) && !userTeamIdSet.has(id),
+  );
+  if (invalidAdds.length > 0) {
+    throw new ApiError(403, "You can only assign teams you are a member of");
   }
 }
 

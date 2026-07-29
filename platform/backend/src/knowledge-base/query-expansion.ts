@@ -17,8 +17,10 @@ interface ExpandedQuery {
 async function expandQuery(params: {
   queryText: string;
   organizationId: string;
+  /** The one connector this query is scoped to, or null when it spans several. */
+  connectorId?: string | null;
 }): Promise<ExpandedQuery[]> {
-  const { queryText, organizationId } = params;
+  const { queryText, organizationId, connectorId = null } = params;
 
   let rerankerConfig: Awaited<ReturnType<typeof resolveRerankerConfig>>;
   try {
@@ -46,8 +48,8 @@ async function expandQuery(params: {
   }
 
   const [semanticResult, keywordResult] = await Promise.allSettled([
-    semanticRephrase({ queryText, rerankerConfig }),
-    keywordExpansion({ queryText, rerankerConfig }),
+    semanticRephrase({ queryText, rerankerConfig, connectorId }),
+    keywordExpansion({ queryText, rerankerConfig, connectorId }),
   ]);
 
   const queries: ExpandedQuery[] = [
@@ -55,7 +57,8 @@ async function expandQuery(params: {
   ];
 
   if (semanticResult.status === "fulfilled" && semanticResult.value) {
-    logger.info(
+    // Query text is user content — payloads only at debug.
+    logger.debug(
       { type: "semantic", queryText: semanticResult.value },
       "[QueryExpansion] Generated semantic rephrase",
     );
@@ -73,7 +76,7 @@ async function expandQuery(params: {
 
   if (keywordResult.status === "fulfilled" && keywordResult.value.length > 0) {
     for (const kw of keywordResult.value) {
-      logger.info(
+      logger.debug(
         { type: "keyword", queryText: kw },
         "[QueryExpansion] Generated keyword query",
       );
@@ -94,15 +97,21 @@ async function expandQuery(params: {
 
   logger.info(
     {
-      originalQuery: queryText,
       expandedCount: deduped.length,
+      queryTypes: deduped.map((q) => q.type),
+    },
+    "[QueryExpansion] Expanded queries",
+  );
+  logger.debug(
+    {
+      originalQuery: queryText,
       queries: deduped.map((q) => ({
         text: q.queryText,
         weight: q.weight,
         type: q.type,
       })),
     },
-    "[QueryExpansion] Expanded queries",
+    "[QueryExpansion] Expanded query texts",
   );
 
   return deduped;
@@ -146,8 +155,9 @@ function deduplicateQueries(queries: ExpandedQuery[]): ExpandedQuery[] {
 async function semanticRephrase(params: {
   queryText: string;
   rerankerConfig: RerankerConfig;
+  connectorId: string | null;
 }): Promise<string | null> {
-  const { queryText, rerankerConfig } = params;
+  const { queryText, rerankerConfig, connectorId } = params;
   const currentDate = new Date().toISOString().split("T")[0];
 
   const result = await withKbObservability({
@@ -157,6 +167,7 @@ async function semanticRephrase(params: {
     >[0]["provider"],
     model: rerankerConfig.modelName,
     source: "knowledge:query-expansion",
+    connectorId,
     type: getProviderChatInteractionType(
       rerankerConfig.provider as Parameters<
         typeof getProviderChatInteractionType
@@ -185,8 +196,9 @@ async function semanticRephrase(params: {
 async function keywordExpansion(params: {
   queryText: string;
   rerankerConfig: RerankerConfig;
+  connectorId: string | null;
 }): Promise<string[]> {
-  const { queryText, rerankerConfig } = params;
+  const { queryText, rerankerConfig, connectorId } = params;
   const currentDate = new Date().toISOString().split("T")[0];
 
   const result = await withKbObservability({
@@ -196,6 +208,7 @@ async function keywordExpansion(params: {
     >[0]["provider"],
     model: rerankerConfig.modelName,
     source: "knowledge:query-expansion",
+    connectorId,
     type: getProviderChatInteractionType(
       rerankerConfig.provider as Parameters<
         typeof getProviderChatInteractionType

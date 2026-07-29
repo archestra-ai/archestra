@@ -399,11 +399,15 @@ export function handleError(
   // Provider-returned 5xx relays (an SDK error carrying the provider's own
   // HTTP failure) are upstream faults, not crashes of ours — marked so error
   // tracking drops the relay as noise while clients still get the status.
+  // The status-less variant is an in-stream failure: once the provider's
+  // stream commits 200, a failure arrives as an SSE `error` event that the
+  // SDK relays with a parsed provider body but no HTTP status (e.g.
+  // Anthropic's mid-stream `api_error` "Internal server error").
   const isUpstreamProviderFailure =
-    hasExplicitStatus &&
     statusCode >= 500 &&
     !(error instanceof ApiError) &&
-    hasProviderHttpErrorShape(error);
+    hasProviderHttpErrorShape(error) &&
+    (hasExplicitStatus || extractUpstreamErrorBody(error) !== undefined);
 
   const errorMessage = extractErrorMessage(error);
   const adapterInternalCode = extractInternalCode(error);

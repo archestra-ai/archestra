@@ -413,6 +413,12 @@ class McpClient {
        */
       abortSignal?: AbortSignal;
       /**
+       * Overrides the default upstream tool-call timeout. Set by the gateway
+       * for task-eligible calls, whose bound is the task TTL rather than the
+       * synchronous patience window.
+       */
+      upstreamTimeoutMs?: number;
+      /**
        * Pre-resolved catalog tool row for dynamic tool access: lets run_tool
        * execute a tool the agent was never assigned. This governs tool ACCESS
        * only. Whose credential/connection the call uses is still decided by
@@ -764,7 +770,12 @@ class McpClient {
           undefined,
           {
             signal: options?.abortSignal,
-            timeout: config.mcpGateway.toolCallTimeoutMs,
+            // A detached task answers its client immediately, so the
+            // synchronous patience window no longer applies — the task TTL
+            // does. Without this, a task outliving the sync timeout dies at
+            // the timeout even though nobody is waiting on it.
+            timeout:
+              options?.upstreamTimeoutMs ?? config.mcpGateway.toolCallTimeoutMs,
           },
         );
 

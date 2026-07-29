@@ -18,7 +18,9 @@ import { vi } from "vitest";
 
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
-    mcpGateway: { tasksSyncThresholdMs: 60 },
+    // The task threshold derives from the one timeout knob: min(10s,
+    // timeout/2). 120ms ⇒ a 60ms threshold, so slow-vs-fast is deterministic.
+    mcpGateway: { toolCallTimeoutMs: 120 },
   }),
 );
 
@@ -372,7 +374,7 @@ describe("MCP Gateway - Tasks extension", () => {
     // expiry alone must make it unservable.
     const expired = await McpGatewayTaskModel.create({
       agentId: agent.id,
-      principal: `token:${token.id}`,
+      principal: `token:${token.token.id}`,
       toolName: TOOL_NAME,
       ttlMs: -1_000,
     });
@@ -475,6 +477,12 @@ describe("MCP Gateway - Tasks extension", () => {
     });
 
     expect(response.json().error).toMatchObject({ code: -32601 });
+  });
+
+  test("the sync threshold derives from the single timeout knob", async () => {
+    const { taskSyncThresholdMs } = await import("./tasks");
+    // toolCallTimeoutMs is mocked to 120 ⇒ half of it.
+    expect(taskSyncThresholdMs()).toBe(60);
   });
 
   test("server/discover advertises the Tasks extension on 2026-07-28", async ({

@@ -30,6 +30,19 @@ export const TASK_POLL_INTERVAL_MS = 2_000;
 /** How long a task row stays retrievable, and the orphan bound (see schema). */
 export const TASK_TTL_MS = 30 * 60 * 1000;
 
+/**
+ * How long an eligible call runs synchronously before detaching into a task.
+ *
+ * Derived from the one existing timeout knob rather than adding a second one:
+ * ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS is "how long a synchronous tool
+ * call may take", and the task threshold is by definition shorter than that —
+ * half of it, capped at 10s so a generous timeout doesn't make task-capable
+ * clients wait half a minute before they get a handle.
+ */
+export function taskSyncThresholdMs(): number {
+  return Math.min(10_000, Math.floor(config.mcpGateway.toolCallTimeoutMs / 2));
+}
+
 export const TASK_METHODS = new Set([
   "tasks/get",
   "tasks/update",
@@ -58,10 +71,13 @@ export function isTaskMethod(body: unknown): boolean {
 
 /**
  * In-process registry of running executions, so a `tasks/cancel` landing on
- * the origin replica can actually abort the upstream call. A cancel on any
- * other replica still cancels the task row — the client is served correctly
- * everywhere — the upstream work just runs to a discarded result there, which
- * is the cooperative cancellation the extension describes.
+ * the origin replica aborts the gateway-side await, releasing its connection
+ * slot and settling the execution promise. Whether the upstream server stops
+ * WORKING is up to the upstream: verified against a live stateless HTTP
+ * upstream, the tool ran to its (discarded) completion — a stateless server
+ * has no request to correlate an MCP cancellation with. That is the
+ * cooperative cancellation the extension describes: the client and the task
+ * row are correct everywhere; upstream compute is best-effort.
  */
 class McpGatewayTaskRunner {
   private controllers = new Map<string, AbortController>();
@@ -106,7 +122,7 @@ export async function runToolCallMaybeTask(params: {
     principal,
     toolName,
     execute,
-    thresholdMs = config.mcpGateway.tasksSyncThresholdMs,
+    thresholdMs = taskSyncThresholdMs(),
   } = params;
 
   const controller = new AbortController();

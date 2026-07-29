@@ -124,7 +124,11 @@ import {
   withCompleteResultEnvelope,
   withPrivateCacheHint,
 } from "./protocol";
-import { clientDeclaredTasks, runToolCallMaybeTask } from "./tasks";
+import {
+  clientDeclaredTasks,
+  runToolCallMaybeTask,
+  TASK_TTL_MS,
+} from "./tasks";
 
 export { deriveAuthMethod };
 
@@ -642,6 +646,9 @@ export async function createAgentServer(params: {
     // outlives it. Everything below (dispatch, policies, envelope, metrics,
     // persistence) runs identically either way; only who is waiting for the
     // outcome changes.
+    const taskEligible =
+      mrtrEnabled && clientDeclaredTasks({ params: request.params });
+
     const executeCallToolRequest = async (
       taskAbortSignal: AbortSignal,
     ): Promise<Record<string, unknown>> => {
@@ -941,9 +948,13 @@ export async function createAgentServer(params: {
               tokenAuth,
               {
                 availableTool,
-                // Tasks: lets tasks/cancel on this replica abort the upstream
-                // call instead of letting it run to a discarded result.
+                // Tasks: tasks/cancel on this replica aborts the gateway-side
+                // await; whether the upstream stops working is up to the
+                // upstream (stateless HTTP servers run on — see tasks.ts).
                 abortSignal: taskAbortSignal,
+                // A call that may detach is bounded by the task TTL, not the
+                // synchronous patience window (see mcp-client).
+                ...(taskEligible ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
                 elicitationHandler: async (request) => {
                   // MRTR: a retry already carries the answer, so consume it
                   // instead of asking again.
@@ -1114,7 +1125,7 @@ export async function createAgentServer(params: {
     };
 
     return runToolCallMaybeTask({
-      eligible: mrtrEnabled && clientDeclaredTasks({ params: request.params }),
+      eligible: taskEligible,
       agentId,
       principal: deriveStatePrincipal({
         userId: tokenAuth?.userId,

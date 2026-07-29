@@ -8691,6 +8691,81 @@ describe("executed-as identity", () => {
   });
 });
 
+describe("task-mode upstream timeout", () => {
+  test("an explicit upstreamTimeoutMs reaches the SDK call in place of the sync window", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser({ email: "tt-admin@example.com" });
+    const caller = await makeUser({ email: "tt-caller@example.com" });
+    await makeMember(caller.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+
+    const catalog = await InternalMcpCatalogModel.create({
+      name: "timeout-lab",
+      serverType: "remote",
+      serverUrl: "https://mcp.timeout.example/mcp",
+    });
+    const secret = await secretManager().createSecret(
+      { access_token: "tl-token" },
+      "tl-secret",
+    );
+    const server = await McpServerModel.create({
+      name: "timeout-lab",
+      catalogId: catalog.id,
+      secretId: secret.id,
+      serverType: "remote",
+      ownerId: admin.id,
+      scope: "org",
+    });
+    await InternalMcpCatalogModel.update(catalog.id, {
+      dynamicConnectionMcpServerId: server.id,
+    });
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "timeout-lab__slow",
+      description: "slow",
+      parameters: {},
+      catalogId: catalog.id,
+    });
+    await AgentToolModel.createOrUpdateCredentials(
+      agent.id,
+      tool.id,
+      null,
+      "dynamic",
+    );
+
+    mockCallTool.mockResolvedValueOnce({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    await mcpClient.executeToolCallForOwner(
+      { id: "call_tt", name: "timeout-lab__slow", arguments: {} },
+      agentOwner(agent.id),
+      {
+        tokenId: "tt-token",
+        teamId: null,
+        isOrganizationToken: false,
+        isUserToken: true,
+        userId: caller.id,
+        organizationId: org.id,
+      },
+      { upstreamTimeoutMs: 1_800_000 },
+    );
+
+    const lastOptions = mockCallTool.mock.calls.at(-1)?.[2] as {
+      timeout?: number;
+    };
+    // A detached task is bounded by the task TTL, not the synchronous
+    // patience window — without this, a task outliving the sync timeout dies
+    // even though nobody is waiting on it.
+    expect(lastOptions?.timeout).toBe(1_800_000);
+  });
+});
+
 describe("x-mcp-header mirroring (SEP-2243)", () => {
   async function seedAnnotatedTool({
     makeOrganization,

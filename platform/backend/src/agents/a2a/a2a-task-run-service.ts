@@ -6,6 +6,7 @@ import {
   type A2AProtocolStreamResponse,
 } from "./a2a-protocol";
 import { a2aPushNotificationService } from "./a2a-push-notification-service";
+import { a2aTaskEventNotifier } from "./a2a-task-event-notifier";
 
 const DELTA_FLUSH_INTERVAL_MS = 250;
 const HEARTBEAT_INTERVAL_MS = 30 * 1000;
@@ -192,6 +193,21 @@ class A2ATaskRunService {
    */
   notify(taskId: string, event: A2AProtocolStreamResponse): void {
     void a2aPushNotificationService.deliver({ taskId, event });
+    this.wakeSubscribers(taskId);
+  }
+
+  /**
+   * Tell every replica's SubscribeToTask streams that this task has new
+   * events, so they re-read now instead of on their next poll. Best-effort by
+   * design: the poll is what makes the stream correct.
+   */
+  wakeSubscribers(taskId: string): void {
+    void a2aTaskEventNotifier.notify(taskId).catch((error) => {
+      logger.warn(
+        { error, taskId },
+        "Failed to publish an A2A task event notification",
+      );
+    });
   }
 
   /** Reap orphans + prune terminal event logs (one interval tick). */
@@ -358,7 +374,10 @@ class A2ATaskDeltaBatcher {
         if (appended === null) {
           this.stopped = true;
           this.params.onTaskNoLongerActive();
+          return;
         }
+        // The chunk is durable now, so subscribers on any replica can read it.
+        a2aTaskRunService.wakeSubscribers(this.params.taskId);
       } catch (error) {
         logger.warn(
           { error, taskId: this.params.taskId },

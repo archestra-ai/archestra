@@ -3,6 +3,7 @@ import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_PROXY_ENV_KEYS,
   COPILOT_PROVIDER_ENV_KEYS,
+  DEFAULT_MODELS,
   EXTERNAL_AGENT_ID_HEADER,
   isDefaultBrandedAppName,
   VIRTUAL_KEY_HEADER,
@@ -291,8 +292,8 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
           ctx.proxy.provider === "github-copilot";
         steps.push(
           keyApplied
-            ? 'The COPILOT_* provider variables were applied for you — set COPILOT_MODEL, then verify with: copilot -p "Reply with exactly: archestra-copilot-cli-ok"'
-            : `Set ${COPILOT_PROVIDER_ENV_KEYS.apiKey} to your own key (the other COPILOT_* variables were applied for you), set COPILOT_MODEL, then verify with: copilot -p "Reply with exactly: archestra-copilot-cli-ok"`,
+            ? 'The COPILOT_* provider variables (including a default COPILOT_MODEL) were applied for you — verify with: copilot -p "Reply with exactly: archestra-copilot-cli-ok"'
+            : `Set ${COPILOT_PROVIDER_ENV_KEYS.apiKey} to your own key (the other COPILOT_* variables were applied for you), then verify with: copilot -p "Reply with exactly: archestra-copilot-cli-ok"`,
         );
       }
       if (ctx.skills) {
@@ -645,9 +646,25 @@ function psApplyUserEnv(name: string, psValueExpr: string): string {
 [Environment]::SetEnvironmentVariable('${name}', ${psValueExpr}, 'User')`;
 }
 
-/** Shared tail lines of both Copilot provider sections. */
+/** Shared success line of both Copilot provider sections. */
 const PS_COPILOT_APPLIED_OK = `Ok 'Copilot provider settings applied: current session + saved to your User environment.'`;
-const PS_COPILOT_MODEL_HINT = `Write-Host 'Set ${COPILOT_PROVIDER_ENV_KEYS.model} to the model you use ($env:${COPILOT_PROVIDER_ENV_KEYS.model} = "<model-name>"), then restart any open Copilot CLI sessions.'`;
+
+/**
+ * COPILOT_MODEL companion to the provider apply: with a BYOK provider
+ * configured, the Copilot CLI refuses to launch without an explicit model
+ * ("BYOK providers require an explicit model"), so an unset COPILOT_MODEL
+ * gets the provider's default (session + User scope). An existing value is
+ * the user's own choice and is never overwritten.
+ */
+function psCopilotModelApply(defaultModel: string): string {
+  return `if ([string]::IsNullOrEmpty($env:${COPILOT_PROVIDER_ENV_KEYS.model})) {
+  ${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.model, psq(defaultModel))}
+  Ok ${psq(`set ${COPILOT_PROVIDER_ENV_KEYS.model} = ${defaultModel} — change it anytime ($env:${COPILOT_PROVIDER_ENV_KEYS.model}).`)}
+} else {
+  Write-Host ('Keeping your existing ${COPILOT_PROVIDER_ENV_KEYS.model} = ' + $env:${COPILOT_PROVIDER_ENV_KEYS.model})
+}
+Write-Host 'Restart any open Copilot CLI sessions to pick this up.'`;
+}
 
 function copilotSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
@@ -684,7 +701,7 @@ ${PS_COPILOT_APPLIED_OK}${
     ? ""
     : `\nWrite-Host 'Set your own key the same way: $env:${COPILOT_PROVIDER_ENV_KEYS.apiKey} = "<your-${ctx.proxy.provider}-api-key>"'`
 }
-${PS_COPILOT_MODEL_HINT}`);
+${psCopilotModelApply(DEFAULT_MODELS[ctx.proxy.provider])}`);
     }
   }
 
@@ -846,7 +863,7 @@ if (-not [string]::IsNullOrEmpty($ArchGhcpToken)) {
 } else {
   Write-Host 'No GitHub token was linked — set your own key the same way: $env:${COPILOT_PROVIDER_ENV_KEYS.apiKey} = "<your-github-oauth-token>"'
 }
-${PS_COPILOT_MODEL_HINT}`;
+${psCopilotModelApply(DEFAULT_MODELS["github-copilot"])}`;
 }
 
 // ===================================================================

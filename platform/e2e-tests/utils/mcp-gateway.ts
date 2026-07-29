@@ -653,6 +653,16 @@ export async function getVisibleCredentials(page: Page): Promise<string[]> {
 export async function getVisibleStaticCredentials(
   page: Page,
 ): Promise<string[]> {
+  // allTextContents() does not auto-wait: read at the wrong instant it
+  // answers [] for a dialog that is still rendering its options — which is
+  // exactly how this helper hard-failed two merge-queue runs in a row. Its
+  // only caller asserts a non-empty list, so wait for the first option to
+  // exist before reading the set.
+  await page
+    .getByTestId(E2eTestId.StaticCredentialToUse)
+    .first()
+    .waitFor({ state: "visible", timeout: 15_000 });
+
   const credentialLabels = await page
     .getByTestId(E2eTestId.StaticCredentialToUse)
     .allTextContents();

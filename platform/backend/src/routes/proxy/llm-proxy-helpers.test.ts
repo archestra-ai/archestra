@@ -807,6 +807,21 @@ describe("handleError", () => {
     expect(thrown.upstream).toBe(true);
   });
 
+  test("marks a status-less in-stream provider error with a bare-string payload as upstream", () => {
+    // OpenAI-compatible upstreams may put a plain string under the stream's
+    // `error` member; the SDK relays it verbatim with no HTTP status.
+    const thrown = throwErrorFor(
+      Object.assign(new Error("tool call refused by upstream"), {
+        error: "tool call refused by upstream",
+        headers: new Headers(),
+      }),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.upstream).toBe(true);
+  });
+
   test("does not mark an internal 500 as an upstream failure", () => {
     const thrown = throwErrorFor(
       new TypeError("cannot read x of undefined"),

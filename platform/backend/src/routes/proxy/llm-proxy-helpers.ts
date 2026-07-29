@@ -407,7 +407,7 @@ export function handleError(
     statusCode >= 500 &&
     !(error instanceof ApiError) &&
     hasProviderHttpErrorShape(error) &&
-    (hasExplicitStatus || extractUpstreamErrorBody(error) !== undefined);
+    (hasExplicitStatus || hasUpstreamErrorPayload(error));
 
   const errorMessage = extractErrorMessage(error);
   const adapterInternalCode = extractInternalCode(error);
@@ -581,6 +581,19 @@ function nestedProviderErrorType(error: Error): string | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * Whether the SDK error carries an upstream error payload. OpenAI-compatible
+ * upstreams are free-form in what they put under the stream's `error` member —
+ * usually an object, but some send a bare string — and the SDK relays either
+ * verbatim, so both shapes identify an in-stream provider failure.
+ */
+function hasUpstreamErrorPayload(error: unknown): boolean {
+  if (extractUpstreamErrorBody(error) !== undefined) return true;
+  if (!(error instanceof Error)) return false;
+  const body = (error as Error & { error?: unknown }).error;
+  return typeof body === "string" && body.length > 0;
 }
 
 /**

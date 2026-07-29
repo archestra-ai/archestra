@@ -39326,6 +39326,9 @@
                     "version": {
                       "type": "string"
                     },
+                    "documentationUrl": {
+                      "type": "string"
+                    },
                     "supportedInterfaces": {
                       "type": "array",
                       "items": {
@@ -39358,16 +39361,52 @@
                         "pushNotifications": {
                           "type": "boolean"
                         },
-                        "stateTransitionHistory": {
+                        "extendedAgentCard": {
                           "type": "boolean"
                         }
                       },
                       "required": [
                         "streaming",
                         "pushNotifications",
-                        "stateTransitionHistory"
+                        "extendedAgentCard"
                       ],
                       "additionalProperties": false
+                    },
+                    "securitySchemes": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "scheme": {
+                            "type": "string"
+                          },
+                          "bearerFormat": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "securityRequirements": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
                     },
                     "defaultInputModes": {
                       "type": "array",
@@ -39396,6 +39435,12 @@
                             "type": "string"
                           },
                           "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "examples": {
                             "type": "array",
                             "items": {
                               "type": "string"
@@ -39432,6 +39477,8 @@
                     "version",
                     "supportedInterfaces",
                     "capabilities",
+                    "securitySchemes",
+                    "securityRequirements",
                     "defaultInputModes",
                     "defaultOutputModes",
                     "skills"
@@ -39440,6 +39487,9 @@
                 }
               }
             }
+          },
+          "304": {
+            "description": "Default Response"
           }
         }
       }

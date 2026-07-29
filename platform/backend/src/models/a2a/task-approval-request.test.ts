@@ -3,9 +3,9 @@ import {
   A2AProtocolTaskState,
 } from "@/agents/a2a/a2a-protocol";
 import { describe, expect, test } from "@/test";
-import A2AContextModel from "./a2a-context";
-import A2ATaskModel from "./a2a-task";
-import A2ATaskApprovalRequestModel from "./a2a-task-approval-request";
+import A2AContextModel from "./context";
+import A2ATaskModel from "./task";
+import A2ATaskApprovalRequestModel from "./task-approval-request";
 
 async function createContext() {
   return await A2AContextModel.create({

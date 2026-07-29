@@ -52,7 +52,7 @@ describe("a2a routes", () => {
     });
 
     app = createFastifyInstance();
-    const { default: a2aRoutes } = await import("./a2a");
+    const { default: a2aRoutes } = await import("./v1");
     await app.register(a2aRoutes);
 
     (app as FastifyInstanceWithZod & { __agentId: string }).__agentId =

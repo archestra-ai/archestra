@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { FastifyReply } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -20,7 +21,9 @@ import {
   A2AProtocolTaskState,
   type A2AProtocolVersion,
   resolveA2AProtocolVersion,
+  SUPPORTED_A2A_VERSION_LIST,
 } from "@/agents/a2a/a2a-protocol";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { AgentModel } from "@/models";
 import {
@@ -40,16 +43,33 @@ const A2AAgentCardSupportedInterfaceSchema = z.object({
   protocolVersion: z.string(),
 });
 
+/**
+ * A2A v1.0 `SecurityScheme` entries the card advertises. The gateway accepts
+ * all of these on the same `Authorization: Bearer` header — platform tokens,
+ * external IdP JWTs, and OAuth access tokens are distinguished by the
+ * validator, not by the client — so they are declared as HTTP bearer schemes
+ * with descriptions that tell a human operator which credential to mint.
+ */
+const A2AAgentCardSecuritySchemeSchema = z.object({
+  type: z.string(),
+  scheme: z.string().optional(),
+  bearerFormat: z.string().optional(),
+  description: z.string().optional(),
+});
+
 const A2AAgentCardSchema = z.object({
   name: z.string(),
   description: z.string(),
   version: z.string(),
+  documentationUrl: z.string().optional(),
   supportedInterfaces: z.array(A2AAgentCardSupportedInterfaceSchema),
   capabilities: z.object({
     streaming: z.boolean(),
     pushNotifications: z.boolean(),
-    stateTransitionHistory: z.boolean(),
+    extendedAgentCard: z.boolean(),
   }),
+  securitySchemes: z.record(z.string(), A2AAgentCardSecuritySchemeSchema),
+  securityRequirements: z.array(z.record(z.string(), z.array(z.string()))),
   defaultInputModes: z.array(z.string()),
   defaultOutputModes: z.array(z.string()),
   skills: z.array(
@@ -58,11 +78,20 @@ const A2AAgentCardSchema = z.object({
       name: z.string(),
       description: z.string(),
       tags: z.array(z.string()),
+      examples: z.array(z.string()).optional(),
       inputModes: z.array(z.string()),
       outputModes: z.array(z.string()),
     }),
   ),
 });
+
+/**
+ * Media types the agent accepts and produces. `text/plain` is listed first
+ * because the protocol's text parts are the primary shape; `application/json`
+ * covers structured `data` parts.
+ */
+const A2A_DEFAULT_INPUT_MODES = ["text/plain", "application/json"];
+const A2A_DEFAULT_OUTPUT_MODES = ["text/plain", "application/json"];
 
 const A2AJsonRpcRequestSchema = z.object({
   jsonrpc: z.literal("2.0"),
@@ -101,6 +130,8 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         response: {
           200: A2AAgentCardSchema,
+          // Conditional-request hit: bodiless by definition.
+          304: z.undefined(),
         },
       },
     },
@@ -120,9 +151,12 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Validate token authentication (reuse MCP Gateway utilities)
+      // Validate token authentication (reuse MCP Gateway utilities). The
+      // WWW-Authenticate header tells an unauthenticated client which scheme
+      // to retry with, as the A2A enterprise-readiness guidance asks.
       const token = extractBearerToken(request);
       if (!token) {
+        reply.header("WWW-Authenticate", 'Bearer realm="a2a"');
         throw new ApiError(
           401,
           "Authorization header required. Use: Bearer <platform_token>",
@@ -131,15 +165,19 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const tokenAuth = await validateMCPGatewayToken(agent.id, token);
       if (!tokenAuth) {
+        reply.header(
+          "WWW-Authenticate",
+          'Bearer realm="a2a", error="invalid_token"',
+        );
         throw new ApiError(401, "Invalid or unauthorized token");
       }
 
-      // Construct base URL from request
-      const protocol = request.headers["x-forwarded-proto"] || "http";
-      const host = request.headers.host || "localhost:9000";
-      const baseUrl = `${protocol}://${host}`;
+      const baseUrl = resolveA2ABaseUrl(request);
+      const securitySchemes = buildA2ASecuritySchemes();
 
-      // Build skills array with a single skill representing the agent
+      // Build skills array with a single skill representing the agent. `tags`
+      // is REQUIRED by the spec and is what LLM-driven agent selection reads,
+      // so derive something meaningful rather than shipping an empty list.
       const skillId = agent.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "_")
@@ -148,17 +186,22 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           id: skillId,
           name: agent.name,
-          description: agent.description || "",
-          tags: [],
-          inputModes: ["application/json"],
-          outputModes: ["application/json"],
+          description: agent.description || agent.systemPrompt || agent.name,
+          tags: buildSkillTags(agent.name),
+          examples: [`Ask ${agent.name} a question and read the reply.`],
+          inputModes: A2A_DEFAULT_INPUT_MODES,
+          outputModes: A2A_DEFAULT_OUTPUT_MODES,
         },
       ];
 
-      return reply.send({
+      const card = {
         name: agent.name,
         description: agent.description || agent.systemPrompt || "",
-        version: "1",
+        // Clients cache the card against this value, so it must move whenever
+        // the card's content can — the agent's own revision timestamp is the
+        // one thing that does.
+        version: buildCardVersion(agent.updatedAt),
+        documentationUrl: getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a),
         supportedInterfaces: [
           {
             url: `${baseUrl}${endpoint}/${agent.id}`,
@@ -169,12 +212,31 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         capabilities: {
           streaming: true,
           pushNotifications: false,
-          stateTransitionHistory: false,
+          // We serve exactly one card, and it is already authenticated, so
+          // there is no separate extended card to fetch.
+          extendedAgentCard: false,
         },
-        defaultInputModes: ["application/json"],
-        defaultOutputModes: ["application/json"],
+        securitySchemes,
+        // Any one of the declared schemes is sufficient; each alternative is
+        // its own requirement object per the spec's OpenAPI-style semantics.
+        securityRequirements: Object.keys(securitySchemes).map((name) => ({
+          [name]: [],
+        })),
+        defaultInputModes: A2A_DEFAULT_INPUT_MODES,
+        defaultOutputModes: A2A_DEFAULT_OUTPUT_MODES,
         skills,
-      });
+      };
+
+      // Cards are cheap to recompute but clients poll them; a weak validator
+      // keyed on the content lets a conditional request answer 304.
+      const etag = `W/"${createHash("sha256").update(JSON.stringify(card)).digest("hex").slice(0, 32)}"`;
+      reply.header("Cache-Control", "public, max-age=300");
+      reply.header("ETag", etag);
+      if (request.headers["if-none-match"] === etag) {
+        return reply.code(304).send(undefined);
+      }
+
+      return reply.send(card);
     },
   );
 
@@ -211,6 +273,19 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // A2A v1.0 requires honoring the requested Major.Minor version, and
+      // answering VersionNotSupportedError for anything else — serving 1.0
+      // semantics to a client that asked for 2.x would be a silent mismatch.
+      const version = resolveA2AProtocolVersion(request.headers["a2a-version"]);
+      if (version === null) {
+        return reply.send(
+          buildJsonRpcErrorEnvelope(
+            id,
+            new A2AV2RouterError(A2AV2RouterErrorKind.VersionNotSupported),
+          ),
+        );
+      }
+
       // The streaming methods return an SSE stream (text/event-stream) rather
       // than a single buffered JSON-RPC reply; hand off to the dedicated
       // handler. Pre-flight failures there still surface as a normal JSON-RPC
@@ -221,7 +296,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId,
           token,
           body: request.body,
-          version: resolveA2AProtocolVersion(request.headers["a2a-version"]),
+          version,
           reply,
         });
       }
@@ -585,6 +660,67 @@ function sleep(ms: number): Promise<void> {
  */
 const SSE_HEARTBEAT_INTERVAL_MS = 15_000;
 
+/**
+ * Authentication schemes the gateway accepts, declared so a client can
+ * discover how to authenticate instead of having to already know. All three
+ * ride the same bearer header — the validator distinguishes them — so they
+ * differ only in how the operator obtains the credential.
+ */
+function buildA2ASecuritySchemes() {
+  const appName = archestraMcpBranding.appName;
+  return {
+    platformToken: {
+      type: "http",
+      scheme: "bearer",
+      description: `${appName} platform token (personal, team, or organization) issued in the ${appName} UI.`,
+    },
+    identityProviderJwt: {
+      type: "http",
+      scheme: "bearer",
+      bearerFormat: "JWT",
+      description:
+        "JWT issued by an identity provider bound to this agent, validated against the provider's JWKS.",
+    },
+    oauthAccessToken: {
+      type: "http",
+      scheme: "bearer",
+      description: `Access token from an ${appName} OAuth client permitted to reach this agent.`,
+    },
+  };
+}
+
+/**
+ * Base URL clients should dial, taken from the forwarded protocol. The spec
+ * requires an absolute HTTPS URL outside local development, so a proxy that
+ * forgot the header must not cause us to advertise a downgrade to http.
+ */
+function resolveA2ABaseUrl(request: {
+  headers: Record<string, string | string[] | undefined>;
+}): string {
+  const host = (request.headers.host as string) || "localhost:9000";
+  const forwarded = request.headers["x-forwarded-proto"];
+  const proto = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  if (proto) {
+    return `${proto}://${host}`;
+  }
+  const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
+  return `${isLocal ? "http" : "https"}://${host}`;
+}
+
+/** Card `version`, moved by anything that can change the card's content. */
+function buildCardVersion(updatedAt: Date | null): string {
+  return updatedAt ? String(Math.floor(updatedAt.getTime() / 1000)) : "1";
+}
+
+/** Lowercase word tags derived from the agent name, for agent selection. */
+function buildSkillTags(agentName: string): string[] {
+  const tags = agentName
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length > 2);
+  return tags.length > 0 ? Array.from(new Set(tags)) : ["agent"];
+}
+
 /** JSON-RPC error `code`/`message` for an error thrown during A2A handling. */
 function jsonRpcErrorParts(error: unknown): { code: number; message: string } {
   if (error instanceof A2AV2RouterError || error instanceof A2AError) {
@@ -637,6 +773,7 @@ enum A2AV2RouterErrorKind {
   AgentNotFound,
   AgentNotInternal,
   FailedToResolveActor,
+  VersionNotSupported,
 }
 
 const A2A_V2_ROUTER_ERRORS = {
@@ -644,9 +781,15 @@ const A2A_V2_ROUTER_ERRORS = {
     code: -32601,
     message: "Method not found",
   },
+  // -32006 is the spec's InvalidAgentResponseError; an unknown agent is a bad
+  // request parameter, which is what the manager's own errors already use.
   [A2AV2RouterErrorKind.AgentNotFound]: {
-    code: -32006,
+    code: -32602,
     message: "Agent not found",
+  },
+  [A2AV2RouterErrorKind.VersionNotSupported]: {
+    code: -32009,
+    message: `Unsupported A2A-Version. This endpoint serves: ${SUPPORTED_A2A_VERSION_LIST.join(", ")}`,
   },
   [A2AV2RouterErrorKind.AgentNotInternal]: {
     code: -32602,

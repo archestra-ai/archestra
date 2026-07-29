@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@/test";
-import A2AContextModel from "./a2a-context";
+import A2AContextModel from "./context";
 
 describe("A2AContextModel", () => {
   describe("create", () => {

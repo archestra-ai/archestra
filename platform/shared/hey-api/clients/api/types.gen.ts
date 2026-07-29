@@ -11798,6 +11798,7 @@ export type GetV2A2aByAgentIdWellKnownAgentCardJsonResponses = {
         name: string;
         description: string;
         version: string;
+        documentationUrl?: string;
         supportedInterfaces: Array<{
             url: string;
             protocolBinding: string;
@@ -11806,8 +11807,19 @@ export type GetV2A2aByAgentIdWellKnownAgentCardJsonResponses = {
         capabilities: {
             streaming: boolean;
             pushNotifications: boolean;
-            stateTransitionHistory: boolean;
+            extendedAgentCard: boolean;
         };
+        securitySchemes: {
+            [key: string]: {
+                type: string;
+                scheme?: string;
+                bearerFormat?: string;
+                description?: string;
+            };
+        };
+        securityRequirements: Array<{
+            [key: string]: Array<string>;
+        }>;
         defaultInputModes: Array<string>;
         defaultOutputModes: Array<string>;
         skills: Array<{
@@ -11815,6 +11827,7 @@ export type GetV2A2aByAgentIdWellKnownAgentCardJsonResponses = {
             name: string;
             description: string;
             tags: Array<string>;
+            examples?: Array<string>;
             inputModes: Array<string>;
             outputModes: Array<string>;
         }>;

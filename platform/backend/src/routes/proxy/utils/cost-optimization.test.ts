@@ -69,6 +69,44 @@ describe("calculateCost", () => {
     expect(cost).toBeCloseTo(0.05);
   });
 
+  test("records no cost for a provider that charges no per-token rate", async () => {
+    await ModelModel.create({
+      externalId: "ollama/qwen3:8b",
+      provider: "ollama",
+      modelId: "qwen3:8b",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      lastSyncedAt: new Date(),
+    });
+
+    // Ollama publishes no per-token price, so the generic estimate must not
+    // apply: 50k tokens would otherwise be recorded as $2.50 of spend.
+    const cost = await calculateCost("qwen3:8b", 40000, 10000, "ollama");
+    expect(cost).toBe(0);
+  });
+
+  test("an operator's custom price overrides the zero rate", async () => {
+    const model = await ModelModel.create({
+      externalId: "vllm/mixtral",
+      provider: "vllm",
+      modelId: "mixtral",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      lastSyncedAt: new Date(),
+    });
+
+    await ModelModel.update(model.id, {
+      customPricePerMillionInput: "2.00",
+      customPricePerMillionOutput: "6.00",
+    });
+
+    // Self-hosted deployments may still charge internally; a custom price is
+    // an explicit statement and outranks the zero.
+    // 1000 * $2/M + 500 * $6/M = 0.002 + 0.003
+    const cost = await calculateCost("mixtral", 1000, 500, "vllm");
+    expect(cost).toBeCloseTo(0.005);
+  });
+
   test("falls back to default pricing when model not in database", async () => {
     // Default pricing for non-mini models: $50/M input, $50/M output
     // 1000 input tokens = 1000/1M * $50 = $0.05

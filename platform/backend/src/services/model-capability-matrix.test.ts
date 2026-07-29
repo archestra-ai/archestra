@@ -804,7 +804,8 @@ const MATRIX: MatrixRow[] = [
     },
   },
 
-  // --- Ollama: local models, absent from models.dev entirely --------------
+  // --- Ollama: local models, absent from models.dev entirely, and billed
+  // no per-token rate on either transport (zero, not the generic estimate) ---
   {
     name: "ollama/a Modelfile num_ctx caps the window below the architectural one",
     provider: "ollama",
@@ -819,8 +820,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text"],
       outputModalities: ["text"],
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
       priceSource: "default",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
@@ -838,8 +839,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text"],
       outputModalities: ["text"],
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
       priceSource: "default",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
@@ -857,8 +858,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text"],
       outputModalities: [],
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
       priceSource: "default",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,

@@ -43,6 +43,17 @@ interface EffectivePricing {
 }
 
 /**
+ * Providers that charge no per-token rate, so their real price is zero rather
+ * than unknown: the operator runs the server (vLLM, self-hosted Ollama), or the
+ * vendor bills a flat subscription metered on compute time (Ollama's cloud).
+ */
+const PROVIDERS_BILLING_NO_TOKEN_RATE = new Set<SupportedProvider>([
+  "ollama",
+  "ollama-native",
+  "vllm",
+]);
+
+/**
  * Returns default token prices for a model.
  * Cheaper models (-haiku, -nano, -mini) get $30/million tokens.
  * All other models get $50/million tokens.
@@ -666,7 +677,7 @@ class ModelModel {
     provider?: SupportedProvider,
   ): EffectivePricing {
     const { pricePerMillionInput, pricePerMillionOutput, source } =
-      ModelModel.getEffectiveBasePricing(model, modelId);
+      ModelModel.getEffectiveBasePricing(model, modelId, provider);
     const cache = ModelModel.getEffectiveCachePricing(
       model,
       pricePerMillionInput,
@@ -687,6 +698,7 @@ class ModelModel {
   private static getEffectiveBasePricing(
     model: Model | null,
     modelId?: string,
+    provider?: SupportedProvider,
   ): {
     pricePerMillionInput: string;
     pricePerMillionOutput: string;
@@ -720,7 +732,29 @@ class ModelModel {
       };
     }
 
-    // Tier 3: Default fallback
+    // Tier 3: Default fallback. The generic estimate below assumes an unknown
+    // price exists to be approximated; for these providers none does, so it
+    // fabricates one — inflating recorded spend and burning cost limits against
+    // tokens nobody is billed for. vLLM is an inference server the operator
+    // runs. Ollama bills no per-token rate on either transport: a self-hosted
+    // server charges nothing, and its cloud offering is a flat monthly
+    // subscription metered on GPU time rather than tokens.
+    //
+    // Listed explicitly rather than derived from the self-hosted-provider set
+    // it currently matches, so that adding a keyless provider that does bill
+    // per token cannot silently make its traffic free.
+    const resolvedProvider = model?.provider ?? provider;
+    if (
+      resolvedProvider &&
+      PROVIDERS_BILLING_NO_TOKEN_RATE.has(resolvedProvider)
+    ) {
+      return {
+        pricePerMillionInput: "0.00",
+        pricePerMillionOutput: "0.00",
+        source: "default",
+      };
+    }
+
     const nameForDefault = model?.modelId ?? modelId ?? "";
     return {
       ...getDefaultModelPrice(nameForDefault),

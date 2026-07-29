@@ -16,6 +16,7 @@ import {
 } from "./mcp-gateway.mrtr";
 import {
   buildDiscoverResult,
+  extractTraceContext,
   isDiscoverRequest,
   MCP_PROTOCOL_VERSION_HEADER,
   type McpProtocolRevision,
@@ -139,6 +140,17 @@ async function handleMcpPostRequest(
   // Read from the raw body: the SDK's request schemas drop unknown params, so
   // these are gone by the time a request handler runs.
   const mrtrParams = extractMrtrParams(body);
+
+  // SEP-414: a client may attach W3C trace context, which lets its spans, the
+  // gateway's, and the upstream server's join one trace. Logged on the request
+  // so a trace id present in the client is findable here.
+  const traceContext = extractTraceContext(body);
+  if (traceContext) {
+    fastify.log.debug(
+      { profileId, traceparent: traceContext.traceparent },
+      "MCP request carries W3C trace context",
+    );
+  }
   const isInitialize =
     typeof body?.method === "string" && body.method === "initialize";
 

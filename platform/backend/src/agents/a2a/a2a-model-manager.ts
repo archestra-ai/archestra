@@ -1,18 +1,20 @@
 import type { UIMessage } from "ai";
 import z from "zod";
 import {
+  A2AArtifactModel,
   A2AContextModel,
   A2AMessageModel,
   A2ATaskApprovalRequestModel,
   A2ATaskModel,
 } from "@/models";
 import { A2AMessageIdExistsError } from "@/models/a2a-message";
-import type { A2AContext, A2AMessage, A2ATask } from "@/types";
+import type { A2AArtifact, A2AContext, A2AMessage, A2ATask } from "@/types";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import {
   type A2AArchestraApprovalRequest,
   A2AArchestraApprovalRequestSchema,
   type A2AArchestraTaskApprovalDecision,
+  type A2AProtocolArtifact,
   type A2AProtocolMessage,
   type A2AProtocolPart,
   A2AProtocolRole,
@@ -24,6 +26,7 @@ export type A2ATaskWithData = A2ATask & {
   approvalRequests: A2AArchestraApprovalRequest[];
   history: A2AMessage[];
   statusMessage?: A2AMessage;
+  artifacts?: A2AArtifact[];
 };
 
 /**
@@ -120,17 +123,58 @@ export class A2AContextManager {
 }
 
 export class A2ATaskManager {
-  static toProtocolTask(task: A2ATaskWithData): A2AProtocolTask {
+  static toProtocolTask(
+    task: A2ATaskWithData,
+    options?: {
+      /**
+       * A2A `history_length`: undefined = full history, 0 = omit the field
+       * entirely, N > 0 = at most the N most recent messages.
+       */
+      historyLength?: number;
+      /** When false the `artifacts` field is omitted entirely (ListTasks). */
+      includeArtifacts?: boolean;
+    },
+  ): A2AProtocolTask {
+    const { historyLength, includeArtifacts = true } = options ?? {};
+
+    // A FAILED/CANCELED task carries its reason as the status message when no
+    // agent message describes the outcome (the spec's TaskStatus.message is
+    // exactly this: an update relevant to the status).
+    const statusMessage = task.statusMessage
+      ? getA2AProtocolMessageByA2AModelMessage(task.statusMessage)
+      : task.statusReason
+        ? {
+            messageId: `${task.id}-status`,
+            contextId: task.contextId,
+            taskId: task.id,
+            role: A2AProtocolRole.Agent,
+            parts: [{ text: task.statusReason }],
+          }
+        : undefined;
+
+    const history =
+      historyLength === 0
+        ? undefined
+        : historyLength !== undefined
+          ? task.history.slice(-historyLength)
+          : task.history;
+
     return {
       id: task.id,
       contextId: task.contextId,
       status: {
-        state: task.state as A2AProtocolTaskState,
-        message:
-          task.statusMessage &&
-          getA2AProtocolMessageByA2AModelMessage(task.statusMessage),
+        state: task.state,
+        message: statusMessage,
+        ...(task.stateChangedAt
+          ? { timestamp: task.stateChangedAt.toISOString() }
+          : {}),
       },
-      history: task.history.map(getA2AProtocolMessageByA2AModelMessage),
+      ...(includeArtifacts && task.artifacts?.length
+        ? { artifacts: task.artifacts.map(toProtocolArtifact) }
+        : {}),
+      ...(history
+        ? { history: history.map(getA2AProtocolMessageByA2AModelMessage) }
+        : {}),
       metadata: {
         approvalRequests: z
           .array(A2AArchestraApprovalRequestSchema)
@@ -159,26 +203,46 @@ export class A2ATaskManager {
     if (context.id !== task.contextId) {
       throw new A2AError(A2AErrorKind.TaskContextMismatch);
     }
-    const [approvalRequestRows, history] = await Promise.all([
+
+    return { task: await A2ATaskManager.loadTaskWithData(task), context };
+  }
+
+  /**
+   * Load a task's associated data (approvals, history, artifacts) WITHOUT
+   * authorization — for callers that already validated access, e.g. a run
+   * refreshing its own task after a lifecycle transition.
+   */
+  static async loadTaskWithData(task: A2ATask): Promise<A2ATaskWithData> {
+    const [approvalRequestRows, history, artifacts] = await Promise.all([
       A2ATaskApprovalRequestModel.findByTaskId(task.id)
         // Sort for deterministic persistence
         .then((reqs) =>
           reqs.sort((a, b) => a.approvalId.localeCompare(b.approvalId)),
         ),
       A2AMessageModel.findByTaskId(task.id),
+      A2AArtifactModel.findByTaskId(task.id),
     ]);
     const approvalRequests = z
       .array(A2AArchestraApprovalRequestSchema)
       .parse(approvalRequestRows);
 
-    const statusMessage = history.length
-      ? history[history.length - 1]
-      : undefined;
+    // The status message is the latest AGENT message: surfacing whatever
+    // happens to be last would hand a just-appended USER turn back as the
+    // task's status (and ChatOps renders status messages verbatim).
+    const statusMessage = [...history]
+      .reverse()
+      .find((m) => m.role === A2AProtocolRole.Agent);
 
-    return {
-      task: { ...task, approvalRequests, history, statusMessage },
-      context,
-    };
+    return { ...task, approvalRequests, history, statusMessage, artifacts };
+  }
+
+  /** {@link loadTaskWithData} by id; throws TaskNotFound when the row is gone. */
+  static async loadTaskWithDataById(taskId: string): Promise<A2ATaskWithData> {
+    const task = await A2ATaskModel.findById(taskId);
+    if (!task) {
+      throw new A2AError(A2AErrorKind.TaskNotFound);
+    }
+    return await A2ATaskManager.loadTaskWithData(task);
   }
 
   static async createTask(params: {
@@ -186,6 +250,7 @@ export class A2ATaskManager {
     actor: A2AActor;
     state: A2AProtocolTaskState;
     approvalRequests: A2AArchestraApprovalRequest[];
+    agentId?: string;
     options?: A2AContextAccessOptions;
   }): Promise<A2ATaskWithData> {
     const {
@@ -213,13 +278,14 @@ export class A2ATaskManager {
     const task = await A2ATaskModel.create({
       contextId: context.id,
       state,
+      agentId: params.agentId,
     });
 
     await A2ATaskApprovalRequestModel.bulkCreate({
       taskId: task.id,
       approvalRequests,
     });
-    return { ...task, approvalRequests, history: [] };
+    return { ...task, approvalRequests, history: [], artifacts: [] };
   }
 
   static async addMessageToTask(params: {
@@ -356,8 +422,10 @@ export class A2ATaskManager {
     task: A2ATaskWithData,
     state: A2AProtocolTaskState,
   ): Promise<A2ATaskWithData> {
-    await A2ATaskModel.updateState(task.id, state);
-    return { ...task, state };
+    const updated = await A2ATaskModel.updateState(task.id, state);
+    // Merge the refreshed row so callers hold the real persisted state (e.g.
+    // stateChangedAt) rather than a stale in-memory copy.
+    return updated ? { ...task, ...updated } : { ...task, state };
   }
 }
 
@@ -380,5 +448,15 @@ function getA2AProtocolMessageByA2AModelMessage(
     taskId: message.taskId || undefined,
     role: message.role as A2AProtocolRole,
     parts: message.parts as A2AProtocolPart[],
+  };
+}
+
+function toProtocolArtifact(artifact: A2AArtifact): A2AProtocolArtifact {
+  return {
+    artifactId: artifact.id,
+    name: artifact.name,
+    ...(artifact.description ? { description: artifact.description } : {}),
+    parts: artifact.parts,
+    ...(artifact.metadata ? { metadata: artifact.metadata } : {}),
   };
 }

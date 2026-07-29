@@ -105,6 +105,11 @@ describe("A2ATaskManager", () => {
         },
       ],
       history: [],
+      agentId: null,
+      statusReason: null,
+      stateChangedAt: null,
+      lastHeartbeatAt: null,
+      nextEventSeq: 1,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies A2ATaskWithData;
@@ -145,6 +150,11 @@ describe("A2ATaskManager", () => {
         },
       ],
       history: [],
+      agentId: null,
+      statusReason: null,
+      stateChangedAt: null,
+      lastHeartbeatAt: null,
+      nextEventSeq: 1,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies A2ATaskWithData;

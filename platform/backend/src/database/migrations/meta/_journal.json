@@ -2612,6 +2612,13 @@
       "when": 1785323643795,
       "tag": "0372_past_matthew_murdock",
       "breakpoints": true
+    },
+    {
+      "idx": 373,
+      "version": "7",
+      "when": 1785348237596,
+      "tag": "0373_sparkling_bastion",
+      "breakpoints": true
     }
   ]
 }

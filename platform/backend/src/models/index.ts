@@ -1,3 +1,4 @@
+export { default as A2AArtifactModel } from "./a2a-artifact";
 export { default as A2AContextModel } from "./a2a-context";
 export { default as A2AContextCompactionModel } from "./a2a-context-compaction";
 export { default as A2AMessageModel } from "./a2a-message";

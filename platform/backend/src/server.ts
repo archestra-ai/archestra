@@ -41,6 +41,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { a2aTaskRunService } from "@/agents/a2a/a2a-task-run-service";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   cleanupEmailProvider,
@@ -1504,9 +1505,19 @@ function registerWebServerShutdown(
     // runs are freed, leaving their conversations blocked until the reaper runs.
     // This is a single fast UPDATE, bounded so a slow DB cannot stall shutdown.
     await Promise.race([
-      activeChatRunService.failInFlightRuns().catch((error) => {
-        fastify.log.error({ error }, "Failed to fail in-flight chat runs");
-      }),
+      Promise.all([
+        activeChatRunService.failInFlightRuns().catch((error) => {
+          fastify.log.error({ error }, "Failed to fail in-flight chat runs");
+        }),
+        // Same reasoning for A2A task runs: settle this pod's WORKING tasks
+        // to FAILED now, instead of leaving clients polling until the reaper.
+        a2aTaskRunService.failInFlightRuns().catch((error) => {
+          fastify.log.error(
+            { error },
+            "Failed to fail in-flight A2A task runs",
+          );
+        }),
+      ]),
       new Promise<void>((resolve) =>
         setTimeout(resolve, SHUTDOWN_CLEANUP_TIMEOUT_MS),
       ),

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { coerceMalformedToolInputs } from "@archestra/shared";
 import {
   convertToModelMessages,
@@ -10,6 +11,7 @@ import {
 import logger from "@/logging";
 import {
   A2AMessageModel,
+  A2ATaskModel,
   AgentModel,
   AgentTeamModel,
   TeamModel,
@@ -18,8 +20,13 @@ import {
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import type { A2AContext, A2AMessage } from "@/types";
+import { isTerminalA2ATaskState } from "@/types/a2a-task";
 import type { InteractionSource } from "../../../../shared";
-import { type A2AAttachment, executeA2AMessage } from "../a2a-executor";
+import {
+  type A2AAttachment,
+  type A2AExecuteResult,
+  executeA2AMessage,
+} from "../a2a-executor";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import {
   type A2AContextCompactionEvent,
@@ -35,15 +42,24 @@ import {
   type A2AArchestraApprovalRequest,
   type A2AArchestraTaskApprovalDecision,
   type A2AArchestraTaskOps,
+  type A2AProtocolCancelTaskRequest,
   type A2AProtocolGetTaskRequest,
+  type A2AProtocolListTasksRequest,
+  type A2AProtocolListTasksResponse,
   type A2AProtocolMessage,
   type A2AProtocolPart,
   A2AProtocolRole,
   type A2AProtocolSendMessageRequest,
   type A2AProtocolSendMessageResponse,
+  type A2AProtocolStreamResponse,
+  type A2AProtocolSubscribeToTaskRequest,
   type A2AProtocolTask,
   A2AProtocolTaskState,
 } from "./a2a-protocol";
+import { a2aTaskRunService } from "./a2a-task-run-service";
+
+/** Wire name of the single text artifact carrying a tasked run's answer. */
+const RESPONSE_ARTIFACT_NAME = "agent-response";
 
 interface A2AManagerConfig {
   /**
@@ -90,6 +106,32 @@ interface A2AManagerConfig {
    * Default: false (= contexts/tasks are actor-owned)
    */
   trustedContextAccess?: boolean;
+
+  /**
+   * How much of the A2A task lifecycle this manager drives.
+   *
+   * - "approval-only" (default): tasks exist purely as approval handles —
+   *   the pre-existing behavior every internal consumer (chatops) is built
+   *   on. Plain sends return `{message}`; no run detachment, no events.
+   * - "full": the v2 protocol surface. Streaming and `returnImmediately`
+   *   sends create durable tasks whose runs are registered with the task run
+   *   service (delta events, artifacts, heartbeats, cancellation), terminal
+   *   failures persist as TASK_STATE_FAILED, and spec guards apply (messages
+   *   to terminal or already-running tasks are rejected). Requires stateful
+   *   mode.
+   */
+  taskMode?: "full" | "approval-only";
+}
+
+/**
+ * How a full-task-mode send executes its run.
+ * - "blocking": awaited; the response carries the settled outcome.
+ * - "detached": the task handle returns immediately and the run continues in
+ *   the background (`returnImmediately`, SendStreamingMessage).
+ */
+export interface A2ATaskRunRequest {
+  createTask: boolean;
+  detached: boolean;
 }
 
 export class A2AManager {
@@ -134,15 +176,32 @@ export class A2AManager {
      */
     onTextDelta?: (delta: string) => void;
     /**
-     * Cancellation signal forwarded into the agent run. SendStreamingMessage
-     * aborts when the SSE client disconnects; chatops aborts a muted thread's
-     * in-flight model requests instead of letting them finish and post a
-     * now-unwanted reply.
+     * Cancellation signal forwarded into the agent run (approval-only mode:
+     * chatops aborts a muted thread's in-flight model requests). Full-mode
+     * tasked runs ignore it — their lifetime is owned by the task run
+     * service, so a caller disconnect no longer cancels the run.
      */
     abortSignal?: AbortSignal;
+    /**
+     * Full task mode only: create a task for this send and run it blocking or
+     * detached. Ignored (with a warning) in approval-only mode.
+     */
+    taskRun?: A2ATaskRunRequest;
+    /**
+     * Fired just before a detached task run's snapshot is returned:
+     * `followFromSeq` is the event-log watermark the caller should stream
+     * events after — 0 for a freshly created task (nothing emitted yet), the
+     * pre-resume watermark for a resumed one (so the resume's Working event
+     * is delivered but earlier history is not replayed).
+     */
+    onDetachedTaskRun?: (info: {
+      taskId: string;
+      followFromSeq: number;
+    }) => void;
   }): Promise<A2AProtocolSendMessageResponse> {
     try {
       const { actor, agentId, request, systemParams, abortSignal } = params;
+      const fullTaskMode = this.config.taskMode === "full";
 
       const [a2aUser, agent] = await Promise.all([
         actor.kind === "user" && actor.id !== "system"
@@ -159,6 +218,10 @@ export class A2AManager {
       };
       let task: A2ATaskWithData | undefined;
       let context: A2AContext | undefined;
+      // Event-log watermark captured BEFORE any task op runs, so a detached
+      // caller following the stream sees everything this send causes (starting
+      // with the resume's Working event) and nothing from before it.
+      let resumeWatermark = 0;
       if (request.message.taskId) {
         const { task: fetchedTask, context: fetchedContext } =
           await A2ATaskManager.findAndValidateTaskWithContext(
@@ -169,6 +232,14 @@ export class A2AManager {
           );
         task = fetchedTask;
         context = fetchedContext;
+        resumeWatermark = fetchedTask.nextEventSeq - 1;
+        if (
+          fullTaskMode &&
+          fetchedTask.agentId &&
+          fetchedTask.agentId !== agentId
+        ) {
+          throw new A2AError(A2AErrorKind.TaskNotFound);
+        }
         if (
           request.message.contextId &&
           context.id !== request.message.contextId
@@ -182,6 +253,26 @@ export class A2AManager {
           actor,
           contextAccessOptions,
         );
+      }
+
+      // Spec guards (A2A v1.0, full mode only to keep chatops semantics
+      // untouched): terminal tasks are absorbing, and our execution model is
+      // single-writer-per-task — the only joinable state is INPUT_REQUIRED
+      // (approval resume), so a send addressed to a SUBMITTED/WORKING task is
+      // rejected rather than racing the live run.
+      if (fullTaskMode && task) {
+        if (isTerminalA2ATaskState(task.state)) {
+          throw new A2AError(
+            A2AErrorKind.UnsupportedOperation,
+            "the task is in a terminal state; start a new task in the same context instead",
+          );
+        }
+        if (task.state !== A2AProtocolTaskState.InputRequired) {
+          throw new A2AError(
+            A2AErrorKind.UnsupportedOperation,
+            "the task is still running; wait for it to reach an input-required or terminal state",
+          );
+        }
       }
 
       let taskWasSwitchedToWorkingState: boolean | undefined = false;
@@ -393,39 +484,114 @@ export class A2AManager {
             })
           : [],
       ]);
-      const result = await startActiveChatSpan({
-        agentName: agent.name,
-        agentId,
-        agentType: agent.agentType ?? undefined,
-        sessionId,
-        teams,
-        userTeams,
-        routeCategory: systemParams?.routeCategory ?? RouteCategory.A2A,
-        user: a2aUser
-          ? { id: a2aUser.id, email: a2aUser.email, name: a2aUser.name }
-          : null,
-        callback: async () => {
-          return executeA2AMessage({
+      const executeRun = (runOpts: {
+        abortSignal?: AbortSignal;
+        onTextDelta?: (delta: string) => void;
+      }) =>
+        startActiveChatSpan({
+          agentName: agent.name,
+          agentId,
+          agentType: agent.agentType ?? undefined,
+          sessionId,
+          teams,
+          userTeams,
+          routeCategory: systemParams?.routeCategory ?? RouteCategory.A2A,
+          user: a2aUser
+            ? { id: a2aUser.id, email: a2aUser.email, name: a2aUser.name }
+            : null,
+          callback: async () => {
+            return executeA2AMessage({
+              agentId,
+              message: executedTurnText,
+              attachments:
+                currentTurnAttachments.length > 0
+                  ? currentTurnAttachments
+                  : undefined,
+              messages: requestMessages,
+              organizationId: actor.organizationId,
+              userId: actor.kind === "user" ? actor.id : "system",
+              sessionId,
+              source: systemParams?.source,
+              parentDelegationChain: undefined, // This is the root call, chain starts with agentId
+              blockOnApprovalRequired: false, // No need to block. We check approval flow availability below
+              originalUiMessages: contextUiMessages,
+              chatOpsBindingId: systemParams?.chatOpsBindingId,
+              chatOpsThreadId: systemParams?.chatOpsThreadId,
+              onTextDelta: runOpts.onTextDelta,
+              abortSignal: runOpts.abortSignal,
+            });
+          },
+        });
+
+      // ---- Full task mode: run under the durable task lifecycle -----------
+      // A tasked run is requested explicitly (streaming / returnImmediately)
+      // or implied by resuming an existing task. Everything below this block
+      // is the pre-existing message-response flow, untouched for
+      // approval-only managers and plain blocking sends.
+      const taskRunRequested =
+        fullTaskMode && (params.taskRun?.createTask || Boolean(task));
+      if (taskRunRequested) {
+        if (this.config.stateless) {
+          throw new Error("[A2AManager] Full task mode requires stateful mode");
+        }
+        if (!context) {
+          // This should never happen: stateful mode created the context above.
+          throw new Error("[A2AManager] No context for a task run");
+        }
+        // `context` is a mutable binding; capture the id so the narrowing
+        // survives into the lifecycle closure.
+        const runContextId = context.id;
+
+        let runTask: A2ATaskWithData;
+        if (task) {
+          runTask = task;
+        } else {
+          const created = await A2ATaskModel.createForRun({
+            contextId: context.id,
             agentId,
-            message: executedTurnText,
-            attachments:
-              currentTurnAttachments.length > 0
-                ? currentTurnAttachments
-                : undefined,
-            messages: requestMessages,
-            organizationId: actor.organizationId,
-            userId: actor.kind === "user" ? actor.id : "system",
-            sessionId,
-            source: systemParams?.source,
-            parentDelegationChain: undefined, // This is the root call, chain starts with agentId
-            blockOnApprovalRequired: false, // No need to block. We check approval flow availability below
-            originalUiMessages: contextUiMessages,
-            chatOpsBindingId: systemParams?.chatOpsBindingId,
-            chatOpsThreadId: systemParams?.chatOpsThreadId,
-            onTextDelta: params.onTextDelta,
-            abortSignal,
+            userMessageId: persistedContextUserMessage?.id,
           });
-        },
+          runTask = {
+            ...created,
+            approvalRequests: [],
+            history: persistedContextUserMessage
+              ? [{ ...persistedContextUserMessage, taskId: created.id }]
+              : [],
+            artifacts: [],
+          };
+        }
+
+        const lifecycle = () =>
+          this.runTaskLifecycle({
+            task: runTask,
+            contextId: runContextId,
+            executeRun,
+          });
+
+        if (params.taskRun?.detached) {
+          const snapshot = A2ATaskManager.toProtocolTask(runTask);
+          params.onDetachedTaskRun?.({
+            taskId: runTask.id,
+            followFromSeq: task ? resumeWatermark : 0,
+          });
+          // Never-rejecting detached continuation: the lifecycle persists its
+          // own terminal outcome; an escaping rejection here would take the
+          // process down under the unhandled-rejection policy.
+          void lifecycle().catch((error) => {
+            logger.error(
+              { error, taskId: runTask.id, agentId },
+              "[A2AManager] Detached A2A task run crashed",
+            );
+          });
+          return { task: snapshot };
+        }
+
+        return await lifecycle();
+      }
+
+      const result = await executeRun({
+        abortSignal,
+        onTextDelta: params.onTextDelta,
       });
 
       const approvalRequests = extractApprovalRequestsFromUiMessage(
@@ -524,6 +690,278 @@ export class A2AManager {
       );
       throw error;
     }
+  }
+
+  /**
+   * Run one execution under the durable task lifecycle (full task mode):
+   * start transition, delta events + artifact chunks through the run
+   * service, and exactly one terminal/interrupt transaction — COMPLETED,
+   * INPUT_REQUIRED (approvals), CANCELED, or FAILED. The task row is the
+   * authority at every step: every transition is a CAS, so whichever of
+   * {this run, CancelTask, the reaper} settles the task first wins and the
+   * others observe it.
+   */
+  private async runTaskLifecycle(params: {
+    task: A2ATaskWithData;
+    contextId: string;
+    executeRun: (runOpts: {
+      abortSignal?: AbortSignal;
+      onTextDelta?: (delta: string) => void;
+    }) => Promise<A2AExecuteResult>;
+  }): Promise<A2AProtocolSendMessageResponse> {
+    const { contextId } = params;
+    let task = params.task;
+    const taskId = task.id;
+    const artifactId = randomUUID();
+
+    // Start transition. A freshly created task starts from SUBMITTED; a task
+    // being fed new input starts from INPUT_REQUIRED. An approval resume
+    // already flipped to WORKING (with its event) inside the resume
+    // transaction, so there is nothing to do. A CAS miss means the task was
+    // canceled between creation/validation and here.
+    if (task.state !== A2AProtocolTaskState.Working) {
+      const started = await A2ATaskModel.transitionStateWithEvent({
+        id: taskId,
+        to: A2AProtocolTaskState.Working,
+        allowedFrom: [
+          A2AProtocolTaskState.Submitted,
+          A2AProtocolTaskState.InputRequired,
+        ],
+        eventPayload: {
+          statusUpdate: {
+            taskId,
+            contextId,
+            status: { state: A2AProtocolTaskState.Working },
+          },
+        },
+      });
+      if (!started) {
+        const refreshed = await A2ATaskManager.loadTaskWithDataById(taskId);
+        return { task: A2ATaskManager.toProtocolTask(refreshed) };
+      }
+      task = { ...task, ...started };
+    }
+
+    let isFirstChunk = true;
+    const run = a2aTaskRunService.startRun({
+      taskId,
+      artifact: { id: artifactId, name: RESPONSE_ARTIFACT_NAME },
+      buildDeltaEvent: (chunk) => {
+        const append = !isFirstChunk;
+        isFirstChunk = false;
+        return {
+          artifactUpdate: {
+            taskId,
+            contextId,
+            artifact: {
+              artifactId,
+              name: RESPONSE_ARTIFACT_NAME,
+              parts: [{ text: chunk }],
+            },
+            ...(append ? { append: true } : {}),
+          },
+        };
+      },
+    });
+
+    try {
+      const result = await params.executeRun({
+        abortSignal: run.signal,
+        onTextDelta: run.onTextDelta,
+      });
+      await run.drainDeltas();
+
+      const approvalRequests = extractApprovalRequestsFromUiMessage(
+        result.responseUiMessage,
+      );
+      const parts = extractProtocolPartsFromUIMessage(result.responseUiMessage);
+      const agentMessage = {
+        id: result.responseUiMessage.id,
+        contextId,
+        role: A2AProtocolRole.Agent,
+        parts,
+        content: result.responseUiMessage,
+      };
+
+      if (approvalRequests.length > 0) {
+        if (this.config.disableApprovalFlow) {
+          await this.settleFailedRun({
+            taskId,
+            contextId,
+            statusReason:
+              "The agent requested tool approval, but the approval flow is disabled.",
+          });
+          throw new A2AError(A2AErrorKind.OutputApprovalFlowIsDisabled);
+        }
+
+        const sortedRequests = [...approvalRequests].sort((a, b) =>
+          a.approvalId.localeCompare(b.approvalId),
+        );
+        await A2ATaskModel.interruptForApproval({
+          taskId,
+          agentMessage,
+          approvalRequests: sortedRequests.map((request) => ({
+            taskId,
+            approvalId: request.approvalId,
+            toolCallId: request.toolCallId,
+            toolName: request.toolName,
+            approved: request.approved,
+            resolved: request.resolved,
+          })),
+          eventPayload: {
+            statusUpdate: {
+              taskId,
+              contextId,
+              status: { state: A2AProtocolTaskState.InputRequired },
+            },
+          },
+        });
+        // A CAS miss here means a cancellation landed while the run was
+        // interrupting — the refreshed task carries whichever outcome won.
+        const refreshed = await A2ATaskManager.loadTaskWithDataById(taskId);
+        return { task: A2ATaskManager.toProtocolTask(refreshed) };
+      }
+
+      const finalParts: { text: string }[] = [{ text: result.text }];
+      await A2ATaskModel.completeRun({
+        taskId,
+        agentMessage,
+        artifact: {
+          id: artifactId,
+          name: RESPONSE_ARTIFACT_NAME,
+          parts: finalParts,
+        },
+        eventPayloads: [
+          {
+            // Seal the artifact: replace-with-final-content + lastChunk, so
+            // event-following clients hold the authoritative artifact even if
+            // a delta batch was reordered away by a crash.
+            artifactUpdate: {
+              taskId,
+              contextId,
+              artifact: {
+                artifactId,
+                name: RESPONSE_ARTIFACT_NAME,
+                parts: finalParts,
+              },
+              lastChunk: true,
+            },
+          },
+          {
+            statusUpdate: {
+              taskId,
+              contextId,
+              status: {
+                state: A2AProtocolTaskState.Completed,
+                message: {
+                  messageId: result.responseUiMessage.id,
+                  contextId,
+                  taskId,
+                  role: A2AProtocolRole.Agent,
+                  parts,
+                },
+              },
+            },
+          },
+        ],
+      });
+      // CAS miss = cancellation won while the run was completing: the
+      // completion transaction rolled back, and the task stays CANCELED with
+      // no completed outputs.
+      const refreshed = await A2ATaskManager.loadTaskWithDataById(taskId);
+      return { task: A2ATaskManager.toProtocolTask(refreshed) };
+    } catch (error) {
+      if (error instanceof A2AError) {
+        throw error;
+      }
+
+      // Outcome decided BEFORE persistence (an abort is a cancellation, not a
+      // failure), and the terminal write must never mask the original error.
+      const wasAborted = run.signal.aborted;
+      try {
+        if (wasAborted) {
+          await A2ATaskModel.transitionStateWithEvent({
+            id: taskId,
+            to: A2AProtocolTaskState.Canceled,
+            allowedFrom: [
+              A2AProtocolTaskState.Submitted,
+              A2AProtocolTaskState.Working,
+            ],
+            statusReason: "The task run was aborted.",
+            clearApprovals: true,
+            eventPayload: {
+              statusUpdate: {
+                taskId,
+                contextId,
+                status: { state: A2AProtocolTaskState.Canceled },
+              },
+            },
+          });
+        } else {
+          await this.settleFailedRun({
+            taskId,
+            contextId,
+            statusReason:
+              error instanceof Error ? error.message : String(error),
+          });
+        }
+      } catch (persistError) {
+        logger.error(
+          { persistError, taskId },
+          "[A2AManager] Failed to persist the terminal state of an A2A task run; the reaper will settle it",
+        );
+      }
+
+      throw error;
+    } finally {
+      run.finish();
+    }
+  }
+
+  /** CAS the task to FAILED with its terminal event; no-op if already settled. */
+  private async settleFailedRun(params: {
+    taskId: string;
+    contextId: string;
+    statusReason: string;
+  }): Promise<void> {
+    await A2ATaskModel.transitionStateWithEvent({
+      id: params.taskId,
+      to: A2AProtocolTaskState.Failed,
+      allowedFrom: [
+        A2AProtocolTaskState.Submitted,
+        A2AProtocolTaskState.Working,
+      ],
+      statusReason: params.statusReason,
+      eventPayload: {
+        statusUpdate: {
+          taskId: params.taskId,
+          contextId: params.contextId,
+          status: { state: A2AProtocolTaskState.Failed },
+        },
+      },
+    });
+  }
+
+  /**
+   * Resolve a task for this route's agent + actor. Tasks bound to a different
+   * agent answer TaskNotFound (existence non-disclosure); legacy rows with no
+   * binding fall back to the actor/context ownership check alone.
+   */
+  private async findTaskForAgent(params: {
+    taskId: string;
+    actor: A2AActor;
+    agentId: string;
+  }): Promise<A2ATaskWithData> {
+    const { task } = await A2ATaskManager.findAndValidateTaskWithContext(
+      params.taskId,
+      undefined,
+      params.actor,
+      { trustedActorAccess: Boolean(this.config.trustedContextAccess) },
+    );
+    if (task.agentId && task.agentId !== params.agentId) {
+      throw new A2AError(A2AErrorKind.TaskNotFound);
+    }
+    return task;
   }
 
   /**
@@ -655,23 +1093,43 @@ export class A2AManager {
         message: lastMessageContent,
         approvalDecisions,
       });
-      // Apply to messages to db first
-      await A2AMessageModel.updateContent(lastMessage.id, lastMessageContent);
-      // Apply to task db
-      task = await A2ATaskManager.updateTaskApprovalDecisions({
-        task,
-        approvalDecisions,
-      });
 
-      const hasPendingApprovalRequests = task.approvalRequests.some(
+      const decisionMap = new Map(
+        approvalDecisions.map((d) => [d.approvalId, d]),
+      );
+      const updatedApprovalRequests = task.approvalRequests.map((req) => {
+        const decision = decisionMap.get(req.approvalId);
+        return decision
+          ? { ...req, approved: decision.approved, resolved: true }
+          : req;
+      });
+      const hasPendingApprovalRequests = updatedApprovalRequests.some(
         (r) => !r.resolved,
       );
+
       if (!hasPendingApprovalRequests) {
-        task = await A2ATaskManager.updateTaskState(
-          task,
-          A2AProtocolTaskState.Working,
-        );
-        task = await A2ATaskManager.removeTaskApprovalRequests(task);
+        // Final decision: message update, approval-row cleanup, the
+        // INPUT_REQUIRED → WORKING CAS, and the Working event commit
+        // together. A CAS miss means a concurrent duplicate resume or a
+        // cancellation got there first.
+        const resumed = await A2ATaskModel.resumeApprovedTask({
+          taskId: task.id,
+          lastMessage: { id: lastMessage.id, content: lastMessageContent },
+          eventPayload: {
+            statusUpdate: {
+              taskId: task.id,
+              contextId: task.contextId,
+              status: { state: A2AProtocolTaskState.Working },
+            },
+          },
+        });
+        if (!resumed) {
+          throw new A2AError(
+            A2AErrorKind.TaskIsNotInputRequired,
+            "the task was resumed or canceled concurrently",
+          );
+        }
+        task = { ...task, ...resumed, approvalRequests: [] };
         return {
           task,
           switchedToWorkingState: true,
@@ -679,6 +1137,17 @@ export class A2AManager {
         };
       }
 
+      // Partial decision: some requests still pending — persist the applied
+      // decisions atomically, task state stays INPUT_REQUIRED.
+      await A2ATaskModel.applyApprovalDecisions({
+        taskId: task.id,
+        lastMessage: { id: lastMessage.id, content: lastMessageContent },
+        approvalDecisions: approvalDecisions.map((d) => ({
+          approvalId: d.approvalId,
+          approved: d.approved,
+        })),
+      });
+      task = { ...task, approvalRequests: updatedApprovalRequests };
       return { task, approvalDecisionsWasApplied: true };
     }
 
@@ -690,16 +1159,180 @@ export class A2AManager {
     agentId: string;
     request: A2AProtocolGetTaskRequest;
   }): Promise<A2AProtocolTask> {
-    const { task } = await A2ATaskManager.findAndValidateTaskWithContext(
-      params.request.id,
-      undefined,
-      params.actor,
-      { trustedActorAccess: Boolean(this.config.trustedContextAccess) },
-    );
-    if (!task) {
+    const task = await this.findTaskForAgent({
+      taskId: params.request.id,
+      actor: params.actor,
+      agentId: params.agentId,
+    });
+    return A2ATaskManager.toProtocolTask(task, {
+      historyLength: params.request.historyLength,
+    });
+  }
+
+  /**
+   * A2A `CancelTask`: durably CAS the task to CANCELED (with its terminal
+   * event and approval cleanup) FIRST, then best-effort abort the run — a
+   * non-cooperative run can then never overwrite the canceled outcome, and a
+   * run on another pod observes the state via its own poll / append guard.
+   */
+  public async cancelTask(params: {
+    actor: A2AActor;
+    agentId: string;
+    request: A2AProtocolCancelTaskRequest;
+  }): Promise<A2AProtocolTask> {
+    const task = await this.findTaskForAgent({
+      taskId: params.request.id,
+      actor: params.actor,
+      agentId: params.agentId,
+    });
+
+    if (isTerminalA2ATaskState(task.state)) {
+      throw new A2AError(A2AErrorKind.TaskNotCancelable);
+    }
+
+    const canceled = await A2ATaskModel.transitionStateWithEvent({
+      id: task.id,
+      to: A2AProtocolTaskState.Canceled,
+      allowedFrom: [
+        A2AProtocolTaskState.Submitted,
+        A2AProtocolTaskState.Working,
+        A2AProtocolTaskState.InputRequired,
+        A2AProtocolTaskState.AuthRequired,
+        A2AProtocolTaskState.Unspecified,
+      ],
+      statusReason: "The task was canceled by the client.",
+      clearApprovals: true,
+      eventPayload: {
+        statusUpdate: {
+          taskId: task.id,
+          contextId: task.contextId,
+          status: { state: A2AProtocolTaskState.Canceled },
+        },
+      },
+    });
+    if (!canceled) {
+      // Lost the race to another terminal transition (concurrent cancel or a
+      // completing run) — per spec a terminal task is not cancelable.
+      throw new A2AError(A2AErrorKind.TaskNotCancelable);
+    }
+
+    a2aTaskRunService.abortLocal(task.id);
+
+    const refreshed = await A2ATaskManager.loadTaskWithData(canceled);
+    return A2ATaskManager.toProtocolTask(refreshed);
+  }
+
+  /**
+   * A2A `SubscribeToTask` validation + snapshot: returns the authorized task
+   * (throwing -32004 when it is already terminal, per spec — finished work is
+   * fetched with GetTask) together with the event-sequence watermark bound to
+   * that snapshot. The transport layer polls `readTaskEventsAfter` from the
+   * watermark, so no event can be duplicated or skipped between snapshot and
+   * first poll.
+   */
+  public async subscribeToTask(params: {
+    actor: A2AActor;
+    agentId: string;
+    request: A2AProtocolSubscribeToTaskRequest;
+  }): Promise<{ task: A2AProtocolTask; taskId: string; watermark: number }> {
+    const task = await this.findTaskForAgent({
+      taskId: params.request.id,
+      actor: params.actor,
+      agentId: params.agentId,
+    });
+
+    if (isTerminalA2ATaskState(task.state)) {
+      throw new A2AError(
+        A2AErrorKind.UnsupportedOperation,
+        "the task is already in a terminal state; use GetTask to fetch it",
+      );
+    }
+
+    // The watermark is read AFTER the snapshot's data was loaded: an event
+    // that lands in between is simply re-covered by the first poll (events
+    // strictly after the watermark), never dropped. nextEventSeq - 1 is the
+    // last allocated sequence.
+    const row = await A2ATaskModel.findById(task.id);
+    if (!row) {
       throw new A2AError(A2AErrorKind.TaskNotFound);
     }
-    return A2ATaskManager.toProtocolTask(task);
+
+    return {
+      task: A2ATaskManager.toProtocolTask(task),
+      taskId: task.id,
+      watermark: row.nextEventSeq - 1,
+    };
+  }
+
+  /**
+   * Poll step for SubscribeToTask streams: the task's current state plus its
+   * events strictly after `afterSeq`. Terminal state + drained events =
+   * close the stream.
+   */
+  public async readTaskEventsAfter(params: {
+    taskId: string;
+    afterSeq: number;
+  }): Promise<{
+    state: A2AProtocolTaskState;
+    events: { seq: number; payload: A2AProtocolStreamResponse }[];
+  } | null> {
+    const result = await A2ATaskModel.readTaskAndEventsAfter(params);
+    if (!result) {
+      return null;
+    }
+    return { state: result.task.state, events: result.events };
+  }
+
+  /** A2A `ListTasks`, scoped to the calling actor and the route's agent. */
+  public async listTasks(params: {
+    actor: A2AActor;
+    agentId: string;
+    request: A2AProtocolListTasksRequest;
+  }): Promise<A2AProtocolListTasksResponse> {
+    const { request } = params;
+    const pageSize = request.pageSize ?? 20;
+
+    const cursor = request.pageToken
+      ? decodeListTasksPageToken(request.pageToken)
+      : undefined;
+
+    const { tasks, totalSize } = await A2ATaskModel.listForActor({
+      actorKind: params.actor.kind,
+      actorId: params.actor.id,
+      agentId: params.agentId,
+      contextId: request.contextId,
+      state: request.status,
+      statusChangedAfter: request.statusTimestampAfter
+        ? new Date(request.statusTimestampAfter)
+        : undefined,
+      cursor,
+      pageSize,
+    });
+
+    const withData = await Promise.all(
+      tasks.map((task) => A2ATaskManager.loadTaskWithData(task)),
+    );
+
+    const last = tasks[tasks.length - 1];
+    const nextPageToken =
+      tasks.length === pageSize && last
+        ? encodeListTasksPageToken({
+            stateChangedAt: last.stateChangedAt ?? last.createdAt,
+            id: last.id,
+          })
+        : "";
+
+    return {
+      tasks: withData.map((task) =>
+        A2ATaskManager.toProtocolTask(task, {
+          historyLength: request.historyLength ?? 0,
+          includeArtifacts: request.includeArtifacts ?? false,
+        }),
+      ),
+      nextPageToken,
+      pageSize,
+      totalSize,
+    };
   }
 
   public async resolveActorByMCPGatewayToken(
@@ -747,6 +1380,37 @@ export class A2AManager {
       kind: "system",
       organizationId,
     };
+  }
+}
+
+/**
+ * Opaque, stable ListTasks cursor: the (status-change timestamp, id) pair of
+ * the last row of the previous page, base64-encoded. Both components are
+ * immutable once written (heartbeats touch a different column), so pages
+ * never skip or duplicate under concurrent activity.
+ */
+function encodeListTasksPageToken(cursor: {
+  stateChangedAt: Date;
+  id: string;
+}): string {
+  return Buffer.from(
+    JSON.stringify({ t: cursor.stateChangedAt.toISOString(), id: cursor.id }),
+  ).toString("base64url");
+}
+
+function decodeListTasksPageToken(token: string): {
+  stateChangedAt: Date;
+  id: string;
+} {
+  try {
+    const decoded = JSON.parse(Buffer.from(token, "base64url").toString());
+    const timestamp = new Date(decoded.t);
+    if (Number.isNaN(timestamp.getTime()) || typeof decoded.id !== "string") {
+      throw new Error("malformed");
+    }
+    return { stateChangedAt: timestamp, id: decoded.id };
+  } catch {
+    throw new A2AError(A2AErrorKind.InvalidPageToken);
   }
 }
 

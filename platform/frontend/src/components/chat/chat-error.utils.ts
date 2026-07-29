@@ -148,6 +148,10 @@ const BACKEND_ERROR_TYPE_TO_CODE: Record<string, ChatErrorCode> = {
  * these client-side fallbacks (used when no server message arrives) have to do
  * the same substitution so a white-labeled deployment never shows the vendor's
  * name in a chat error.
+ *
+ * Mirrors the backend's `archestraMcpBranding.brandBuiltInText` (which the
+ * frontend cannot import) minus the tool-prefix swap, which never appears in
+ * these messages. If that swap ever grows another token, update both.
  */
 function branded(message: string, appName: string): string {
   return appName === DEFAULT_APP_NAME

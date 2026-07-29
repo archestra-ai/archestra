@@ -532,6 +532,11 @@ requires_openai_auth = true`,
                 ? 'COPILOT_PROVIDER_TYPE stays "openai" because Copilot speaks the OpenAI-compatible protocol; the API key is your GitHub OAuth token (or a virtual key mapped to a stored GitHub Copilot key).'
                 : `Use a virtual key mapped to ${providerLabel}. COPILOT_PROVIDER_TYPE stays "openai" because Copilot is speaking the OpenAI-compatible protocol; the ${appName} base URL still needs the selected provider path.`,
             language: "bash" as const,
+            // The `<your-archestra-virtual-key>` placeholder and the
+            // `archestra-copilot-cli-ok` echo sentinel below are wire-level
+            // probe strings inside code blocks, not prose — they stay stable
+            // across brands (and lowercase, so the white-label copy check
+            // ignores them by design).
             code: `export COPILOT_PROVIDER_TYPE="openai"
 export COPILOT_PROVIDER_BASE_URL="${url}"
 export COPILOT_PROVIDER_API_KEY="${provider === "github-copilot" ? "<your-github-oauth-token>" : "<your-archestra-virtual-key>"}"

@@ -45,7 +45,8 @@ export function enrichOpenApiWithRbac<T extends OpenApiDocument>(spec: T): T {
     }
   }
 
-  return brandSpecText(clonedSpec) as T;
+  brandSpecTextInPlace(clonedSpec);
+  return clonedSpec;
 }
 
 // === Internal helpers ===
@@ -63,22 +64,30 @@ export function enrichOpenApiWithRbac<T extends OpenApiDocument>(spec: T): T {
  * rewriting a `$ref` value while its schema key stays put would produce a spec
  * that no longer resolves. `brandBuiltInText` is a no-op for non-white-labeled
  * deployments.
+ *
+ * Mutates the given node in place — the caller hands it the fresh
+ * `structuredClone` it is about to serve, so nothing shared is touched and a
+ * copying transform would only churn allocations on every /openapi.json hit.
  */
 const BRANDABLE_SPEC_KEYS = new Set(["description", "summary"]);
 
-function brandSpecText(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(brandSpecText);
+function brandSpecTextInPlace(node: unknown): void {
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      brandSpecTextInPlace(item);
+    }
+    return;
   }
-  if (value && typeof value === "object") {
-    for (const [key, child] of Object.entries(value)) {
-      (value as Record<string, unknown>)[key] =
-        typeof child === "string" && BRANDABLE_SPEC_KEYS.has(key)
-          ? archestraMcpBranding.brandBuiltInText(child)
-          : brandSpecText(child);
+  if (node && typeof node === "object") {
+    for (const [key, child] of Object.entries(node)) {
+      if (typeof child === "string" && BRANDABLE_SPEC_KEYS.has(key)) {
+        (node as Record<string, unknown>)[key] =
+          archestraMcpBranding.brandBuiltInText(child);
+      } else {
+        brandSpecTextInPlace(child);
+      }
     }
   }
-  return value;
 }
 
 // === Types ===
@@ -207,7 +216,10 @@ function createAuthenticationSection(operationId: string): string {
   return [
     "Authentication:",
     "",
-    `Required. Use an authenticated browser session or send your ${archestraMcpBranding.appName} API key in the \`Authorization\` header.`,
+    // white-label-ok: OpenAPI prose; this section is appended to the operation's
+    // description, which brandSpecTextInPlace rebrands with everything else —
+    // branding it inline too would just be the same swap twice.
+    "Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.",
   ].join("\n");
 }
 

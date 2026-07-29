@@ -22,6 +22,8 @@ export enum A2AErrorKind {
   MessageIdAlreadyExists,
   NothingToExecute,
   InvalidPageToken,
+  InvalidPushNotificationUrl,
+  PushNotificationConfigNotFound,
 }
 const A2A_ERRORS: Record<A2AErrorKind, { code: number; message: string }> = {
   [A2AErrorKind.InvalidToken]: {
@@ -91,6 +93,14 @@ const A2A_ERRORS: Record<A2AErrorKind, { code: number; message: string }> = {
   [A2AErrorKind.InvalidPageToken]: {
     code: -32602,
     message: "Invalid page token",
+  },
+  [A2AErrorKind.InvalidPushNotificationUrl]: {
+    code: -32602,
+    message: "Invalid push notification URL",
+  },
+  [A2AErrorKind.PushNotificationConfigNotFound]: {
+    code: -32001,
+    message: "Push notification config not found",
   },
 };
 

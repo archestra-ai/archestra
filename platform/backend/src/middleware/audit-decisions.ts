@@ -266,6 +266,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "A2A protocol task artifact output (runtime state)",
   },
+  a2aPushNotificationConfigsTable: {
+    audited: false,
+    reason: "A2A protocol per-task webhook config (runtime state)",
+  },
   a2aTaskApprovalRequestsTable: {
     audited: false,
     reason: "A2A protocol approval state",

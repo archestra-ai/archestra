@@ -218,6 +218,72 @@ export type A2AProtocolListTasksRequest = z.infer<
   typeof A2AProtocolListTasksRequestSchema
 >;
 
+// --- A2A push notification configs ---
+
+/** A2A v1.0 `AuthenticationInfo` for an outbound webhook call. */
+const A2AProtocolAuthenticationInfoSchema = z.object({
+  scheme: z.string(),
+  credentials: z.string().optional(),
+});
+
+/**
+ * A2A v1.0 `PushNotificationConfig`. `id` is server-assigned on create and
+ * required to address the config afterwards; `credentials` is write-only —
+ * reads never echo it back.
+ */
+const A2AProtocolPushNotificationConfigSchema = z.object({
+  id: z.string().optional(),
+  url: z.string(),
+  token: z.string().optional(),
+  authentication: A2AProtocolAuthenticationInfoSchema.optional(),
+});
+
+export const A2AProtocolTaskPushNotificationConfigSchema = z.object({
+  tenant: z.string().optional(),
+  taskId: z.string(),
+  pushNotificationConfig: A2AProtocolPushNotificationConfigSchema,
+});
+export type A2AProtocolTaskPushNotificationConfig = z.infer<
+  typeof A2AProtocolTaskPushNotificationConfigSchema
+>;
+
+export const A2AProtocolGetTaskPushNotificationConfigRequestSchema = z.object({
+  tenant: z.string().optional(),
+  taskId: z.string(),
+  id: z.string(),
+});
+export type A2AProtocolGetTaskPushNotificationConfigRequest = z.infer<
+  typeof A2AProtocolGetTaskPushNotificationConfigRequestSchema
+>;
+
+export const A2AProtocolListTaskPushNotificationConfigsRequestSchema = z.object(
+  {
+    tenant: z.string().optional(),
+    taskId: z.string(),
+  },
+);
+export type A2AProtocolListTaskPushNotificationConfigsRequest = z.infer<
+  typeof A2AProtocolListTaskPushNotificationConfigsRequestSchema
+>;
+
+export const A2AProtocolListTaskPushNotificationConfigsResponseSchema =
+  z.object({
+    configs: z.array(A2AProtocolTaskPushNotificationConfigSchema),
+  });
+export type A2AProtocolListTaskPushNotificationConfigsResponse = z.infer<
+  typeof A2AProtocolListTaskPushNotificationConfigsResponseSchema
+>;
+
+export const A2AProtocolDeleteTaskPushNotificationConfigRequestSchema =
+  z.object({
+    tenant: z.string().optional(),
+    taskId: z.string(),
+    id: z.string(),
+  });
+export type A2AProtocolDeleteTaskPushNotificationConfigRequest = z.infer<
+  typeof A2AProtocolDeleteTaskPushNotificationConfigRequestSchema
+>;
+
 export const A2AProtocolListTasksResponseSchema = z.object({
   tasks: z.array(A2AProtocolTaskSchema),
   nextPageToken: z.string(),

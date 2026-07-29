@@ -136,7 +136,7 @@ export async function createAppServer(
 
   server.setRequestHandler(
     CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }) => {
+    async ({ params: { name, arguments: args } }, extra) => {
       // The synthetic launch tool just points the host at the app's UI resource.
       if (name === APP_LAUNCH_TOOL_NAME) {
         return {
@@ -168,6 +168,10 @@ export async function createAppServer(
           userId: tokenAuth.userId,
           organizationId: tokenAuth.organizationId,
           tokenAuth,
+          // Aborts when the caller gives up on the request (the route closes
+          // the transport on client disconnect), so a long dispatch — the LLM
+          // completion in particular — stops instead of running unobserved.
+          abortSignal: extra.signal,
         });
         try {
           await McpToolCallModel.create({
@@ -200,6 +204,7 @@ export async function createAppServer(
         toolCall,
         appOwner(appId),
         tokenAuth,
+        { abortSignal: extra.signal },
       );
       return {
         content: Array.isArray(result.content)

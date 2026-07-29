@@ -1,6 +1,9 @@
-import { APP_RECORDING_MAX_BUNDLE_BYTES } from "@archestra/shared";
+import {
+  APP_RECORDING_MAX_BUNDLE_BYTES,
+  APPS_HACKATHON_OPENS_AT_MS,
+} from "@archestra/shared";
 import config from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import appRecordingRoutes from "./app-recording.routes";
 
@@ -10,10 +13,17 @@ describe("POST /api/app-recordings/render", () => {
   beforeEach(async ({ makeMember }) => {
     await makeMember(ctx.user.id, ctx.organizationId);
     config.hackathonRecorder.enabled = true;
-    config.hackathonRecorder.overrideActive = true;
+    // The date gate reads the wall clock and has no bypass, so pin the clock
+    // inside the hackathon window.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(APPS_HACKATHON_OPENS_AT_MS);
     // The video export is its own opt-in on top of the recorder, so every
     // render test has to turn it on the way a deployment would.
     config.hackathonRecorder.videoDownloadEnabled = true;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   test("403s when the deployment does not offer video download", async () => {

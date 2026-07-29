@@ -29,9 +29,9 @@ import { parseFullToolName } from "./utils";
  * Outside this window the recorder hard-disables everywhere, whatever a
  * deployment or an organization still has switched on. The bounds are read at
  * REQUEST time, never captured at boot: a pod started before the window would
- * otherwise keep its answer frozen as the clock crosses either edge. The one
- * exception is the staging override, which bypasses the window entirely (see
- * the recorder route and useAppsHackathonOffered).
+ * otherwise keep its answer frozen as the clock crosses either edge. There is
+ * no bypass: the staging override forces the deployment flag on, but the
+ * window applies to every deployment equally.
  */
 export const APPS_HACKATHON_OPENS_AT_MS = Date.UTC(2026, 6, 21, 23, 0, 0);
 export const APPS_HACKATHON_CLOSES_AT_MS = Date.UTC(2026, 6, 30, 0, 0, 0);

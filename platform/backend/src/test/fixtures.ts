@@ -449,13 +449,19 @@ async function makeApp(
   // (catalog authorId + personal-scope access checks).
   const authorId = appOverrides.authorId ?? (await makeUser()).id;
 
+  const name =
+    appOverrides.name ?? `Test App ${crypto.randomUUID().substring(0, 8)}`;
+
   const created = await AppModel.create({
     app: {
-      name: `Test App ${crypto.randomUUID().substring(0, 8)}`,
+      // Derived like the real create paths, so fixtures carry the slug a
+      // production app has; a test that pins one overrides it below.
+      slug: await AppModel.generateUniqueSlug({ name, organizationId }),
       // Default to a live (enabled) app so existing tests exercise normal
       // visibility/consumption; disabled-specific tests pass `enabled: false`.
       enabled: true,
       ...appOverrides,
+      name,
       authorId,
       organizationId,
     },

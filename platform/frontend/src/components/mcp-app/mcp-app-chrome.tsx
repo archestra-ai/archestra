@@ -15,6 +15,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { appRunUrl } from "@/lib/apps/app-run-url";
 import { cn } from "@/lib/utils";
 
 /** Ghost icon + text button shared by the app top bar's labeled actions. */
@@ -132,10 +133,11 @@ export function McpAppFullscreenExitButton({
 }
 
 export function McpAppStandaloneButton({
-  appId,
+  app,
   disabled = false,
 }: {
-  appId: string;
+  /** Slug-first when the app is resolved; the id alone still opens the page. */
+  app: { id: string; slug?: string | null };
   /**
    * Disabled while a recording is in progress: a new tab loads a fresh,
    * unrecorded app instance, so opening one mid-recording would silently drop
@@ -179,7 +181,7 @@ export function McpAppStandaloneButton({
       size="sm"
       className={LABELED_BUTTON_CLASS}
     >
-      <Link href={`/a/${appId}`} target="_blank" rel="noreferrer">
+      <Link href={appRunUrl(app)} target="_blank" rel="noreferrer">
         <SquareArrowOutUpRight className="h-3.5 w-3.5" />
         Open in new tab
       </Link>

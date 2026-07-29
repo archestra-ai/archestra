@@ -1611,7 +1611,7 @@ describe("createAgentServer tools/list", () => {
       iconLogo: null,
     });
 
-    const { server } = await createAgentServer(agent.id);
+    const { server } = await createAgentServer({ agentId: agent.id });
     const listToolsHandler = (
       server.server as unknown as {
         _requestHandlers: Map<string, TestListToolsHandler>;
@@ -1647,7 +1647,7 @@ describe("createAgentServer tools/list", () => {
       toolExposureMode: "search_and_run_only",
     });
 
-    const { server } = await createAgentServer(agent.id);
+    const { server } = await createAgentServer({ agentId: agent.id });
     const listToolsHandler = (
       server.server as unknown as {
         _requestHandlers: Map<string, TestListToolsHandler>;
@@ -1696,13 +1696,16 @@ describe("createAgentServer tools/list", () => {
       });
       await seedAndAssignArchestraTools(agent.id);
 
-      const { server } = await createAgentServer(agent.id, {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: org.id,
-        isUserToken: true,
-        userId: adminUser.id,
+      const { server } = await createAgentServer({
+        agentId: agent.id,
+        tokenAuth: {
+          tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          isUserToken: true,
+          userId: adminUser.id,
+        },
       });
       const listToolsHandler = (
         server.server as unknown as {
@@ -1782,13 +1785,16 @@ describe("createAgentServer tools/list", () => {
     await makeAgentTool(agent.id, uiTool.id);
     await makeAgentTool(agent.id, plainTool.id);
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -1854,13 +1860,16 @@ describe("createAgentServer tools/list", () => {
     });
     await makeAgentTool(agent.id, uiTool.id);
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -1924,13 +1933,16 @@ describe("createAgentServer tools/list", () => {
         },
       });
 
-      const { server } = await createAgentServer(agent.id, {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: org.id,
-        isUserToken: true,
-        userId: user.id,
+      const { server } = await createAgentServer({
+        agentId: agent.id,
+        tokenAuth: {
+          tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          isUserToken: true,
+          userId: user.id,
+        },
       });
       const listToolsHandler = (
         server.server as unknown as {
@@ -1988,13 +2000,16 @@ describe("createAgentServer tools/list", () => {
       },
     });
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -2069,13 +2084,16 @@ describe("createAgentServer tools/list", () => {
       excludedToolIds: [excludedTool.id],
     });
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -2131,13 +2149,16 @@ describe("createAgentServer tools/list", () => {
       meta: { _meta: { ui: { resourceUri: "ui://archestra-app/get-time" } } },
     });
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -2191,13 +2212,16 @@ describe("createAgentServer tools/list", () => {
         accessAllTools: true,
         agentType,
       });
-      const { server } = await createAgentServer(agent.id, {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: org.id,
-        isUserToken: true,
-        userId: user.id,
+      const { server } = await createAgentServer({
+        agentId: agent.id,
+        tokenAuth: {
+          tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          isUserToken: true,
+          userId: user.id,
+        },
       });
       const handler = (
         server.server as unknown as {
@@ -2254,13 +2278,16 @@ describe("createAgentServer tools/list", () => {
     });
     await makeAgentTool(agent.id, openTool.id);
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -2315,13 +2342,16 @@ describe("createAgentServer tools/list", () => {
     });
     await makeAgentTool(agent.id, openTool.id);
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -2365,13 +2395,16 @@ describe("createAgentServer tools/list", () => {
     });
     await makeAgentTool(agent.id, uiTool.id);
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -2428,13 +2461,16 @@ describe("createAgentServer tools/list", () => {
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -2500,13 +2536,16 @@ describe("createAgentServer tools/list", () => {
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -2571,13 +2610,16 @@ describe("createAgentServer tools/list", () => {
     });
     await makeMcpServer({ catalogId: dynamicCatalog.id, scope: "org" });
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -2639,7 +2681,7 @@ describe("createAgentServer tools/list", () => {
     await makeAgentTool(agent.id, httpsTool.id);
     await makeAgentTool(agent.id, maskedLegacyTool.id);
 
-    const { server } = await createAgentServer(agent.id);
+    const { server } = await createAgentServer({ agentId: agent.id });
     const listToolsHandler = (
       server.server as unknown as {
         _requestHandlers: Map<string, TestListToolsHandler>;
@@ -2687,7 +2729,7 @@ describe("createAgentServer tools/list", () => {
     // No tokenAuth: dynamic access is user-scoped, so without a user there is
     // no accessible-tool set to widen from — the listing must succeed with the
     // tool absent, not throw.
-    const { server } = await createAgentServer(agent.id);
+    const { server } = await createAgentServer({ agentId: agent.id });
     const listToolsHandler = (
       server.server as unknown as {
         _requestHandlers: Map<string, TestListToolsHandler>;
@@ -2738,13 +2780,16 @@ describe("createAgentServer tools/list", () => {
     await makeAgentTool(agent.id, uiTool.id);
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -2803,13 +2848,16 @@ describe("createAgentServer tools/list", () => {
     });
     await makeMcpServer({ catalogId: catalog.id, scope: "org" });
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -2887,13 +2935,16 @@ describe("createAgentServer tools/list", () => {
       });
 
     try {
-      const { server } = await createAgentServer(agent.id, {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: org.id,
-        isUserToken: true,
-        userId: user.id,
+      const { server } = await createAgentServer({
+        agentId: agent.id,
+        tokenAuth: {
+          tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          isUserToken: true,
+          userId: user.id,
+        },
       });
       const callToolHandler = (
         server.server as unknown as {
@@ -2975,13 +3026,16 @@ describe("createAgentServer tools/list", () => {
     );
 
     try {
-      const { server } = await createAgentServer(agent.id, {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: org.id,
-        isUserToken: true,
-        userId: user.id,
+      const { server } = await createAgentServer({
+        agentId: agent.id,
+        tokenAuth: {
+          tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          isUserToken: true,
+          userId: user.id,
+        },
       });
       const callToolHandler = (
         server.server as unknown as {
@@ -3047,13 +3101,16 @@ describe("createAgentServer tools/list", () => {
     await seedAndAssignArchestraTools(chatAgent.id);
 
     const listFor = async (agentId: string) => {
-      const { server } = await createAgentServer(agentId, {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: org.id,
-        isUserToken: true,
-        userId: user.id,
+      const { server } = await createAgentServer({
+        agentId: agentId,
+        tokenAuth: {
+          tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          isUserToken: true,
+          userId: user.id,
+        },
       });
       const listToolsHandler = (
         server.server as unknown as {
@@ -3103,13 +3160,16 @@ describe("createAgentServer tools/list", () => {
     });
 
     const callRenderApp = async (agentId: string) => {
-      const { server } = await createAgentServer(agentId, {
-        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: org.id,
-        isUserToken: true,
-        userId: user.id,
+      const { server } = await createAgentServer({
+        agentId: agentId,
+        tokenAuth: {
+          tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          isUserToken: true,
+          userId: user.id,
+        },
       });
       const callToolHandler = (
         server.server as unknown as {
@@ -3189,7 +3249,7 @@ describe("createAgentServer tools/list", () => {
     });
     await makeAgentTool(agent.id, notesTool.id);
 
-    const { server } = await createAgentServer(agent.id);
+    const { server } = await createAgentServer({ agentId: agent.id });
     const listToolsHandler = (
       server.server as unknown as {
         _requestHandlers: Map<string, TestListToolsHandler>;
@@ -3248,7 +3308,7 @@ describe("createAgentServer tools/list", () => {
       await makeAgentTool(agent.id, tool.id);
     }
 
-    const { server } = await createAgentServer(agent.id);
+    const { server } = await createAgentServer({ agentId: agent.id });
     const listToolsHandler = (
       server.server as unknown as {
         _requestHandlers: Map<string, TestListToolsHandler>;
@@ -3316,13 +3376,16 @@ describe("createAgentServer tools/list", () => {
     });
     await makeMcpServer({ catalogId: discoverableCatalog.id, scope: "org" });
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: user.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
     });
     const listToolsHandler = (
       server.server as unknown as {
@@ -3364,13 +3427,16 @@ describe("createAgentServer tools/list", () => {
     });
     await seedAndAssignArchestraTools(agent.id);
 
-    const { server } = await createAgentServer(agent.id, {
-      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
-      teamId: null,
-      isOrganizationToken: false,
-      organizationId: org.id,
-      isUserToken: true,
-      userId: adminUser.id,
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: adminUser.id,
+      },
     });
     const callToolHandler = (
       server.server as unknown as {
@@ -3433,7 +3499,7 @@ describe("createAgentServer tools/list", () => {
       });
 
     try {
-      const { server } = await createAgentServer(agent.id);
+      const { server } = await createAgentServer({ agentId: agent.id });
       const callToolHandler = (
         server.server as unknown as {
           _requestHandlers: Map<string, TestCallToolHandler>;
@@ -3555,7 +3621,7 @@ describe("createAgentServer tools/list", () => {
     await makeAgentTool(agent.id, brokenTool.id);
     await makeAgentTool(agent.id, healthyTool.id);
 
-    const { server } = await createAgentServer(agent.id);
+    const { server } = await createAgentServer({ agentId: agent.id });
     const listToolsHandler = (
       server.server as unknown as {
         _requestHandlers: Map<string, TestListToolsHandler>;

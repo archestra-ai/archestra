@@ -105,9 +105,21 @@ import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
 import {
+  buildInputRequiredResult,
+  clientSupportsInputRequest,
+  deriveStatePrincipal,
+  encodeRequestState,
+  GATEWAY_INPUT_REQUEST_KEY,
+  InputRequiredSignal,
+  type InputResponses,
+  isInputRequiredSignal,
+  MAX_INPUT_ROUNDS,
+} from "./mcp-gateway.mrtr";
+import {
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
+  withCompleteResultEnvelope,
   withPrivateCacheHint,
 } from "./mcp-gateway.protocol";
 
@@ -226,10 +238,33 @@ const rawArchestraTokenCache =
 /**
  * Creates an MCP server for the given agent.
  */
-export async function createAgentServer(
-  agentId: string,
-  tokenAuth?: TokenAuthContext,
-): Promise<{ server: McpServer; agent: AgentInfo }> {
+export async function createAgentServer(params: {
+  agentId: string;
+  tokenAuth?: TokenAuthContext;
+  /**
+   * Answers the client supplied on an MRTR retry, keyed as they were issued.
+   * Absent on a first attempt, which is what makes the gateway elicit.
+   */
+  mrtr?: {
+    enabled: boolean;
+    inputResponses?: InputResponses;
+    clientCapabilities?: unknown;
+    /** Rounds already spent, read from a verified requestState. */
+    round?: number;
+  };
+}): Promise<{ server: McpServer; agent: AgentInfo }> {
+  const { agentId, tokenAuth, mrtr } = params;
+  const mrtrEnabled = mrtr?.enabled === true;
+
+  /**
+   * Stamp an ordinary result. Deliberately not applied to the MRTR
+   * InputRequiredResult, which carries `input_required` instead.
+   */
+  const complete = <T extends object>(result: T): T =>
+    withCompleteResultEnvelope(result, {
+      name: `archestra-agent-${agentId}`,
+      version: config.api.version,
+    });
   const mcpServer = new McpServer(
     {
       name: `archestra-agent-${agentId}`,
@@ -508,7 +543,12 @@ export async function createAgentServer(
 
     // SEP-2549 freshness hints. Always private: this list is filtered per
     // caller, so it must never be shared across users by an intermediary.
-    return { tools: toolsList, ...buildPrivateListCacheHint() };
+    // Deterministic order: the revision asks servers to return tools stably so
+    // client-side caching and LLM prompt caches can actually hit. Without it
+    // the ttlMs hint above advertises freshness for a list that reshuffles.
+    toolsList.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+
+    return complete({ tools: toolsList, ...buildPrivateListCacheHint() });
   });
 
   server.setRequestHandler(
@@ -524,7 +564,7 @@ export async function createAgentServer(
           { agentId, uri, resultType: typeof result },
           "Resource read successful",
         );
-        return withPrivateCacheHint(result);
+        return complete(withPrivateCacheHint(result));
       } catch (error) {
         // A third-party tool can advertise a `ui://` UI resource whose upstream
         // server does not actually implement `resources/read` (returning -32601
@@ -560,20 +600,22 @@ export async function createAgentServer(
   // servers reached with the caller's own credentials, so results differ per
   // caller and must not be shared by an intermediary.
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return withPrivateCacheHint(
-      await mcpClient.listResources(agentId, tokenAuth),
+    return complete(
+      withPrivateCacheHint(await mcpClient.listResources(agentId, tokenAuth)),
     );
   });
 
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-    return withPrivateCacheHint(
-      await mcpClient.listResourceTemplates(agentId, tokenAuth),
+    return complete(
+      withPrivateCacheHint(
+        await mcpClient.listResourceTemplates(agentId, tokenAuth),
+      ),
     );
   });
 
   server.setRequestHandler(ListPromptsRequestSchema, async () => {
-    return withPrivateCacheHint(
-      await mcpClient.listPrompts(agentId, tokenAuth),
+    return complete(
+      withPrivateCacheHint(await mcpClient.listPrompts(agentId, tokenAuth)),
     );
   });
 
@@ -877,6 +919,27 @@ export async function createAgentServer(
               {
                 availableTool,
                 elicitationHandler: async (request) => {
+                  // MRTR: a retry already carries the answer, so consume it
+                  // instead of asking again.
+                  const supplied =
+                    mrtr?.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
+                  if (supplied !== undefined) {
+                    return ElicitResultSchema.parse(supplied);
+                  }
+
+                  // Under 2026-07-28 a server may not open a request mid-call,
+                  // so unwind and let the handler answer with an
+                  // InputRequiredResult carrying this request.
+                  if (mrtrEnabled) {
+                    throw new InputRequiredSignal({
+                      key: GATEWAY_INPUT_REQUEST_KEY,
+                      request: {
+                        method: "elicitation/create",
+                        params: request.params as Record<string, unknown>,
+                      },
+                    });
+                  }
+
                   try {
                     return await extra.sendRequest(request, ElicitResultSchema);
                   } catch (error) {
@@ -944,6 +1007,61 @@ export async function createAgentServer(
           structuredContent: result.structuredContent,
         };
       } catch (error) {
+        // MRTR: not a failure. The call needs input the gateway does not have,
+        // so it answers with an InputRequiredResult and the client retries the
+        // whole call with the answer attached. Handled before the metrics below
+        // so it is not counted as an errored tool call.
+        if (isInputRequiredSignal(error)) {
+          if (
+            !clientSupportsInputRequest({
+              clientCapabilities: mrtr?.clientCapabilities,
+              request: error.request,
+            })
+          ) {
+            // Asking a client for something it never declared is forbidden, and
+            // it could not answer anyway — fail with a result the model can act
+            // on rather than eliciting into the void.
+            return structuredToolErrorResult({
+              error: {
+                type: "generic",
+                message: `This tool needs ${error.request.method}, which this client does not support.`,
+              },
+            });
+          }
+
+          const nextRound = (mrtr?.round ?? 0) + 1;
+          if (nextRound > MAX_INPUT_ROUNDS) {
+            // Each round re-runs the tool from the top, so an upstream that
+            // keeps asking would re-execute its side effects once per round
+            // and prompt the user indefinitely. Stop rather than loop.
+            logger.warn(
+              { agentId, toolName: name, rounds: nextRound },
+              "MCP tool exceeded the input-round cap; refusing to elicit again",
+            );
+            return structuredToolErrorResult({
+              error: {
+                type: "generic",
+                message: `This tool asked for input more than ${MAX_INPUT_ROUNDS} times without completing.`,
+              },
+            });
+          }
+
+          return buildInputRequiredResult({
+            inputRequests: { [error.key]: error.request },
+            requestState: encodeRequestState({
+              round: nextRound,
+              principal: deriveStatePrincipal({
+                userId: tokenAuth?.userId,
+                tokenId: tokenAuth?.tokenId,
+                organizationId: tokenAuth?.organizationId,
+              }),
+              method: "tools/call",
+              requestParams: { name, arguments: args ?? {} },
+              keys: [error.key],
+            }),
+          });
+        }
+
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.mcp.reportMcpToolCall({
           agentId: agent.id,

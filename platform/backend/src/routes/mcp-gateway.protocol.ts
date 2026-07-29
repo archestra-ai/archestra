@@ -119,6 +119,35 @@ export function buildPrivateListCacheHint(): CacheHint {
 }
 
 /**
+ * `_meta` key servers use to identify themselves on each result, replacing what
+ * `initialize` reported once per connection.
+ */
+export const MCP_SERVER_INFO_META_KEY = "io.modelcontextprotocol/serverInfo";
+
+/**
+ * Stamp a result as an ordinary, complete one and identify the server.
+ *
+ * Every result carries `resultType` in this revision; `complete` is the
+ * ordinary case, as opposed to the `input_required` interim result MRTR
+ * returns. Older clients treat a missing field as `complete`, so emitting it
+ * unconditionally is safe for both revisions.
+ */
+export function withCompleteResultEnvelope<T extends object>(
+  result: T,
+  serverInfo: { name: string; version: string },
+): T {
+  const existingMeta = (result as { _meta?: Record<string, unknown> })._meta;
+  return {
+    ...result,
+    resultType: COMPLETE_RESULT_TYPE,
+    _meta: {
+      ...existingMeta,
+      [MCP_SERVER_INFO_META_KEY]: serverInfo,
+    },
+  } as T;
+}
+
+/**
  * Attach cache hints to a result produced elsewhere (e.g. proxied from an
  * upstream server) without disturbing its existing fields.
  */

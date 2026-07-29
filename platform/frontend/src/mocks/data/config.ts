@@ -55,7 +55,6 @@ export function makeConfig(
       chatopsTelegramEnabled: false,
       kbAutoSyncPermissionsEnabled: false,
       hackathonRecorderEnabled: true,
-      hackathonRecorderOverrideActive: false,
       // Off by default, exactly as a real deployment has it.
       hackathonVideoDownloadEnabled: false,
       hackathonMaxFinalCutMs: APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,

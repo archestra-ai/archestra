@@ -943,6 +943,10 @@ export async function seedDefaultAppsForPristineOrgs(): Promise<void> {
               organizationId: org.id,
               authorId: admin.userId,
               name: definition.name,
+              slug: await AppModel.generateUniqueSlug({
+                name: definition.name,
+                organizationId: org.id,
+              }),
               description: definition.description,
               templateId: definition.templateId,
             },

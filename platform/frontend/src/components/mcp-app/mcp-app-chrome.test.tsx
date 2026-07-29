@@ -17,15 +17,25 @@ vi.mock("next/link", () => ({
 
 describe("address-pill action buttons", () => {
   it("opens the owned app's standalone run page in a new tab", () => {
-    render(<McpAppStandaloneButton appId="app-123" />);
+    render(<McpAppStandaloneButton app={{ id: "app-123" }} />);
 
     const link = screen.getByRole("link", { name: /open in new tab/i });
     expect(link).toHaveAttribute("href", "/a/app-123");
     expect(link).toHaveAttribute("target", "_blank");
   });
 
+  it("addresses the app by its slug when it has one", () => {
+    render(
+      <McpAppStandaloneButton app={{ id: "app-123", slug: "sales-board" }} />,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /open in new tab/i }),
+    ).toHaveAttribute("href", "/a/sales-board");
+  });
+
   it("disables opening a new tab while a recording is in progress", () => {
-    render(<McpAppStandaloneButton appId="app-123" disabled />);
+    render(<McpAppStandaloneButton app={{ id: "app-123" }} disabled />);
 
     // No link to a fresh, unrecorded instance — just a disabled button.
     expect(

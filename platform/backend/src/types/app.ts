@@ -2,6 +2,7 @@ import { ResourceVisibilityScopeSchema } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { isUuid } from "@/utils/uuid";
 import { AppRenderDiagnosticEntrySchema } from "./app-diagnostics";
 import { AppSpecSchema } from "./app-spec";
 import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials";
@@ -44,6 +45,36 @@ export const APP_DATA_MAX_VALUE_BYTES = 256 * 1024;
 /** Max number of keys a single app may persist in its data store. */
 export const APP_DATA_MAX_ENTRIES = 1000;
 export const APP_DATA_KEY_MAX_LENGTH = 256;
+
+// Slug segments the app run page can never serve, because a static Next.js
+// segment under /a/ shadows the dynamic [appId] one. Only `catalog` today
+// (frontend/src/app/a/catalog/[catalogId]); extend this when a sibling is added.
+const RESERVED_APP_SLUGS = new Set(["catalog"]);
+
+/** @public — AppModel.generateUniqueSlug must avoid these too, not just input. */
+export function isReservedAppSlug(slug: string): boolean {
+  return RESERVED_APP_SLUGS.has(slug);
+}
+
+/**
+ * The `/a/<slug>` URL segment: lowercase alphanumerics in hyphen-separated
+ * groups, so it round-trips through {@link urlSlugify} unchanged. A UUID-shaped
+ * slug is refused because the run page resolves a segment against `id` OR
+ * `slug`, so one would shadow whichever app actually owns that id.
+ */
+export const AppSlugSchema = z
+  .string()
+  .min(1)
+  .max(APP_NAME_MAX_LENGTH)
+  .regex(
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+    "Use lowercase letters, numbers and single hyphens, e.g. sales-dashboard.",
+  )
+  .refine((s) => !isUuid(s), "A URL cannot be a UUID.")
+  .refine(
+    (s) => !isReservedAppSlug(s),
+    "That URL is reserved by the platform.",
+  );
 
 /**
  * Shape of the platform-pinned CSP (APP_PLATFORM_CSP) and the snapshotted
@@ -90,6 +121,9 @@ const AppListItemBaseSchema = z.object({
 export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
   source: z.literal("owned"),
   id: z.string(),
+  // The card's standalone-page link prefers this over `id`. Owned apps only —
+  // an external app is addressed by its catalog id, which has no slug.
+  slug: z.string().nullable(),
   scope: AppScopeSchema,
   authorId: z.string().nullable(),
   // The author's display name, for the personal-scope badge — an app admin
@@ -247,6 +281,8 @@ const htmlField = z
 
 export const CreateAppSchema = z.object({
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH),
+  // Omitted: derived from the name (AppModel.generateUniqueSlug).
+  slug: AppSlugSchema.optional(),
   description: z.string().max(APP_DESCRIPTION_MAX_LENGTH).optional(),
   scope: AppScopeSchema.optional(),
   // html is optional: supply it to seed explicitly, otherwise the single
@@ -320,6 +356,8 @@ export const AppTemplateSchema = z.object({
 
 export const UpdateAppSchema = z.object({
   name: z.string().min(1).max(APP_NAME_MAX_LENGTH).optional(),
+  // Changing this breaks links that used the old slug; /a/<id> keeps working.
+  slug: AppSlugSchema.optional(),
   description: z.string().max(APP_DESCRIPTION_MAX_LENGTH).nullable().optional(),
   scope: AppScopeSchema.optional(),
   // Supplying html forks a new immutable version (no-op forks are suppressed).

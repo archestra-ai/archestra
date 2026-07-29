@@ -111,8 +111,12 @@ describe("resolveBedrockAwsPrices", () => {
     // family at one legacy rate; mapping a specific model onto one is the
     // failure this guards.
     const GENERIC = new Set(["Claude", "Claude Opus 4", "Amazon Bedrock"]);
-    for (const identity of Object.values(AWS_PRICE_IDENTITY)) {
+    for (const [modelId, identity] of Object.entries(AWS_PRICE_IDENTITY)) {
       expect(GENERIC.has(identity)).toBe(false);
+      // The identity is transcribed from AWS by hand, so a typo — or a listing
+      // AWS renames on a later refresh — resolves to nothing and drops the
+      // model onto the fabricated estimate without failing anything else.
+      expect(resolve(modelId)).not.toBeNull();
     }
   });
 });

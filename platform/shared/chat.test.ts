@@ -13,6 +13,8 @@ import {
   isInlineableTextMimeType,
   OUTPUT_MODALITY_OPTIONS,
   parseSandboxCommand,
+  toConversationTitle,
+  toPlaceholderTitle,
 } from "./chat";
 
 const VALID_BREAKDOWN = {
@@ -534,5 +536,90 @@ describe("parseSandboxCommand", () => {
     expect(parseSandboxCommand("")).toBeNull();
     expect(parseSandboxCommand("/compact")).toBeNull();
     expect(parseSandboxCommand("what does ! mean in bash?")).toBeNull();
+  });
+});
+
+describe("toPlaceholderTitle", () => {
+  test("flattens a multi-line prompt onto one line", () => {
+    expect(toPlaceholderTitle("Review this\n\n- one\n- two")).toBe(
+      "Review this - one - two",
+    );
+  });
+
+  // A sentence terminator is not a title boundary: "1. Fix it" is a list
+  // marker, not a one-word sentence, and "3.5" is not a sentence at all.
+  test("does not stop at the first sentence or list marker", () => {
+    expect(toPlaceholderTitle("1. Fix it. Then test.")).toBe(
+      "1. Fix it. Then test.",
+    );
+    expect(toPlaceholderTitle("Round 3.5 up")).toBe("Round 3.5 up");
+  });
+
+  test("truncates a prompt that runs long", () => {
+    const title = toPlaceholderTitle(`${"word ".repeat(100)}end`);
+
+    // At most 30 characters plus the ellipsis; a trailing space is dropped
+    // before the ellipsis rather than being padded back out.
+    expect(title.length).toBeLessThanOrEqual(31);
+    expect(title.endsWith("…")).toBe(true);
+  });
+
+  test("does not cut an emoji in half", () => {
+    // The odd-length prefix puts the 30th UTF-16 unit inside a surrogate pair,
+    // so a raw slice would leave an unpaired surrogate in the stored title.
+    const title = toPlaceholderTitle(`Debug my ${"🐛".repeat(40)} now`);
+
+    expect(title).toBe(`Debug my ${"🐛".repeat(21)}…`);
+    expect(title).not.toMatch(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/,
+    );
+  });
+
+  test("leaves a short prompt whole, with no ellipsis", () => {
+    expect(toPlaceholderTitle("Short prompt")).toBe("Short prompt");
+  });
+
+  test("returns an empty string for an empty prompt", () => {
+    expect(toPlaceholderTitle("")).toBe("");
+    expect(toPlaceholderTitle("   \n  ")).toBe("");
+  });
+});
+
+describe("toConversationTitle", () => {
+  test("accepts a short line, normalizing quotes and line breaks", () => {
+    expect(toConversationTitle('"React\n  Component   Basics"')).toEqual({
+      title: "React Component Basics",
+    });
+  });
+
+  test("rejects a response with no visible text", () => {
+    expect(toConversationTitle("")).toEqual({
+      title: null,
+      reason: "empty_response",
+    });
+    // Quotes with nothing inside them are equally unusable.
+    expect(toConversationTitle(' " " ')).toEqual({
+      title: null,
+      reason: "empty_response",
+    });
+  });
+
+  test("rejects a paragraph the model wrote instead of a title", () => {
+    expect(toConversationTitle("word ".repeat(500))).toEqual({
+      title: null,
+      reason: "not_a_title",
+    });
+  });
+
+  test("measures the cap in characters, not UTF-16 units", () => {
+    // 80 emoji are 160 UTF-16 units. Capping by `.length` would reject a title
+    // that is exactly as long as the limit allows.
+    expect(toConversationTitle("🐛".repeat(80))).toEqual({
+      title: "🐛".repeat(80),
+    });
+    expect(toConversationTitle("🐛".repeat(81))).toEqual({
+      title: null,
+      reason: "not_a_title",
+    });
   });
 });

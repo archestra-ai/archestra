@@ -57,12 +57,15 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     await app.close();
   });
 
-  /** Creates an untitled conversation holding one user/assistant exchange. */
-  async function makeConversationWithExchange(agentId: string) {
+  /**
+   * Creates a conversation holding one user/assistant exchange, untitled unless
+   * a placeholder is given (what the client sends when it opens a new chat).
+   */
+  async function makeConversationWithExchange(agentId: string, title?: string) {
     const createResponse = await app.inject({
       method: "POST",
       url: "/api/chat/conversations",
-      payload: { agentId },
+      payload: title ? { agentId, title } : { agentId },
     });
     expect(createResponse.statusCode).toBe(200);
     const conversation = createResponse.json();
@@ -184,6 +187,121 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().title).toBe("Friendly greeting");
     expect(mockGenerateText).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps the placeholder when the model answers instead of titling", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // A new chat is created holding the opening words of the first message, and
+    // the client asks for a regeneration over that placeholder. When the model
+    // replies to the conversation rather than naming it, persisting a truncated
+    // answer would read worse in the sidebar than the placeholder — so the
+    // route settles on the placeholder, which here is already the stored title.
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await makeConversationWithExchange(agent.id, "Hi!");
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      scope: "org",
+      name: "Anthropic",
+    });
+    const model = await makeModelRow("anthropic", "claude-sonnet-5");
+    await setOrganizationDefaultLlm(model.id, apiKey.id);
+
+    mockGenerateText.mockResolvedValue({
+      text: "Hello there! I am happy to help you with anything you need. ".repeat(
+        5,
+      ),
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: { regenerate: true },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().title).toBe("Hi!");
+  });
+
+  test("titles an untitled conversation from its opening words when the model answers instead", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Conversations opened outside the chat UI carry no placeholder, so there is
+    // nothing to fall back to on the client. The route derives one from the
+    // first message rather than leaving the chat permanently untitled.
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await makeConversationWithExchange(agent.id);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      scope: "org",
+      name: "Anthropic",
+    });
+    const model = await makeModelRow("anthropic", "claude-sonnet-5");
+    await setOrganizationDefaultLlm(model.id, apiKey.id);
+
+    mockGenerateText.mockResolvedValue({
+      text: "Hello there! I am happy to help you with anything you need. ".repeat(
+        5,
+      ),
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().title).toBe("Hi!");
+  });
+
+  test("falls back to the opening words when the provider call fails", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await makeConversationWithExchange(agent.id);
+
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      scope: "org",
+      name: "Anthropic",
+    });
+    const model = await makeModelRow("anthropic", "claude-sonnet-5");
+    await setOrganizationDefaultLlm(model.id, apiKey.id);
+
+    mockGenerateText.mockRejectedValue(new Error("provider unavailable"));
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().title).toBe("Hi!");
   });
 
   test("returns 200 (not 500) when the conversation is deleted mid-generation", async ({

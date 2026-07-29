@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  collapseWhitespace,
+  exceedsCharLimit,
+  stripWrappingQuotes,
+  truncateCharsWithEllipsis,
+} from "./utils";
 
 // ============================================================================
 // Token Usage Types
@@ -138,6 +144,74 @@ export const ContextWindowBreakdownSchema = z.object({
 export type ContextWindowBreakdown = z.infer<
   typeof ContextWindowBreakdownSchema
 >;
+
+// ============================================================================
+// Conversation Titles
+// ============================================================================
+
+/**
+ * Longest title generation may return. A response longer than this is a model
+ * answering the conversation rather than naming it, so it is discarded instead
+ * of truncated and the conversation falls back to a placeholder.
+ */
+const CONVERSATION_TITLE_MAX_CHARS = 80;
+
+/** Longest placeholder title, before the ellipsis that marks the cut. */
+const PLACEHOLDER_TITLE_MAX_CHARS = 30;
+
+/**
+ * Shape a user's opening prompt into something title-like: a single line,
+ * capped. A new conversation is created with this as its title until the server
+ * generates a real one, and the server settles on it when the model declines to
+ * name the conversation.
+ *
+ * Shared deliberately: the client decides whether a stored title is still a
+ * placeholder by comparing against this exact string, so a second
+ * implementation that shaped even one character differently would leave those
+ * conversations asking to be retitled forever.
+ */
+export function toPlaceholderTitle(raw: string): string {
+  return truncateCharsWithEllipsis(
+    collapseWhitespace(raw),
+    PLACEHOLDER_TITLE_MAX_CHARS,
+  );
+}
+
+/** Why a title generation response could not be used as a title. */
+export type TitleRejectionReason = "empty_response" | "not_a_title";
+
+export type ConversationTitleResult =
+  | { title: string; reason?: never }
+  | { title: null; reason: TitleRejectionReason };
+
+/**
+ * Read a title generation response as a conversation title, or say why it is
+ * not one.
+ *
+ * A model that followed the 3-6 word instruction returns one short line, which
+ * some wrap in quotes. Anything else is not a title: no visible text (a
+ * reasoning model that spent its whole output ceiling thinking) or a paragraph
+ * (a model that answered the conversation instead of naming it). Those are
+ * rejected rather than truncated, so the caller can settle on a placeholder
+ * taken from the user's own opening prompt — a better sidebar entry than half
+ * an answer. The reason is carried out so the caller can log which happened.
+ *
+ * Lives here next to {@link toPlaceholderTitle} because the two together define
+ * what a conversation title may be; the cap is meaningless apart from them.
+ */
+export function toConversationTitle(raw: string): ConversationTitleResult {
+  const candidate = stripWrappingQuotes(collapseWhitespace(raw));
+
+  if (!candidate) {
+    return { title: null, reason: "empty_response" };
+  }
+
+  if (exceedsCharLimit(candidate, CONVERSATION_TITLE_MAX_CHARS)) {
+    return { title: null, reason: "not_a_title" };
+  }
+
+  return { title: candidate };
+}
 
 // ============================================================================
 // Chat Message Part Types

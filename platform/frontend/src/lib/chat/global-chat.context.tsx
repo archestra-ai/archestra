@@ -57,7 +57,7 @@ import {
 } from "@/lib/chat/chat-session-utils";
 import {
   getChatExternalAgentId,
-  getConversationDisplayTitle,
+  isPlaceholderTitle,
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
 import appConfig from "@/lib/config/config";
@@ -685,18 +685,23 @@ function ChatSessionHook({
         "conversation",
         conversationId,
       ])?.title;
-      const firstUserText = getConversationDisplayTitle(null, stableMessages);
+      // A new chat is created with the opening prompt as its title, so a stored
+      // title is not proof the server ever titled this chat.
+      const hasPlaceholderTitle = isPlaceholderTitle(
+        cachedTitle,
+        stableMessages,
+      );
 
       const shouldGenerateTitle =
         !titleGenerationAttemptedRef.current &&
-        (!cachedTitle || cachedTitle === firstUserText);
+        (!cachedTitle || hasPlaceholderTitle);
 
       if (shouldGenerateTitle) {
         titleGenerationAttemptedRef.current = true;
         generateTitleMutation.mutate(
           {
             id: conversationId,
-            regenerate: cachedTitle === firstUserText,
+            regenerate: hasPlaceholderTitle,
           },
           {
             onSuccess: (data) => {

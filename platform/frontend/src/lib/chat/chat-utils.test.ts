@@ -1,4 +1,5 @@
 import type { UIMessage } from "@ai-sdk/react";
+import { toPlaceholderTitle } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   applyFeedbackToMessages,
@@ -8,6 +9,7 @@ import {
   getConversationDisplayTitle,
   getManualCompactionSkippedMessage,
   getMessageFeedback,
+  isPlaceholderTitle,
   mergePersistedMessageMetadata,
   migrateLegacyNewChatDraft,
   NEW_CHAT_DRAFT_STORAGE_KEY,
@@ -102,6 +104,59 @@ describe("getConversationDisplayTitle", () => {
     );
   });
 
+  it("flattens a multi-line prompt onto one line", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "Review this\n\n- one\n- two" }],
+      },
+    ];
+
+    expect(getConversationDisplayTitle(null, messages)).toBe(
+      "Review this - one - two",
+    );
+  });
+
+  it("does not stop at the first sentence or list marker", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "1. Fix it. Then test." }],
+      },
+    ];
+
+    expect(getConversationDisplayTitle(null, messages)).toBe(
+      "1. Fix it. Then test.",
+    );
+  });
+
+  it("truncates a prompt that runs long", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: `${"word ".repeat(100)}end` }],
+      },
+    ];
+
+    const title = getConversationDisplayTitle(null, messages);
+
+    // At most 30 characters plus the ellipsis; a trailing space is dropped
+    // before the ellipsis rather than being padded back out.
+    expect(title.length).toBeLessThanOrEqual(31);
+    expect(title.endsWith("…")).toBe(true);
+  });
+
+  it("does not imply truncation when the whole prompt is shown", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "Short prompt" }],
+      },
+    ];
+
+    expect(getConversationDisplayTitle(null, messages)).toBe("Short prompt");
+  });
+
   it("returns default session name when no title and no messages", () => {
     expect(getConversationDisplayTitle(null, [])).toBe(DEFAULT_SESSION_NAME);
     expect(getConversationDisplayTitle(null, undefined)).toBe(
@@ -143,6 +198,49 @@ describe("getConversationDisplayTitle", () => {
     expect(getConversationDisplayTitle(null, messages)).toBe(
       DEFAULT_SESSION_NAME,
     );
+  });
+
+  it("returns default session name for a prompt of only whitespace", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "  \n\t " }],
+      },
+    ];
+
+    // Shaping this prompt leaves nothing; a blank sidebar row is worse than
+    // the default name.
+    expect(getConversationDisplayTitle(null, messages)).toBe(
+      DEFAULT_SESSION_NAME,
+    );
+  });
+});
+
+describe("isPlaceholderTitle", () => {
+  const prompt =
+    "Derive the variance of a binomial distribution. Again. Again.";
+  const messages = [{ role: "user", parts: [{ type: "text", text: prompt }] }];
+
+  it("recognizes the shortened placeholder a new chat is created with", () => {
+    expect(isPlaceholderTitle(toPlaceholderTitle(prompt), messages)).toBe(true);
+  });
+
+  // Chats created before placeholders were shortened hold the entire prompt.
+  // They must still be recognized, or they keep that paragraph forever.
+  it("recognizes a legacy placeholder holding the whole prompt", () => {
+    expect(isPlaceholderTitle(prompt, messages)).toBe(true);
+  });
+
+  it("does not treat a generated title as a placeholder", () => {
+    expect(isPlaceholderTitle("Binomial Variance Derivation", messages)).toBe(
+      false,
+    );
+  });
+
+  it("is false when there is no title or no user message", () => {
+    expect(isPlaceholderTitle(null, messages)).toBe(false);
+    expect(isPlaceholderTitle("", messages)).toBe(false);
+    expect(isPlaceholderTitle("Any title", [])).toBe(false);
   });
 });
 

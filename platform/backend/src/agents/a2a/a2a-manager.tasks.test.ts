@@ -1,9 +1,5 @@
 import { vi } from "vitest";
-import {
-  A2AArtifactModel,
-  A2AMessageModel,
-  A2ATaskModel,
-} from "@/models";
+import { A2AArtifactModel, A2AMessageModel, A2ATaskModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import { buildApprovalDecisionSendMessageRequest } from "./a2a-helper";
@@ -241,9 +237,9 @@ describe("A2AManager full task mode", () => {
       taskId: failed.id,
       afterSeq: 0,
     });
-    expect(
-      events?.events.at(-1)?.payload.statusUpdate?.status.state,
-    ).toBe(A2AProtocolTaskState.Failed);
+    expect(events?.events.at(-1)?.payload.statusUpdate?.status.state).toBe(
+      A2AProtocolTaskState.Failed,
+    );
   });
 
   test("cancelTask settles a running task first and the finishing run cannot overwrite it", async ({
@@ -436,9 +432,7 @@ describe("A2AManager full task mode", () => {
       taskRun: { createTask: true, detached: false },
     });
     if (!response.task) throw new Error("expected task");
-    expect(response.task.status.state).toBe(
-      A2AProtocolTaskState.InputRequired,
-    );
+    expect(response.task.status.state).toBe(A2AProtocolTaskState.InputRequired);
     expect(response.task.metadata?.approvalRequests).toHaveLength(1);
 
     const canceled = await manager.cancelTask({
@@ -629,9 +623,9 @@ describe("A2AManager full task mode", () => {
       }),
     ]);
     expect(readA).toEqual(readB);
-    expect(
-      readA?.events.at(-1)?.payload.statusUpdate?.status.state,
-    ).toBe(A2AProtocolTaskState.Completed);
+    expect(readA?.events.at(-1)?.payload.statusUpdate?.status.state).toBe(
+      A2AProtocolTaskState.Completed,
+    );
 
     const err = await manager
       .subscribeToTask({

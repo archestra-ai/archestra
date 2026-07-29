@@ -219,7 +219,11 @@ describe("A2ATaskModel", () => {
               },
             },
           },
-          artifact: { id: artifactId, name: "agent-response", appendText: chunk },
+          artifact: {
+            id: artifactId,
+            name: "agent-response",
+            appendText: chunk,
+          },
         });
         expect(appended).not.toBeNull();
       }
@@ -367,9 +371,9 @@ describe("A2ATaskModel", () => {
         A2AProtocolTaskState.Working,
       );
       // Input-required tasks wait on a human, not a run — never reaped.
-      expect(
-        (await A2ATaskModel.findById(staleInputRequired.id))?.state,
-      ).toBe(A2AProtocolTaskState.InputRequired);
+      expect((await A2ATaskModel.findById(staleInputRequired.id))?.state).toBe(
+        A2AProtocolTaskState.InputRequired,
+      );
     });
   });
 

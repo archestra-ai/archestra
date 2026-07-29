@@ -87,7 +87,6 @@ class A2ATaskApprovalRequestModel {
       .delete(schema.a2aTaskApprovalRequestsTable)
       .where(eq(schema.a2aTaskApprovalRequestsTable.id, id));
   }
-
 }
 
 export default A2ATaskApprovalRequestModel;

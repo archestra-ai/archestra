@@ -312,7 +312,9 @@ class A2ATaskModel {
     taskId: string;
     lastMessage: { id: string; content: unknown };
     approvalDecisions: { approvalId: string; approved: boolean }[];
-  }): Promise<"applied" | "task_not_input_required" | "approval_already_resolved"> {
+  }): Promise<
+    "applied" | "task_not_input_required" | "approval_already_resolved"
+  > {
     try {
       await db.transaction(async (tx) => {
         // Row-lock the task and assert its state inside the transaction; the

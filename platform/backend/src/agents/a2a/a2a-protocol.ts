@@ -140,7 +140,7 @@ const A2AProtocolTaskStatusSchema = z.object({
   /** RFC 3339 datetime (protobuf JSON `google.protobuf.Timestamp`). */
   timestamp: z.iso.datetime().optional(),
 });
-export type A2AProtocolTaskStatus = z.infer<typeof A2AProtocolTaskStatusSchema>;
+type A2AProtocolTaskStatus = z.infer<typeof A2AProtocolTaskStatusSchema>;
 
 export const A2AProtocolTaskSchema = z.object({
   id: z.string(),
@@ -261,7 +261,7 @@ const A2AProtocolTaskStatusUpdateEventSchema = z.object({
   final: z.boolean().optional(),
   metadata: z.any().optional(),
 });
-export type A2AProtocolTaskStatusUpdateEvent = z.infer<
+type A2AProtocolTaskStatusUpdateEvent = z.infer<
   typeof A2AProtocolTaskStatusUpdateEventSchema
 >;
 
@@ -278,7 +278,7 @@ const A2AProtocolTaskArtifactUpdateEventSchema = z.object({
   lastChunk: z.boolean().optional(),
   metadata: z.any().optional(),
 });
-export type A2AProtocolTaskArtifactUpdateEvent = z.infer<
+type A2AProtocolTaskArtifactUpdateEvent = z.infer<
   typeof A2AProtocolTaskArtifactUpdateEventSchema
 >;
 

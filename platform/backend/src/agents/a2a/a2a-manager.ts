@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { coerceMalformedToolInputs } from "@archestra/shared";
-import { z } from "zod";
 import {
   convertToModelMessages,
   type FilePart,
@@ -9,6 +8,7 @@ import {
   type TextUIPart,
   type UIMessage,
 } from "ai";
+import { z } from "zod";
 import logger from "@/logging";
 import {
   A2AMessageModel,
@@ -130,7 +130,7 @@ interface A2AManagerConfig {
  * - "detached": the task handle returns immediately and the run continues in
  *   the background (`returnImmediately`, SendStreamingMessage).
  */
-export interface A2ATaskRunRequest {
+interface A2ATaskRunRequest {
   createTask: boolean;
   detached: boolean;
 }
@@ -205,8 +205,7 @@ export class A2AManager {
     // (history load, compaction, team lookup), the catch below settles the
     // task to FAILED instead of stranding a heartbeat-less WORKING task
     // until the reaper fires.
-    let resumedWorkingTask: { taskId: string; contextId: string } | null =
-      null;
+    let resumedWorkingTask: { taskId: string; contextId: string } | null = null;
     try {
       const { actor, agentId, request, systemParams, abortSignal } = params;
       const fullTaskMode = this.config.taskMode === "full";
@@ -699,8 +698,7 @@ export class A2AManager {
         await this.settleFailedRun({
           taskId: resumedWorkingTask.taskId,
           contextId: resumedWorkingTask.contextId,
-          statusReason:
-            error instanceof Error ? error.message : String(error),
+          statusReason: error instanceof Error ? error.message : String(error),
         }).catch((settleError) => {
           logger.error(
             { settleError, taskId: resumedWorkingTask?.taskId },

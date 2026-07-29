@@ -110,6 +110,5 @@ describe("A2ATaskApprovalRequestModel", () => {
       await A2ATaskApprovalRequestModel.delete(created.id);
       expect(await A2ATaskApprovalRequestModel.findById(created.id)).toBeNull();
     });
-
   });
 });

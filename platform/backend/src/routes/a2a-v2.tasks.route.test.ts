@@ -56,7 +56,11 @@ type SseEvent = {
     artifactUpdate?: {
       taskId: string;
       contextId?: string;
-      artifact: { artifactId: string; name?: string; parts: { text?: string }[] };
+      artifact: {
+        artifactId: string;
+        name?: string;
+        parts: { text?: string }[];
+      };
       append?: boolean;
       lastChunk?: boolean;
     };
@@ -349,9 +353,9 @@ describe("a2a v2 task methods", () => {
     expect(last.result?.statusUpdate?.status.state).toBe(
       "TASK_STATE_COMPLETED",
     );
-    expect(
-      last.result?.statusUpdate?.status.message?.parts?.[0]?.text,
-    ).toBe("Hello world");
+    expect(last.result?.statusUpdate?.status.message?.parts?.[0]?.text).toBe(
+      "Hello world",
+    );
   });
 
   test("SubscribeToTask on a terminal task is a plain -32004 JSON-RPC error", async () => {

@@ -9,7 +9,7 @@ const STALE_RUN_MS = 10 * 60 * 1000;
 const REAP_INTERVAL_MS = 60 * 1000;
 const TERMINAL_EVENT_RETENTION_MS = 60 * 60 * 1000;
 
-export const ORPHANED_TASK_REASON =
+const ORPHANED_TASK_REASON =
   "The server executing this task stopped before the run completed.";
 const SHUTDOWN_TASK_REASON =
   "The server shut down before the task's run completed.";

@@ -249,15 +249,15 @@ export class A2ATaskManager {
    * Batch variant of {@link loadTaskWithData}: three queries total for the
    * whole page instead of three per task (ListTasks N+1 prevention).
    */
-  static async loadTasksWithData(
-    tasks: A2ATask[],
-  ): Promise<A2ATaskWithData[]> {
+  static async loadTasksWithData(tasks: A2ATask[]): Promise<A2ATaskWithData[]> {
     const taskIds = tasks.map((task) => task.id);
-    const [approvalsByTask, historyByTask, artifactsByTask] = await Promise.all([
-      A2ATaskApprovalRequestModel.findByTaskIds(taskIds),
-      A2AMessageModel.findByTaskIds(taskIds),
-      A2AArtifactModel.findByTaskIds(taskIds),
-    ]);
+    const [approvalsByTask, historyByTask, artifactsByTask] = await Promise.all(
+      [
+        A2ATaskApprovalRequestModel.findByTaskIds(taskIds),
+        A2AMessageModel.findByTaskIds(taskIds),
+        A2AArtifactModel.findByTaskIds(taskIds),
+      ],
+    );
 
     return tasks.map((task) => {
       const approvalRequests = z

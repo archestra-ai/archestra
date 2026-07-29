@@ -359,5 +359,4 @@ describe("A2ATaskManager", () => {
       ).task.state,
     ).toBe(A2AProtocolTaskState.Completed);
   });
-
 });

@@ -58,7 +58,7 @@ const {
   validateOAuthToken,
   validateExternalIdpToken,
   buildKnowledgeSourcesDescription,
-} = await import("./mcp-gateway.utils");
+} = await import("./utils");
 
 type TestListToolsHandler = (request: unknown) => Promise<ListToolsResult>;
 type TestCallToolHandler = (
@@ -3647,7 +3647,7 @@ describe("createAgentServer tools/list", () => {
 });
 
 describe("extractPassthroughHeaders", async () => {
-  const { extractPassthroughHeaders } = await import("./mcp-gateway.utils");
+  const { extractPassthroughHeaders } = await import("./utils");
 
   test("returns undefined when allowlist is null", () => {
     expect(extractPassthroughHeaders(null, { "x-foo": "bar" })).toBeUndefined();

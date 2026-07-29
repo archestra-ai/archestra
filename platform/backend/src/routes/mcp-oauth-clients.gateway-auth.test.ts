@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { McpOauthClientModel, OAuthAccessTokenModel } from "@/models";
 import { describe, expect, test } from "@/test";
-import { validateMCPGatewayToken } from "./mcp-gateway.utils";
+import { validateMCPGatewayToken } from "./mcp-gateway/utils";
 
 /**
  * End-to-end authorization tests for MCP OAuth client (application) tokens

@@ -37,7 +37,7 @@ vi.mock("@/services/jwks-validator", () => ({
   },
 }));
 
-const { default: mcpGatewayRoutes } = await import("./mcp-gateway");
+const { default: mcpGatewayRoutes } = await import("./index");
 
 // A JWT-shaped bearer token that is NOT an Archestra token, so the gateway
 // routes it through external-IdP JWKS validation instead of the token tables.

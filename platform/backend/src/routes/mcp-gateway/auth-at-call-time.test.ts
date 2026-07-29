@@ -29,7 +29,7 @@ import {
 import { TeamTokenModel, UserTokenModel } from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import mcpGatewayRoutes from "./mcp-gateway";
+import mcpGatewayRoutes from "./index";
 
 const CATALOG_NAME = "auth-calltime-test";
 const FULL_TOOL_NAME = `${CATALOG_NAME}__test_auth_tool`;

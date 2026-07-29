@@ -18,8 +18,8 @@ import {
   deriveStatePrincipal,
   GATEWAY_INPUT_REQUEST_KEY,
   verifyRequestState,
-} from "./mcp-gateway.mrtr";
-import { createAgentServer } from "./mcp-gateway.utils";
+} from "./mrtr";
+import { createAgentServer } from "./utils";
 
 type CallToolHandler = (
   request: unknown,

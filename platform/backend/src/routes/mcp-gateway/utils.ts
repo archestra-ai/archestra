@@ -114,14 +114,14 @@ import {
   type InputResponses,
   isInputRequiredSignal,
   MAX_INPUT_ROUNDS,
-} from "./mcp-gateway.mrtr";
+} from "./mrtr";
 import {
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
   withCompleteResultEnvelope,
   withPrivateCacheHint,
-} from "./mcp-gateway.protocol";
+} from "./protocol";
 
 export { deriveAuthMethod };
 

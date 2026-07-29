@@ -31,6 +31,7 @@ import {
   resolveA2AProtocolVersion,
   SUPPORTED_A2A_VERSION_LIST,
 } from "@/agents/a2a/a2a-protocol";
+import { a2aTaskEventNotifier } from "@/agents/a2a/a2a-task-event-notifier";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { AgentModel } from "@/models";
@@ -414,9 +415,12 @@ async function streamA2AResponse(params: {
   // A disconnect only detaches this subscriber — the run itself belongs to
   // the task run service and keeps going (rejoin with SubscribeToTask, poll
   // with GetTask, stop with CancelTask).
-  let clientGone = false;
+  // Aborted rather than just flagged: the follow loop parks on a notification
+  // wait between reads, and must drop it the moment the client goes away
+  // instead of holding the handler until the wait times out.
+  const clientGone = new AbortController();
   raw.on("close", () => {
-    clientGone = true;
+    clientGone.abort();
   });
 
   try {
@@ -433,7 +437,7 @@ async function streamA2AResponse(params: {
         fromSeq: prepared.subscription.watermark,
         version: "v1",
         writeEvent,
-        isClientGone: () => clientGone,
+        clientGone: clientGone.signal,
         emitLegacyInterruptFraming: false,
       });
       return undefined;
@@ -483,7 +487,7 @@ async function streamA2AResponse(params: {
         fromSeq: detachedRun.followFromSeq,
         version,
         writeEvent,
-        isClientGone: () => clientGone,
+        clientGone: clientGone.signal,
         emitLegacyInterruptFraming: version === "legacy",
       });
     } else {
@@ -512,8 +516,17 @@ async function streamA2AResponse(params: {
   }
 }
 
-/** How often a stream polls the task event log for new events. */
-const TASK_EVENT_POLL_INTERVAL_MS = 300;
+/**
+ * How long a stream waits for new task events before re-reading anyway.
+ *
+ * A cross-replica LISTEN/NOTIFY wake normally arrives the moment the writing
+ * pod commits, so this is the safety net rather than the mechanism: it bounds
+ * how long a stream can lag if a notification is missed (the listener was
+ * reconnecting) or never sent (polling-compatibility mode behind a
+ * transaction pooler). Seconds, not milliseconds, because the notify carries
+ * the latency in the normal case.
+ */
+const TASK_EVENT_POLL_INTERVAL_MS = 5_000;
 
 /**
  * Follow a task's durable event log from `fromSeq` until the task reaches a
@@ -531,7 +544,7 @@ async function followTaskEvents(params: {
   fromSeq: number;
   version: A2AProtocolVersion;
   writeEvent: (event: A2AProtocolStreamResponse) => void;
-  isClientGone: () => boolean;
+  clientGone: AbortSignal;
   /**
    * The legacy SendStreamingMessage contract ends an approval-interrupted
    * stream with a full `task` frame (carrying the approval metadata) followed
@@ -543,7 +556,7 @@ async function followTaskEvents(params: {
   const { router, taskId, version, writeEvent } = params;
   let lastSeq = params.fromSeq;
 
-  while (!params.isClientGone()) {
+  while (!params.clientGone.aborted) {
     const snapshot = await router.readTaskEventsAfter({
       taskId,
       afterSeq: lastSeq,
@@ -588,7 +601,12 @@ async function followTaskEvents(params: {
       return;
     }
 
-    await sleep(TASK_EVENT_POLL_INTERVAL_MS);
+    // Woken by the writing pod's notify, or by the fallback timeout.
+    await a2aTaskEventNotifier.wait({
+      key: taskId,
+      timeoutMs: TASK_EVENT_POLL_INTERVAL_MS,
+      abortSignal: params.clientGone,
+    });
   }
 }
 
@@ -655,10 +673,6 @@ function translateEventForVersion(
   }
 
   return [payload];
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

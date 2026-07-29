@@ -965,6 +965,9 @@ export class A2AManager {
               },
             },
           });
+          // Terminal state and its event committed together; let parked
+          // subscribers read the cancellation now.
+          a2aTaskRunService.wakeSubscribers(taskId);
         } else {
           await this.settleFailedRun({
             taskId,
@@ -1015,6 +1018,11 @@ export class A2AManager {
         },
       },
     });
+
+    // Inside the helper rather than at its call sites: a failure can settle a
+    // task from several escape paths, and a parked subscriber must learn about
+    // every one of them without waiting out its fallback interval.
+    a2aTaskRunService.wakeSubscribers(params.taskId);
   }
 
   /**
@@ -1320,6 +1328,10 @@ export class A2AManager {
     }
 
     a2aTaskRunService.abortLocal(task.id);
+    // The canceled state and its terminal event committed together above, so
+    // subscribers on every replica can read the cancellation now rather than
+    // waiting out their fallback interval.
+    a2aTaskRunService.wakeSubscribers(task.id);
 
     const refreshed = await A2ATaskManager.loadTaskWithData(canceled);
     return A2ATaskManager.toProtocolTask(refreshed);

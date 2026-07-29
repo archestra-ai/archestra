@@ -166,8 +166,19 @@ export function createChatTaskBridge(): ChatTaskBridge {
         content: [
           {
             type: "text",
+            // The cancelled outcome is a structured envelope rather than a bare
+            // sentence: the LLM proxy logs the wire messages verbatim, and the
+            // log surfaces (/llm/logs tool boxes) can only render a distinct
+            // Cancelled state from something parseable in the content. The
+            // model reads the message field just as well.
             text: cancelled
-              ? "The user cancelled this call before it finished, so it produced no result."
+              ? JSON.stringify({
+                  archestraError: {
+                    type: "cancelled",
+                    message:
+                      "The user cancelled this call before it finished, so it produced no result.",
+                  },
+                })
               : (settled.errorText ??
                 "The background task failed before it produced output."),
           },

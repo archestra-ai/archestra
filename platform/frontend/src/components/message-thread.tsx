@@ -477,11 +477,15 @@ const MessageThread = ({
                                 <ToolHeader
                                   type={`tool-${toolName}`}
                                   state={
-                                    dualLlmPart
-                                      ? "output-available-dual-llm"
-                                      : toolResultPart
-                                        ? "output-available"
-                                        : part.state
+                                    isCancelledToolOutput(
+                                      toolResultPart?.output ?? part.output,
+                                    )
+                                      ? "output-cancelled"
+                                      : dualLlmPart
+                                        ? "output-available-dual-llm"
+                                        : toolResultPart
+                                          ? "output-available"
+                                          : part.state
                                   }
                                   icon={getIcon()}
                                 />
@@ -493,11 +497,15 @@ const MessageThread = ({
                                   {toolResultPart && (
                                     <ToolOutput
                                       label={
-                                        toolResultPart.errorText
-                                          ? "Error"
-                                          : dualLlmPart
-                                            ? "Unsafe result"
-                                            : "Result"
+                                        isCancelledToolOutput(
+                                          toolResultPart.output,
+                                        )
+                                          ? "Cancelled"
+                                          : toolResultPart.errorText
+                                            ? "Error"
+                                            : dualLlmPart
+                                              ? "Unsafe result"
+                                              : "Result"
                                       }
                                       output={toolResultPart.output as unknown}
                                       errorText={toolResultPart.errorText}
@@ -506,11 +514,13 @@ const MessageThread = ({
                                   {!toolResultPart && Boolean(part.output) && (
                                     <ToolOutput
                                       label={
-                                        part.errorText
-                                          ? "Error"
-                                          : dualLlmPart
-                                            ? "Unsafe result"
-                                            : "Result"
+                                        isCancelledToolOutput(part.output)
+                                          ? "Cancelled"
+                                          : part.errorText
+                                            ? "Error"
+                                            : dualLlmPart
+                                              ? "Unsafe result"
+                                              : "Result"
                                       }
                                       output={part.output as unknown}
                                       errorText={part.errorText}
@@ -626,11 +636,15 @@ const MessageThread = ({
                                   <ToolHeader
                                     type={part.type}
                                     state={
-                                      dualLlmPart
-                                        ? "output-available-dual-llm"
-                                        : toolResultPart
-                                          ? "output-available"
-                                          : part.state
+                                      isCancelledToolOutput(
+                                        toolResultPart?.output ?? part.output,
+                                      )
+                                        ? "output-cancelled"
+                                        : dualLlmPart
+                                          ? "output-available-dual-llm"
+                                          : toolResultPart
+                                            ? "output-available"
+                                            : part.state
                                     }
                                   />
                                   <ToolContent>
@@ -644,11 +658,15 @@ const MessageThread = ({
                                     {toolResultPart && (
                                       <ToolOutput
                                         label={
-                                          toolResultPart.errorText
-                                            ? "Error"
-                                            : dualLlmPart
-                                              ? "Unsafe result"
-                                              : "Result"
+                                          isCancelledToolOutput(
+                                            toolResultPart.output,
+                                          )
+                                            ? "Cancelled"
+                                            : toolResultPart.errorText
+                                              ? "Error"
+                                              : dualLlmPart
+                                                ? "Unsafe result"
+                                                : "Result"
                                         }
                                         output={
                                           toolResultPart.output as unknown
@@ -664,11 +682,13 @@ const MessageThread = ({
                                       Boolean(part.output) && (
                                         <ToolOutput
                                           label={
-                                            part.errorText
-                                              ? "Error"
-                                              : dualLlmPart
-                                                ? "Unsafe result"
-                                                : "Result"
+                                            isCancelledToolOutput(part.output)
+                                              ? "Cancelled"
+                                              : part.errorText
+                                                ? "Error"
+                                                : dualLlmPart
+                                                  ? "Unsafe result"
+                                                  : "Result"
                                           }
                                           output={part.output as unknown}
                                           errorText={
@@ -1038,4 +1058,17 @@ function getPartSignature(part: PartialUIMessage["parts"][number]): string {
       }
       return `part:${JSON.stringify(part)}`;
   }
+}
+
+/**
+ * A tool result the run's user cancelled mid-flight (stopped run or cancelled
+ * background task). The backend serializes the outcome as a structured
+ * envelope precisely so log surfaces can render a distinct Cancelled state —
+ * neither a success nor an error.
+ */
+function isCancelledToolOutput(output: unknown): boolean {
+  if (typeof output !== "object" || output === null) return false;
+  const archestraError = (output as { archestraError?: { type?: string } })
+    .archestraError;
+  return archestraError?.type === "cancelled";
 }

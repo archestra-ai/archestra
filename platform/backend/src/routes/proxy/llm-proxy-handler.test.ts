@@ -655,6 +655,65 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         }),
       );
     });
+
+    test("records a context-variant id as the model it names, and forwards it unchanged", async () => {
+      const forwarded: string[] = [];
+      vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+        () =>
+          ({
+            messages: {
+              create: async (...args: unknown[]) => {
+                const [params] = args as [{ model: string }];
+                forwarded.push(params.model);
+                return (
+                  createAnthropicTestClient(anthropicStubOptions).messages
+                    .create as (...a: unknown[]) => unknown
+                )(...args);
+              },
+            },
+          }) as never,
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          // A client asking for the long-context variant of a model that is
+          // already priced under its plain id.
+          model: "claude-3-5-sonnet-20241022[1m]",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "Hello!" }],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // The marker names the same model, so usage is attributed to the priced
+      // record rather than to a second one no catalog can describe.
+      expect(counterInc).toHaveBeenCalledWith(
+        expect.objectContaining({
+          labels: expect.objectContaining({
+            provider: "anthropic",
+            model: "claude-3-5-sonnet-20241022",
+          }),
+        }),
+      );
+      await expect(
+        ModelModel.findByProviderAndModelId(
+          "anthropic",
+          "claude-3-5-sonnet-20241022[1m]",
+        ),
+      ).resolves.toBeNull();
+
+      // The provider still receives the id the client asked for.
+      expect(forwarded).toEqual(["claude-3-5-sonnet-20241022[1m]"]);
+    });
   });
 
   describe("Gemini", () => {

@@ -16,6 +16,7 @@ import {
   providerDisplayNames,
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
+  stripClaudeContextVariantSuffix,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
 import {
@@ -724,7 +725,13 @@ export async function handleLLMProxy<
     }
 
     // Cost optimization - potentially switch to cheaper model
-    const baselineModel = requestAdapter.getModel();
+    // A client may mark a Claude id with a context variant (`…[1m]`). It names
+    // the same model at the same price, so it is dropped for bookkeeping —
+    // otherwise the request records a model no catalog lists, which can never be
+    // priced. The request itself is forwarded with the id the client sent.
+    const baselineModel = stripClaudeContextVariantSuffix(
+      requestAdapter.getModel(),
+    );
     const hasTools = requestAdapter.hasTools();
     const tools = requestAdapter.getTools();
     // Cast messages since getOptimizedModel expects specific provider types
@@ -754,7 +761,9 @@ export async function handleLLMProxy<
       );
     }
 
-    const actualModel = requestAdapter.getModel();
+    const actualModel = stripClaudeContextVariantSuffix(
+      requestAdapter.getModel(),
+    );
 
     // Ensure model entries exist for cost tracking
     await ModelModel.ensureModelExists(baselineModel, providerName);
@@ -1147,8 +1156,10 @@ export async function handleLLMProxy<
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
         response: { error: errorMessage },
-        model: requestAdapter.getModel(),
-        baselineModel: requestAdapter.getModel(),
+        model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
+        baselineModel: stripClaudeContextVariantSuffix(
+          requestAdapter.getModel(),
+        ),
         inputTokens: 0,
         outputTokens: 0,
       });

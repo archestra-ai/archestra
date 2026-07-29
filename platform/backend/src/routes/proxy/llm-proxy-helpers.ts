@@ -382,9 +382,19 @@ export function handleError(
 
   // Some SDK transport and streaming failures do not carry an HTTP status.
   if (!hasExplicitStatus) {
-    const upstreamStatus = classifyTransientUpstreamError(error);
-    if (upstreamStatus !== undefined) {
-      statusCode = upstreamStatus;
+    if (isClientAbortError(error)) {
+      // The proxy client disconnected and the disconnect was propagated to
+      // the in-flight provider call as an AbortSignal (see
+      // createDownstreamAbortSignal). Nobody is waiting for this response —
+      // report 499 (client closed request) so the interaction record names
+      // the cause and error tracking's 4xx rule treats it as expected
+      // instead of a crash of ours.
+      statusCode = 499;
+    } else {
+      const upstreamStatus = classifyTransientUpstreamError(error);
+      if (upstreamStatus !== undefined) {
+        statusCode = upstreamStatus;
+      }
     }
   }
 
@@ -505,6 +515,23 @@ export function handleError(
 function hasProviderHttpErrorShape(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return "error" in error || "headers" in error || "$metadata" in error;
+}
+
+/**
+ * Whether the error is an abort of a request we initiated — the fetch/SDK
+ * AbortError raised when the signal wired to the proxy client's disconnect
+ * fires, or the SDK's own user-abort wrapper around it. Deliberately does NOT
+ * match AbortSignal.timeout's TimeoutError ("… aborted due to timeout", a 504
+ * classified below): the message fallback is anchored so only a bare abort
+ * matches.
+ */
+function isClientAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === "AbortError" ||
+    error.name === "APIUserAbortError" ||
+    /\boperation was aborted\.?$/i.test(error.message)
+  );
 }
 
 /**

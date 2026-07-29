@@ -678,6 +678,33 @@ describe("handleError", () => {
     );
   });
 
+  test("classifies a downstream client abort as a 499", () => {
+    // The fetch AbortError raised when the client-disconnect signal fires.
+    expect(
+      throwStatusFor(
+        new DOMException("This operation was aborted", "AbortError"),
+      ),
+    ).toBe(499);
+    // The provider SDKs' wrapper for a caller-supplied signal firing mid-call.
+    expect(
+      throwStatusFor(
+        Object.assign(new Error("Request was aborted."), {
+          name: "APIUserAbortError",
+        }),
+      ),
+    ).toBe(499);
+  });
+
+  test("keeps classifying an abort-due-to-timeout as a 504, not a client abort", () => {
+    expect(
+      throwStatusFor(
+        Object.assign(new Error("The operation was aborted due to timeout"), {
+          name: "TimeoutError",
+        }),
+      ),
+    ).toBe(504);
+  });
+
   function makeStreamedOverloadError(headers?: Headers) {
     const body = {
       type: "error",

@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Switch } from "@/components/ui/switch";
+import { formatPricePerMillion } from "@/lib/model-price-format";
 import { providerLogoUrl } from "@/lib/provider-logos";
 import { cn } from "@/lib/utils";
 
@@ -401,7 +402,7 @@ function formatPricing(option: LlmModelSelectOption) {
   ) {
     return "Dynamic pricing";
   }
-  return `$${input} / $${output} per 1M tokens`;
+  return `$${formatPricePerMillion(input)} / $${formatPricePerMillion(output)} per 1M tokens`;
 }
 
 function AllModelsOptionLabel({ label }: { label: string }) {

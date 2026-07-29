@@ -98,6 +98,7 @@ import {
   useUpdateModel,
 } from "@/lib/llm-models.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { formatPricePerMillion } from "@/lib/model-price-format";
 import { useOrganization } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { formatContextLength } from "@/lib/utils";
@@ -345,7 +346,9 @@ export default function ModelsPage() {
           const price = row.original.pricePerMillionInput;
           if (hasUnknownCapabilities(row.original)) return null;
           return price ? (
-            <span className="text-sm font-mono">${price}</span>
+            <span className="text-sm font-mono">
+              ${formatPricePerMillion(price)}
+            </span>
           ) : (
             <span className="text-sm text-muted-foreground">-</span>
           );
@@ -359,7 +362,9 @@ export default function ModelsPage() {
           const price = row.original.pricePerMillionOutput;
           if (hasUnknownCapabilities(row.original)) return null;
           return price ? (
-            <span className="text-sm font-mono">${price}</span>
+            <span className="text-sm font-mono">
+              ${formatPricePerMillion(price)}
+            </span>
           ) : (
             <span className="text-sm text-muted-foreground">-</span>
           );
@@ -381,7 +386,7 @@ export default function ModelsPage() {
           }
           return (
             <span className="text-sm font-mono">
-              ${pricePerMillionCacheRead} / ${pricePerMillionCacheWrite}
+              {`$${formatPricePerMillion(pricePerMillionCacheRead)} / $${formatPricePerMillion(pricePerMillionCacheWrite)}`}
             </span>
           );
         },

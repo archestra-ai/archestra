@@ -15,6 +15,7 @@ import {
 import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
+import { resolveBedrockAwsPrices } from "@/services/bedrock-aws-pricing";
 import type {
   CreateModel,
   Model,
@@ -716,11 +717,20 @@ class ModelModel {
       };
     }
 
-    // Tier 2: models.dev synced price (convert per-token to per-million)
+    // Tier 2: registry-synced price (convert per-token to per-million). The
+    // stored columns do not record which registry supplied them, so the source
+    // is re-derived: a Bedrock model AWS prices was synced from AWS, since sync
+    // and read consult the same snapshot.
     if (
       model?.promptPricePerToken != null &&
       model?.completionPricePerToken != null
     ) {
+      const syncedSource: PriceSource = resolveBedrockAwsPrices({
+        provider: model.provider,
+        modelId: model.modelId,
+      })
+        ? "aws"
+        : "models_dev";
       return {
         pricePerMillionInput: (
           Number.parseFloat(model.promptPricePerToken) * 1_000_000
@@ -728,7 +738,7 @@ class ModelModel {
         pricePerMillionOutput: (
           Number.parseFloat(model.completionPricePerToken) * 1_000_000
         ).toFixed(2),
-        source: "models_dev",
+        source: syncedSource,
       };
     }
 

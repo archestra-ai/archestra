@@ -24,6 +24,7 @@ import {
   RefreshCw,
   RotateCcw,
   Server,
+  UserRoundCheck,
   Users,
   X,
 } from "lucide-react";
@@ -260,6 +261,30 @@ export default function ModelsPage() {
                           Limited to:{" "}
                           {row.original.teams
                             .map((team) => team.name)
+                            .join(", ")}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                {row.original.users.length > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="text-xs gap-1">
+                          <UserRoundCheck className="h-3 w-3 shrink-0" />
+                          <span>
+                            {row.original.users.length === 1
+                              ? "1 person"
+                              : `${row.original.users.length} people`}
+                          </span>
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>
+                          Limited to:{" "}
+                          {row.original.users
+                            .map((user) => user.name)
                             .join(", ")}
                         </p>
                       </TooltipContent>

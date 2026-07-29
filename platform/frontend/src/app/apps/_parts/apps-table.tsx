@@ -147,6 +147,11 @@ export function AppsTable({
                   ? app.teams?.map((team) => team.name)
                   : undefined
               }
+              userNames={
+                app.source === "owned"
+                  ? app.users?.map((user) => user.name)
+                  : undefined
+              }
             />
             {isForeignPersonalApp && (
               <Badge variant="secondary">

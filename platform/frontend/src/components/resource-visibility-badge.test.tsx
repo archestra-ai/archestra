@@ -66,3 +66,58 @@ describe("ResourceVisibilityBadge", () => {
     expect(screen.getByText("Organization")).toBeInTheDocument();
   });
 });
+
+/**
+ * A resource shared with named people stays `personal` and carries grants
+ * beside it, so reading the scope alone attributed it to its author — which is
+ * exactly the question an "Accessible to" column exists to answer.
+ */
+describe("ResourceVisibilityBadge per-user shares", () => {
+  it("lists the grantees alongside the owner", () => {
+    render(
+      <ResourceVisibilityBadge
+        scope="personal"
+        teams={[]}
+        users={[{ id: "u1", name: "Ada Lovelace" }]}
+        authorId={ME}
+        authorName="My Name"
+        currentUserId={ME}
+        showSelfAsMe
+      />,
+    );
+
+    expect(screen.getByText("Me")).toBeInTheDocument();
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+  });
+
+  it("still shows a shared resource when the owner's own badge is hidden", () => {
+    render(
+      <ResourceVisibilityBadge
+        scope="personal"
+        teams={[]}
+        users={[{ id: "u1", name: "Ada Lovelace" }]}
+        authorId={ME}
+        authorName="My Name"
+        currentUserId={ME}
+      />,
+    );
+
+    // Blank would claim the resource reaches nobody but its author.
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+  });
+
+  it("leaves an unshared personal resource exactly as it was", () => {
+    const { container } = render(
+      <ResourceVisibilityBadge
+        scope="personal"
+        teams={[]}
+        users={[]}
+        authorId={ME}
+        authorName="My Name"
+        currentUserId={ME}
+      />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+});

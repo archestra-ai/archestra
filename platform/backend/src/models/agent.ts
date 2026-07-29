@@ -718,9 +718,10 @@ class AgentModel {
       AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
 
-    // Assign teams and labels to each agent
+    // Assign teams, grantees, and labels to each agent
     for (const agent of agents) {
       agent.teams = teamsMap.get(agent.id) || [];
+      agent.users = usersMap.get(agent.id) || [];
       agent.labels = labelsMap.get(agent.id) || [];
     }
 
@@ -1351,9 +1352,10 @@ class AgentModel {
       AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
 
-    // Assign teams and labels to each agent
+    // Assign teams, grantees, and labels to each agent
     for (const agent of agents) {
       agent.teams = teamsMap.get(agent.id) || [];
+      agent.users = usersMap.get(agent.id) || [];
       agent.labels = labelsMap.get(agent.id) || [];
     }
 

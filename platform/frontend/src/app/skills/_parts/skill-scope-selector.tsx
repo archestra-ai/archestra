@@ -5,6 +5,10 @@ import { Globe, User, Users } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
+  UserShareField,
+  useUserShareOption,
+} from "@/components/user-share-field";
+import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
@@ -17,16 +21,27 @@ import { useAssignableTeams } from "@/lib/teams/team.query";
  * `skill:team-admin` (or admin), and team assignments are limited to teams the
  * server will accept.
  */
+/**
+ * What this control offers. Wider than the stored scope: a skill shared with
+ * named people persists as `personal` plus grants, so "user" lives only here.
+ */
+type SkillVisibilityChoice = ResourceVisibilityScope | "user";
+
 export function SkillScopeSelector({
   scope,
   onScopeChange,
   teamIds,
   onTeamIdsChange,
+  userIds = [],
+  onUserIdsChange,
 }: {
   scope: ResourceVisibilityScope;
   onScopeChange: (scope: ResourceVisibilityScope) => void;
   teamIds: string[];
   onTeamIdsChange: (ids: string[]) => void;
+  /** People the skill is shared with by name; omit to hide the Users option. */
+  userIds?: string[];
+  onUserIdsChange?: (ids: string[]) => void;
 }) {
   const { data: isSkillAdmin } = useHasPermissions({ skill: ["admin"] });
   const { data: isSkillTeamAdmin } = useHasPermissions({
@@ -38,13 +53,30 @@ export function SkillScopeSelector({
   const canShareTeams = isSkillAdmin || isSkillTeamAdmin;
   const hasNoTeams = (teams ?? []).length === 0;
 
-  const options: VisibilityOption<ResourceVisibilityScope>[] = [
+  // A skill shared with named people is stored as `personal` plus grants, so
+  // "user" is a reading of (scope, userIds) that this control maps both ways.
+  const supportsUserSharing = onUserIdsChange !== undefined;
+  const userOption = useUserShareOption<SkillVisibilityChoice>("user");
+  const choice: SkillVisibilityChoice =
+    scope === "personal" && userIds.length > 0 ? "user" : scope;
+  const handleChoiceChange = (next: SkillVisibilityChoice) => {
+    if (next === "user") {
+      onScopeChange("personal");
+      return;
+    }
+    // Leaving Users revokes what it left behind rather than stranding it.
+    onUserIdsChange?.([]);
+    onScopeChange(next);
+  };
+
+  const options: VisibilityOption<SkillVisibilityChoice>[] = [
     {
       value: "personal",
       label: "Personal",
       description: "Only you can use this skill",
       icon: User,
     },
+    ...(supportsUserSharing ? [userOption] : []),
     {
       value: "team",
       label: "Teams",
@@ -72,11 +104,15 @@ export function SkillScopeSelector({
   return (
     <VisibilitySelector
       heading="Who can use this skill"
-      value={scope}
+      value={choice}
       options={options}
-      onValueChange={onScopeChange}
+      onValueChange={handleChoiceChange}
     >
-      {scope === "team" && (
+      {choice === "user" && onUserIdsChange && (
+        <UserShareField value={userIds} onValueChange={onUserIdsChange} />
+      )}
+
+      {choice === "team" && (
         <div className="space-y-2">
           <Label>Teams</Label>
           <MultiSelectCombobox

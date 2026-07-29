@@ -12135,6 +12135,7 @@ export type CreateAgentData = {
         } | null;
         deletedAt?: unknown;
         teams?: Array<string>;
+        users?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
@@ -13488,6 +13489,7 @@ export type UpdateAgentData = {
         } | null;
         deletedAt?: unknown;
         teams?: Array<string>;
+        users?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
@@ -70250,7 +70252,7 @@ export type GetProjectsResponses = {
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
         conversationCount: number;
-        visibility: 'organization' | 'team';
+        visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
@@ -70347,7 +70349,7 @@ export type CreateProjectResponses = {
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
         conversationCount: number;
-        visibility: 'organization' | 'team';
+        visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
@@ -70445,7 +70447,7 @@ export type CreateProjectFromConversationResponses = {
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
         conversationCount: number;
-        visibility: 'organization' | 'team';
+        visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
@@ -70625,11 +70627,12 @@ export type GetProjectResponses = {
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
         conversationCount: number;
-        visibility: 'organization' | 'team';
+        visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
         shareTeamIds: Array<string> | null;
+        shareUserIds: Array<string> | null;
     };
 };
 
@@ -70726,8 +70729,9 @@ export type UpdateProjectResponse = UpdateProjectResponses[keyof UpdateProjectRe
 
 export type SetProjectShareData = {
     body: {
-        visibility: 'organization' | 'team' | 'none';
+        visibility: 'organization' | 'team' | 'user' | 'none';
         teamIds?: Array<string>;
+        userIds?: Array<string>;
     };
     path: {
         id: string;

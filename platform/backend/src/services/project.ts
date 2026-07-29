@@ -316,6 +316,7 @@ class ProjectService {
       conversationCount: counts.get(project.id) ?? 0,
       visibility: share?.visibility ?? null,
       shareTeamIds: canManage ? (share?.teamIds ?? []) : null,
+      shareUserIds: canManage ? (share?.userIds ?? []) : null,
       shareTeamNames:
         viewerRole === "owner" && share?.visibility === "team"
           ? (shareTeams.get(project.id) ?? []).map((t) => t.name)
@@ -416,6 +417,7 @@ class ProjectService {
     userId: string;
     visibility: ProjectShareVisibility | null;
     teamIds: string[];
+    userIds?: string[];
   }): Promise<void> {
     await this.requireManageable(params);
     // Org-wide visibility is a broadcast to the whole organization, so both
@@ -445,6 +447,7 @@ class ProjectService {
       createdByUserId: params.userId,
       visibility: params.visibility,
       teamIds: params.teamIds,
+      userIds: params.userIds ?? [],
     });
   }
 

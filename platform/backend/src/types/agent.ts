@@ -276,6 +276,9 @@ export const InsertAgentSchemaBase = createInsertSchema(
 )
   .extend({
     teams: z.array(z.string()).default([]),
+    // Individuals the agent is shared with by name. Additive to the scope,
+    // so a personal agent can reach a colleague without going team-wide.
+    users: z.array(z.string()).default([]),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
     // Make organizationId optional - model will auto-assign if not provided
     organizationId: z.string().optional(),
@@ -308,6 +311,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
 )
   .extend({
     teams: z.array(z.string()).optional(),
+    users: z.array(z.string()).optional(),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
     scope: AgentScopeSchema.optional(),
     knowledgeBaseIds: z.array(z.string()).optional(),

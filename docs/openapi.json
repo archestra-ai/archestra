@@ -40823,6 +40823,13 @@
                       "type": "string"
                     }
                   },
+                  "users": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -46442,6 +46449,12 @@
                     "nullable": true
                   },
                   "teams": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "users": {
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -272974,7 +272987,8 @@
                       "type": "string",
                       "enum": [
                         "organization",
-                        "team"
+                        "team",
+                        "user"
                       ]
                     },
                     "shareTeamNames": {
@@ -273361,7 +273375,8 @@
                         "type": "string",
                         "enum": [
                           "organization",
-                          "team"
+                          "team",
+                          "user"
                         ]
                       },
                       "shareTeamNames": {
@@ -273725,7 +273740,8 @@
                       "type": "string",
                       "enum": [
                         "organization",
-                        "team"
+                        "team",
+                        "user"
                       ]
                     },
                     "shareTeamNames": {
@@ -274065,7 +274081,8 @@
                       "type": "string",
                       "enum": [
                         "organization",
-                        "team"
+                        "team",
+                        "user"
                       ]
                     },
                     "shareTeamNames": {
@@ -274090,6 +274107,13 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "shareUserIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -274104,7 +274128,8 @@
                     "shareTeamNames",
                     "pinnedAt",
                     "createdAt",
-                    "shareTeamIds"
+                    "shareTeamIds",
+                    "shareUserIds"
                   ],
                   "additionalProperties": false
                 }
@@ -274949,7 +274974,8 @@
                         "type": "string",
                         "enum": [
                           "organization",
-                          "team"
+                          "team",
+                          "user"
                         ]
                       },
                       {
@@ -274961,6 +274987,13 @@
                     ]
                   },
                   "teamIds": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "userIds": {
                     "default": [],
                     "type": "array",
                     "items": {

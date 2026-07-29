@@ -64,6 +64,7 @@ import AgentLabelModel from "./agent-label";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import AgentUserModel from "./agent-user";
 import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
@@ -388,6 +389,7 @@ class AgentModel {
   static async create(
     {
       teams,
+      users,
       labels,
       knowledgeBaseIds,
       connectorIds,
@@ -453,6 +455,12 @@ class AgentModel {
     // Assign teams to the agent if provided
     if (teams && teams.length > 0) {
       await AgentTeamModel.assignTeamsToAgent(createdAgent.id, teams);
+    }
+
+    // Share with named individuals if provided. Additive to the scope, so a
+    // personal agent can reach a colleague without being published wider.
+    if (users && users.length > 0) {
+      await AgentUserModel.syncAgentUsers(createdAgent.id, users);
     }
 
     // Assign labels to the agent if provided
@@ -1593,14 +1601,27 @@ class AgentModel {
           eq(schema.teamMembersTable.userId, userId),
         ),
       )
+      .leftJoin(
+        schema.agentUsersTable,
+        and(
+          eq(schema.agentsTable.id, schema.agentUsersTable.agentId),
+          eq(schema.agentUsersTable.userId, userId),
+        ),
+      )
       .where(
         and(
           notDeleted(schema.agentsTable),
           or(
             eq(schema.agentsTable.scope, "org"),
+            // A personal agent reaches its author, and anyone it has been
+            // shared with individually. The grant sits beside the scope rather
+            // than replacing it, so no scope enum has to learn a new value.
             and(
               eq(schema.agentsTable.scope, "personal"),
-              eq(schema.agentsTable.authorId, userId),
+              or(
+                eq(schema.agentsTable.authorId, userId),
+                eq(schema.agentUsersTable.userId, userId),
+              ),
             ),
             and(
               eq(schema.agentsTable.scope, "team"),
@@ -2184,6 +2205,7 @@ class AgentModel {
     id: string,
     {
       teams,
+      users,
       labels,
       knowledgeBaseIds,
       connectorIds,
@@ -2323,6 +2345,11 @@ class AgentModel {
     // Sync team assignments if teams is provided
     if (teams !== undefined) {
       await AgentTeamModel.syncAgentTeams(id, teams);
+    }
+
+    // Sync individual grants; `[]` revokes them all, omitted leaves them alone.
+    if (users !== undefined) {
+      await AgentUserModel.syncAgentUsers(id, users);
     }
 
     // Sync label assignments if labels is provided

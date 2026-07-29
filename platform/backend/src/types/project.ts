@@ -4,7 +4,13 @@ import { schema } from "@/database";
 import { ConversationOriginSchema } from "./conversation";
 
 /** Who a shared project is visible to (no share row = owner only). */
-export const ProjectShareVisibilitySchema = z.enum(["organization", "team"]);
+// `user` shares with named individuals listed in `project_share_user`, the
+// same option conversations have carried from the start.
+export const ProjectShareVisibilitySchema = z.enum([
+  "organization",
+  "team",
+  "user",
+]);
 export type ProjectShareVisibility = z.infer<
   typeof ProjectShareVisibilitySchema
 >;
@@ -84,6 +90,9 @@ export type ProjectListItem = z.infer<typeof ProjectListItemSchema>;
  */
 export const ProjectDetailSchema = ProjectListItemSchema.extend({
   shareTeamIds: z.array(z.string()).nullable(),
+  // People a `user`-shared project names. Null when the caller cannot
+  // manage sharing, matching how shareTeamIds is withheld.
+  shareUserIds: z.array(z.string()).nullable(),
 });
 export type ProjectDetail = z.infer<typeof ProjectDetailSchema>;
 

@@ -11,6 +11,8 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeletedConversation } from "@/database/schemas/conversation";
+import { softDelete } from "@/database/soft-delete";
 import type {
   Conversation,
   ConversationOrigin,
@@ -79,6 +81,7 @@ class ConversationModel {
 
     // Build WHERE conditions
     const conditions = [
+      notDeletedConversation,
       eq(schema.conversationsTable.userId, userId),
       eq(schema.conversationsTable.organizationId, organizationId),
       // App-opened chats are drafts until the user writes: opening an app
@@ -339,6 +342,7 @@ class ConversationModel {
       )
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, id),
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),
@@ -391,6 +395,7 @@ class ConversationModel {
       .from(schema.conversationsTable)
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, params.id),
           eq(schema.conversationsTable.userId, params.userId),
           eq(schema.conversationsTable.organizationId, params.organizationId),
@@ -426,6 +431,7 @@ class ConversationModel {
       .from(schema.conversationsTable)
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, params.id),
           eq(schema.conversationsTable.userId, params.userId),
           eq(schema.conversationsTable.organizationId, params.organizationId),
@@ -482,7 +488,12 @@ class ConversationModel {
         organizationId: schema.conversationsTable.organizationId,
       })
       .from(schema.conversationsTable)
-      .where(eq(schema.conversationsTable.id, params.id));
+      .where(
+        and(
+          notDeletedConversation,
+          eq(schema.conversationsTable.id, params.id),
+        ),
+      );
     if (
       !bare ||
       !bare.projectId ||
@@ -548,6 +559,7 @@ class ConversationModel {
       )
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, params.id),
           eq(schema.conversationsTable.organizationId, params.organizationId),
         ),
@@ -659,6 +671,7 @@ class ConversationModel {
       .set(patch)
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, id),
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),
@@ -697,6 +710,7 @@ class ConversationModel {
       .set({ hooksDebugEnabled: params.enabled })
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, params.id),
           eq(schema.conversationsTable.userId, params.userId),
           eq(schema.conversationsTable.organizationId, params.organizationId),
@@ -733,6 +747,7 @@ class ConversationModel {
       })
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, params.id),
           eq(schema.conversationsTable.userId, params.userId),
           eq(schema.conversationsTable.organizationId, params.organizationId),
@@ -752,36 +767,50 @@ class ConversationModel {
         organizationId: schema.conversationsTable.organizationId,
       })
       .from(schema.conversationsTable)
-      .where(eq(schema.conversationsTable.id, id))
+      .where(and(notDeletedConversation, eq(schema.conversationsTable.id, id)))
       .limit(1);
     return row ?? null;
   }
 
+  /**
+   * Soft-delete a conversation (owner + org scoped): stamps `deleted_at` so it
+   * vanishes from every read path while its rows (messages, files, runs) stay
+   * intact. Idempotent — returns the number of rows that transitioned from
+   * active to deleted, so the caller can distinguish a first delete (1) from an
+   * already-deleted conversation (0) and answer 404 on the latter.
+   */
   static async delete(
     id: string,
     userId: string,
     organizationId: string,
-  ): Promise<void> {
-    await db
-      .delete(schema.conversationsTable)
-      .where(
-        and(
-          eq(schema.conversationsTable.id, id),
-          eq(schema.conversationsTable.userId, userId),
-          eq(schema.conversationsTable.organizationId, organizationId),
-        ),
-      );
+  ): Promise<number> {
+    return softDelete(
+      db,
+      schema.conversationsTable,
+      and(
+        eq(schema.conversationsTable.id, id),
+        eq(schema.conversationsTable.userId, userId),
+        eq(schema.conversationsTable.organizationId, organizationId),
+      ),
+    );
   }
 
   /**
    * Get the agentId for a conversation (without user context checks)
-   * Used by internal services that need to look up conversation -> agent mapping
+   * Used by internal services that need to look up conversation -> agent mapping.
+   * Excludes soft-deleted conversations, so late/in-flight callers resolve null
+   * (and degrade to a clean not-found) once a conversation is deleted.
    */
   static async getAgentId(conversationId: string): Promise<string | null> {
     const result = await db
       .select({ agentId: schema.conversationsTable.agentId })
       .from(schema.conversationsTable)
-      .where(eq(schema.conversationsTable.id, conversationId))
+      .where(
+        and(
+          notDeletedConversation,
+          eq(schema.conversationsTable.id, conversationId),
+        ),
+      )
       .limit(1);
 
     return result[0]?.agentId ?? null;
@@ -801,6 +830,7 @@ class ConversationModel {
       .from(schema.conversationsTable)
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, conversationId),
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),

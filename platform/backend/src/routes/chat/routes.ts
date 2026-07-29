@@ -2533,46 +2533,50 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, user, organizationId }, reply) => {
       // Look up the conversation (owner+org-scoped) before deletion so we can
       // capture its agent and any running active run for post-delete cleanup.
+      // findById now excludes soft-deleted rows, so a missing conversation here
+      // means it does not exist, is not owned by the caller, or was already
+      // deleted — all of which answer 404 (a re-delete is not a no-op success).
       const conversation = await ConversationModel.findById({
         id,
         userId: user.id,
         organizationId,
       });
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
 
-      // Capture the running run id before deletion: the cascade removes the run
-      // row, and we need its id afterward to wake the stream's stop/poll loop.
-      // Gated on the owner+org-scoped lookup above, so it never observes another
-      // tenant's run.
-      const runningRunId = conversation
-        ? ((await ActiveChatRunModel.findRunningByConversation(id))?.id ?? null)
-        : null;
+      // Soft-delete: stamp deleted_at so the conversation vanishes from every
+      // read path while its rows (messages, files, runs) stay intact — no file
+      // purge. Idempotent: a 0 count means a concurrent request won the delete
+      // race, which is still a 404 for this caller.
+      const deletedCount = await ConversationModel.delete(
+        id,
+        user.id,
+        organizationId,
+      );
+      if (deletedCount === 0) {
+        throw new ApiError(404, "Conversation not found");
+      }
 
-      // The conversation owns its no-project files, so they must die with it
-      // rather than linger as unreachable orphans (the FK is SET NULL). Purge
-      // them BEFORE the delete, while they still carry the conversation id, and
-      // only when the owner-scoped lookup above confirmed the caller owns it.
-      if (conversation) {
-        await fileStore.purgeConversationFiles({
-          organizationId,
+      // Best-effort teardown of live-only resources; failures here must not fail
+      // the already-successful delete. The data stays, but an in-flight run and
+      // its browser tab are ephemeral and must not keep streaming into a hidden
+      // conversation. Soft-delete leaves the run row in place (no cascade), so
+      // request an explicit stop: this sets stopRequestedAt on the still-running
+      // row, which the stream's stop-poll observes and aborts on.
+      try {
+        await activeChatRunService.requestStop({
           conversationId: id,
+          organizationId,
         });
+      } catch (error) {
+        logger.warn(
+          { error, conversationId: id },
+          "Failed to stop active chat run on conversation deletion",
+        );
       }
 
-      // The delete is the source of truth. Do not stop the stream or tear down
-      // browser runtime before it succeeds: a failed delete must leave the
-      // conversation and its in-flight response intact.
-      await ConversationModel.delete(id, user.id, organizationId);
-
-      // Post-delete best-effort cleanup; failures here must not fail the
-      // already-successful delete. The run row is now cascade-gone, so waking
-      // its stop/poll loop makes the stream observe the missing row promptly.
-      // The run_missing append path and missing-row poll remain as safety nets
-      // if this wake is lost.
-      if (runningRunId) {
-        await activeChatRunService.notifyConversationDeleted(runningRunId);
-      }
-
-      if (conversation?.agentId && browserStreamFeature.isEnabled()) {
+      if (conversation.agentId && browserStreamFeature.isEnabled()) {
         // Close browser tab for this conversation (best effort, don't fail if it errors)
         try {
           await browserStreamFeature.closeTab(conversation.agentId, id, {

@@ -137,15 +137,6 @@ export class ActiveChatRunService {
     return run;
   }
 
-  // Wake the stop-poll loop for a run whose conversation was just deleted. The
-  // run row is already cascade-gone, so the woken poll observes the missing row
-  // and aborts the stream (see startStopPolling). Best-effort: the underlying
-  // notify swallows its own errors, so a lost wake falls back to the poll
-  // interval and never fails the caller's delete.
-  async notifyConversationDeleted(runId: string): Promise<void> {
-    await this.notifyStop(runId);
-  }
-
   drainStreamToEvents(params: {
     runId: string;
     conversationId: string;
@@ -362,8 +353,10 @@ export class ActiveChatRunService {
         try {
           const run = await ActiveChatRunModel.findById(params.runId);
           // The row existed when polling started, so a null read now means the
-          // run was deleted — its conversation was hard-deleted and cascaded.
-          // Treat that as cancellation: there is nothing left to stream into.
+          // run row is gone (e.g. reaped). Conversation deletion is a soft
+          // delete and leaves this row in place, requesting a stop instead —
+          // that path aborts via stopRequestedAt below. Treat a missing row as
+          // cancellation regardless: there is nothing left to stream into.
           if (!run) {
             if (!params.abortController.signal.aborted) {
               logger.info(

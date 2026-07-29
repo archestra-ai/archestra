@@ -1,4 +1,5 @@
 import {
+  ConversationModel,
   ProjectModel,
   ProjectNameExistsError,
   ProjectPinModel,
@@ -297,6 +298,47 @@ describe("ProjectModel", () => {
     expect(scheduledRow?.scheduleTriggerId).toBe(trigger.id);
     expect(scheduledRow?.scheduleRunId).toBe(run.id);
     expect(scheduledRow?.scheduleName).toBe(trigger.name);
+  });
+
+  test("countConversations and listConversations exclude soft-deleted chats", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const project = await makeProject({
+      organizationId: org.id,
+      userId: user.id,
+      name: "hides-deleted",
+    });
+    const { default: db, schema } = await import("@/database");
+    const { eq } = await import("drizzle-orm");
+
+    const ids: string[] = [];
+    for (const title of ["keep", "remove"]) {
+      const conv = await makeConversation(agent.id, {
+        userId: user.id,
+        organizationId: org.id,
+        title,
+      });
+      await db
+        .update(schema.conversationsTable)
+        .set({ projectId: project.id })
+        .where(eq(schema.conversationsTable.id, conv.id));
+      ids.push(conv.id);
+    }
+
+    // Soft-delete the second chat; it must drop out of both the count and list.
+    await ConversationModel.delete(ids[1], user.id, org.id);
+
+    expect(
+      (await ProjectModel.countConversations([project.id])).get(project.id),
+    ).toBe(1);
+    const listed = await ProjectModel.listConversations(project.id);
+    expect(listed.map((c) => c.title)).toEqual(["keep"]);
   });
 });
 

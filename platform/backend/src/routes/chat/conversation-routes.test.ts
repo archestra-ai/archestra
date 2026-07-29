@@ -1,4 +1,5 @@
 import { ChatErrorCode } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import client from "prom-client";
 import db, { schema } from "@/database";
 import ConversationModel from "@/models/conversation";
@@ -1357,12 +1358,13 @@ describe("project chats: read-only access for project members", () => {
     });
     expect([403, 404]).toContain(rename.statusCode);
 
-    // the delete model call is owner-scoped, so a reader's DELETE is a no-op
-    // (the route's 200 is pre-existing "idempotent delete" semantics).
-    await app.inject({
+    // the delete lookup is owner-scoped, so a reader's DELETE finds nothing it
+    // owns and returns 404 — the author's chat is left intact.
+    const deleteAttempt = await app.inject({
       method: "DELETE",
       url: `/api/chat/conversations/${conversation.id}`,
     });
+    expect(deleteAttempt.statusCode).toBe(404);
     const stillThere = await ConversationModel.findById({
       id: conversation.id,
       userId: author.id,
@@ -1542,5 +1544,51 @@ describe("conversation list projectName", () => {
     expect(
       await ConversationChatErrorModel.findByConversation(conversation.id),
     ).toHaveLength(1);
+  });
+
+  test("delete soft-deletes the conversation: 200 once, then GET/re-DELETE 404, row kept", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "delete me",
+    });
+
+    const first = await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toEqual({ success: true });
+
+    // Gone from every read surface.
+    const afterGet = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(afterGet.statusCode).toBe(404);
+
+    // A re-delete is a 404, not a silent success: the second delete has no
+    // state transition to audit.
+    const second = await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(second.statusCode).toBe(404);
+
+    // The row survives with deletedAt stamped — soft delete keeps the data.
+    const [row] = await db
+      .select()
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, conversation.id));
+    expect(row).toBeDefined();
+    expect(row.deletedAt).toBeInstanceOf(Date);
   });
 });

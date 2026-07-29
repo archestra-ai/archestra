@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import db, { schema } from "@/database";
+import { notDeletedConversation } from "@/database/schemas/conversation";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { restore as restoreRows, softDelete } from "@/database/soft-delete";
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
@@ -83,6 +84,7 @@ class ProjectModel {
         .from(schema.conversationsTable)
         .where(
           and(
+            notDeletedConversation,
             eq(schema.conversationsTable.id, params.conversationId),
             eq(schema.conversationsTable.userId, params.userId),
             eq(schema.conversationsTable.organizationId, params.organizationId),
@@ -389,7 +391,12 @@ class ProjectModel {
         count: sql<number>`count(*)::int`,
       })
       .from(schema.conversationsTable)
-      .where(inArray(schema.conversationsTable.projectId, projectIds))
+      .where(
+        and(
+          notDeletedConversation,
+          inArray(schema.conversationsTable.projectId, projectIds),
+        ),
+      )
       .groupBy(schema.conversationsTable.projectId);
     const map = new Map<string, number>();
     for (const r of rows) {
@@ -460,6 +467,7 @@ class ProjectModel {
         )
         .where(
           and(
+            notDeletedConversation,
             eq(schema.conversationsTable.projectId, projectId),
             authorUserId
               ? eq(schema.conversationsTable.userId, authorUserId)

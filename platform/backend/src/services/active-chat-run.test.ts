@@ -2,7 +2,6 @@ import type { UIMessageChunk } from "ai";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
-import { ConversationModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import {
   ActiveChatRunService,
@@ -591,9 +590,12 @@ test("startStopPolling aborts when the run row no longer exists", async ({
     abortController,
   });
 
-  // Deleting the conversation cascades the run row away. The stop poll observes
-  // the now-missing row and aborts, the same as DELETE waking it via notify.
-  await ConversationModel.delete(conversation.id, user.id, organization.id);
+  // Remove the run row directly. Conversation deletion is a soft delete now and
+  // no longer cascades the run row away (DELETE instead requests a stop); the
+  // stop poll observes the now-missing row and aborts, the same as a stop notify.
+  await db
+    .delete(schema.chatActiveRunsTable)
+    .where(eq(schema.chatActiveRunsTable.id, run?.id ?? ""));
   await notifier.notifyStop(run?.id ?? "");
 
   await waitForAbort(abortController.signal);
@@ -651,7 +653,11 @@ test("drainStreamToEvents stops cleanly when the run is deleted before a schedul
       getTerminalStatus: async () => ({ status: "completed" }),
     });
 
-    await ConversationModel.delete(conversation.id, user.id, organization.id);
+    // Remove the run row directly (soft-deleting the conversation no longer
+    // cascades it away), so the scheduled flush observes run_missing.
+    await db
+      .delete(schema.chatActiveRunsTable)
+      .where(eq(schema.chatActiveRunsTable.id, run?.id ?? ""));
 
     // The scheduled flush sees run_missing, so the drain aborts the chat and
     // cancels the source instead of leaving a process-level unhandled rejection.

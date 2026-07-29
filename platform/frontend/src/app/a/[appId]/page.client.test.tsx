@@ -30,6 +30,7 @@ const app = {
   organizationId: "org-1",
   authorId: "user-1",
   name: "Test App",
+  slug: "test-app",
   description: null,
   templateId: null,
   mcpServerId: "server-1",
@@ -52,7 +53,11 @@ const server = setupServer();
 vi.mock("sonner");
 
 vi.mock("@/components/mcp-app/mcp-app-view", () => ({
-  McpAppRuntime: () => <div data-testid="app-frame" />,
+  // Surfaces the endpoint the runtime was actually mounted on, so a test can
+  // assert the app id reaches it — never the URL segment.
+  McpAppRuntime: ({ endpoint }: { endpoint: { appId?: string } }) => (
+    <div data-testid="app-frame" data-endpoint-app-id={endpoint.appId} />
+  ),
 }));
 
 vi.mock("@/components/mcp-app/use-app-runtime-controls", () => ({
@@ -145,12 +150,50 @@ describe("AppRunPage", () => {
     ).not.toBeInTheDocument();
     expect(toast.error).not.toHaveBeenCalled();
   });
+
+  it("mounts the runtime on the app id when the URL carried a slug", async () => {
+    // The slug addresses the page; the runtime endpoint (/api/mcp/app/:appId)
+    // is uuid-keyed and the id is the app's isolation key, so the resolved id —
+    // not the URL segment — is what must reach it.
+    // Only the slug URL resolves, so the page cannot pass by guessing the id.
+    server.resetHandlers();
+    server.use(
+      http.get(`${API_ORIGIN}/api/apps/${app.slug}`, () =>
+        HttpResponse.json(app),
+      ),
+    );
+
+    renderPage(createQueryClient(), app.slug);
+
+    expect(await screen.findByTestId("app-frame")).toHaveAttribute(
+      "data-endpoint-app-id",
+      APP_ID,
+    );
+  });
+
+  it("looks the app up by whatever segment the URL carried", async () => {
+    let slugRequests = 0;
+    server.use(
+      http.get(`${API_ORIGIN}/api/apps/${app.slug}`, () => {
+        slugRequests += 1;
+        return HttpResponse.json(app);
+      }),
+    );
+
+    renderPage(createQueryClient(), app.slug);
+
+    await screen.findByTestId("app-frame");
+    expect(slugRequests).toBe(1);
+  });
 });
 
-function renderPage(queryClient = createQueryClient()): QueryClient {
+function renderPage(
+  queryClient = createQueryClient(),
+  idOrSlug: string = APP_ID,
+): QueryClient {
   render(
     <QueryClientProvider client={queryClient}>
-      <AppRunPage appId={APP_ID} />
+      <AppRunPage idOrSlug={idOrSlug} />
     </QueryClientProvider>,
   );
   return queryClient;

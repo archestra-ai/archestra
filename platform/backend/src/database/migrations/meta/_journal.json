@@ -2591,6 +2591,13 @@
       "when": 1785254164675,
       "tag": "0369_free_secret_warriors",
       "breakpoints": true
+    },
+    {
+      "idx": 370,
+      "version": "7",
+      "when": 1785309090407,
+      "tag": "0370_app_url_slug",
+      "breakpoints": true
     }
   ]
 }

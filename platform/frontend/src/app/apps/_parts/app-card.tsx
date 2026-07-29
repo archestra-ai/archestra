@@ -38,6 +38,7 @@ import {
   useOpenExternalAppInChat,
   usePinApp,
 } from "@/lib/app.query";
+import { appRunUrl } from "@/lib/apps/app-run-url";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { setPendingProjectChatHandoff } from "@/lib/chat/pending-project-chat-handoff";
 import { cn } from "@/lib/utils";
@@ -263,7 +264,7 @@ function OwnedAppCard({
               Settings
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href={`/a/${app.id}`} target="_blank" rel="noreferrer">
+              <Link href={appRunUrl(app)} target="_blank" rel="noreferrer">
                 <SquareArrowOutUpRight className="h-4 w-4" />
                 Open in new tab
               </Link>

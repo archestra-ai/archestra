@@ -3,6 +3,7 @@ import {
   permissionDescriptions,
   requiredEndpointPermissionsMap,
 } from "@archestra/shared/access-control";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 
 // === Exports ===
 
@@ -173,7 +174,7 @@ function createAuthenticationSection(operationId: string): string {
   return [
     "Authentication:",
     "",
-    "Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.",
+    `Required. Use an authenticated browser session or send your ${archestraMcpBranding.appName} API key in the \`Authorization\` header.`,
   ].join("\n");
 }
 

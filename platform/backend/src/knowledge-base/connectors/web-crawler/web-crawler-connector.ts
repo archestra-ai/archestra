@@ -7,6 +7,7 @@ import {
 } from "@crawlee/cheerio";
 import ipaddr from "ipaddr.js";
 import safeRegex from "safe-regex2";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import type {
   ConnectorCredentials,
   ConnectorDocument,
@@ -19,7 +20,14 @@ import { BaseConnector } from "../base-connector";
 const DEFAULT_BATCH_SIZE = 25;
 const DEFAULT_MAX_DEPTH = 3;
 const DEFAULT_MAX_PAGES = 250;
-const DEFAULT_USER_AGENT = "Archestra Web Crawler";
+/**
+ * Default crawler identity sent to third-party sites, resolved per request so a
+ * white-labeled deployment does not announce the vendor's brand in its outbound
+ * User-Agent. Overridden per connector by `config.userAgent`.
+ */
+function getDefaultUserAgent(): string {
+  return `${archestraMcpBranding.appName} Web Crawler`;
+}
 const DEFAULT_CONTENT_SELECTORS = ["main", "article", "[role='main']", "body"];
 const DEFAULT_EXCLUDE_SELECTORS = [
   "script",
@@ -202,7 +210,7 @@ export class WebCrawlerConnector extends BaseConnector {
 
             gotOptions.headers = {
               ...gotOptions.headers,
-              "User-Agent": params.config.userAgent ?? DEFAULT_USER_AGENT,
+              "User-Agent": params.config.userAgent ?? getDefaultUserAgent(),
             };
 
             // got follows redirects internally, bypassing the per-request SSRF

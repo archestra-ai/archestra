@@ -19,7 +19,7 @@ import type {
   SubscriptionInfo,
 } from "@/types";
 import {
-  DEFAULT_AGENT_EMAIL_NAME,
+  getDefaultAgentEmailName,
   MAX_EMAIL_BODY_SIZE,
   PROCESSED_EMAIL_RETENTION_MS,
 } from "./constants";
@@ -858,7 +858,7 @@ ${formattedHistory}
   if (shouldSendReply && result.text) {
     try {
       // Use the agent name for the email reply
-      const replyAgentName = agent.name || DEFAULT_AGENT_EMAIL_NAME;
+      const replyAgentName = agent.name || getDefaultAgentEmailName();
 
       const replyId = await provider.sendReply({
         originalEmail: email,

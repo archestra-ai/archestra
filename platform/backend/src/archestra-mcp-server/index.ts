@@ -1,5 +1,4 @@
 import {
-  ARCHESTRA_TOOL_PREFIX,
   type ArchestraToolFullName,
   type ArchestraToolShortName,
   getArchestraToolFullName,
@@ -167,19 +166,24 @@ export function getArchestraMcpTools() {
     ...appLlmTools,
   ];
 
-  if (archestraMcpBranding.toolPrefix === ARCHESTRA_TOOL_PREFIX) {
-    return tools;
-  }
-
+  // Descriptions are shipped strings frozen at module load, so they cannot read
+  // the branding singleton inline — it is only synced once an organization has
+  // been loaded. Rebranding them here, where the tool list is built per
+  // reconcile, is what lets a white-labeled deployment advertise built-ins under
+  // its own name. `brandBuiltInText` is a no-op for non-branded orgs.
   return tools.map((tool) => {
     const shortName = getArchestraToolShortName(tool.name);
-    if (!shortName) {
-      return tool;
-    }
+    const description =
+      typeof tool.description === "string"
+        ? archestraMcpBranding.brandBuiltInText(tool.description)
+        : tool.description;
 
     return {
       ...tool,
-      name: archestraMcpBranding.getToolName(shortName),
+      description,
+      ...(shortName
+        ? { name: archestraMcpBranding.getToolName(shortName) }
+        : {}),
     };
   });
 }

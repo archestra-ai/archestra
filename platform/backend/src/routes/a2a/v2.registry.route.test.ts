@@ -1,4 +1,7 @@
+import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -79,6 +82,35 @@ describe("a2a v2 agent registry", () => {
     const serialized = JSON.stringify(body);
     expect(serialized).not.toContain("Off Limits Agent");
     expect(serialized).not.toContain(unreachableId);
+  });
+
+  test("leaves out the platform's own built-in agents", async ({
+    makeInternalAgent,
+  }) => {
+    // Context compaction, title generation and the dual-LLM pair are how the
+    // platform runs; nobody addresses them as a collaborator.
+    const builtIn = await makeInternalAgent({
+      name: "Context Compaction Subagent",
+      organizationId,
+    });
+    // `built_in` is generated from the presence of a built-in config, which
+    // is how a real platform agent becomes one.
+    await db
+      .update(schema.agentsTable)
+      .set({
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
+      })
+      .where(eq(schema.agentsTable.id, builtIn.id));
+    // Reachable as far as authorization is concerned — exclusion is a catalog
+    // decision, so the check must not be what hides it.
+    mockValidateMCPGatewayToken.mockResolvedValue({ organizationId });
+
+    const body = (await listAgents()).json();
+
+    expect(JSON.stringify(body)).not.toContain(builtIn.id);
+    expect(
+      body.agents.map((agent: { name: string }) => agent.name),
+    ).not.toContain("Context Compaction Subagent");
   });
 
   test("authorizes every candidate individually", async () => {

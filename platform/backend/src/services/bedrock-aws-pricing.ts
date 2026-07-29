@@ -46,7 +46,8 @@ export interface BedrockAwsPrices {
  * revision, and `titan-embed-text-v1` and `-v2` are different models priced five
  * times apart.
  */
-const AWS_PRICE_IDENTITY: Record<string, string> = {
+/** @public — asserted by bedrock-aws-pricing.test.ts to stay free of generic identities. */
+export const AWS_PRICE_IDENTITY: Record<string, string> = {
   "amazon.nova-2-lite-v1": "Nova 2.0 Lite",
   "amazon.nova-2-sonic-v1": "Nova Sonic 2.0",
   "amazon.nova-lite-v1": "Nova Lite",
@@ -57,18 +58,13 @@ const AWS_PRICE_IDENTITY: Record<string, string> = {
   "amazon.titan-embed-text-v2": "TitanEmbeddingsV2-Text-input",
   "anthropic.claude-3-haiku-20240307-v1": "Claude 3 Haiku",
   "anthropic.claude-3-sonnet-20240229-v1": "Claude 3 Sonnet",
-  "anthropic.claude-fable-5": "Claude",
   "anthropic.claude-haiku-4-5-20251001-v1": "Claude Haiku 4.5",
   "anthropic.claude-opus-4-1-20250805-v1": "Claude Opus 4.1",
   "anthropic.claude-opus-4-5-20251101-v1": "Claude Opus 4.5",
   "anthropic.claude-opus-4-6-v1": "Claude Opus 4.6",
-  "anthropic.claude-opus-4-7": "Claude Opus 4",
-  "anthropic.claude-opus-4-8": "Claude Opus 4",
-  "anthropic.claude-opus-5": "Claude",
   "anthropic.claude-sonnet-4-20250514-v1": "Claude Sonnet 4",
   "anthropic.claude-sonnet-4-5-20250929-v1": "Claude Sonnet 4.5",
   "anthropic.claude-sonnet-4-6": "Claude Sonnet 4.6",
-  "anthropic.claude-sonnet-5": "Claude",
   "deepseek.r1-v1": "R1",
   "deepseek.v3.2": "DeepSeek v3.2",
   "google.gemma-3-12b-it": "Gemma 3 12B",

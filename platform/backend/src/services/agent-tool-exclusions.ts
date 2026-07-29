@@ -10,6 +10,7 @@ import logger from "@/logging";
 import {
   AgentExcludedToolModel,
   AgentModel,
+  AgentVersionModel,
   InternalMcpCatalogModel,
   ToolModel,
 } from "@/models";
@@ -121,6 +122,10 @@ class AgentToolExclusionsService {
     const { clearChatMcpClient } = await import("@/clients/chat-mcp-client");
     clearChatMcpClient(agentId);
 
+    // After the replace transaction commits and its row lock is released, so the
+    // fork's own FOR UPDATE can't self-deadlock against it.
+    await AgentVersionModel.forkIfChangedBestEffort(agentId);
+
     logger.info(
       { agentId, excludedToolCount: excludedToolIds.length },
       "Replaced agent tool exclusions",
@@ -173,6 +178,9 @@ class AgentToolExclusionsService {
 
     const { clearChatMcpClient } = await import("@/clients/chat-mcp-client");
     clearChatMcpClient(agentId);
+
+    // After commit / lock release (see replaceExclusions).
+    await AgentVersionModel.forkIfChangedBestEffort(agentId);
 
     logger.info(
       {

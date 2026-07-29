@@ -168,8 +168,10 @@ const agentsTable = softDeletablePgTable(
 
     /**
      * Head pointer into `agent_versions`. 0 = legacy row that predates config
-     * versioning; the first config write forks version 1. Bumped in the same
-     * operation as any config change (AgentVersionModel.forkIfChanged).
+     * versioning; the first config write forks version 1. Bumped by
+     * AgentVersionModel.forkIfChangedBestEffort at a config-mutating operation's
+     * boundary (agent create/update, tool/hook/exclusion/knowledge edits); see
+     * that model for the coverage surface and the lazy-capture caveat.
      */
     latestVersion: integer("latest_version").notNull().default(0),
 

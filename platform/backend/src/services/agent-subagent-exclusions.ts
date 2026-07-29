@@ -1,4 +1,8 @@
-import { AgentExcludedSubagentModel, AgentModel } from "@/models";
+import {
+  AgentExcludedSubagentModel,
+  AgentModel,
+  AgentVersionModel,
+} from "@/models";
 import type { AgentSubagentExclusions } from "@/types";
 
 /**
@@ -37,6 +41,9 @@ class AgentSubagentExclusionsService {
     );
 
     await AgentExcludedSubagentModel.replaceForAgent(agentId, valid);
+
+    // Excluded-subagent set is part of the config snapshot — fork a version.
+    await AgentVersionModel.forkIfChangedBestEffort(agentId);
 
     return this.getExclusions(agentId);
   }

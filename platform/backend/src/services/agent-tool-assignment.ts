@@ -2,6 +2,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   AgentModel,
   AgentToolModel,
+  AgentVersionModel,
   AppAccessModel,
   AppModel,
   AppToolModel,
@@ -85,6 +86,11 @@ export async function assignToolToAgent(
   if (result.status === "unchanged") {
     return "duplicate";
   }
+
+  // The tool surface changed — snapshot a new agent config version. Shared
+  // choke point for every single-tool assign (REST, MCP tools, agent import),
+  // so those paths need no fork of their own.
+  await AgentVersionModel.forkIfChangedBestEffort(params.agentId);
 
   if (result.status === "updated") {
     return "updated";

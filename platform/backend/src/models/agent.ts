@@ -568,8 +568,11 @@ class AgentModel {
     }
 
     // Fork version 1 now that the full config of this create (row, junctions,
-    // auto-assigned tools, exclusion pre-fill) is in place.
-    const fork = await AgentVersionModel.forkIfChanged(createdAgent.id);
+    // auto-assigned tools, exclusion pre-fill) is in place. Best-effort: a
+    // versioning failure must never fail the create itself.
+    const fork = await AgentVersionModel.forkIfChangedBestEffort(
+      createdAgent.id,
+    );
     if (fork) {
       createdAgent.latestVersion = fork.version;
     }
@@ -2455,8 +2458,9 @@ class AgentModel {
     // Any write above may have changed the canonical config — fork a version
     // if so. Deliberately after the junction syncs (the snapshot must capture
     // this mutation's final state), and unconditionally: a relational-only
-    // update skips the agents-row write yet still changes config.
-    const fork = await AgentVersionModel.forkIfChanged(id);
+    // update skips the agents-row write yet still changes config. Best-effort:
+    // a versioning failure must never fail the update itself.
+    const fork = await AgentVersionModel.forkIfChangedBestEffort(id);
     if (fork && updatedAgent) {
       updatedAgent.latestVersion = fork.version;
     }

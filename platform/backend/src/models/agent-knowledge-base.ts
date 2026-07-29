@@ -3,6 +3,7 @@ import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentKnowledgeBase } from "@/types";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
+import AgentVersionModel from "./agent-version";
 
 class AgentKnowledgeBaseModel {
   static async findByAgent(agentId: string): Promise<AgentKnowledgeBase[]> {
@@ -36,6 +37,9 @@ class AgentKnowledgeBaseModel {
       .values({ agentId, knowledgeBaseId })
       .onConflictDoNothing();
     agentKnowledgeSourcesCache.invalidate(agentId);
+    // Knowledge bases are part of the config snapshot — fork a version.
+    // (AgentModel.update goes through syncForAgent, not here, so no double fork.)
+    await AgentVersionModel.forkIfChangedBestEffort(agentId);
   }
 
   static async unassign(
@@ -53,6 +57,9 @@ class AgentKnowledgeBaseModel {
       .returning({ agentId: schema.agentKnowledgeBasesTable.agentId });
 
     agentKnowledgeSourcesCache.invalidate(agentId);
+    if (deleted.length > 0) {
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    }
     return deleted.length > 0;
   }
 

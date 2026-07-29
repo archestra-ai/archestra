@@ -1,6 +1,9 @@
+import { vi } from "vitest";
 import db, { schema } from "@/database";
+import { AgentToolModel, HookFileModel } from "@/models";
 import AgentModel from "@/models/agent";
 import AgentVersionModel from "@/models/agent-version";
+import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { describe, expect, test } from "@/test";
 import type { AgentConfigSnapshot } from "@/types/agent-version";
 
@@ -169,5 +172,121 @@ describe("AgentVersionModel", () => {
     expect(AgentVersionModel.computeContentHash(reordered)).toBe(
       head.contentHash,
     );
+  });
+});
+
+describe("AgentVersionModel fork-on-write coverage", () => {
+  // Config lives across sibling entities that are edited through their own
+  // routes/MCP tools, not only AgentModel.update. Each of those write paths
+  // forks at its boundary via forkIfChangedBestEffort — these pin that the
+  // version history is actually captured, not silently deferred.
+
+  test("hook create/update/delete each fork a new config version", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    expect(await AgentVersionModel.listForAgent(agent.id)).toHaveLength(1);
+
+    const hook = await HookFileModel.create({
+      agentId: agent.id,
+      organizationId: org.id,
+      event: "session_start",
+      fileName: "setup.py",
+      content: "print('hi')",
+      requirements: [],
+      enabled: true,
+    });
+    expect(await AgentVersionModel.listForAgent(agent.id)).toHaveLength(2);
+    const afterCreate = await AgentVersionModel.findByAgentAndVersion(
+      agent.id,
+      2,
+    );
+    expect(afterCreate?.snapshot.hooks).toEqual([
+      {
+        event: "session_start",
+        fileName: "setup.py",
+        content: "print('hi')",
+        requirements: [],
+        enabled: true,
+      },
+    ]);
+
+    await HookFileModel.update({
+      id: hook.id,
+      organizationId: org.id,
+      data: { content: "print('bye')" },
+    });
+    expect(await AgentVersionModel.listForAgent(agent.id)).toHaveLength(3);
+
+    await HookFileModel.delete(hook.id, org.id);
+    const versions = await AgentVersionModel.listForAgent(agent.id);
+    expect(versions).toHaveLength(4);
+    expect(versions[0].snapshot.hooks).toEqual([]);
+  });
+
+  test("tool unassign forks a version", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool();
+    await makeAgentTool(agent.id, tool.id);
+    // makeAgentTool inserts without forking, so version the assignment first —
+    // otherwise removing it just returns to v1's tool-less snapshot.
+    await AgentVersionModel.forkIfChanged(agent.id);
+    expect(await AgentVersionModel.listForAgent(agent.id)).toHaveLength(2);
+
+    const deleted = await AgentToolModel.delete(agent.id, tool.id);
+
+    expect(deleted).toBe(true);
+    const versions = await AgentVersionModel.listForAgent(agent.id);
+    expect(versions).toHaveLength(3);
+    expect(versions[0].snapshot.tools).toEqual([]);
+  });
+
+  test("subagent-exclusion replace forks a version", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const target = await makeAgent({ organizationId: org.id });
+
+    await agentSubagentExclusionsService.replaceExclusions({
+      agentId: agent.id,
+      organizationId: org.id,
+      excludedSubagentIds: [target.id],
+    });
+
+    const versions = await AgentVersionModel.listForAgent(agent.id);
+    expect(versions).toHaveLength(2);
+    expect(
+      versions[0].snapshot.excludedSubagents.map((s) => s.agentId),
+    ).toEqual([target.id]);
+  });
+
+  test("a fork failure never fails the surrounding write (best-effort)", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const spy = vi
+      .spyOn(AgentVersionModel, "forkIfChanged")
+      .mockRejectedValueOnce(new Error("fork exploded"));
+
+    // The config change commits before the fork runs, so the update must still
+    // succeed and return the mutated agent even though the fork threw.
+    const updated = await AgentModel.update(agent.id, {
+      description: "edited",
+    });
+
+    expect(updated?.description).toBe("edited");
+    expect(spy).toHaveBeenCalledTimes(1);
+    // Fork was swallowed → head pointer stays where it was.
+    expect(updated?.latestVersion).toBe(1);
+
+    spy.mockRestore();
   });
 });

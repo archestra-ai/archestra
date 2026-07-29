@@ -12215,7 +12215,6 @@ export type CreateAgentData = {
         } | {
             name: 'app-runtime-llm-agent';
         } | null;
-        latestVersion?: number;
         deletedAt?: unknown;
         teams?: Array<string>;
         users?: Array<string>;
@@ -13606,7 +13605,6 @@ export type UpdateAgentData = {
         } | {
             name: 'app-runtime-llm-agent';
         } | null;
-        latestVersion?: number;
         deletedAt?: unknown;
         teams?: Array<string>;
         users?: Array<string>;

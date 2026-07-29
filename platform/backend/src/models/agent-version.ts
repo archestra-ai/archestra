@@ -1,15 +1,24 @@
 import { createHash } from "node:crypto";
 import { and, asc, desc, eq } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import logger from "@/logging";
 import type { AgentConfigSnapshot, AgentVersion } from "@/types/agent-version";
 
 type AgentRow = typeof schema.agentsTable.$inferSelect;
 
 /**
- * Owns immutable agent config snapshots (`agent_versions`). A version is
- * forked by `forkIfChanged` whenever a config write changes the canonical
- * payload (see AgentConfigSnapshotSchema for the exact surface); a write
- * producing an identical payload leaves the head untouched.
+ * Owns immutable agent config snapshots (`agent_versions`). Config-mutating
+ * operations fork a new version at their boundary via `forkIfChangedBestEffort`
+ * when the write changes the canonical payload (see AgentConfigSnapshotSchema
+ * for the exact surface): agent create/update, tool assign/unassign/delegation,
+ * hook create/update/delete, tool/subagent exclusion edits, and knowledge/
+ * connector assignment. A write producing an identical payload leaves the head
+ * untouched (content-hash dedup).
+ *
+ * Coverage is at those operation boundaries, not a DB trigger — a write that
+ * bypasses them (e.g. the bulk MCP-server install tool fan-out, which runs
+ * inside its own transaction) is captured lazily by the next fork rather than
+ * eagerly at the moment it happens.
  */
 class AgentVersionModel {
   /**
@@ -182,8 +191,8 @@ class AgentVersionModel {
       hooks: hooks.sort(
         // (agent_id, event, file_name) is unique — no tiebreaker needed.
         (a, b) =>
-          a.event.localeCompare(b.event) ||
-          a.fileName.localeCompare(b.fileName),
+          compareStrings(a.event, b.event) ||
+          compareStrings(a.fileName, b.fileName),
       ),
       knowledgeBases: knowledgeBases.sort(byNameThen((k) => k.id)),
       connectors: connectors.sort(byNameThen((c) => c.id)),
@@ -248,6 +257,31 @@ class AgentVersionModel {
     return tx ? await run(tx) : await withDbTransaction(run);
   }
 
+  /**
+   * `forkIfChanged` that never fails the caller's write. A fork is a
+   * self-contained read-compare-insert whose only job is to record history, and
+   * the config change it snapshots has already committed by the time this runs,
+   * so a transient fork error is logged and swallowed — the next config write
+   * re-captures the missed state (same tolerance as the crash case documented on
+   * `forkIfChanged`). This is the entry point every config-mutation boundary
+   * uses; call `forkIfChanged` directly only when a caller must observe the fork
+   * result. Intentionally takes no `tx`: it always runs in its own transaction,
+   * so a swallowed error can never leave a caller's transaction aborted.
+   */
+  static async forkIfChangedBestEffort(
+    agentId: string,
+  ): Promise<{ version: number; forked: boolean } | null> {
+    try {
+      return await AgentVersionModel.forkIfChanged(agentId);
+    } catch (error) {
+      logger.error(
+        { error, agentId },
+        "Agent version fork failed; skipping (config change already committed)",
+      );
+      return null;
+    }
+  }
+
   /** Resolve a specific `(agent, version)` pair, e.g. the agent's head version. */
   static async findByAgentAndVersion(
     agentId: string,
@@ -301,5 +335,16 @@ function stableStringify(value: unknown): string {
 function byNameThen<T extends { name: string }>(
   id: (row: T) => string,
 ): (a: T, b: T) => number {
-  return (a, b) => a.name.localeCompare(b.name) || id(a).localeCompare(id(b));
+  return (a, b) =>
+    compareStrings(a.name, b.name) || compareStrings(id(a), id(b));
+}
+
+/**
+ * Locale-independent string order by UTF-16 code unit, matching the key sort in
+ * `stableStringify`. Collection order is hashed into the snapshot, so using
+ * `localeCompare` here would let the runtime's default locale reorder
+ * equal-weight names and spuriously fork an otherwise-identical config.
+ */
+function compareStrings(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }

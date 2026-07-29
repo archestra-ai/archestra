@@ -303,6 +303,7 @@ export function ChatMessages({
   const earlyToolUiStarts = session?.earlyToolUiStarts || {};
   const contextCompaction = session?.contextCompaction;
   const hasPendingMcpElicitation = Boolean(session?.pendingMcpElicitation);
+  const liveMcpTasks = useMemo(() => session?.mcpTasks ?? {}, [session]);
 
   /**
    * Background tasks keyed by the tool call they back, so the tool circle and
@@ -313,6 +314,7 @@ export function ChatMessages({
    */
   const mcpTasksByToolCallId = useMemo(() => {
     const byToolCallId = new Map<string, McpTaskPartData>();
+    // Persisted first: what the backend spliced into the turn once it ended.
     for (const message of messages) {
       for (const part of message.parts ?? []) {
         if (part.type !== MCP_TASK_PART_TYPE) continue;
@@ -322,8 +324,16 @@ export function ChatMessages({
         }
       }
     }
+    // Then the live ones, which win — during the turn they are the only source
+    // (the stream sends them transiently, so they never reach message parts),
+    // and afterwards they agree with what was persisted.
+    for (const task of Object.values(liveMcpTasks)) {
+      if (task?.toolCallId) {
+        byToolCallId.set(task.toolCallId, task);
+      }
+    }
     return byToolCallId;
-  }, [messages]);
+  }, [messages, liveMcpTasks]);
 
   // Cancelling a background task. The request is fire-once per task: the
   // endpoint answers well before the next poll flips the row, so clearing on

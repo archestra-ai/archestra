@@ -76,6 +76,7 @@ export function createChatTaskBridge(): ChatTaskBridge {
       type: MCP_TASK_PART_TYPE,
       id: data.taskId,
       data,
+      transient: true,
     } as UIMessageChunk);
   }
 

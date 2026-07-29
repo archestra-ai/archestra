@@ -17583,6 +17583,7 @@ export type GetAppsResponses = {
             pinnedAt: string | null;
             source: 'owned';
             id: string;
+            slug: string | null;
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
             authorName: string | null;
@@ -17628,6 +17629,7 @@ export type GetAppsResponse = GetAppsResponses[keyof GetAppsResponses];
 export type CreateAppData = {
     body: {
         name: string;
+        slug?: string;
         description?: string;
         scope?: 'personal' | 'team' | 'org';
         html?: string;
@@ -17728,6 +17730,7 @@ export type CreateAppResponses = {
         organizationId: string;
         authorId: string | null;
         name: string;
+        slug: string | null;
         description: string | null;
         templateId: string | null;
         mcpServerId: string | null;
@@ -18644,6 +18647,7 @@ export type GetAppResponses = {
         organizationId: string;
         authorId: string | null;
         name: string;
+        slug: string | null;
         description: string | null;
         templateId: string | null;
         mcpServerId: string | null;
@@ -18695,6 +18699,7 @@ export type GetAppResponse = GetAppResponses[keyof GetAppResponses];
 export type UpdateAppData = {
     body: {
         name?: string;
+        slug?: string;
         description?: string | null;
         scope?: 'personal' | 'team' | 'org';
         html?: string;
@@ -18797,6 +18802,7 @@ export type UpdateAppResponses = {
         organizationId: string;
         authorId: string | null;
         name: string;
+        slug: string | null;
         description: string | null;
         templateId: string | null;
         mcpServerId: string | null;
@@ -18918,6 +18924,7 @@ export type EnableAppResponses = {
         organizationId: string;
         authorId: string | null;
         name: string;
+        slug: string | null;
         description: string | null;
         templateId: string | null;
         mcpServerId: string | null;
@@ -19049,6 +19056,7 @@ export type DisableAppResponses = {
         organizationId: string;
         authorId: string | null;
         name: string;
+        slug: string | null;
         description: string | null;
         templateId: string | null;
         mcpServerId: string | null;

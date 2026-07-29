@@ -186,3 +186,89 @@ describe("GET /api/apps/:appId", () => {
     expect(response.statusCode).toBe(404);
   });
 });
+
+describe("GET /api/apps/:appId — addressed by slug", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & { organizationId: string; user: User }
+      ).organizationId = organizationId;
+      (request as typeof request & { user: User }).user = user;
+    });
+
+    const { default: appRoutes } = await import("./app.routes");
+    await app.register(appRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("resolves a slug to the same app the id returns", async ({
+    makeApp,
+  }) => {
+    const created = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Sales Dashboard",
+    });
+    expect(created.slug).toBe("sales-dashboard");
+
+    const bySlug = await app.inject({
+      method: "GET",
+      url: "/api/apps/sales-dashboard",
+    });
+    const byId = await app.inject({
+      method: "GET",
+      url: `/api/apps/${created.id}`,
+    });
+
+    expect(bySlug.statusCode).toBe(200);
+    expect(bySlug.json().id).toBe(created.id);
+    // The slug is a second address for one app, not a second app.
+    expect(bySlug.json()).toEqual(byId.json());
+  });
+
+  test("names the segment the caller sent, never the resolved id", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    // A slug that resolves but the caller may not view: echoing the id would
+    // hand them the one identifier the 404 exists to withhold.
+    const author = await makeUser();
+    const hidden = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: author.id,
+      name: "Sales Dashboard",
+    });
+    // Plain reader, so app:admin does not grant sight of a personal app.
+    const role = await makeCustomRole(organizationId, {
+      permission: { app: ["read"] },
+    });
+    const outsider = await makeUser();
+    await makeMember(outsider.id, organizationId, { role: role.role });
+    user = outsider;
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/apps/sales-dashboard",
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain("sales-dashboard");
+    expect(response.json().error.message).not.toContain(hidden.id);
+  });
+});

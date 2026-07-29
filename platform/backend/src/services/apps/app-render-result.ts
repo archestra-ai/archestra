@@ -24,7 +24,7 @@ export function buildAppRenderResult(app: App): CallToolResult {
   };
   return structuredSuccessResult(
     summary,
-    `${fencedBlock(JSON.stringify(summary, null, 2), "json")}\nWill render inline when opened in chat; standalone page: ${appRunLink(app.name, app.id)}`,
+    `${fencedBlock(JSON.stringify(summary, null, 2), "json")}\nWill render inline when opened in chat; standalone page: ${appRunLink(app.name, app)}`,
   );
 }
 

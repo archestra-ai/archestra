@@ -512,7 +512,7 @@ export function McpAppEntryContent({
         <>
           {appId ? (
             <McpAppStandaloneButton
-              appId={appId}
+              app={ownedApp ?? { id: appId }}
               disabled={recorder.status !== "idle"}
             />
           ) : null}
@@ -595,7 +595,7 @@ export function McpAppEntryContent({
         <div className="flex w-full max-w-[80%] justify-end gap-1">
           {appId ? (
             <McpAppStandaloneButton
-              appId={appId}
+              app={ownedApp ?? { id: appId }}
               disabled={recorder.status !== "idle"}
             />
           ) : null}

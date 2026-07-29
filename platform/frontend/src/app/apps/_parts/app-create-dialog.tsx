@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCreateApp } from "@/lib/app.query";
+import { appRunUrl } from "@/lib/apps/app-run-url";
 
 type CreateFormValues = {
   name: string;
@@ -55,7 +56,7 @@ export function AppCreateDialog({
       router.push(
         created.conversationId
           ? `/chat/${created.conversationId}`
-          : `/a/${created.id}`,
+          : appRunUrl(created),
       );
     }
   });

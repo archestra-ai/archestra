@@ -263,6 +263,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         .map((app) => ({
           source: "owned" as const,
           id: app.id,
+          slug: app.slug,
           name: app.name,
           description: app.description,
           scope: app.scope,
@@ -429,25 +430,26 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         html,
         uiPermissions: body.uiPermissions,
       });
-      // App names are unique per author (apps_org_author_name_uidx); a duplicate
+      const slug =
+        body.slug ??
+        (await AppModel.generateUniqueSlug({
+          name: body.name,
+          organizationId,
+        }));
+      // Names are unique per author and slugs per org; a duplicate of either
       // fails this insert before any backing is created.
       const created = await AppModel.create({
         app: {
           organizationId,
           authorId: user.id,
           name: body.name,
+          slug,
           description: body.description ?? null,
           templateId: seededFromTemplate ? DEFAULT_APP_TEMPLATE_ID : null,
         },
         payload,
       }).catch((error) => {
-        if (isUniqueConstraintError(error)) {
-          throw new ApiError(
-            409,
-            `You already have an app named "${body.name}".`,
-          );
-        }
-        throw error;
+        throw appConflictError(error, { name: body.name, slug });
       });
       // An app must never exist without its backing (the catalog owns its
       // visibility + environment); on backing failure delete the app row.
@@ -671,17 +673,29 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetApp,
-        description: "Get a single app by id, if the caller may view it.",
+        description:
+          "Get a single app by id or slug, if the caller may view it.",
         tags: ["Apps"],
-        params: z.object({ appId: UuidIdSchema }),
+        // The only app route that takes a slug: it backs the `/a/<segment>` run
+        // page, which has nothing but the URL segment to go on. Every other
+        // route — and the runtime and connector especially — stays uuid-keyed.
+        params: z.object({ appId: z.string().min(1) }),
         response: constructResponseSchema(AppWithTeamsSchema),
       },
     },
-    async ({ params: { appId }, user, organizationId }, reply) => {
+    async ({ params: { appId: idOrSlug }, user, organizationId }, reply) => {
+      const appId = await AppModel.resolveIdFromIdOrSlug({
+        idOrSlug,
+        organizationId,
+      });
+      if (appId === null) {
+        throw new ApiError(404, `No app found with id ${idOrSlug}.`);
+      }
       const app = await loadViewableApp({
         appId,
         userId: user.id,
         organizationId,
+        addressedAs: idOrSlug,
       });
       return reply.send(
         await buildAppDetail({ app, userId: user.id, organizationId }),
@@ -793,9 +807,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const patch: Partial<
-        Pick<App, "name" | "description" | "scope" | "environmentId">
+        Pick<App, "name" | "slug" | "description" | "scope" | "environmentId">
       > = {};
       if (body.name !== undefined) patch.name = body.name;
+      if (body.slug !== undefined) patch.slug = body.slug;
       if (body.description !== undefined) patch.description = body.description;
       if (body.scope !== undefined) patch.scope = body.scope;
       if (body.environmentId !== undefined)
@@ -828,14 +843,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(nextTeamIds !== undefined ? { teamIds: nextTeamIds } : {}),
         ...(nextUserIds !== undefined ? { userIds: nextUserIds } : {}),
       }).catch((error) => {
-        // A rename into a name this author already uses hits apps_org_author_name_uidx.
-        if (body.name !== undefined && isUniqueConstraintError(error)) {
-          throw new ApiError(
-            409,
-            `You already have an app named "${body.name}".`,
-          );
-        }
-        throw error;
+        throw appConflictError(error, { name: body.name, slug: body.slug });
       });
       if (!updated) {
         throw new ApiError(404, `No app found with id ${appId}.`);
@@ -1167,11 +1175,48 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
 // Internal helpers
 // =============================================================================
 
+/**
+ * Map a write that tripped one of the `apps` unique indexes to the 409 naming
+ * the field that actually collided. Both indexes surface the same error class,
+ * so they have to be told apart by constraint name — otherwise a taken URL
+ * reports as a taken name. Any other error is returned unchanged to rethrow.
+ */
+function appConflictError(
+  error: unknown,
+  attempted: { name?: string; slug?: string },
+): unknown {
+  if (
+    attempted.slug !== undefined &&
+    isUniqueConstraintError(error, "apps_org_slug_uidx")
+  ) {
+    return new ApiError(
+      409,
+      `The URL "${attempted.slug}" is already taken in this organization.`,
+    );
+  }
+  if (
+    attempted.name !== undefined &&
+    isUniqueConstraintError(error, "apps_org_author_name_uidx")
+  ) {
+    return new ApiError(
+      409,
+      `You already have an app named "${attempted.name}".`,
+    );
+  }
+  return error;
+}
+
 /** Load an app the caller may view, or throw 404 (no existence leak). */
 async function loadViewableApp(params: {
   appId: string;
   userId: string;
   organizationId: string;
+  /**
+   * What the 404 names, when the caller addressed the app by something other
+   * than its id (a slug). Echoing the resolved id would hand a caller who may
+   * not view the app the very identifier they could not otherwise obtain.
+   */
+  addressedAs?: string;
 }): Promise<App> {
   const app = await AppModel.findByIdForCaller({
     id: params.appId,
@@ -1180,7 +1225,10 @@ async function loadViewableApp(params: {
     isAppAdmin: await callerIsAppAdmin(params.userId, params.organizationId),
   });
   if (!app) {
-    throw new ApiError(404, `No app found with id ${params.appId}.`);
+    throw new ApiError(
+      404,
+      `No app found with id ${params.addressedAs ?? params.appId}.`,
+    );
   }
   return app;
 }

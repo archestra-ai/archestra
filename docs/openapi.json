@@ -60926,6 +60926,10 @@
                               "id": {
                                 "type": "string"
                               },
+                              "slug": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "scope": {
                                 "type": "string",
                                 "enum": [
@@ -61005,6 +61009,7 @@
                               "pinnedAt",
                               "source",
                               "id",
+                              "slug",
                               "scope",
                               "authorId",
                               "authorName",
@@ -61403,6 +61408,12 @@
                     "minLength": 1,
                     "maxLength": 100
                   },
+                  "slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  },
                   "description": {
                     "type": "string",
                     "maxLength": 500
@@ -61487,6 +61498,10 @@
                       "type": "string"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "description": {
@@ -61595,6 +61610,7 @@
                     "organizationId",
                     "authorId",
                     "name",
+                    "slug",
                     "description",
                     "templateId",
                     "mcpServerId",
@@ -64242,13 +64258,12 @@
         "tags": [
           "Apps"
         ],
-        "description": "Get a single app by id, if the caller may view it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
+        "description": "Get a single app by id or slug, if the caller may view it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              "minLength": 1
             },
             "in": "path",
             "name": "appId",
@@ -64276,6 +64291,10 @@
                       "type": "string"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "description": {
@@ -64427,6 +64446,7 @@
                     "organizationId",
                     "authorId",
                     "name",
+                    "slug",
                     "description",
                     "templateId",
                     "mcpServerId",
@@ -64702,6 +64722,12 @@
                     "minLength": 1,
                     "maxLength": 100
                   },
+                  "slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  },
                   "description": {
                     "nullable": true,
                     "type": "string",
@@ -64800,6 +64826,10 @@
                       "type": "string"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "description": {
@@ -64903,6 +64933,7 @@
                     "organizationId",
                     "authorId",
                     "name",
+                    "slug",
                     "description",
                     "templateId",
                     "mcpServerId",
@@ -65473,6 +65504,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "description": {
                       "nullable": true,
                       "type": "string"
@@ -65622,6 +65657,7 @@
                     "organizationId",
                     "authorId",
                     "name",
+                    "slug",
                     "description",
                     "templateId",
                     "mcpServerId",
@@ -65922,6 +65958,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "description": {
                       "nullable": true,
                       "type": "string"
@@ -66071,6 +66111,7 @@
                     "organizationId",
                     "authorId",
                     "name",
+                    "slug",
                     "description",
                     "templateId",
                     "mcpServerId",

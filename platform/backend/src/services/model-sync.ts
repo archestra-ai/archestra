@@ -441,7 +441,7 @@ export function resolveModelCapabilities(params: {
   crossProviderPrices?: CrossProviderPrices | null;
   /** Capabilities derived from the underlying vendor entry for Bedrock/Azure. */
   crossProviderMetadata?: CrossProviderMetadata | null;
-  /** Prices published by AWS for a Bedrock model. Authoritative over the registry. */
+  /** Prices published by AWS for a Bedrock model. Used where the registry has none. */
   awsPrices?: BedrockAwsPrices | null;
   /** Underlying vendor model name, when the fetcher can determine it (Azure). */
   underlyingModelName?: string | null;

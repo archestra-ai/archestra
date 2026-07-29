@@ -998,14 +998,14 @@ export async function createAgentServer(params: {
         // Transform CommonToolResult to MCP response format
         // When isError is true, we still return the content so the LLM can see
         // the error message and potentially try a different approach
-        return {
+        return complete({
           content: Array.isArray(result.content)
             ? result.content
             : [{ type: "text", text: JSON.stringify(result.content) }],
           isError: result.isError,
           _meta: result._meta,
           structuredContent: result.structuredContent,
-        };
+        });
       } catch (error) {
         // MRTR: not a failure. The call needs input the gateway does not have,
         // so it answers with an InputRequiredResult and the client retries the

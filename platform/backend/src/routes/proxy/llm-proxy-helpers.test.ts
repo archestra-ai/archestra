@@ -678,6 +678,33 @@ describe("handleError", () => {
     );
   });
 
+  test("classifies a downstream client abort as a 499", () => {
+    // The fetch AbortError raised when the client-disconnect signal fires.
+    expect(
+      throwStatusFor(
+        new DOMException("This operation was aborted", "AbortError"),
+      ),
+    ).toBe(499);
+    // The provider SDKs' wrapper for a caller-supplied signal firing mid-call.
+    expect(
+      throwStatusFor(
+        Object.assign(new Error("Request was aborted."), {
+          name: "APIUserAbortError",
+        }),
+      ),
+    ).toBe(499);
+  });
+
+  test("keeps classifying an abort-due-to-timeout as a 504, not a client abort", () => {
+    expect(
+      throwStatusFor(
+        Object.assign(new Error("The operation was aborted due to timeout"), {
+          name: "TimeoutError",
+        }),
+      ),
+    ).toBe(504);
+  });
+
   function makeStreamedOverloadError(headers?: Headers) {
     const body = {
       type: "error",
@@ -798,6 +825,21 @@ describe("handleError", () => {
     const thrown = throwErrorFor(
       Object.assign(new Error(JSON.stringify(body)), {
         error: body,
+        headers: new Headers(),
+      }),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.upstream).toBe(true);
+  });
+
+  test("marks a status-less in-stream provider error with a bare-string payload as upstream", () => {
+    // OpenAI-compatible upstreams may put a plain string under the stream's
+    // `error` member; the SDK relays it verbatim with no HTTP status.
+    const thrown = throwErrorFor(
+      Object.assign(new Error("tool call refused by upstream"), {
+        error: "tool call refused by upstream",
         headers: new Headers(),
       }),
       makeReply(false).reply,

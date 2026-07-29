@@ -228,18 +228,31 @@ describe("MCP Gateway - Tasks extension", () => {
     });
     mockUpstream(5);
 
-    const { result } = (
-      await callTool({
-        agentId: agent.id,
-        token: token.value,
-        meta: TASKS_META,
-      })
-    ).json();
+    // The threshold races the WHOLE route execution — policy checks and DB
+    // reads included, not just the mocked upstream — so on a loaded CI
+    // runner the file-level 60ms threshold can lapse before even a fast call
+    // finishes, flipping this test's result into a task. Give this test
+    // alone a threshold no loaded runner can cross; taskSyncThresholdMs()
+    // reads config live, so the override takes effect immediately.
+    const config = (await import("@/config")).default;
+    const previousTimeoutMs = config.mcpGateway.toolCallTimeoutMs;
+    config.mcpGateway.toolCallTimeoutMs = 20 * 60 * 1000; // threshold caps at 10s
+    try {
+      const { result } = (
+        await callTool({
+          agentId: agent.id,
+          token: token.value,
+          meta: TASKS_META,
+        })
+      ).json();
 
-    // Task creation is server-directed, and for a call that finished inside
-    // the threshold the server directs "no".
-    expect(result.resultType).toBe("complete");
-    expect(result.content).toEqual([{ type: "text", text: "report ready" }]);
+      // Task creation is server-directed, and for a call that finished inside
+      // the threshold the server directs "no".
+      expect(result.resultType).toBe("complete");
+      expect(result.content).toEqual([{ type: "text", text: "report ready" }]);
+    } finally {
+      config.mcpGateway.toolCallTimeoutMs = previousTimeoutMs;
+    }
   });
 
   test("a client that never declared the extension keeps blocking behavior", async ({

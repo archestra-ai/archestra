@@ -19,10 +19,10 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { http, HttpResponse } from "msw";
+import { HttpResponse, http } from "msw";
 import { describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
-import { ApiError } from "@/types";
+import { ApiError, GithubCopilot } from "@/types";
 import githubCopilotProxyRoutes from "./github-copilot";
 
 const COPILOT_TOKEN_EXCHANGE_URL =
@@ -33,7 +33,7 @@ const COPILOT_CHAT_COMPLETIONS_URL =
 /** The exact upstream rejection observed in T-959. */
 const MODEL_NOT_SUPPORTED_BODY = {
   error: {
-    message: "The requested model is not supported.",
+    message: GithubCopilot.API.MODEL_NOT_SUPPORTED_MESSAGE,
     type: "api_validation_error",
   },
 };
@@ -64,6 +64,7 @@ function createTestApp() {
   return app;
 }
 
+// biome-ignore lint/correctness/useHookAtTopLevel: vitest lifecycle helper (per-test MSW server), not a React hook
 const server = useMswServer();
 
 function stubTokenExchange() {

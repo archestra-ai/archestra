@@ -24,6 +24,16 @@ export {
   FinishReasonSchema,
 };
 
+/**
+ * Copilot's rejection of a model its `/chat/completions` endpoint does not
+ * serve — returned even for models `/models` catalogues. The code appears on
+ * direct upstream responses; the message is what survives the LLM proxy's
+ * error wrapping (the proxy keeps `message`/`type` but drops `code`).
+ */
+export const MODEL_NOT_SUPPORTED_CODE = "model_not_supported";
+export const MODEL_NOT_SUPPORTED_MESSAGE =
+  "The requested model is not supported.";
+
 /** Request schema with passthrough for Copilot-specific params. */
 export const ChatCompletionRequestSchema =
   OpenAIChatCompletionRequestSchema.passthrough();

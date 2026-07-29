@@ -28,6 +28,7 @@ import {
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import {
+  type AnthropicStubOptions,
   createAnthropicTestClient,
   createGeminiTestClient,
   createOpenAiTestClient,
@@ -61,14 +62,17 @@ vi.mock("prom-client", () => ({
 // Mock tool-invocation to control policy evaluation results.
 // Default: evaluatePolicies → null (allow), matching the real behavior when no
 // policies exist in the DB.
-const mockEvaluatePolicies = vi.fn<() => Promise<PolicyBlockResult | null>>();
+// Args are forwarded so tests can assert what the handler computed and passed
+// in (notably the availability set), not just that evaluation happened.
+const mockEvaluatePolicies =
+  vi.fn<(...args: unknown[]) => Promise<PolicyBlockResult | null>>();
 
 vi.mock("@/guardrails/tool-invocation", async (importOriginal) => {
   const original =
     await importOriginal<typeof import("@/guardrails/tool-invocation")>();
   return {
     ...original,
-    evaluatePolicies: (..._args: unknown[]) => mockEvaluatePolicies(),
+    evaluatePolicies: (...args: unknown[]) => mockEvaluatePolicies(...args),
   };
 });
 
@@ -956,10 +960,7 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
   let app: FastifyInstance;
   let testAgent: Agent;
   let openAiStubOptions: OpenAiStubOptions;
-  let anthropicStubOptions: {
-    includeToolUse?: boolean;
-    interruptAtChunk?: number;
-  };
+  let anthropicStubOptions: AnthropicStubOptions;
 
   beforeEach(async ({ makeAgent }) => {
     vi.clearAllMocks();
@@ -1121,6 +1122,86 @@ describe("LLM Proxy Handler — recordBlockedToolSpans", () => {
         customPricePerMillionOutput: "15.00",
         lastSyncedAt: new Date(),
       });
+    });
+
+    // The set the handler hands to evaluatePolicies decides which model tool
+    // calls count as available. It is built from getTools(), which drops
+    // provider built-ins, so a caller that declares `bash` alongside a custom
+    // tool has `bash` judged unavailable.
+    test("the availability set passed to evaluatePolicies omits declared built-ins", async () => {
+      anthropicStubOptions.includeToolUse = true;
+      mockEvaluatePolicies.mockResolvedValue(null);
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+          tools: [
+            {
+              name: "get_weather",
+              description: "weather",
+              input_schema: { type: "object", properties: {} },
+            },
+            { type: "bash_20250124", name: "bash" },
+          ],
+        },
+      });
+
+      expect(mockEvaluatePolicies).toHaveBeenCalled();
+      const enabledToolNames = mockEvaluatePolicies.mock
+        .calls[0][4] as Set<string>;
+      expect([...enabledToolNames]).toEqual(["get_weather"]);
+    });
+
+    // The shape the client actually receives when a refusal lands after tool
+    // calls have already been written to the wire. Every assertion here is the
+    // current behavior, including the parts that make the turn unanswerable:
+    // the tool_use survives with no way to resolve it, and the turn is closed
+    // as finished even though a tool_result is still owed.
+    test("a refusal after streamed tool calls leaves the tool_use on the wire and closes the turn", async () => {
+      anthropicStubOptions.includeToolUse = true;
+      anthropicStubOptions.streamStopReason = "tool_use";
+
+      mockEvaluatePolicies.mockResolvedValue({
+        refusalMessage: "Tool get_weather is not enabled here",
+        contentMessage: "Tool get_weather is not enabled here",
+        reason: "Tool invocation blocked: disabled for conversation",
+        blockedToolName: "get_weather",
+        toolInput: {},
+        allToolCallNames: ["get_weather"],
+      } satisfies PolicyBlockResult);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/anthropic/${testAgent.id}/v1/messages`,
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": "test-key",
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-3-5-sonnet-20241022",
+          max_tokens: 1024,
+          messages: [{ role: "user", content: "What's the weather?" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain("toolu_test_weather");
+      expect(response.body).toContain("Tool get_weather is not enabled here");
+      // Upstream said tool_use; the refusal overrides it.
+      expect(response.body).toContain('"stop_reason":"end_turn"');
+      expect(response.body).not.toContain('"stop_reason":"tool_use"');
     });
 
     test("calls recordBlockedToolSpans when streaming response contains blocked tool calls", async () => {

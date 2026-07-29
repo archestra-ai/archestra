@@ -23,6 +23,8 @@ export interface AnthropicStubOptions {
   zeroOutputTokens?: boolean;
   /** Report this many `cache_read_input_tokens` to exercise the fallback's cache guard. */
   cacheReadInputTokens?: number;
+  /** Terminal `message_delta` stop reason. A real turn carrying tool_use ends as `tool_use`. */
+  streamStopReason?: "end_turn" | "tool_use" | "max_tokens" | "stop_sequence";
 }
 
 export interface GeminiStubOptions {
@@ -379,7 +381,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
       type: "message_delta",
       delta: {
         container: null,
-        stop_reason: "end_turn",
+        stop_reason: options.streamStopReason ?? "end_turn",
         stop_sequence: null,
       },
       usage: {

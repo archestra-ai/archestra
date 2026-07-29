@@ -293,16 +293,16 @@ class ProjectService {
     const { project, viewerRole } = await this.requireViewable(params);
     const [share, counts, pins, ownerNames, shareTeams, shareUsers] =
       await Promise.all([
-      ProjectShareModel.findByProjectId(project.id),
-      ProjectModel.countConversations([project.id]),
-      ProjectPinModel.getPinnedAtForProjects({
-        userId: params.userId,
-        projectIds: [project.id],
-      }),
-      UserModel.getNamesByIds([project.userId]),
-      ProjectShareModel.getShareTeamsForProjects([project.id]),
-      ProjectShareModel.getShareUsersForProjects([project.id]),
-    ]);
+        ProjectShareModel.findByProjectId(project.id),
+        ProjectModel.countConversations([project.id]),
+        ProjectPinModel.getPinnedAtForProjects({
+          userId: params.userId,
+          projectIds: [project.id],
+        }),
+        UserModel.getNamesByIds([project.userId]),
+        ProjectShareModel.getShareTeamsForProjects([project.id]),
+        ProjectShareModel.getShareUsersForProjects([project.id]),
+      ]);
     // Share targets are visible to whoever can manage the project (so the edit
     // dialog can populate sharing): the owner, or a project admin — including on
     // a project merely shared with them (viewerRole "shared"), so they still get

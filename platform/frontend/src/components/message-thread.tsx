@@ -1,11 +1,12 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  BlockedToolPart,
-  DualLlmPart,
-  PartialUIMessage,
-  PolicyDeniedPart,
+import {
+  type archestraApiTypes,
+  type BlockedToolPart,
+  type DualLlmPart,
+  extractMcpToolError,
+  type PartialUIMessage,
+  type PolicyDeniedPart,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
 import {
@@ -1062,13 +1063,9 @@ function getPartSignature(part: PartialUIMessage["parts"][number]): string {
 
 /**
  * A tool result the run's user cancelled mid-flight (stopped run or cancelled
- * background task). The backend serializes the outcome as a structured
- * envelope precisely so log surfaces can render a distinct Cancelled state —
- * neither a success nor an error.
+ * background task), detected through the shared schema-validated extractor —
+ * rendered as its own Cancelled state, neither a success nor an error.
  */
 function isCancelledToolOutput(output: unknown): boolean {
-  if (typeof output !== "object" || output === null) return false;
-  const archestraError = (output as { archestraError?: { type?: string } })
-    .archestraError;
-  return archestraError?.type === "cancelled";
+  return extractMcpToolError(output)?.type === "cancelled";
 }

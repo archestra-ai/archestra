@@ -466,6 +466,45 @@ describe("StatisticsModel", () => {
       expect(aliceRow.lastActiveAt).not.toBeNull();
     });
 
+    test("sums token totals beyond int32 without overflowing", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+      makeInteraction,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const user = await makeUser();
+
+      // Each row fits the int32 column, but the org-wide SUM crosses int32 —
+      // an INTEGER cast on the aggregate raised "integer out of range".
+      const perRow = 1_500_000_000;
+      await makeInteraction(agent.id, {
+        userId: user.id,
+        inputTokens: perRow,
+        outputTokens: perRow,
+        cost: "1.0000000000",
+        model: "gpt-4o",
+      });
+      await makeInteraction(agent.id, {
+        userId: user.id,
+        inputTokens: perRow,
+        outputTokens: perRow,
+        cost: "1.0000000000",
+        model: "gpt-4o",
+      });
+
+      const result = await StatisticsModel.getUserStatistics({
+        ...baseParams,
+        requestingUserId: user.id,
+      });
+
+      const row = result.data[0];
+      expect(row.inputTokens).toBe(2 * perRow);
+      expect(row.outputTokens).toBe(2 * perRow);
+      expect(row.totalTokens).toBe(4 * perRow);
+    });
+
     test("reports subscription-covered usage separately from billed spend", async ({
       makeUser,
       makeOrganization,

@@ -382,9 +382,19 @@ export function handleError(
 
   // Some SDK transport and streaming failures do not carry an HTTP status.
   if (!hasExplicitStatus) {
-    const upstreamStatus = classifyTransientUpstreamError(error);
-    if (upstreamStatus !== undefined) {
-      statusCode = upstreamStatus;
+    if (isClientAbortError(error)) {
+      // The proxy client disconnected and the disconnect was propagated to
+      // the in-flight provider call as an AbortSignal (see
+      // createDownstreamAbortSignal). Nobody is waiting for this response —
+      // report 499 (client closed request) so the interaction record names
+      // the cause and error tracking's 4xx rule treats it as expected
+      // instead of a crash of ours.
+      statusCode = 499;
+    } else {
+      const upstreamStatus = classifyTransientUpstreamError(error);
+      if (upstreamStatus !== undefined) {
+        statusCode = upstreamStatus;
+      }
     }
   }
 
@@ -407,7 +417,7 @@ export function handleError(
     statusCode >= 500 &&
     !(error instanceof ApiError) &&
     hasProviderHttpErrorShape(error) &&
-    (hasExplicitStatus || extractUpstreamErrorBody(error) !== undefined);
+    (hasExplicitStatus || hasUpstreamErrorPayload(error));
 
   const errorMessage = extractErrorMessage(error);
   const adapterInternalCode = extractInternalCode(error);
@@ -508,6 +518,23 @@ function hasProviderHttpErrorShape(error: unknown): boolean {
 }
 
 /**
+ * Whether the error is an abort of a request we initiated — the fetch/SDK
+ * AbortError raised when the signal wired to the proxy client's disconnect
+ * fires, or the SDK's own user-abort wrapper around it. Deliberately does NOT
+ * match AbortSignal.timeout's TimeoutError ("… aborted due to timeout", a 504
+ * classified below): the message fallback is anchored so only a bare abort
+ * matches.
+ */
+function isClientAbortError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === "AbortError" ||
+    error.name === "APIUserAbortError" ||
+    /\boperation was aborted\.?$/i.test(error.message)
+  );
+}
+
+/**
  * Classify status-less SDK transport and overload errors as upstream failures.
  */
 function classifyTransientUpstreamError(
@@ -581,6 +608,19 @@ function nestedProviderErrorType(error: Error): string | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * Whether the SDK error carries an upstream error payload. OpenAI-compatible
+ * upstreams are free-form in what they put under the stream's `error` member —
+ * usually an object, but some send a bare string — and the SDK relays either
+ * verbatim, so both shapes identify an in-stream provider failure.
+ */
+function hasUpstreamErrorPayload(error: unknown): boolean {
+  if (extractUpstreamErrorBody(error) !== undefined) return true;
+  if (!(error instanceof Error)) return false;
+  const body = (error as Error & { error?: unknown }).error;
+  return typeof body === "string" && body.length > 0;
 }
 
 /**

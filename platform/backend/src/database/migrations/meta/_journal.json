@@ -2619,6 +2619,13 @@
       "when": 1785330567788,
       "tag": "0373_friendly_zeigeist",
       "breakpoints": true
+    },
+    {
+      "idx": 374,
+      "version": "7",
+      "when": 1785353704228,
+      "tag": "0374_unique_rawhide_kid",
+      "breakpoints": true
     }
   ]
 }

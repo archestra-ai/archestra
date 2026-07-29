@@ -1,3 +1,4 @@
+export * from "./a2a-artifact";
 export * from "./a2a-context";
 export * from "./a2a-message";
 export * from "./a2a-task";

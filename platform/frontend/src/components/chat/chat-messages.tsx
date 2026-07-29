@@ -325,18 +325,36 @@ export function ChatMessages({
     return byToolCallId;
   }, [messages]);
 
-  // Cancelling a background task. The card keeps rendering from the streamed
-  // part; this only disables the button between the click and the backend
-  // flipping the row, so the action can't be fired twice.
+  // Cancelling a background task. The request is fire-once per task: the
+  // endpoint answers well before the next poll flips the row, so clearing on
+  // resolve would re-enable the button for a beat and let a second click
+  // through. The id is held until the task actually leaves `working`, and is
+  // released again only if the request failed so the user can retry.
   const cancelMcpTaskMutation = useCancelChatMcpTask();
-  const [cancellingTaskId, setCancellingTaskId] = useState<string | null>(null);
+  const [cancelRequestedTaskIds, setCancelRequestedTaskIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const handleCancelMcpTask = useCallback(
     async (taskId: string) => {
-      setCancellingTaskId(taskId);
+      let alreadyRequested = false;
+      setCancelRequestedTaskIds((current) => {
+        if (current.has(taskId)) {
+          alreadyRequested = true;
+          return current;
+        }
+        return new Set(current).add(taskId);
+      });
+      if (alreadyRequested) {
+        return;
+      }
       try {
         await cancelMcpTaskMutation.mutateAsync(taskId);
-      } finally {
-        setCancellingTaskId(null);
+      } catch {
+        setCancelRequestedTaskIds((current) => {
+          const next = new Set(current);
+          next.delete(taskId);
+          return next;
+        });
       }
     },
     [cancelMcpTaskMutation],
@@ -544,7 +562,7 @@ export function ChatMessages({
       value={{
         byToolCallId: mcpTasksByToolCallId,
         cancel: handleCancelMcpTask,
-        cancellingTaskId,
+        cancelRequestedTaskIds,
       }}
     >
       <Conversation

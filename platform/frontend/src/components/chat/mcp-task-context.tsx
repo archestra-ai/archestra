@@ -7,7 +7,13 @@ interface McpTaskContextValue {
   /** Background tasks for this conversation, keyed by the tool call they back. */
   byToolCallId: Map<string, McpTaskPartData>;
   cancel: (taskId: string) => void;
-  cancellingTaskId: string | null;
+  /**
+   * Tasks a cancel has been requested for. Held until the task actually leaves
+   * `working` rather than until the request resolves: the endpoint answers well
+   * before the next poll flips the row, and re-enabling in that gap makes the
+   * button flash and invites a second click.
+   */
+  cancelRequestedTaskIds: ReadonlySet<string>;
 }
 
 const McpTaskContext = createContext<McpTaskContextValue | null>(null);
@@ -41,7 +47,9 @@ export function useMcpTaskFor(toolCallId: string | undefined): {
   return {
     task,
     cancel: context?.cancel ?? noop,
-    isCancelling: Boolean(task && context?.cancellingTaskId === task.taskId),
+    isCancelling: Boolean(
+      task && context?.cancelRequestedTaskIds.has(task.taskId),
+    ),
   };
 }
 

@@ -151,7 +151,8 @@ describe("MCP Gateway - protocol revision negotiation", () => {
       LEGACY_MCP_PROTOCOL_REVISION,
     ]);
     expect(body.result.serverInfo.name).toBe(`archestra-agent-${agent.id}`);
-    expect(body.result.capabilities.tools).toEqual({ listChanged: false });
+    // listChanged is true for this revision: subscriptions/listen backs it.
+    expect(body.result.capabilities.tools).toEqual({ listChanged: true });
     expect(body.result.capabilities.extensions).toHaveProperty(
       "io.modelcontextprotocol/ui",
     );

@@ -240,7 +240,9 @@ export function withPrivateCacheHint<T extends object>(
  * response (built by the SDK from these) and by `server/discover`, so the two
  * revisions can never drift apart.
  */
-export function buildGatewayServerCapabilities(): McpServerCapabilitiesWithExtensions {
+export function buildGatewayServerCapabilities(
+  revision: McpProtocolRevision = LEGACY_MCP_PROTOCOL_REVISION,
+): McpServerCapabilitiesWithExtensions {
   return {
     // Neither subscription flag is advertised, in any revision, because
     // neither was ever implemented: no `resources/subscribe` handler exists —
@@ -262,7 +264,13 @@ export function buildGatewayServerCapabilities(): McpServerCapabilitiesWithExten
       ...MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
     },
     prompts: {},
-    tools: { listChanged: false },
+    tools: {
+      // Backed by `subscriptions/listen` fingerprint polling, which exists
+      // only on the stateless revision — a legacy client has no channel a
+      // notification could arrive on, so advertising it there would recreate
+      // the wait-forever caching problem this flag used to cause.
+      listChanged: revision === STATELESS_MCP_PROTOCOL_REVISION,
+    },
   } as McpServerCapabilitiesWithExtensions;
 }
 
@@ -482,7 +490,7 @@ export function buildDiscoverResult(params: {
       name: `archestra-agent-${agentId}`,
       version,
     },
-    capabilities: buildGatewayServerCapabilities(),
+    capabilities: buildGatewayServerCapabilities(revision),
   };
 }
 

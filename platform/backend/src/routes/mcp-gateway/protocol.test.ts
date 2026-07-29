@@ -343,7 +343,9 @@ describe("server/discover", () => {
       name: "archestra-agent-agent-1",
       version: "1.2.3",
     });
-    expect(result.capabilities).toEqual(buildGatewayServerCapabilities());
+    expect(result.capabilities).toEqual(
+      buildGatewayServerCapabilities(STATELESS_MCP_PROTOCOL_REVISION),
+    );
   });
 
   test("advertises every supported version, not only the negotiated one", () => {
@@ -368,7 +370,12 @@ describe("server/discover", () => {
 
     expect(capabilities.resources).not.toHaveProperty("subscribe");
     expect(capabilities.resources).toMatchObject({ listChanged: false });
+    // Legacy default: no notification channel exists there. The stateless
+    // revision advertises true, backed by subscriptions/listen.
     expect(capabilities.tools).toMatchObject({ listChanged: false });
+    expect(
+      buildGatewayServerCapabilities(STATELESS_MCP_PROTOCOL_REVISION).tools,
+    ).toMatchObject({ listChanged: true });
   });
 
   test("capabilities carry the MCP Apps extension", () => {

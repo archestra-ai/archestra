@@ -105,6 +105,7 @@ Older revisions still work too. Anything back to `2024-11-05` is accepted and se
 | Result envelope | Plain result | `resultType`, plus server identity in `_meta` |
 | Missing-resource error | `-32002` | `-32602` |
 | `ping` and `logging/setLevel` | Answered | Removed — method-not-found |
+| Change notifications | None | `subscriptions/listen` stream for tool-list changes |
 
 Both revisions see the same tools, the same access control, and the same policies. The differences are all in how a client talks to the gateway, not in what it can reach.
 
@@ -115,6 +116,8 @@ Routing headers must agree with the request body. The gateway rejects a mismatch
 Tool, prompt, and resource results carry a freshness hint. It is always marked private: a gateway filters results per caller, so two users can legitimately see different ones and a shared cache must not serve one person's view to another.
 
 A tool that needs input mid-call returns a request for it instead of prompting inline. Your client gathers the answer and retries the same call with it attached. The retry re-runs the tool, and the gateway caps how many times one call can go around.
+
+To hear about tool-list changes, open a `subscriptions/listen` stream with `toolsListChanged` in the filter. The first event acknowledges which types the gateway honors — tool-list changes only, since prompt and resource lists come from upstream servers. Close the stream to unsubscribe.
 
 ## Access Control
 

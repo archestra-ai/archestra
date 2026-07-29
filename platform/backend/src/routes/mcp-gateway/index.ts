@@ -30,6 +30,11 @@ import {
   validateRoutingHeaders,
 } from "./protocol";
 import {
+  isSubscriptionsListenRequest,
+  parseSubscriptionFilter,
+  runSubscriptionStream,
+} from "./subscriptions";
+import {
   authenticateMCPGatewayRequest,
   createAgentServer,
   createStatelessTransport,
@@ -493,6 +498,40 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           },
           id: (request.body as { id?: string | number })?.id ?? null,
         };
+      }
+
+      // `subscriptions/listen` (2026-07-28) opens a long-lived notification
+      // stream. Handled at the route because the SDK transport answers with a
+      // single JSON body, and this is the one method that must not. Requires
+      // the stateless revision: a legacy client falls through to the SDK and
+      // gets method-not-found, since the method does not exist there.
+      if (
+        resolution.revision === STATELESS_MCP_PROTOCOL_REVISION &&
+        isSubscriptionsListenRequest(request.body)
+      ) {
+        const subscriptionId =
+          (request.body as { id?: string | number })?.id ?? null;
+        if (subscriptionId === null) {
+          reply.status(400);
+          return {
+            jsonrpc: "2.0",
+            error: {
+              code: -32600,
+              message:
+                "subscriptions/listen must be a request with an id; the id becomes the subscription id.",
+            },
+            id: null,
+          };
+        }
+
+        await runSubscriptionStream({
+          request,
+          reply,
+          agentId: profileId,
+          subscriptionId,
+          requested: parseSubscriptionFilter(request.body),
+        });
+        return;
       }
 
       // `server/discover` replaces the `initialize` handshake under 2026-07-28.

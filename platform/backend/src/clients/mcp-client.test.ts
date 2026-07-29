@@ -1032,7 +1032,10 @@ describe("McpClient", () => {
         url: {},
       });
       expect(mockSetRequestHandler).toHaveBeenCalledOnce();
-      expect(mockSetNotificationHandler).toHaveBeenCalledOnce();
+      // No notification handler: 2026-07-28 removes
+      // `notifications/elicitation/complete`, since under MRTR the client
+      // learns the outcome by retrying the original request.
+      expect(mockSetNotificationHandler).not.toHaveBeenCalled();
     });
 
     describe("Secrets caching (N+1 prevention)", () => {

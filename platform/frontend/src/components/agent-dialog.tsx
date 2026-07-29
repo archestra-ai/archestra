@@ -133,9 +133,20 @@ import {
 } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import {
+  UserShareField,
+  useUserShareOption,
+} from "@/components/user-share-field";
+import {
   VisibilitySelector as SharedVisibilitySelector,
   type VisibilityOption,
 } from "@/components/visibility-selector";
+
+/**
+ * What the agent visibility control offers. Wider than the stored scope: an
+ * agent shared with named people persists as `personal` plus grants.
+ */
+type AgentVisibilityChoice = AgentScope | "user";
+
 import {
   useCreateProfile,
   useDeleteProfile,
@@ -489,6 +500,8 @@ export function AccessLevelSelector({
   agentType,
   teams,
   assignedTeamIds,
+  assignedUserIds = [],
+  onUserIdsChange,
   onTeamIdsChange,
   hasNoAvailableTeams,
   showTeamRequired,
@@ -502,17 +515,41 @@ export function AccessLevelSelector({
   agentType: AgentType;
   teams: Array<{ id: string; name: string }> | undefined;
   assignedTeamIds: string[];
+  /**
+   * Per-user sharing. Omitted by surfaces that cannot persist grants (the
+   * clone dialog), which then simply do not offer the option — better than
+   * showing a control whose selection would be silently dropped.
+   */
+  assignedUserIds?: string[];
+  onUserIdsChange?: (ids: string[]) => void;
   onTeamIdsChange: (ids: string[]) => void;
   hasNoAvailableTeams: boolean;
   showTeamRequired: boolean;
 }) {
   const scopeOptions = getScopeOptions(agentType);
   const canShareWithTeams = isAdmin || isTeamAdmin;
+  const userOption = useUserShareOption<AgentVisibilityChoice>("user");
+  // An agent shared with named people stays `personal` in storage and carries
+  // grants, so "user" is a reading of (scope, userIds) mapped back on change.
+  const choice: AgentVisibilityChoice =
+    scope === "personal" && assignedUserIds.length > 0 ? "user" : scope;
+  const handleChoiceChange = (next: AgentVisibilityChoice) => {
+    if (next === "user") {
+      onScopeChange("personal");
+      return;
+    }
+    // Leaving Users revokes what it left behind rather than stranding it.
+    onUserIdsChange?.([]);
+    onScopeChange(next);
+  };
 
   const isOptionDisabled = (value: string) => {
     if (value === "personal" && initialScope && initialScope !== "personal")
       return true;
     if (value === "team" && (!canShareWithTeams || !canReadTeams)) return true;
+    // Nothing to share with: keep the option visible but inert and explained,
+    // rather than offering a choice that cannot be completed.
+    if (value === "team" && hasNoAvailableTeams) return true;
     if (value === "org" && !isAdmin) return true;
     return false;
   };
@@ -532,29 +569,49 @@ export function AccessLevelSelector({
       return `Team sharing is unavailable without ${formatPermissionRequirement({ resource: "team", action: "read" })}`;
     if (value === "team" && !canShareWithTeams)
       return `You need ${resourceName}:team-admin permission to share with teams`;
+    if (value === "team" && hasNoAvailableTeams)
+      return "There are no teams to share with yet. Create one from Settings → Teams.";
     if (value === "org" && !isAdmin)
       return `You need ${resourceName}:admin permission to make this available org-wide`;
     return "";
   };
 
-  const options: VisibilityOption<AgentScope>[] = scopeOptions.map(
-    (option) => ({
+  const scopedOptions: VisibilityOption<AgentVisibilityChoice>[] =
+    scopeOptions.map((option) => ({
       ...option,
       disabled: isOptionDisabled(option.value),
       disabledReason: isOptionDisabled(option.value)
         ? getDisabledReason(option.value)
         : undefined,
-    }),
+    }));
+  // Users sits next to Personal: both keep the agent out of team/org reach.
+  const personalIndex = scopedOptions.findIndex(
+    (option) => option.value === "personal",
   );
+  const options: VisibilityOption<AgentVisibilityChoice>[] =
+    personalIndex === -1 || !onUserIdsChange
+      ? scopedOptions
+      : [
+          ...scopedOptions.slice(0, personalIndex + 1),
+          userOption,
+          ...scopedOptions.slice(personalIndex + 1),
+        ];
 
   return (
     <SharedVisibilitySelector
       heading={`Who can use this ${agentTypeDisplayName[agentType] || "agent"}`}
-      value={scope}
+      value={choice}
       options={options}
-      onValueChange={onScopeChange}
+      onValueChange={handleChoiceChange}
     >
-      {scope === "team" && (
+      {choice === "user" && onUserIdsChange && (
+        <UserShareField
+          value={assignedUserIds}
+          onValueChange={onUserIdsChange}
+        />
+      )}
+
+      {choice === "team" && (
         <div className="space-y-2">
           <Label>Teams{showTeamRequired && " *"}</Label>
           <MultiSelectCombobox
@@ -730,6 +787,9 @@ export function AgentDialog({
   const [selectedDelegationTargetIds, setSelectedDelegationTargetIds] =
     useState<string[]>([]);
   const [assignedTeamIds, setAssignedTeamIds] = useState<string[]>([]);
+  // People the agent is shared with by name. Stored beside the `personal`
+  // scope, so the control below reads (scope, userIds) as a fourth choice.
+  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [considerContextUntrusted, setConsiderContextUntrusted] =
     useState(false);
@@ -865,6 +925,7 @@ export function AgentDialog({
             systemPrompt: agentData.systemPrompt || "",
             suggestedPrompts: agentData.suggestedPrompts,
             assignedTeamIds: agentData.teams.map((t) => t.id),
+            assignedUserIds: agentData.users?.map((u) => u.id) ?? [],
             labels: agentData.labels,
             considerContextUntrusted: agentData.considerContextUntrusted,
             llmApiKeyId: agentData.llmApiKeyId,
@@ -899,6 +960,7 @@ export function AgentDialog({
             systemPrompt: isInternalAgent ? DEFAULT_AGENT_SYSTEM_PROMPT : "",
             suggestedPrompts: [],
             assignedTeamIds: [],
+            assignedUserIds: [],
             labels: [],
             considerContextUntrusted: false,
             llmApiKeyId: null,
@@ -927,6 +989,7 @@ export function AgentDialog({
       setLlmApiKeyId(nextValues.llmApiKeyId);
       setLlmModel(nextValues.llmModel);
       setAssignedTeamIds(nextValues.assignedTeamIds);
+      setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
       setConsiderContextUntrusted(nextValues.considerContextUntrusted);
       setIdentityProviderId(nextValues.identityProviderId);
@@ -1196,6 +1259,7 @@ export function AgentDialog({
               accessAllSubagents,
             }),
             teams: assignedTeamIds,
+            users: assignedUserIds,
             labels: updatedLabels,
             scope,
             ...(showSecurity && { considerContextUntrusted }),
@@ -1245,6 +1309,7 @@ export function AgentDialog({
             accessAllSubagents,
           }),
           teams: assignedTeamIds,
+          users: assignedUserIds,
           labels: updatedLabels,
           scope,
           ...(showSecurity && { considerContextUntrusted }),
@@ -1338,6 +1403,7 @@ export function AgentDialog({
     systemPrompt,
     suggestedPrompts,
     assignedTeamIds,
+    assignedUserIds,
     labels,
     considerContextUntrusted,
     llmApiKeyId,
@@ -1426,6 +1492,7 @@ export function AgentDialog({
     systemPrompt,
     suggestedPrompts,
     assignedTeamIds,
+    assignedUserIds,
     labels,
     considerContextUntrusted,
     llmApiKeyId,
@@ -2384,6 +2451,8 @@ export function AgentDialog({
                         canReadTeams={!!canReadTeams}
                         assignedTeamIds={assignedTeamIds}
                         onTeamIdsChange={setAssignedTeamIds}
+                        assignedUserIds={assignedUserIds}
+                        onUserIdsChange={setAssignedUserIds}
                         hasNoAvailableTeams={hasNoAvailableTeams}
                         showTeamRequired={true}
                       />
@@ -2816,6 +2885,7 @@ type AgentFormFields = {
   systemPrompt: string;
   suggestedPrompts: Array<{ summaryTitle: string; prompt: string }>;
   assignedTeamIds: string[];
+  assignedUserIds: string[];
   labels: ProfileLabel[];
   considerContextUntrusted: boolean;
   llmApiKeyId: string | null;

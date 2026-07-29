@@ -221,6 +221,14 @@ export type GatewayAgent = z.infer<typeof GatewayAgentSchema>;
 export const SelectAgentSchema = AgentRowSchema.extend({
   tools: z.array(SelectToolSchema),
   teams: z.array(AgentTeamInfoSchema),
+  // People the agent is shared with individually. A personal-scoped agent with
+  // a non-empty list is shared, not private — the settings form reads the pair
+  // as its Users choice.
+  // Optional like authorName: only the read paths that surface sharing
+  // populate it, so the many internal Agent assemblies stay unchanged.
+  users: z
+    .array(z.object({ id: z.string(), name: z.string(), email: z.string() }))
+    .optional(),
   labels: z.array(AgentLabelWithDetailsSchema),
   authorName: z.string().nullable().optional(),
   authorEmail: z.string().nullable().optional(),

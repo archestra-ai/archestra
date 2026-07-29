@@ -80,6 +80,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  UserShareField,
+  useUserShareOption,
+} from "@/components/user-share-field";
+import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
@@ -618,7 +622,9 @@ type EditModelEmbeddingDimensionsValue =
   | ""
   | keyof typeof EMBEDDING_DIMENSION_MAP;
 
-type ModelAccessScope = "everyone" | "team";
+// "user" shares the model with named individuals — the finer-grained peer of a
+// team restriction. Stored as grants beside the team list, not as a scope.
+type ModelAccessScope = "everyone" | "team" | "user";
 
 const modelAccessScopeOptions: VisibilityOption<ModelAccessScope>[] = [
   {
@@ -644,6 +650,7 @@ interface EditModelFormValues {
   ignored: boolean;
   accessScope: ModelAccessScope;
   teamIds: string[];
+  userIds: string[];
   embeddingDimensions: EditModelEmbeddingDimensionsValue;
   inputModalities: string[];
   outputModalities: string[];
@@ -681,17 +688,23 @@ function EditModelDialog({
   });
   const fallbackPricing = getFallbackPricing(model);
   const teamScopeUnavailable = !canReadTeams || assignableTeams.length === 0;
-  const accessScopeOptions = modelAccessScopeOptions.map((option) =>
-    option.value === "team" && teamScopeUnavailable
-      ? {
-          ...option,
-          disabled: true,
-          disabledReason: !canReadTeams
-            ? "Team selection requires permission to view teams."
-            : "No teams available. Create a team first.",
-        }
-      : option,
-  );
+  const userShareOption = useUserShareOption<ModelAccessScope>("user");
+  const accessScopeOptions: VisibilityOption<ModelAccessScope>[] = [
+    ...modelAccessScopeOptions.map((option) =>
+      option.value === "team" && teamScopeUnavailable
+        ? {
+            ...option,
+            disabled: true,
+            disabledReason: !canReadTeams
+              ? "Team selection requires permission to view teams."
+              : "No teams available. Create a team first.",
+          }
+        : option,
+    ),
+    // Shown even with nobody to share with, disabled and explained, so the
+    // capability is discoverable rather than silently absent.
+    { ...userShareOption, label: "Specific people" },
+  ];
   // The model's provider supports prompt caching when the backend resolved a
   // cache price for it (synced, custom, or multiplier-derived).
   const supportsCachePricing = model.cachePriceSource !== null;
@@ -740,7 +753,10 @@ function EditModelDialog({
       customPricePerMillionCacheRead: cacheReadPrice,
       customPricePerMillionCacheWrite: cacheWritePrice,
       ignored: values.ignored,
+      // Both lists always go, so switching between Teams and Users revokes
+      // what the previous choice left behind instead of stranding it.
       teamIds: values.accessScope === "team" ? values.teamIds : [],
+      userIds: values.accessScope === "user" ? values.userIds : [],
       embeddingDimensions,
       inputModalities: values.inputModalities as ModelInputModality[],
       outputModalities: values.outputModalities as ModelOutputModality[],
@@ -895,6 +911,17 @@ function EditModelDialog({
                       void form.trigger("teamIds");
                     }}
                   >
+                    {accessScope === "user" && (
+                      <UserShareField
+                        value={form.watch("userIds")}
+                        onValueChange={(ids) => {
+                          form.setValue("userIds", ids);
+                          void form.trigger("userIds");
+                        }}
+                        label="People"
+                      />
+                    )}
+
                     {accessScope === "team" && (
                       <FormControl>
                         <MultiSelectCombobox
@@ -1550,6 +1577,7 @@ function getDefaults(model: ModelWithApiKeys): EditModelFormValues {
     accessScope:
       model.teams.length > 0 ? ("team" as const) : ("everyone" as const),
     teamIds: model.teams.map((team) => team.id),
+    userIds: model.users?.map((user) => user.id) ?? [],
     embeddingDimensions: model.embeddingDimensions
       ? getEmbeddingDimensionsString(model.embeddingDimensions)
       : "",

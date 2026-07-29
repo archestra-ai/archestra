@@ -12061,6 +12061,11 @@ export type GetAgentsResponses = {
                 id: string;
                 name: string;
             }>;
+            users?: Array<{
+                id: string;
+                name: string;
+                email: string;
+            }>;
             labels: Array<{
                 key: string;
                 value: string;
@@ -12307,6 +12312,11 @@ export type CreateAgentResponses = {
             id: string;
             name: string;
         }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -12516,6 +12526,11 @@ export type GetAllAgentsResponses = {
             id: string;
             name: string;
         }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -12700,6 +12715,11 @@ export type GetDefaultMcpGatewayResponses = {
             id: string;
             name: string;
         }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -12883,6 +12903,11 @@ export type GetDefaultLlmProxyResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         labels: Array<{
             key: string;
@@ -13146,6 +13171,11 @@ export type ImportAgentResponses = {
             teams: Array<{
                 id: string;
                 name: string;
+            }>;
+            users?: Array<{
+                id: string;
+                name: string;
+                email: string;
             }>;
             labels: Array<{
                 key: string;
@@ -13424,6 +13454,11 @@ export type GetAgentResponses = {
             id: string;
             name: string;
         }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -13663,6 +13698,11 @@ export type UpdateAgentResponses = {
             id: string;
             name: string;
         }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -13857,6 +13897,11 @@ export type CloneAgentResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         labels: Array<{
             key: string;
@@ -14566,6 +14611,11 @@ export type RestoreAgentResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         labels: Array<{
             key: string;
@@ -55756,6 +55806,11 @@ export type GetModelsWithApiKeysResponses = {
             id: string;
             name: string;
         }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         pricePerMillionInput: string | null;
         pricePerMillionOutput: string | null;
         isCustomPrice: boolean;
@@ -55792,6 +55847,7 @@ export type UpdateModelData = {
             reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
         } | null;
         teamIds?: Array<string>;
+        userIds?: Array<string>;
     };
     path: {
         id: string;

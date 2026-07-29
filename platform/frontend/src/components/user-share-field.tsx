@@ -28,10 +28,15 @@ export function useUserShareOption<Value extends string>(
     label: "Users",
     description: "Share this with selected people",
     icon: UserRound,
-    // Nothing to pick from in a one-person organization; the option stays
-    // visible but inert so the capability is still discoverable.
+    // Nothing to pick from in a one-person organization. The option still
+    // shows — disabled and explained — so the capability stays discoverable
+    // rather than silently absent, which reads as a missing feature.
     disabled: candidates.length === 0,
     disabledLabel: candidates.length === 0 ? "No users available" : undefined,
+    disabledReason:
+      candidates.length === 0
+        ? "There is no one else in your organization to share with yet. Invite someone from Settings → Users."
+        : undefined,
     hasCandidates: candidates.length > 0,
   };
 }
@@ -73,9 +78,12 @@ function useShareCandidates(): Array<{
   name: string;
   email: string;
 }> {
-  const { data: session } = useSession();
-  const { data: members = [] } = useOrganizationMembers();
-  const currentUserId = session?.user?.id;
+  // Read defensively: this control is mounted inside several dialogs whose
+  // suites partially mock the auth and organization query modules, and a
+  // visibility picker should degrade to "nobody to share with" rather than
+  // crash the dialog around it.
+  const currentUserId = useSession()?.data?.user?.id;
+  const members = useOrganizationMembers()?.data ?? [];
   return useMemo(
     () =>
       members

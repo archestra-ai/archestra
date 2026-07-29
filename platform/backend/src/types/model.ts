@@ -226,6 +226,9 @@ export const PatchModelBodySchema = createUpdateSchema(
      * restrictions. Empty array clears the restriction (available to everyone).
      */
     teamIds: z.array(z.string()).optional(),
+    // People the model is shared with individually — the finer-grained peer of
+    // a team restriction. Omitted leaves grants alone; `[]` revokes them.
+    userIds: z.array(z.string()).optional(),
     // Per-model generation parameters sent on every native Ollama chat turn.
     configuredParameters: ConfiguredParametersSchema.nullable().optional(),
   })
@@ -332,6 +335,11 @@ export const ModelWithApiKeysSchema = SelectModelSchema.extend({
   apiKeys: z.array(LinkedApiKeySchema),
   /** Teams this model is restricted to (empty = available to everyone) */
   teams: z.array(ModelTeamDetailSchema),
+  // People the model is shared with individually — the finer-grained peer of a
+  // team restriction, so the form can show who it reaches by name.
+  users: z.array(
+    z.object({ id: z.string(), name: z.string(), email: z.string() }),
+  ),
   /** Price per million tokens for input (computed from raw/custom pricing) */
   pricePerMillionInput: z.string().nullable(),
   /** Price per million tokens for output (computed from raw/custom pricing) */

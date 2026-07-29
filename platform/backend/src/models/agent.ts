@@ -585,6 +585,7 @@ class AgentModel {
       ...createdAgent,
       tools: assignedTools.map((row) => row.tool),
       teams: teamDetails,
+      users: [],
       labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
       knowledgeBaseIds: knowledgeBaseIds ?? [],
       connectorIds: connectorIds ?? [],
@@ -693,6 +694,7 @@ class AgentModel {
           ...agent,
           tools: [],
           teams: [] as Array<{ id: string; name: string }>,
+          users: [] as Array<{ id: string; name: string; email: string }>,
           labels: [],
           knowledgeBaseIds: [],
           connectorIds: [],
@@ -710,8 +712,9 @@ class AgentModel {
     const agentIds = agents.map((agent) => agent.id);
 
     // Populate teams and labels for all agents with bulk queries to avoid N+1
-    const [teamsMap, labelsMap] = await Promise.all([
+    const [teamsMap, usersMap, labelsMap] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
 
@@ -764,6 +767,7 @@ class AgentModel {
 
     const [
       teamsMap,
+      usersMap,
       labelsMap,
       kbMap,
       connectorMap,
@@ -771,6 +775,7 @@ class AgentModel {
       toolsResult,
     ] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
       AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
       AgentConnectorAssignmentModel.getConnectorIdsForAgents(agentIds),
@@ -803,6 +808,7 @@ class AgentModel {
       ...agent,
       tools: toolsByAgent.get(agent.id) || [],
       teams: teamsMap.get(agent.id) || [],
+      users: usersMap.get(agent.id) || [],
       labels: labelsMap.get(agent.id) || [],
       knowledgeBaseIds: kbMap.get(agent.id) || [],
       connectorIds: connectorMap.get(agent.id) || [],
@@ -851,6 +857,7 @@ class AgentModel {
 
     const [
       teamsMap,
+      usersMap,
       labelsMap,
       kbMap,
       connectorMap,
@@ -858,6 +865,7 @@ class AgentModel {
       toolsResult,
     ] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
       AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
       AgentConnectorAssignmentModel.getConnectorIdsForAgents(agentIds),
@@ -890,6 +898,7 @@ class AgentModel {
       ...agent,
       tools: toolsByAgent.get(agent.id) || [],
       teams: teamsMap.get(agent.id) || [],
+      users: usersMap.get(agent.id) || [],
       labels: labelsMap.get(agent.id) || [],
       knowledgeBaseIds: kbMap.get(agent.id) || [],
       connectorIds: connectorMap.get(agent.id) || [],
@@ -1318,6 +1327,7 @@ class AgentModel {
           ...agent,
           tools: [],
           teams: [] as Array<{ id: string; name: string }>,
+          users: [] as Array<{ id: string; name: string; email: string }>,
           labels: [],
           knowledgeBaseIds: [],
           connectorIds: [],
@@ -1335,8 +1345,9 @@ class AgentModel {
     const agentIds = agents.map((agent) => agent.id);
 
     // Populate teams and labels for all agents with bulk queries to avoid N+1
-    const [teamsMap, labelsMap] = await Promise.all([
+    const [teamsMap, usersMap, labelsMap] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
 
@@ -1879,6 +1890,9 @@ class AgentModel {
       ...agent,
       tools,
       teams,
+      users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
+        (map) => map.get(agent.id) ?? [],
+      ),
       labels,
       knowledgeBaseIds,
       connectorIds,
@@ -2027,6 +2041,9 @@ class AgentModel {
       ...agent,
       tools,
       teams,
+      users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
+        (map) => map.get(agent.id) ?? [],
+      ),
       labels,
       knowledgeBaseIds,
       connectorIds,
@@ -2090,6 +2107,9 @@ class AgentModel {
       ...agent,
       tools,
       teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
+      users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
+        (map) => map.get(agent.id) ?? [],
+      ),
       labels: await AgentLabelModel.getLabelsForAgent(agent.id),
       knowledgeBaseIds: await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
         agent.id,
@@ -2168,6 +2188,9 @@ class AgentModel {
         ...agent,
         tools,
         teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
+        users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
+          (map) => map.get(agent.id) ?? [],
+        ),
         labels: await AgentLabelModel.getLabelsForAgent(agent.id),
         knowledgeBaseIds: await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
           agent.id,

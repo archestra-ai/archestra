@@ -361,6 +361,22 @@ describe("McpClient", () => {
 
     expect(mockCallTool).toHaveBeenCalledTimes(1);
     expect(mockClose).not.toHaveBeenCalled();
+
+    // The cancelled call must not vanish from the tool-call log: a row is
+    // persisted carrying the structured `cancelled` marker (not isError —
+    // a user-initiated stop is not a tool failure), which the log surfaces
+    // render as their distinct Cancelled state.
+    const [logged] = await db
+      .select()
+      .from(schema.mcpToolCallsTable)
+      .where(eq(schema.mcpToolCallsTable.agentId, agentId));
+    expect(logged).toBeDefined();
+    const loggedResult = logged.toolResult as {
+      isError?: boolean;
+      _meta?: { archestraError?: { type?: string } };
+    };
+    expect(loggedResult.isError).toBe(false);
+    expect(loggedResult._meta?.archestraError?.type).toBe("cancelled");
   });
 
   test("returns an error result (does not throw) for a non-abort failure", async () => {

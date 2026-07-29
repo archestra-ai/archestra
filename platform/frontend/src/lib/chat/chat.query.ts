@@ -50,6 +50,7 @@ const {
   getMcpServer,
   getInternalMcpCatalogTools,
   bulkAssignTools,
+  cancelChatMcpTask,
   stopChatStream,
   getMemberDefaultModel,
   resolveChatMcpElicitation,
@@ -670,6 +671,13 @@ export function useStopChatStream() {
   return useMutation({
     mutationFn: (conversationId: string) =>
       callApi(() => stopChatStream({ path: { id: conversationId } }), null),
+  });
+}
+
+export function useCancelChatMcpTask() {
+  return useMutation({
+    mutationFn: (taskId: string) =>
+      callApi(() => cancelChatMcpTask({ path: { taskId } }), null),
   });
 }
 

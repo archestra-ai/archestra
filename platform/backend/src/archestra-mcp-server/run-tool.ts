@@ -11,6 +11,7 @@ import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocat
 import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
 import logger from "@/logging";
 import { ConversationEnabledToolModel } from "@/models";
+import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { agentOwner, type Tool } from "@/types";
 import { archestraMcpBranding } from "./branding";
@@ -492,28 +493,51 @@ async function dispatchTool({
   const toolCallId = `run-tool-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 9)}`;
-  const result = await mcpClient.executeToolCallForOwner(
-    {
-      id: toolCallId,
-      name: resolvedName,
-      arguments: toolInput,
-    },
-    agentOwner(context.agentId),
-    context.tokenAuth,
-    // mcp-client scopes per-conversation sessions (e.g. browser contexts)
-    // by this key; headless executions use their isolation key so
-    // concurrent runs never share a session and cleanup can close it.
-    // availableTool lets a tool the agent has no assignment for execute in
-    // "Auto" mode; it is only ever set after the dynamic-access gates
-    // above passed, and the MCP server's connection policy still decides
-    // which credential the call uses.
-    {
-      conversationId: context.isolationKey ?? context.conversationId,
-      availableTool: availableTool ?? undefined,
-      // Cancel the in-flight upstream call when the chat run is stopped.
-      abortSignal: context.abortSignal,
-    },
-  );
+  // Captured before the closure: narrowing on a context property does not
+  // survive into one.
+  const ownerAgentId = context.agentId;
+  const dispatch = (signal: AbortSignal | undefined, detachable: boolean) =>
+    mcpClient.executeToolCallForOwner(
+      {
+        id: toolCallId,
+        name: resolvedName,
+        arguments: toolInput,
+      },
+      agentOwner(ownerAgentId),
+      context.tokenAuth,
+      // mcp-client scopes per-conversation sessions (e.g. browser contexts)
+      // by this key; headless executions use their isolation key so
+      // concurrent runs never share a session and cleanup can close it.
+      // availableTool lets a tool the agent has no assignment for execute in
+      // "Auto" mode; it is only ever set after the dynamic-access gates
+      // above passed, and the MCP server's connection policy still decides
+      // which credential the call uses.
+      {
+        conversationId: context.isolationKey ?? context.conversationId,
+        availableTool: availableTool ?? undefined,
+        // Cancel the in-flight upstream call when the chat run is stopped.
+        abortSignal: signal,
+        // A detached call outlives the synchronous timeout by design.
+        ...(detachable ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
+      },
+    );
+
+  // In `search_and_run_only` mode every third-party tool call arrives here, so
+  // this is the path that decides whether those agents get task behavior at
+  // all. The card is attached to the visible `run_tool` call rather than the
+  // synthetic inner id above.
+  const { taskBridge, currentToolCallId, userId, agentId } = context;
+  const result =
+    taskBridge && currentToolCallId && userId && agentId
+      ? await taskBridge.runMaybeTask({
+          agentId,
+          userId,
+          toolCallId: currentToolCallId,
+          toolName: resolvedName,
+          abortSignal: context.abortSignal,
+          execute: (signal) => dispatch(signal, true),
+        })
+      : await dispatch(context.abortSignal, false);
 
   return appendEnvelopeRepairNote(
     {

@@ -21,6 +21,7 @@ import {
 } from "@/archestra-mcp-server";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
+import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import {
   buildAgentDelegationTool,
   buildMcpGatewayTool,
@@ -819,6 +820,7 @@ export async function getChatMcpTools({
   scheduleTriggerRunId,
   hookRunCollector,
   subagentToolStream,
+  taskBridge,
   repeatTracker,
 }: {
   agentName: string;
@@ -865,6 +867,7 @@ export async function getChatMcpTools({
    * the delegation call that spawned them.
    */
   subagentToolStream?: SubagentToolStreamBridge;
+  taskBridge?: ChatTaskBridge;
   /**
    * Per-run repeated-tool-call tracker. Run entrypoints that own a `stopWhen`
    * pass their own instance so the breaker records into the same tracker the
@@ -1013,6 +1016,7 @@ export async function getChatMcpTools({
       blockOnApprovalRequired,
       hookRunCollector,
       subagentToolStream,
+      taskBridge,
       mcpGwToken,
       considerContextUntrusted,
       teams,

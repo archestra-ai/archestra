@@ -205,6 +205,7 @@ vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/chat/chat.query", () => ({
   useProfileToolsWithIds: () => ({ data: [] }),
+  useCancelChatMcpTask: () => ({ mutateAsync: vi.fn() }),
 }));
 
 vi.mock("@/lib/chat/chat-message.query", () => ({

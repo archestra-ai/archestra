@@ -59,9 +59,15 @@ vi.mock("@/components/ai-elements/tool", () => ({
   ToolContent: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  ToolHeader: ({ type }: { type: string }) => <div>{type}</div>,
+  ToolHeader: ({ type, state }: { type: string; state?: string }) => (
+    <div>
+      {type}
+      {state ? <span data-testid="tool-state">{state}</span> : null}
+    </div>
+  ),
   ToolInput: () => null,
-  ToolOutput: () => null,
+  ToolOutput: ({ label }: { label?: string }) =>
+    label ? <div data-testid="tool-output-label">{label}</div> : null,
 }));
 
 vi.mock("@/components/chat/knowledge-graph-citations", () => ({
@@ -97,6 +103,43 @@ beforeEach(() => {
 });
 
 describe("MessageThread", () => {
+  it("renders a cancelled tool call as Cancelled, not Success or Error", () => {
+    const messages: PartialUIMessage[] = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "slow_report",
+            toolCallId: "call-cancelled",
+            state: "output-available",
+            input: { seconds: 90 },
+            // The structured envelope the backend serializes when the user
+            // stops a run or cancels a background task mid-call.
+            output: {
+              archestraError: {
+                type: "cancelled",
+                message: "The user cancelled this call before it finished.",
+              },
+            },
+          },
+        ],
+      },
+    ];
+
+    render(<MessageThread messages={messages} />);
+
+    // Header state and output label both read cancelled — a user-initiated
+    // stop is neither a success nor a failure.
+    expect(screen.getByTestId("tool-state")).toHaveTextContent(
+      "output-cancelled",
+    );
+    expect(screen.getByTestId("tool-output-label")).toHaveTextContent(
+      "Cancelled",
+    );
+  });
+
   it("does not render a message bubble for whitespace-only text parts", () => {
     const messages: PartialUIMessage[] = [
       {

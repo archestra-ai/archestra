@@ -855,12 +855,26 @@ class McpClient {
         // McpError(RequestTimeout) — indistinguishable by shape from a real
         // timeout — so key off the signal, not the error. Rethrow before any
         // recovery so an aborted call is never retried (token refresh / fresh
-        // session). The aborted call is intentionally not audited from here:
-        // it runs in the AI SDK's abandoned tool-execute promise, so a DB write
-        // at this point is unreliable. Auditing a cancelled (possibly
-        // upstream-committed) call needs a non-abandoned context and is tracked
-        // separately.
+        // session).
+        //
+        // Persist the cancellation first: a call the user stopped mid-flight
+        // used to vanish from the tool-call log entirely, which is exactly
+        // the kind of half-finished action an operator later needs to see
+        // (the upstream may have committed work before the abort landed).
+        // The structured `cancelled` marker — not `isError` — is what log
+        // surfaces key off, because a user-initiated stop is not a tool
+        // failure. Best-effort by design: for a chat-stop abort this runs in
+        // the AI SDK's abandoned tool-execute promise, so the write races
+        // process shutdown; for a background-task cancel the promise is held
+        // by the task's detached continuation and the write is reliable.
         if (options?.abortSignal?.aborted) {
+          await this.persistToolCall(
+            owner,
+            mcpServerName,
+            toolCall,
+            this.buildCancelledResult(toolCall, authInfo),
+            authInfo,
+          );
           throw error;
         }
 
@@ -2455,6 +2469,31 @@ class McpClient {
     return authInfo?.executedAs
       ? { [MCP_EXECUTED_AS_META_KEY]: authInfo.executedAs }
       : {};
+  }
+
+  /**
+   * The row persisted for a call aborted mid-flight. `isError` stays false —
+   * a user-initiated stop is not a tool failure — and the structured
+   * `cancelled` marker is what the log surfaces render as their distinct
+   * Cancelled state. Never returned to the caller: the abort rethrows, and
+   * this row exists purely so the call doesn't vanish from the audit surface.
+   */
+  private buildCancelledResult(
+    toolCall: CommonToolCall,
+    authInfo?: ToolCallAuthInfo,
+  ): CommonToolResult {
+    const message =
+      "Cancelled before it finished — the run was stopped or the background task was cancelled. The upstream server may have completed work before the cancellation landed.";
+    return {
+      id: toolCall.id,
+      name: toolCall.name,
+      content: [{ type: "text", text: message }],
+      isError: false,
+      _meta: {
+        archestraError: { type: "cancelled", message },
+        ...this.executedAsMeta(authInfo),
+      },
+    };
   }
 
   /**

@@ -278,9 +278,11 @@ export async function createAgentServer(params: {
       version: config.api.version,
     },
     {
-      // Shared with the `server/discover` payload so the capabilities a
-      // 2025-11-25 client learns at `initialize` and a 2026-07-28 client learns
-      // on demand cannot drift apart.
+      // The legacy revision's capability set: `initialize` is only ever
+      // answered for 2025-11-25-and-older clients, which have no notification
+      // channel, so `tools.listChanged` stays false here. `server/discover`
+      // deliberately passes the negotiated revision instead and may advertise
+      // `tools.listChanged: true`, backed by `subscriptions/listen`.
       capabilities: buildGatewayServerCapabilities(),
     },
   );

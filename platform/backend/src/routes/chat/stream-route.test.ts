@@ -2825,36 +2825,48 @@ describe("POST /api/chat handler composition", () => {
 
   test("accepts an attachment over the sandbox limit and stores it", async () => {
     // Too big to stage into the sandbox, but well under the storage cap: the
-    // sandbox is bypassed and the file still lands in the Files panel.
-    const overSandbox = Buffer.alloc(
-      config.skillsSandbox.artifactBytesLimit + 1,
-      0x61,
-    );
-    const dataUrl = `data:application/zip;base64,${overSandbox.toString("base64")}`;
-    const response = await postMessage([
-      {
-        id: "msg-1",
-        role: "user",
-        parts: [
-          { type: "text", text: "process this" },
-          {
-            type: "file",
-            url: dataUrl,
-            mediaType: "application/zip",
-            filename: "big.zip",
-          },
-        ],
-      },
-    ]);
-
-    expect(response.statusCode).toBe(200);
-    const attachments =
-      await ConversationAttachmentModel.findByConversationIdWithoutData(
-        conversationId,
+    // sandbox is bypassed and the file still lands in the Files panel. The
+    // staging limit defaults to the storage cap, so it is lowered here to
+    // keep that band non-empty (and the buffer small).
+    const original = config.skillsSandbox.artifactBytesLimit;
+    (
+      config.skillsSandbox as { artifactBytesLimit: number }
+    ).artifactBytesLimit = 1024;
+    try {
+      const overSandbox = Buffer.alloc(
+        config.skillsSandbox.artifactBytesLimit + 1,
+        0x61,
       );
-    expect(attachments).toHaveLength(1);
-    expect(attachments[0].originalName).toBe("big.zip");
-    expect(attachments[0].fileSize).toBe(overSandbox.byteLength);
+      const dataUrl = `data:application/zip;base64,${overSandbox.toString("base64")}`;
+      const response = await postMessage([
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [
+            { type: "text", text: "process this" },
+            {
+              type: "file",
+              url: dataUrl,
+              mediaType: "application/zip",
+              filename: "big.zip",
+            },
+          ],
+        },
+      ]);
+
+      expect(response.statusCode).toBe(200);
+      const attachments =
+        await ConversationAttachmentModel.findByConversationIdWithoutData(
+          conversationId,
+        );
+      expect(attachments).toHaveLength(1);
+      expect(attachments[0].originalName).toBe("big.zip");
+      expect(attachments[0].fileSize).toBe(overSandbox.byteLength);
+    } finally {
+      (
+        config.skillsSandbox as { artifactBytesLimit: number }
+      ).artifactBytesLimit = original;
+    }
   });
 
   test("rejects an attachment over the attachment storage cap and persists nothing", async () => {

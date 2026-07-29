@@ -110,6 +110,7 @@ import { projectService } from "@/services/project";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { resolveProjectFileScope } from "@/skills-sandbox/project-file-scope";
+import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { renderSystemPrompt } from "@/templating";
 import {
   ApiError,
@@ -460,6 +461,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // buildModelMessagesForProvider).
       // Wrapped in markTerminal cleanup: a throw here would otherwise leave
       // the active run stuck `running`, causing subsequent sends to 409.
+      // Detected before extraction rewrites data: URLs into refs.
+      const turnHasNewAttachments = (messages as ChatMessage[]).some(
+        (message) =>
+          message.parts?.some(
+            (part) =>
+              part.type === "file" &&
+              typeof part.url === "string" &&
+              part.url.startsWith("data:"),
+          ),
+      );
       try {
         await extractInlineAttachments({
           messages: messages as ChatMessage[],
@@ -474,6 +485,33 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           error: error instanceof Error ? error.message : String(error),
         });
         throw error;
+      }
+
+      if (turnHasNewAttachments) {
+        // Upload-time staging: a file the model can't take must already be on
+        // the sandbox filesystem when the pointer notice reaches the model,
+        // not parked until the first sandbox op. Fire-and-forget — op-time
+        // staging remains the idempotent catch-up, so a failure costs nothing.
+        void isSkillSandboxAvailableForAgent({
+          userId: user.id,
+          organizationId,
+          agentId: conversation.agentId,
+        })
+          .then((available) =>
+            available
+              ? skillSandboxRuntimeService.stageConversationAttachmentsNow({
+                  organizationId,
+                  userId: conversationUserId,
+                  conversationId,
+                })
+              : undefined,
+          )
+          .catch((error) => {
+            logger.warn(
+              { error, conversationId },
+              "upload-time attachment staging failed",
+            );
+          });
       }
 
       const stopActiveRunPolling = activeChatRunService.startStopPolling({

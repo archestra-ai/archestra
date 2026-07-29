@@ -72,7 +72,7 @@ The engine pod itself runs privileged and as root. Building containers is what r
 
 ## Limits
 
-Each command runs under fixed caps: 30 seconds of CPU, 1 GiB of memory, and 120 seconds of wall-clock time. Command output is captured up to 256 KiB, and a file the agent exports can be up to 16 MiB. Admins can tune the caps; see [Deployment](./platform-deployment#code-sandbox).
+Each command runs under fixed caps: 30 seconds of CPU, 1 GiB of memory, and 120 seconds of wall-clock time. Command output is captured up to 256 KiB, and a file the agent exports can be up to 50 MiB. Admins can tune the caps; see [Deployment](./platform-deployment#code-sandbox).
 
 ## Enabling the Sandbox
 

@@ -245,17 +245,15 @@ export function buildGatewayServerCapabilities(
   revision: McpProtocolRevision = LEGACY_MCP_PROTOCOL_REVISION,
 ): McpServerCapabilitiesWithExtensions {
   return {
-    // Neither subscription flag is advertised, in any revision, because
-    // neither was ever implemented: no `resources/subscribe` handler exists —
-    // callers always got method-not-found — and no `list_changed`
-    // notification has ever been sent (the stateless transport has no channel
-    // to carry one). Advertising them cost real behavior: a client seeing
+    // The resources subscription flags are not advertised in any revision:
+    // no `resources/subscribe` handler has ever existed — callers always got
+    // method-not-found — and no resources `list_changed` notification has
+    // ever been sent. Advertising them cost real behavior: a client seeing
     // `listChanged: true` may cache its lists indefinitely waiting for a
     // notification that never comes. Freshness is signalled by the SEP-2549
-    // `ttlMs`/`cacheScope` hints on every cacheable result instead. In
-    // 2026-07-28 `resources/subscribe` is removed outright in favour of
-    // `subscriptions/listen`, which the gateway can advertise if it ever
-    // grows an event source to back it.
+    // `ttlMs`/`cacheScope` hints instead. (Tools are different — see the
+    // `tools` block below, whose flag is backed by `subscriptions/listen`
+    // on the stateless revision.)
     resources: {
       listChanged: false,
     },

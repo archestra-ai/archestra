@@ -52,10 +52,13 @@ export function validateAuthorizationResponseIssuer(params: {
       : { ok: true };
   }
 
-  // A present `iss` with nothing recorded to compare against cannot be
-  // verified, so it cannot be trusted.
+  // Nothing recorded to compare against. This is not evidence of a mix-up:
+  // proxy flows skip authorization-server discovery by design, so they never
+  // record an issuer. Treating that as a mismatch would reject those flows
+  // outright while proving nothing, so the request proceeds unverified —
+  // exactly where it stood before this check existed.
   if (!recordedIssuer) {
-    return { ok: false, reason: "issuer_mismatch" };
+    return { ok: true };
   }
 
   return issuersMatch(responseIssuer, recordedIssuer)

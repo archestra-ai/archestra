@@ -476,6 +476,15 @@ class McpClient {
           ...mcpParamHeaders,
         },
       };
+    } else if (mcpParamHeaders) {
+      // Every gateway request carries token auth, so this should be
+      // unreachable — but if a call path without auth context ever reaches an
+      // annotated tool, the mirrored headers are dropped, and that should be
+      // visible rather than silent.
+      logger.debug(
+        { toolName: toolCall.name, headers: Object.keys(mcpParamHeaders) },
+        "Skipping Mcp-Param headers: no token auth context to carry them",
+      );
     }
 
     // App backing servers have no upstream to connect to: the `open` launch tool is
@@ -1236,8 +1245,10 @@ class McpClient {
     }
 
     // Create the client with UI extension capabilities
+    // No `roots`: nothing here implements `roots/list`, and declaring it
+    // invited upstream servers to call a method we always failed. Deprecated
+    // in 2026-07-28 besides.
     const baseCapabilities: ClientCapabilitiesWithExtensions = {
-      roots: { listChanged: true },
       extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
     };
     const capabilities = elicitationHandler
@@ -3280,8 +3291,8 @@ class McpClient {
           secretId,
         );
 
+        // No `roots` — see the identical omission above.
         const capabilities: ClientCapabilitiesWithExtensions = {
-          roots: { listChanged: true },
           extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
         };
 

@@ -8,7 +8,10 @@ import type {
   ModelOutputModality,
   PriceSource,
 } from "@/types";
+import { resolveDiscoveredModelRegistryEntry } from "./cross-provider-pricing";
+import { enrichDiscoveredModel } from "./discovered-model-enrichment";
 import { buildModelsToUpsert } from "./model-sync";
+import { lookupOpenAiPublishedPrices } from "./openai-published-pricing";
 
 /**
  * Black-box matrix over model metadata resolution: given a provider, a model id
@@ -270,6 +273,13 @@ interface MatrixRow {
   modelId: string;
   underlyingModelName?: string;
   fetched?: FetchedModelCapabilities;
+  /**
+   * Route the row through the LLM proxy's discovery path instead of a sync.
+   * A model the proxy names is written bare under the *endpoint's* provider and
+   * is never revisited by a sync, so it resolves through a different path and
+   * belongs in the same table rather than a private one.
+   */
+  discovered?: true;
   expected: ExpectedCapabilities;
 }
 
@@ -421,6 +431,47 @@ const MATRIX: MatrixRow[] = [
     },
   },
 
+  // --- OpenAI: models the registry omits, priced from OpenAI's own list ----
+  {
+    name: "openai/gpt-5.1-codex — absent from the registry, so the published map fills it",
+    provider: "openai",
+    modelId: "gpt-5.1-codex",
+    expected: {
+      contextLength: null,
+      outputLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      pricePerMillionInput: "1.25",
+      pricePerMillionOutput: "10.00",
+      priceSource: "models_dev",
+      pricePerMillionCacheRead: "0.125",
+      // OpenAI bills nothing to write to the cache, so the derived write is 0.
+      pricePerMillionCacheWrite: "0",
+      cachePriceSource: "models_dev",
+    },
+  },
+  {
+    name: "openai/gpt-5.1-codex-mini — priced apart from the model its name contains",
+    provider: "openai",
+    modelId: "gpt-5.1-codex-mini",
+    expected: {
+      contextLength: null,
+      outputLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      // A fifth of `gpt-5.1-codex`: deriving one from the other by stripping
+      // the suffix would bill this at five times its published rate.
+      pricePerMillionInput: "0.25",
+      pricePerMillionOutput: "2.00",
+      priceSource: "models_dev",
+      pricePerMillionCacheRead: "0.025",
+      pricePerMillionCacheWrite: "0",
+      cachePriceSource: "models_dev",
+    },
+  },
+
   // --- Anthropic ----------------------------------------------------------
   {
     name: "anthropic/claude-opus-4-8 — both cache directions synced",
@@ -473,6 +524,90 @@ const MATRIX: MatrixRow[] = [
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.3",
       pricePerMillionCacheWrite: "3.75",
+      cachePriceSource: "models_dev",
+    },
+  },
+
+  // --- Proxy discovery: model recorded under the endpoint's provider -------
+  {
+    name: "discovered/bedrock:gpt-4o — a vendor model that reached a mismatched endpoint",
+    provider: "bedrock",
+    modelId: "gpt-4o",
+    discovered: true,
+    expected: {
+      contextLength: 128000,
+      outputLength: 16384,
+      // Enrichment deliberately writes no modalities: validating them against
+      // the column schema lives in the sync path.
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: true,
+      pricePerMillionInput: "2.50",
+      pricePerMillionOutput: "10.00",
+      priceSource: "models_dev",
+      pricePerMillionCacheRead: "1.25",
+      // The registry entry carries no cache-write price, so it derives from the
+      // input price rather than being synced.
+      pricePerMillionCacheWrite: "3.125",
+      cachePriceSource: "models_dev",
+    },
+  },
+  {
+    name: "discovered/bedrock:us.amazon.nova-lite — still resolves through the provider-scoped path",
+    provider: "bedrock",
+    modelId: "us.amazon.nova-lite-v1:0",
+    discovered: true,
+    expected: {
+      contextLength: 300000,
+      outputLength: 8192,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: true,
+      pricePerMillionInput: "0.06",
+      pricePerMillionOutput: "0.24",
+      // The AWS snapshot lists this model at the same rate, so the stored price
+      // matches it and the provenance reads as AWS.
+      priceSource: "aws",
+      pricePerMillionCacheRead: "0.015",
+      pricePerMillionCacheWrite: "0.075",
+      cachePriceSource: "models_dev",
+    },
+  },
+  {
+    name: "discovered/bedrock:unlisted — no first-party vendor lists it, so no price is asserted",
+    provider: "bedrock",
+    modelId: "us.anthropic.claude-notarealmodel-v1:0",
+    discovered: true,
+    expected: {
+      contextLength: null,
+      outputLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      pricePerMillionInput: "50.00",
+      pricePerMillionOutput: "50.00",
+      priceSource: "default",
+      pricePerMillionCacheRead: "5",
+      pricePerMillionCacheWrite: "62.5",
+      cachePriceSource: "derived_multiplier",
+    },
+  },
+  {
+    name: "discovered/bedrock:gpt-5.1-codex — no registry provider carries it, so the published map does",
+    provider: "bedrock",
+    modelId: "gpt-5.1-codex",
+    discovered: true,
+    expected: {
+      contextLength: null,
+      outputLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      pricePerMillionInput: "1.25",
+      pricePerMillionOutput: "10.00",
+      priceSource: "models_dev",
+      pricePerMillionCacheRead: "0.125",
+      pricePerMillionCacheWrite: "1.5625",
       cachePriceSource: "models_dev",
     },
   },
@@ -1008,24 +1143,48 @@ const MATRIX: MatrixRow[] = [
  * the guard below fails until someone updates this number, which is the moment
  * to ask whether that model should really be unpriced.
  */
-const EXPECTED_DEFAULT_PRICED_ROWS = 7;
+const EXPECTED_DEFAULT_PRICED_ROWS = 8;
+
+/**
+ * Reproduce what the LLM proxy does the first time it sees a model: write the
+ * bare row under the endpoint's provider, then enrich it from the registry.
+ */
+async function discoverAndEnrich(row: MatrixRow) {
+  const created = await ModelModel.ensureModelExists(row.modelId, row.provider);
+  if (!created) {
+    throw new Error(`expected ${row.provider}/${row.modelId} to be created`);
+  }
+  await enrichDiscoveredModel({ model: created, modelsDevData: MODELS_DEV });
+  const model = await ModelModel.findByProviderAndModelId(
+    row.provider,
+    row.modelId,
+  );
+  if (!model) {
+    throw new Error(`expected ${row.provider}/${row.modelId} to be readable`);
+  }
+  return model;
+}
 
 describe("model capability matrix", () => {
   for (const row of MATRIX) {
     test(row.name, async () => {
-      const [model] = await ModelModel.bulkUpsert(
-        buildModelsToUpsert({
-          provider: row.provider,
-          models: [
-            {
-              id: row.modelId,
-              capabilities: row.fetched,
-              underlyingModelName: row.underlyingModelName ?? null,
-            },
-          ],
-          modelsDevData: MODELS_DEV,
-        }),
-      );
+      const model = row.discovered
+        ? await discoverAndEnrich(row)
+        : (
+            await ModelModel.bulkUpsert(
+              buildModelsToUpsert({
+                provider: row.provider,
+                models: [
+                  {
+                    id: row.modelId,
+                    capabilities: row.fetched,
+                    underlyingModelName: row.underlyingModelName ?? null,
+                  },
+                ],
+                modelsDevData: MODELS_DEV,
+              }),
+            )
+          )[0];
 
       const capabilities = ModelModel.toCapabilities(model);
 
@@ -1050,6 +1209,19 @@ describe("model capability matrix", () => {
 
   test("only the known-unpriced models fall through to the estimate", () => {
     const unpriced = MATRIX.filter((row) => {
+      // Each row is judged by the path it actually takes. Running a discovered
+      // row through the sync builder would report it unpriced for a resolution
+      // it never performs, hiding the estimate this guard exists to surface.
+      if (row.discovered) {
+        return (
+          resolveDiscoveredModelRegistryEntry({
+            provider: row.provider,
+            modelId: row.modelId,
+            modelsDevData: MODELS_DEV,
+          })?.prices?.promptPricePerToken == null &&
+          lookupOpenAiPublishedPrices(row.modelId) == null
+        );
+      }
       const [built] = buildModelsToUpsert({
         provider: row.provider,
         models: [

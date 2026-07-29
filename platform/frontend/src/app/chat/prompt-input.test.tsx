@@ -24,6 +24,7 @@ const {
     chatSecretScanEnabled: false,
     chatAttachmentStorageBytesLimit: undefined as number | undefined,
     apiBodyLimitBytes: undefined as number | undefined,
+    sandboxArtifactBytesLimit: undefined as number | undefined,
   },
   mockProfileState: {
     agent: null as { sandboxAvailable: boolean } | null,
@@ -340,10 +341,14 @@ describe("ArchestraPromptInput", () => {
       if (flag === "apiBodyLimitBytes") {
         return mockFeatureState.apiBodyLimitBytes;
       }
+      if (flag === "sandboxArtifactBytesLimit") {
+        return mockFeatureState.sandboxArtifactBytesLimit;
+      }
       return undefined;
     });
     mockFeatureState.chatAttachmentStorageBytesLimit = undefined;
     mockFeatureState.apiBodyLimitBytes = undefined;
+    mockFeatureState.sandboxArtifactBytesLimit = undefined;
     mockUploadPolicy.maxFileSize = undefined;
     mockUploadPolicy.validateFile = undefined;
     mockUseChatPlaceholder.mockReturnValue({
@@ -495,8 +500,11 @@ describe("ArchestraPromptInput", () => {
       });
 
       it("accepts a file the model can't read and the sandbox can't take", () => {
-        // Over the 16 MiB sandbox artifact limit but under the storage cap: it
+        // Over the sandbox artifact limit but under the storage cap: it
         // skips the sandbox and still lands in the conversation's Files panel.
+        // The sandbox limit is pinned because its default tracks the storage
+        // cap, which would leave this band empty.
+        mockFeatureState.sandboxArtifactBytesLimit = 16 * 1024 * 1024;
         mockFeatureState.chatAttachmentStorageBytesLimit = 50 * 1024 * 1024;
         renderComposer();
 

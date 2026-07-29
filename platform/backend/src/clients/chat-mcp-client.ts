@@ -638,8 +638,11 @@ export async function getChatMcpClient(
     // Create StreamableHTTP transport with profile token authentication
     const transport = createLoopbackGatewayTransport(mcpGatewayUrl, authToken);
 
+    // No `roots` here: the capability promises to answer `roots/list`, which
+    // no client in this codebase implements — a server taking the declaration
+    // at its word got method-not-found. Roots is also deprecated in the
+    // 2026-07-28 MCP revision.
     const capabilities: ClientCapabilitiesWithExtensions = {
-      roots: { listChanged: true },
       extensions: MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
     };
 

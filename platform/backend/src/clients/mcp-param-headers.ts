@@ -233,6 +233,7 @@ export function mcpParamHeadersForCall(params: {
  * round-trips exactly and can never smuggle CR/LF.
  */
 function encodeHeaderValue(value: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: matching RFC 9110's exact allowed byte range (tab + space + visible ASCII) is the point
   const asciiSafe = /^[\x20\x09\x21-\x7E]*$/.test(value);
   const noEdgeWhitespace = value === value.trim();
   if (asciiSafe && noEdgeWhitespace) return value;

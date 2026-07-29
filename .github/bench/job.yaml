@@ -1,6 +1,7 @@
 # Short-lived benchmark Job. Runs the bench container against an ephemeral Postgres sidecar (zero blast
-# radius on staging's DB) and the shared staging Dagger engine (reached via kube-pod:// with the
-# platform service account's RBAC). The pod owns reporting: it uploads results to GCS and posts Slack,
+# radius on staging's DB) and a short-lived benchmark-owned Dagger engine (reached via kube-pod://
+# with the platform service account's RBAC). The pod owns reporting: it uploads results to GCS and
+# posts Slack,
 # so CI applies the Job and leaves. activeDeadlineSeconds / ttlSecondsAfterFinished handle teardown.
 # `${...}` are filled by envsubst.
 #
@@ -64,10 +65,11 @@ spec:
               value: "basic"
             - name: BENCH_LANES
               value: "glm,deepseek-flash,qwen37-plus,gemma-4-31b,gpt-56-luna,mimo-25,qwen36-35b-a3b,qwen36-27b"
-            # Dagger runner host is resolved from the live staging Deployment by CI.
-            # Setting it also turns on the code sandbox (gated on the host's presence).
+            # Setting the benchmark-owned engine host also turns on the code sandbox.
             - name: ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST
               value: "${DAGGER_RUNNER_HOST}"
+            - name: DAGGER_ENGINE_POD
+              value: "${DAGGER_ENGINE_POD}"
             - name: ZAI_API_KEY
               valueFrom:
                 secretKeyRef:

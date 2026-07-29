@@ -1,6 +1,6 @@
 #!/bin/sh
 # Drives one benchmark run inside the prod platform image and owns reporting end to end: provisions the
-# bench env file, runs the benchmark against the Postgres sidecar + staging Dagger engine, then exports
+# bench env file, runs the benchmark against its Postgres sidecar + dedicated Dagger engine, then exports
 # TensorBoard scalars, uploads artifacts to GCS, and posts the Slack summary. The final publish step's
 # exit code encodes harness health (zero passes ⇒ broken), so the pod's terminal phase is the signal CI
 # reads — CI applies the Job and leaves, it does not wait or copy anything out.
@@ -10,6 +10,25 @@ umask 077
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set (shared with the postgres sidecar)}"
 BENCH_ENVS="${BENCH_ENVS:-basic}"
 BENCH_LANES="${BENCH_LANES:-glm}"
+
+cleanup_dagger() {
+  status=$?
+  trap - EXIT
+  if [ -n "${DAGGER_ENGINE_POD:-}" ]; then
+    service_account_dir=/var/run/secrets/kubernetes.io/serviceaccount
+    namespace=$(cat "${service_account_dir}/namespace")
+    if ! curl -fsS --max-time 10 --request DELETE \
+      --cacert "${service_account_dir}/ca.crt" \
+      --header "Authorization: Bearer $(cat "${service_account_dir}/token")" \
+      "https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT_HTTPS:-443}/api/v1/namespaces/${namespace}/pods/${DAGGER_ENGINE_POD}" \
+      >/dev/null; then
+      printf 'warning: could not delete Dagger pod %s\n' "${DAGGER_ENGINE_POD}" >&2
+    fi
+  fi
+  exit "${status}"
+}
+trap cleanup_dagger EXIT
+trap 'exit 143' HUP INT TERM
 
 # The bench resolves its Postgres from ARCHESTRA_BENCH_DATABASE_URL and creates a fresh per-run
 # database on it; the backend's own ARCHESTRA_DATABASE_URL is then derived from that. `Instance::start`
@@ -55,5 +74,5 @@ else
 fi
 
 # Final step: uploads to GCS, posts Slack, and exits non-zero on a broken harness so the pod's terminal
-# phase reflects run health.
-exec python3 /bench/scripts/publish_run.py --tb /work/tb --run-dir /work/run --tarball /work/run.tgz
+# phase reflects run health. The EXIT trap removes the separate Dagger pod after publishing.
+python3 /bench/scripts/publish_run.py --tb /work/tb --run-dir /work/run --tarball /work/run.tgz

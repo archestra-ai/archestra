@@ -1,0 +1,138 @@
+# Short-lived, benchmark-owned Dagger engine. It runs separately from the secret-bearing benchmark
+# pod, has no Kubernetes token, and is reachable only through kube-pod:// exec. `${RUN_NUMBER}` is
+# filled by envsubst in CI.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: archestra-bench-dagger-config
+  namespace: archestra
+data:
+  engine.json: |
+    {
+      "logLevel": "info",
+      "security": { "insecureRootCapabilities": false },
+      "gc": { "maxUsedSpace": "40GB", "reservedSpace": "5GB", "minFreeSpace": "20%" }
+    }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: archestra-bench-dagger-egress
+  namespace: archestra
+spec:
+  podSelector:
+    matchLabels:
+      app: archestra-bench-dagger
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 100.64.0.0/10
+              - 127.0.0.0/8
+              - 169.254.0.0/16
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: archestra-bench-dagger-${RUN_NUMBER}
+  namespace: archestra
+  labels:
+    app: archestra-bench-dagger
+    run: "${RUN_NUMBER}"
+  annotations:
+    cluster-autoscaler.kubernetes.io/safe-to-evict: "false"
+spec:
+  activeDeadlineSeconds: 23400
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  terminationGracePeriodSeconds: 30
+  containers:
+    - name: dagger-engine
+      image: registry.dagger.io/engine:v0.21.5@sha256:3dd06d85a150defe5299bf7a4ca000c8cb2bfc8a4121b712aa146f0e7aeb3be1
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eu
+          CGROUP="archestra-bench-${POD_UID}"
+          CGROUP_PATH="/sys/fs/cgroup/${CGROUP}"
+          printf '[worker.oci]\n  defaultCgroupParent = "/%s"\n' "${CGROUP}" > /etc/dagger/engine.toml
+          cap() {
+            mkdir -p "${CGROUP_PATH}" 2>/dev/null &&
+            echo 5368709120 > "${CGROUP_PATH}/memory.max" 2>/dev/null &&
+            echo '200000 100000' > "${CGROUP_PATH}/cpu.max" 2>/dev/null &&
+            { echo 0 > "${CGROUP_PATH}/memory.swap.max" 2>/dev/null || true; }
+          }
+          i=0
+          until cap; do
+            if [ "${i}" -ge 60 ]; then
+              echo 'archestra: could not cap benchmark sandboxes with cgroup v2' >&2
+              exit 1
+            fi
+            i=$((i + 1))
+            sleep 1
+          done
+          exec /usr/local/bin/dagger-entrypoint.sh
+      env:
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+      securityContext:
+        privileged: true
+      resources:
+        requests:
+          cpu: "2"
+          memory: 6Gi
+        limits:
+          memory: 6Gi
+      readinessProbe:
+        exec:
+          command: ["buildctl", "debug", "workers"]
+        periodSeconds: 2
+        timeoutSeconds: 2
+        failureThreshold: 60
+      lifecycle:
+        preStop:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - rmdir "/sys/fs/cgroup/archestra-bench-${POD_UID}" 2>/dev/null || true
+      volumeMounts:
+        - name: varlib
+          mountPath: /var/lib/dagger
+        - name: run
+          mountPath: /run/dagger
+        - name: config
+          mountPath: /etc/dagger/engine.json
+          subPath: engine.json
+  volumes:
+    - name: varlib
+      ephemeral:
+        volumeClaimTemplate:
+          spec:
+            accessModes: [ReadWriteOnce]
+            resources:
+              requests:
+                storage: 50Gi
+    - name: run
+      emptyDir:
+        medium: Memory
+    - name: config
+      configMap:
+        name: archestra-bench-dagger-config

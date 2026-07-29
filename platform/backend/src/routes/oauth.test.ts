@@ -847,6 +847,242 @@ describe("OAuth routes", () => {
     expect(requestBody.get("code")).toBe("authorization-code");
     expect(requestBody.has("resource")).toBe(false);
   });
+  test("forwards a matching iss through the callback (RFC 9207)", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Direct OAuth MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/v1/mcp",
+      oauthConfig: {
+        name: "Direct OAuth MCP",
+        server_url: "https://mcp.example.com/v1/mcp",
+        grant_type: "authorization_code",
+        auth_server_url: "https://login.example.com/oauth",
+        authorization_endpoint: "https://login.example.com/oauth/authorize",
+        token_endpoint: "https://login.example.com/oauth/token",
+        client_id: "public-client-id",
+        client_secret: "public-client-secret",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["read", "write"],
+        default_scopes: ["read", "write"],
+        supports_resource_metadata: false,
+      },
+    });
+
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+
+      if (url === "https://login.example.com/oauth/token") {
+        const body = init?.body as URLSearchParams;
+        if (body.has("resource")) {
+          return {
+            ok: false,
+            status: 400,
+            text: async () =>
+              JSON.stringify({
+                error: "invalid_target",
+                error_description: "Incorrect resource parameters",
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            access_token: "new-access-token",
+            refresh_token: "new-refresh-token",
+            expires_in: 3600,
+          }),
+          text: async () =>
+            JSON.stringify({
+              access_token: "new-access-token",
+              refresh_token: "new-refresh-token",
+              expires_in: 3600,
+            }),
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://login.example.com/oauth/authorize",
+          token_endpoint: "https://login.example.com/oauth/token",
+        }),
+      };
+    }) as Mock;
+    globalThis.fetch = fetchMock;
+
+    const initiateResponse = await app.inject({
+      method: "POST",
+      url: "/api/oauth/initiate",
+      payload: {
+        catalogId: catalog.id,
+      },
+    });
+    expect(initiateResponse.statusCode, initiateResponse.body).toBe(200);
+    const authorizationUrl = new URL(initiateResponse.json().authorizationUrl);
+    expect(authorizationUrl.searchParams.has("resource")).toBe(false);
+    const state = initiateResponse.json().state;
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS keyv_cache (
+        key text PRIMARY KEY,
+        value text NOT NULL
+      )
+    `);
+    await db.execute(sql`
+      INSERT INTO keyv_cache (key, value)
+      VALUES (
+        ${`keyv:${CacheKey.OAuthState}-${state}`},
+        ${JSON.stringify({
+          value: {
+            catalogId: catalog.id,
+            codeVerifier: "test-code-verifier",
+            clientId: "public-client-id",
+            clientSecret: "public-client-secret",
+            issuer: "https://login.example.com",
+            issParameterSupported: true,
+          },
+          expires: Date.now() + 60_000,
+        })}
+      )
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+    `);
+
+    const callbackResponse = await app.inject({
+      method: "POST",
+      url: "/api/oauth/callback",
+      payload: {
+        code: "authorization-code",
+        state,
+        iss: "https://login.example.com",
+      },
+    });
+
+    // Regression: the browser must forward `iss`. When it did not, a server
+    // advertising RFC 9207 support had every flow rejected for its absence.
+    expect(callbackResponse.statusCode, callbackResponse.body).toBe(200);
+  });
+
+  test("rejects a callback whose iss is not the server the flow started with", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Direct OAuth MCP",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com/v1/mcp",
+      oauthConfig: {
+        name: "Direct OAuth MCP",
+        server_url: "https://mcp.example.com/v1/mcp",
+        grant_type: "authorization_code",
+        auth_server_url: "https://login.example.com/oauth",
+        authorization_endpoint: "https://login.example.com/oauth/authorize",
+        token_endpoint: "https://login.example.com/oauth/token",
+        client_id: "public-client-id",
+        client_secret: "public-client-secret",
+        redirect_uris: ["http://localhost:3000/oauth-callback"],
+        scopes: ["read", "write"],
+        default_scopes: ["read", "write"],
+        supports_resource_metadata: false,
+      },
+    });
+
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = String(input);
+
+      if (url === "https://login.example.com/oauth/token") {
+        const body = init?.body as URLSearchParams;
+        if (body.has("resource")) {
+          return {
+            ok: false,
+            status: 400,
+            text: async () =>
+              JSON.stringify({
+                error: "invalid_target",
+                error_description: "Incorrect resource parameters",
+              }),
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            access_token: "new-access-token",
+            refresh_token: "new-refresh-token",
+            expires_in: 3600,
+          }),
+          text: async () =>
+            JSON.stringify({
+              access_token: "new-access-token",
+              refresh_token: "new-refresh-token",
+              expires_in: 3600,
+            }),
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({
+          authorization_endpoint: "https://login.example.com/oauth/authorize",
+          token_endpoint: "https://login.example.com/oauth/token",
+        }),
+      };
+    }) as Mock;
+    globalThis.fetch = fetchMock;
+
+    const initiateResponse = await app.inject({
+      method: "POST",
+      url: "/api/oauth/initiate",
+      payload: {
+        catalogId: catalog.id,
+      },
+    });
+    expect(initiateResponse.statusCode, initiateResponse.body).toBe(200);
+    const authorizationUrl = new URL(initiateResponse.json().authorizationUrl);
+    expect(authorizationUrl.searchParams.has("resource")).toBe(false);
+    const state = initiateResponse.json().state;
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS keyv_cache (
+        key text PRIMARY KEY,
+        value text NOT NULL
+      )
+    `);
+    await db.execute(sql`
+      INSERT INTO keyv_cache (key, value)
+      VALUES (
+        ${`keyv:${CacheKey.OAuthState}-${state}`},
+        ${JSON.stringify({
+          value: {
+            catalogId: catalog.id,
+            codeVerifier: "test-code-verifier",
+            clientId: "public-client-id",
+            clientSecret: "public-client-secret",
+            issuer: "https://login.example.com",
+            issParameterSupported: true,
+          },
+          expires: Date.now() + 60_000,
+        })}
+      )
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+    `);
+
+    const callbackResponse = await app.inject({
+      method: "POST",
+      url: "/api/oauth/callback",
+      payload: {
+        code: "authorization-code",
+        state,
+        iss: "https://evil.example.com",
+      },
+    });
+
+    expect(callbackResponse.statusCode).toBe(400);
+    expect(callbackResponse.body).toContain("issuer");
+  });
 
   test("includes configured OAuth resource when refreshing access tokens", async ({
     makeInternalMcpCatalog,

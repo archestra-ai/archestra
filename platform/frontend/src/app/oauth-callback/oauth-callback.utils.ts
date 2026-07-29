@@ -1,3 +1,46 @@
+/**
+ * Every query parameter the OAuth callback consumes, read in one place.
+ *
+ * Extracted from the page component so the set is pinned by tests: the RFC
+ * 9207 regression was exactly a parameter (`iss`) that the server sent, the
+ * backend accepted, and this layer silently dropped — invisible to both the
+ * component's rendering and the backend's route tests.
+ */
+export interface OAuthCallbackParams {
+  code: string | null;
+  error: string | null;
+  errorDescription: string | null;
+  state: string | null;
+  /** RFC 9207 authorization-server identifier, when the server sends one. */
+  iss: string | null;
+}
+
+export function extractOAuthCallbackParams(searchParams: {
+  get(name: string): string | null;
+}): OAuthCallbackParams {
+  return {
+    code: searchParams.get("code"),
+    error: searchParams.get("error"),
+    errorDescription: searchParams.get("error_description"),
+    state: searchParams.get("state"),
+    iss: searchParams.get("iss"),
+  };
+}
+
+/**
+ * The exact body for the token-exchange call. `iss` rides along whenever the
+ * server sent it — the backend compares it against the server the flow
+ * started with, so it has to reach the wire.
+ */
+export function buildOAuthCallbackPayload(params: {
+  code: string;
+  state: string;
+  iss: string | null;
+}): { code: string; state: string; iss?: string } {
+  const { code, state, iss } = params;
+  return { code, state, ...(iss ? { iss } : {}) };
+}
+
 export interface OAuthCallbackErrorState {
   title: string;
   description: string;

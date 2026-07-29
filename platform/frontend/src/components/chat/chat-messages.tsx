@@ -304,6 +304,27 @@ export function ChatMessages({
   const contextCompaction = session?.contextCompaction;
   const hasPendingMcpElicitation = Boolean(session?.pendingMcpElicitation);
 
+  /**
+   * The single occurrence of each background task that should render, as
+   * `messageId:partIndex`. After a reload a task is present twice — the live
+   * streamed part and the persisted one the backend spliced in — and without
+   * this the card appears once per copy. Last occurrence wins so the card
+   * shows the newest status.
+   */
+  const renderedTaskPartKeys = useMemo(() => {
+    const owners = new Map<string, string>();
+    for (const message of messages) {
+      message.parts?.forEach((part, index) => {
+        if (part.type !== MCP_TASK_PART_TYPE) return;
+        const taskId = (part as { data?: McpTaskPartData }).data?.taskId;
+        if (taskId) {
+          owners.set(taskId, `${message.id}:${index}`);
+        }
+      });
+    }
+    return owners;
+  }, [messages]);
+
   // Cancelling a background task. The card keeps rendering from the streamed
   // part; this only disables the button between the click and the backend
   // flipping the row, so the action can't be fired twice.
@@ -1237,6 +1258,15 @@ export function ChatMessages({
                           const taskData = (part as { data?: McpTaskPartData })
                             .data;
                           if (!taskData?.taskId) return null;
+                          // The same task arrives twice after a reload — once
+                          // streamed, once persisted — so render only the
+                          // occurrence that owns it.
+                          if (
+                            renderedTaskPartKeys.get(taskData.taskId) !==
+                            `${message.id}:${i}`
+                          ) {
+                            return null;
+                          }
                           return (
                             <McpTaskCard
                               key={partKey}

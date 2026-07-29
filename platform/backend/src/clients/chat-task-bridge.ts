@@ -102,9 +102,15 @@ export function createChatTaskBridge(): ChatTaskBridge {
         agentId,
         principal,
         toolName,
-        execute: execute as (
-          signal: AbortSignal,
-        ) => Promise<Record<string, unknown>>,
+        // Merge here rather than at each call site: a detached call must answer
+        // to both the chat run stopping and the task being cancelled, and a
+        // caller that forgot one would silently lose that cancellation path.
+        execute: ((taskSignal: AbortSignal) =>
+          execute(
+            abortSignal
+              ? AbortSignal.any([abortSignal, taskSignal])
+              : taskSignal,
+          )) as (signal: AbortSignal) => Promise<Record<string, unknown>>,
       });
 
       const handle = readTaskHandle(outcome);

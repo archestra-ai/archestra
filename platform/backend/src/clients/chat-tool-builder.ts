@@ -235,6 +235,10 @@ export function buildMcpGatewayTool(params: {
                 scheduleTriggerRunId: ctx.scheduleTriggerRunId,
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
+                taskBridge: ctx.taskBridge,
+                // Lets a task minted inside run_tool attach its card to the
+                // run_tool call the user sees, not the synthetic inner id.
+                currentToolCallId: options.toolCallId,
                 contextIsTrusted: toolExecutionContext.contextIsTrusted,
                 sensitiveContextOrigin: sensitiveContextOriginFromBoundary(
                   toolExecutionContext.unsafeContextBoundary,
@@ -1174,8 +1178,7 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
             toolCallId,
             toolName,
             abortSignal,
-            execute: (taskSignal) =>
-              callUpstream(mergeSignals(abortSignal, taskSignal), true),
+            execute: (signal) => callUpstream(signal, true),
           })
         : await callUpstream(abortSignal, false);
     reportToolMetrics({
@@ -1582,19 +1585,6 @@ function buildTokenAuthContext({
     isUserToken: mcpGwToken.isUserToken,
     userId: mcpGwToken.isUserToken ? userId : undefined,
   };
-}
-
-/**
- * Abort when either source aborts. A detached call answers to two of them: the
- * chat run stopping, and the task itself being cancelled.
- */
-function mergeSignals(
-  a: AbortSignal | undefined,
-  b: AbortSignal | undefined,
-): AbortSignal | undefined {
-  if (!a) return b;
-  if (!b) return a;
-  return AbortSignal.any([a, b]);
 }
 
 function throwIfAborted(abortSignal?: AbortSignal): void {

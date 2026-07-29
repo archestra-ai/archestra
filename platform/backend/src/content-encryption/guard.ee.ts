@@ -78,20 +78,18 @@ export async function verifyContentEncryptionKey(): Promise<void> {
     secretPrevious &&
     canaryOpensWith(canary.encryptedCanary, secretPrevious)
   ) {
+    // Rotation in progress (or the decrypt-only pre-distribution rollout).
+    // Deliberately do NOT re-mint here: during a rolling swap, replicas with
+    // the old and new variable assignments would each see the other's canary
+    // as "previous" and ping-pong it, resetting the backfill's fingerprint
+    // state each time. The cluster-singleton backfill re-mints the canary
+    // exactly once, when the re-encryption sweep completes.
     if (secret) {
-      // Rotation: the data rows still carry the previous key (the backfill
-      // sweep re-encrypts them); the canary tracks the CURRENT key.
-      await EncryptionKeyCanaryModel.replace(
-        canary.id,
-        newContentCanaryBlob(mustDerive(secret)),
-      );
       logger.info(
-        "content encryption key rotation detected — canary re-minted for " +
-          "the new key; the backfill sweep will re-encrypt existing rows",
+        "content encryption key rotation detected — existing rows will be " +
+          "re-encrypted by the backfill sweep",
       );
     }
-    // Decrypt-only pre-distribution rollout (only _PREVIOUS set): nothing to
-    // re-mint; writes stay in their current mode.
     return;
   }
 
@@ -103,6 +101,24 @@ export async function verifyContentEncryptionKey(): Promise<void> {
       "there is deliberately no override, because encrypted chat history " +
       "and logs cannot be re-entered.",
   );
+}
+
+/**
+ * Re-mint the content canary under the CURRENT key. Called by the backfill
+ * sweep on completion — the single, cluster-singleton actor — so a rolling
+ * rotation can never ping-pong the canary between replica configurations.
+ */
+export async function remintContentCanaryForCurrentKey(): Promise<void> {
+  const { secret } = config.contentEncryption;
+  if (!secret) return;
+  const canary = await EncryptionKeyCanaryModel.get("content");
+  const blob = newContentCanaryBlob(mustDerive(secret));
+  if (canary) {
+    if (canaryOpensWith(canary.encryptedCanary, secret)) return;
+    await EncryptionKeyCanaryModel.replace(canary.id, blob);
+  } else {
+    await EncryptionKeyCanaryModel.create(blob, "content");
+  }
 }
 
 // === Internal ===

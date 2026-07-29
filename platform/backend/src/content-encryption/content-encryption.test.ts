@@ -300,13 +300,22 @@ describe("content encryption", () => {
       );
     });
 
-    test("rotation (previous key opens canary) re-mints under the new key", async () => {
+    test("rotation keeps the canary until the sweep completes, then re-mints", async () => {
       setKeys(SECRET_A);
       await verifyContentEncryptionKey();
       const before = await EncryptionKeyCanaryModel.get("content");
 
       setKeys(SECRET_B, SECRET_A);
+      // The guard accepts the previous-key canary WITHOUT rewriting it —
+      // rewriting here would ping-pong between mixed replica configs during
+      // a rolling swap.
       await verifyContentEncryptionKey();
+      const during = await EncryptionKeyCanaryModel.get("content");
+      expect(during?.encryptedCanary).toBe(before?.encryptedCanary);
+
+      // Completing the sweep (cluster-singleton) advances the canary once.
+      await dropTrgmIndex();
+      await runContentEncryptionBackfill({});
       const after = await EncryptionKeyCanaryModel.get("content");
       expect(after?.encryptedCanary).not.toBe(before?.encryptedCanary);
 

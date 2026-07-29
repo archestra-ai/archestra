@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import ContentEncryptionStateModel from "@/models/content-encryption-state.ee";
+import { remintContentCanaryForCurrentKey } from "./guard.ee";
 import {
   type ContentEncryptionContext,
   contentKeyFingerprint,
@@ -98,6 +99,9 @@ export async function runContentEncryptionBackfill(params: {
   }
 
   if (interactionsDone && messagesDone) {
+    // Every row now carries the current key — safe to advance the canary
+    // (no-op outside a rotation).
+    await remintContentCanaryForCurrentKey();
     await ContentEncryptionStateModel.markCompleted();
     logger.info({ rowsRewritten }, "content encryption backfill completed");
     return { status: "completed", rowsRewritten };

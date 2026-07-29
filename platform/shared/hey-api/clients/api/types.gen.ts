@@ -74315,6 +74315,11 @@ export type GetSkillsResponses = {
                 id: string;
                 name: string;
             }>;
+            users: Array<{
+                id: string;
+                name: string;
+                email: string;
+            }>;
             environments: Array<{
                 id: string;
                 name: string;
@@ -74354,6 +74359,7 @@ export type CreateSkillData = {
         }>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
+        userIds?: Array<string>;
         /**
          * Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.
          */
@@ -74479,6 +74485,11 @@ export type CreateSkillResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         environments: Array<{
             id: string;
@@ -74613,6 +74624,11 @@ export type ConvertAgentToSkillResponses = {
             teams: Array<{
                 id: string;
                 name: string;
+            }>;
+            users: Array<{
+                id: string;
+                name: string;
+                email: string;
             }>;
             environments: Array<{
                 id: string;
@@ -74926,6 +74942,11 @@ export type GetSkillResponses = {
             id: string;
             name: string;
         }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         environments: Array<{
             id: string;
             name: string;
@@ -74954,6 +74975,7 @@ export type UpdateSkillData = {
         }>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
+        userIds?: Array<string>;
         /**
          * Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.
          */
@@ -75081,6 +75103,11 @@ export type UpdateSkillResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         environments: Array<{
             id: string;
@@ -75390,6 +75417,11 @@ export type ResetSkillResponses = {
             id: string;
             name: string;
         }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         environments: Array<{
             id: string;
             name: string;
@@ -75532,6 +75564,11 @@ export type UpdateSkillGithubSyncResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         environments: Array<{
             id: string;
@@ -75942,6 +75979,7 @@ export type ImportGithubSkillsData = {
         skillPaths: Array<string>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
+        userIds?: Array<string>;
         /**
          * Pull schedule for the imported skills. Every import is synced from the repo and read-only in the app until disconnected. Defaults to daily.
          */

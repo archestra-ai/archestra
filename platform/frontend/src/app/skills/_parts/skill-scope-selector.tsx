@@ -58,15 +58,14 @@ export function SkillScopeSelector({
   // "user" is a reading of (scope, userIds) that this control maps both ways.
   const supportsUserSharing = onUserIdsChange !== undefined;
   const userOption = useUserShareOption<SkillVisibilityChoice>("user");
-  const { isUserChoice, selectChoice } = useUserShareChoice<
-    ResourceVisibilityScope
-  >({
-    scope,
-    personalScope: "personal",
-    userIds,
-    onScopeChange,
-    onUserIdsChange,
-  });
+  const { isUserChoice, selectChoice } =
+    useUserShareChoice<ResourceVisibilityScope>({
+      scope,
+      personalScope: "personal",
+      userIds,
+      onScopeChange,
+      onUserIdsChange,
+    });
   const choice: SkillVisibilityChoice = isUserChoice ? "user" : scope;
 
   const options: VisibilityOption<SkillVisibilityChoice>[] = [

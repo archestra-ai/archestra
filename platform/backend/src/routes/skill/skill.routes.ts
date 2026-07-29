@@ -30,6 +30,7 @@ import {
   SkillModel,
   SkillTeamModel,
   SkillUsageEventModel,
+  SkillUserModel,
   TaskModel,
   TeamModel,
   ToolModel,
@@ -126,6 +127,17 @@ const GithubSkillSourceSchema = z
 /** A team a skill is assigned to (for `scope = 'team'` skills). */
 const SkillTeamSchema = z.object({ id: z.string(), name: z.string() });
 
+/**
+ * Someone a personal skill has been shared with by name. Such a skill stays
+ * `scope = 'personal'` and carries grants beside it, so this is what tells a
+ * shared skill apart from a private one.
+ */
+const SkillUserSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+});
+
 /** An environment a skill is restricted to (empty = every environment). */
 const SkillEnvironmentSchema = z.object({ id: z.string(), name: z.string() });
 
@@ -133,6 +145,7 @@ const SkillEnvironmentSchema = z.object({ id: z.string(), name: z.string() });
 const SkillListItemSchema = SelectSkillSchema.extend({
   fileCount: z.number(),
   teams: z.array(SkillTeamSchema),
+  users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
   authorName: z.string().nullable(),
   /**
@@ -145,6 +158,7 @@ const SkillListItemSchema = SelectSkillSchema.extend({
 /** A skill with its resource files, team, and environment assignments. */
 const SkillDetailSchema = SkillWithFilesSchema.extend({
   teams: z.array(SkillTeamSchema),
+  users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
 });
 
@@ -210,6 +224,8 @@ const SkillManifestInputSchema = z
     files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
     scope: ResourceVisibilityScopeSchema.optional(),
     teamIds: z.array(z.string()).optional(),
+    /** Only meaningful for `scope = 'personal'`; ignored for team/org skills. */
+    userIds: z.array(z.string()).optional(),
     environmentIds: z
       .array(UuidIdSchema)
       .optional()
@@ -375,12 +391,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const [
         fileCounts,
         teamsBySkill,
+        usersBySkill,
         environmentsBySkill,
         authorNames,
         usageUserCounts,
       ] = await Promise.all([
         SkillFileModel.countBySkillIds(skillIds),
         SkillTeamModel.getTeamDetailsForSkills(skillIds),
+        SkillUserModel.getUserDetailsForSkills(skillIds),
         SkillEnvironmentModel.getEnvironmentDetailsForSkills(skillIds),
         UserModel.getNamesByIds(skillAuthorIds),
         SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
@@ -393,6 +411,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SKILL.md (stored in the skills row) so the count matches the catalog.
           fileCount: (fileCounts.get(skill.id) ?? 0) + 1,
           teams: teamsBySkill.get(skill.id) ?? [],
+          users: usersBySkill.get(skill.id) ?? [],
           environments: environmentsBySkill.get(skill.id) ?? [],
           authorName: skill.authorId
             ? (authorNames.get(skill.authorId) ?? null)
@@ -419,6 +438,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const parsed = parseManifestOrThrow(body.content);
       const scope = body.scope ?? "personal";
       const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
+      // Sharing with named people keeps the skill personal, so grants only
+      // apply to that scope; a team/org skill is already reachable more widely.
+      const userIds = scope === "personal" ? dedupe(body.userIds ?? []) : [];
 
       const environmentIds = dedupe(body.environmentIds ?? []);
 
@@ -455,6 +477,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       if (!skill) {
         throw skillNameConflict(parsed.name);
+      }
+      if (userIds.length > 0) {
+        await SkillUserModel.syncSkillUsers(skill.id, userIds);
       }
 
       return reply.send(await loadSkillDetail(skill));
@@ -758,6 +783,18 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // Sharing with named people keeps the skill personal, so grants live only
+      // on that scope; widening to team or org clears them rather than leaving
+      // grants stranded on a skill whose visibility now says something else.
+      const existingGrantees =
+        (await SkillUserModel.getUserDetailsForSkills([existing.id])).get(
+          existing.id,
+        ) ?? [];
+      const existingUserIds = existingGrantees.map((grantee) => grantee.id);
+      const newUserIds =
+        newScope === "personal" ? dedupe(body.userIds ?? existingUserIds) : [];
+      const usersChanged = !sameIdSet(newUserIds, existingUserIds);
+
       // Changing a skill's environment assignments is gated like assigning
       // them: every environment in the new set must be assignable by this user.
       const existingEnvironmentIds =
@@ -811,6 +848,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!updated) {
         throw new ApiError(404, "Skill not found");
+      }
+      if (usersChanged) {
+        await SkillUserModel.syncSkillUsers(id, newUserIds);
       }
 
       return reply.send(await loadSkillDetail(updated));
@@ -1222,6 +1262,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             skillPaths: z.array(z.string()).min(1),
             scope: ResourceVisibilityScopeSchema.optional(),
             teamIds: z.array(z.string()).optional(),
+            /** Only meaningful for `scope = 'personal'`. */
+            userIds: z.array(z.string()).optional(),
             sync: z
               .object({ interval: SkillGithubSyncIntervalSchema })
               .default({ interval: "1d" })
@@ -1265,6 +1307,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // silently published org-wide.
       const scope = body.scope ?? "personal";
       const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
+      // Sharing with named people keeps a skill personal, so grants only apply
+      // to that scope; every skill in this import gets the same set.
+      const userIds = scope === "personal" ? dedupe(body.userIds ?? []) : [];
 
       await authorizeSkillCreate({
         userId: user.id,
@@ -1318,6 +1363,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!skill) {
           skipped.push(item.parsed.name);
           continue;
+        }
+        if (userIds.length > 0) {
+          await SkillUserModel.syncSkillUsers(skill.id, userIds);
         }
         created.push(skill);
         if (item.skippedFiles.length > 0) {
@@ -1476,15 +1524,18 @@ async function findSkillOrThrow(id: string, organizationId: string) {
 
 /** A skill with its files, team, and environment assignments, for detail responses. */
 async function loadSkillDetail(skill: Skill) {
-  const [files, teamsBySkill, environmentsBySkill] = await Promise.all([
-    SkillFileModel.findBySkillId(skill.id),
-    SkillTeamModel.getTeamDetailsForSkills([skill.id]),
-    SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
-  ]);
+  const [files, teamsBySkill, usersBySkill, environmentsBySkill] =
+    await Promise.all([
+      SkillFileModel.findBySkillId(skill.id),
+      SkillTeamModel.getTeamDetailsForSkills([skill.id]),
+      SkillUserModel.getUserDetailsForSkills([skill.id]),
+      SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
+    ]);
   return {
     ...skill,
     files,
     teams: teamsBySkill.get(skill.id) ?? [],
+    users: usersBySkill.get(skill.id) ?? [],
     environments: environmentsBySkill.get(skill.id) ?? [],
   };
 }

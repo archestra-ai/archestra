@@ -287503,6 +287503,29 @@
                               "additionalProperties": false
                             }
                           },
+                          "users": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "email"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "environments": {
                             "type": "array",
                             "items": {
@@ -287560,6 +287583,7 @@
                           "updatedAt",
                           "fileCount",
                           "teams",
+                          "users",
                           "environments",
                           "authorName",
                           "usageUserCount"
@@ -287916,6 +287940,12 @@
                       "type": "string"
                     }
                   },
+                  "userIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "environmentIds": {
                     "description": "Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.",
                     "type": "array",
@@ -288157,6 +288187,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "environments": {
                       "type": "array",
                       "items": {
@@ -288207,6 +288260,7 @@
                     "updatedAt",
                     "files",
                     "teams",
+                    "users",
                     "environments"
                   ],
                   "additionalProperties": false
@@ -288710,6 +288764,29 @@
                             "additionalProperties": false
                           }
                         },
+                        "users": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "email": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "email"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "environments": {
                           "type": "array",
                           "items": {
@@ -288760,6 +288837,7 @@
                         "updatedAt",
                         "files",
                         "teams",
+                        "users",
                         "environments"
                       ],
                       "additionalProperties": false
@@ -289576,6 +289654,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "environments": {
                       "type": "array",
                       "items": {
@@ -289626,6 +289727,7 @@
                     "updatedAt",
                     "files",
                     "teams",
+                    "users",
                     "environments"
                   ],
                   "additionalProperties": false
@@ -289932,6 +290034,12 @@
                       "type": "string"
                     }
                   },
+                  "userIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "environmentIds": {
                     "description": "Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.",
                     "type": "array",
@@ -290183,6 +290291,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "environments": {
                       "type": "array",
                       "items": {
@@ -290233,6 +290364,7 @@
                     "updatedAt",
                     "files",
                     "teams",
+                    "users",
                     "environments"
                   ],
                   "additionalProperties": false
@@ -291575,6 +291707,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "environments": {
                       "type": "array",
                       "items": {
@@ -291625,6 +291780,7 @@
                     "updatedAt",
                     "files",
                     "teams",
+                    "users",
                     "environments"
                   ],
                   "additionalProperties": false
@@ -292138,6 +292294,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "environments": {
                       "type": "array",
                       "items": {
@@ -292188,6 +292367,7 @@
                     "updatedAt",
                     "files",
                     "teams",
+                    "users",
                     "environments"
                   ],
                   "additionalProperties": false
@@ -293820,6 +294000,12 @@
                     ]
                   },
                   "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "userIds": {
                     "type": "array",
                     "items": {
                       "type": "string"

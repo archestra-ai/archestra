@@ -1,8 +1,12 @@
 import { describe, expect, test } from "vitest";
+import awsPricesJson from "./bedrock-aws-prices.json";
 import {
   AWS_PRICE_IDENTITY,
   resolveBedrockAwsPrices,
 } from "./bedrock-aws-pricing";
+
+const AWS_PRICES: Record<string, { in?: number; out?: number } | undefined> =
+  awsPricesJson;
 
 function resolve(modelId: string, underlyingModelName?: string) {
   return resolveBedrockAwsPrices({
@@ -23,6 +27,32 @@ describe("resolveBedrockAwsPrices", () => {
     expect(global?.completionPricePerToken).toBe("0.000015");
     expect(regional?.promptPricePerToken).toBe("0.0000033");
     expect(regional?.completionPricePerToken).toBe("0.0000165");
+  });
+
+  test("reads Amazon's global-endpoint convention, not only Anthropic's", () => {
+    // Anthropic marks the global SKU with a `_Global` usage-type suffix, but
+    // Amazon's own Nova models use `-cross-region-global`. Reading one
+    // convention alone pairs a regional input with a global output, a
+    // combination AWS never charges.
+    const regional = resolve("us.amazon.nova-2-lite-v1:0");
+    const global = resolve("global.amazon.nova-2-lite-v1:0");
+
+    expect(regional?.promptPricePerToken).toBe("3.3e-7");
+    expect(regional?.completionPricePerToken).toBe("0.00000275");
+    expect(global?.promptPricePerToken).toBe("3e-7");
+    expect(global?.completionPricePerToken).toBe("0.0000025");
+  });
+
+  test("never prices a global endpoint above its regional counterpart", () => {
+    // The global tier is the cheaper one wherever AWS publishes both. A
+    // snapshot entry that inverts this has crossed two tiers.
+    for (const [key, entry] of Object.entries(AWS_PRICES)) {
+      if (!key.endsWith("|global")) continue;
+      const regional = AWS_PRICES[key.slice(0, -"|global".length)];
+      if (!regional) continue;
+      expect(entry?.in ?? 0, key).toBeLessThanOrEqual(regional.in ?? 0);
+      expect(entry?.out ?? 0, key).toBeLessThanOrEqual(regional.out ?? 0);
+    }
   });
 
   test("prices a model the registry does not carry at all", () => {

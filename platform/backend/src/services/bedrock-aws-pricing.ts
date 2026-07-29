@@ -12,11 +12,17 @@ import awsPricesJson from "./bedrock-aws-prices.json";
  * `region_index.json`. Refreshing means re-reading those documents; AWS has
  * published roughly monthly.
  *
- * Three rules govern the transcription, each of which is easy to get wrong:
+ * Four rules govern the transcription, each of which is easy to get wrong:
  * a price is published per 1K *or* per 1M tokens and both appear in one
  * document; `batch`, `flex`, `priority` and latency-optimized SKUs sit beside
- * the standard on-demand price and must not be read as it; and a `_Global`
- * suffix on the usage type marks the cheaper global-endpoint price.
+ * the standard on-demand price and must not be read as it; the global-endpoint
+ * price is marked by a `_Global` suffix on the usage type for Anthropic and
+ * TwelveLabs listings but by `-cross-region-global` for Amazon's own Nova
+ * models, so reading only one convention silently mixes the two tiers into one
+ * entry; and a model serving more than text splits its dimensions by modality
+ * (`text-`, `speech-`, `input-audio-`, `input-image-`), of which only the text
+ * pair belongs here.
+ *
  * A `|global` suffix marks the global-endpoint price; `out` is absent for models
  * AWS prices on input alone.
  */

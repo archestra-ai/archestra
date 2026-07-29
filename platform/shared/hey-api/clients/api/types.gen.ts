@@ -29751,6 +29751,7 @@ export type GenerateChatConversationTitleResponse = GenerateChatConversationTitl
 
 export type UpdateChatMessageData = {
     body: {
+        conversationId: string;
         partIndex: number;
         text: string;
         deleteSubsequentMessages?: boolean;

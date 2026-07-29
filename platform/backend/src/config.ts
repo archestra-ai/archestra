@@ -2652,6 +2652,23 @@ const config = {
     acceptNewEncryptionKey:
       process.env.ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY === "true",
   },
+  /**
+   * Enterprise content-encryption-at-rest for interactions and chat messages
+   * (content-encryption/). Both secrets are operator-supplied with NO
+   * fallback: an unset current secret means the feature is off for writes,
+   * deliberately unlike the secrets-manager key. `secretPrevious` is an
+   * additional decrypt-only key — it makes enabling and rotating safe across
+   * rolling deployments (distribute a key to every replica as decrypt-capable
+   * first, then activate it for writes) and lets the backfill re-encrypt
+   * rotated rows.
+   */
+  contentEncryption: {
+    secret:
+      process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET?.trim() || undefined,
+    secretPrevious:
+      process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS?.trim() ||
+      undefined,
+  },
   test: {
     enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",
     enableTestMcpServer: process.env.ENABLE_TEST_MCP_SERVER === "true",

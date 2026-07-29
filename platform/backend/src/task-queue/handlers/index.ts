@@ -6,6 +6,8 @@ import { handleCheckDuePermissionSyncs } from "./check-due-permission-syncs-hand
 import { handleCheckDueScheduleTriggers } from "./check-due-schedule-triggers-handler";
 import { handleCheckDueSkillGithubSyncs } from "./check-due-skill-github-syncs-handler";
 import { handleConnectorSync } from "./connector-sync-handler";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, no-op unless the feature is enabled
+import { handleContentEncryptionBackfill } from "./content-encryption-backfill-handler.ee";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, gated at boot by the retention license gate
 import { handleContentRetentionCleanup } from "./content-retention-cleanup-handler.ee";
 import { handlePermissionSync } from "./permission-sync-handler";
@@ -36,6 +38,10 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler(
     "content_retention_cleanup",
     handleContentRetentionCleanup,
+  );
+  taskQueueService.registerHandler(
+    "content_encryption_backfill",
+    handleContentEncryptionBackfill,
   );
   taskQueueService.registerHandler(
     "check_due_skill_github_syncs",

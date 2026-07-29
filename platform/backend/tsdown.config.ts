@@ -297,6 +297,7 @@ export default defineConfig((options: UserConfig) => {
       "src/standalone-scripts/vault-env-injector.ee.ts",
       "src/standalone-scripts/migrate-byos-to-vault/migrate.ee.ts",
       // Encryption-key re-encryption migration, run by the Helm migration Job.
+      "src/standalone-scripts/reencrypt-content.ee.ts",
       "src/standalone-scripts/reencrypt-secrets.ts",
     ],
 

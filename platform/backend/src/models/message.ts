@@ -1,4 +1,11 @@
 import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
+import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
+import {
+  decryptMessageRow,
+  encryptMessageContent,
+  // biome-ignore lint/style/noRestrictedImports: dual-licensed; helpers pass plaintext through when the feature is off
+} from "@/content-encryption/rows.ee";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
 import { ApiError, type InsertMessage, type Message } from "@/types";
@@ -53,8 +60,13 @@ class MessageModel {
         // Monotonic v7 id: with `created_at` at millisecond precision,
         // back-to-back writes can tie, and every "which message is later?"
         // question (ordering, delete-subsequent) breaks ties with the id.
-        .values({ id: uuidv7(), ...data })
+        .values({
+          id: uuidv7(),
+          ...data,
+          content: encryptMessageContent(data.content),
+        })
         .returning();
+      decryptMessageRow(message);
 
       // Update conversation's updatedAt so it sorts to the top
       await MessageModel.touchConversation(data.conversationId, tx);
@@ -71,9 +83,13 @@ class MessageModel {
       return;
     }
 
-    await executor
-      .insert(schema.messagesTable)
-      .values(messages.map((m) => ({ id: uuidv7(), ...m })));
+    await executor.insert(schema.messagesTable).values(
+      messages.map((m) => ({
+        id: uuidv7(),
+        ...m,
+        content: encryptMessageContent(m.content),
+      })),
+    );
 
     // Update conversation's updatedAt for all affected conversations. Must run
     // on the same executor: with a transaction executor, a separate `db` query
@@ -95,6 +111,9 @@ class MessageModel {
       .where(eq(schema.messagesTable.conversationId, conversationId))
       .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
+    for (const message of messages) {
+      decryptMessageRow(message);
+    }
     return messages;
   }
 
@@ -127,43 +146,16 @@ class MessageModel {
       .from(schema.messagesTable)
       .where(eq(schema.messagesTable.id, messageId));
 
-    return message || null;
+    return message ? decryptMessageRow(message) : null;
   }
 
   /**
-   * Find a message by the AI SDK content ID stored in the JSONB content field.
-   * This handles in-session messages whose IDs haven't been replaced with DB UUIDs yet.
-   */
-  static async findByContentId(contentId: string): Promise<Message | null> {
-    const [message] = await db
-      .select()
-      .from(schema.messagesTable)
-      .where(sql`${schema.messagesTable.content}->>'id' = ${contentId}`);
-
-    return message || null;
-  }
-
-  /**
-   * Find a message by either its database UUID or AI SDK content ID.
-   * Messages loaded from DB have UUID IDs, but messages created in the current
-   * session retain their AI SDK nanoid IDs until the page is reloaded.
-   */
-  static async findByAnyId(id: string): Promise<Message | null> {
-    // Try DB UUID first (fast indexed lookup) — only if it looks like a UUID
-    // to avoid PostgreSQL "invalid input syntax for type uuid" errors
-    if (isUuid(id)) {
-      const byDbId = await MessageModel.findById(id);
-      if (byDbId) return byDbId;
-    }
-
-    // Fall back to content ID (AI SDK nanoid)
-    return MessageModel.findByContentId(id);
-  }
-
-  /**
-   * Like findByAnyId, but scoped to a single conversation. Content IDs are
-   * client-supplied and carry no uniqueness guarantee across conversations,
-   * so callers that know the conversation must scope the lookup to it.
+   * Find a message by either its database UUID or AI SDK content ID, scoped
+   * to a single conversation. Messages loaded from the DB have UUID ids, but
+   * messages created in the current session keep their AI SDK nanoid until
+   * the page reloads. Content IDs are client-supplied and carry no uniqueness
+   * guarantee across conversations, so every caller must know and pass the
+   * conversation.
    */
   static async findByAnyIdInConversation(
     id: string,
@@ -179,8 +171,24 @@ class MessageModel {
             eq(schema.messagesTable.conversationId, conversationId),
           ),
         );
-      if (byDbId) return byDbId;
+      if (byDbId) return decryptMessageRow(byDbId);
     }
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Under content encryption, content->>'id' cannot see into envelopes;
+    // scan the conversation's (bounded) messages in JS instead — decryption
+    // also passes plaintext rows through, so mixed states resolve correctly.
+    if (isContentEncryptionEnabled()) {
+      const rows = await MessageModel.findByConversation(conversationId);
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const content = rows[i].content as { id?: unknown } | null;
+        if (content && content.id === id) return rows[i];
+      }
+      return null;
+    }
+    // SPDX-SnippetEnd
 
     // Content IDs carry no uniqueness guarantee even within one conversation
     // (client-supplied), so pick the newest match deterministically instead of
@@ -200,7 +208,7 @@ class MessageModel {
       )
       .limit(1);
 
-    return byContentId || null;
+    return byContentId ? decryptMessageRow(byContentId) : null;
   }
 
   /**
@@ -263,11 +271,12 @@ class MessageModel {
       const [updatedMessage] = await tx
         .update(schema.messagesTable)
         .set({
-          content,
+          content: encryptMessageContent(content),
           updatedAt: new Date(),
         })
         .where(eq(schema.messagesTable.id, messageId))
         .returning();
+      decryptMessageRow(updatedMessage);
 
       await MessageModel.touchConversation(updatedMessage.conversationId, tx);
 
@@ -298,11 +307,12 @@ class MessageModel {
       const [updatedMessage] = await tx
         .update(schema.messagesTable)
         .set({
-          content,
+          content: encryptMessageContent(content),
           updatedAt: new Date(),
         })
         .where(eq(schema.messagesTable.id, messageId))
         .returning();
+      decryptMessageRow(updatedMessage);
 
       await MessageModel.touchConversation(updatedMessage.conversationId, tx);
 
@@ -381,6 +391,7 @@ class MessageModel {
       if (!message) {
         throw new ApiError(404, "Message not found");
       }
+      decryptMessageRow(message);
 
       // biome-ignore lint/suspicious/noExplicitAny: UIMessage content is dynamic
       const content = message.content as any;
@@ -405,11 +416,12 @@ class MessageModel {
       const [updatedMessage] = await tx
         .update(schema.messagesTable)
         .set({
-          content,
+          content: encryptMessageContent(content),
           updatedAt: new Date(),
         })
         .where(eq(schema.messagesTable.id, messageId))
         .returning();
+      decryptMessageRow(updatedMessage);
 
       // Delete subsequent messages if requested
       if (deleteSubsequent) {

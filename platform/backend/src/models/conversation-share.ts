@@ -1,4 +1,6 @@
 import { and, eq } from "drizzle-orm";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
+import { decryptMessageRow } from "@/content-encryption/rows.ee";
 import db, { schema, withDbTransaction } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
 import type {
@@ -255,6 +257,9 @@ class ConversationShareModel {
     const messages = [];
 
     for (const row of rows) {
+      if (row.message) {
+        decryptMessageRow(row.message);
+      }
       if (row.message?.content) {
         messages.push({
           ...row.message.content,

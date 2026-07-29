@@ -170,8 +170,10 @@ async function runCompactMessagesForChat(
     await ConversationCompactionModel.findLatestByConversation(
       params.conversationId,
     );
-  const latestCompactionBoundaryIds =
-    await getCompactionBoundaryIds(latestCompaction);
+  const latestCompactionBoundaryIds = await getCompactionBoundaryIds(
+    latestCompaction,
+    params.conversationId,
+  );
   const latestCompactionState = resolveUsableCompaction(
     params.messages,
     latestCompaction,
@@ -238,6 +240,7 @@ async function runCompactMessagesForChat(
   // list later; without it, a compaction would be unrecoverable
   const boundaryMessageId = await resolveCompactionBoundaryMessageId(
     split.compactable.at(-1),
+    params.conversationId,
   );
   if (!boundaryMessageId) {
     logger.warn(
@@ -938,6 +941,7 @@ function isCompactionBeneficial(params: {
 
 async function resolveCompactionBoundaryMessageId(
   message: ChatMessage | undefined,
+  conversationId: string,
 ): Promise<string | null> {
   if (!message) {
     return null;
@@ -952,7 +956,13 @@ async function resolveCompactionBoundaryMessageId(
     return null;
   }
 
-  const persistedMessage = await MessageModel.findByAnyId(message.id);
+  // Conversation-scoped: content ids are client-supplied (non-unique across
+  // conversations), and the scoped lookup stays correct under content
+  // encryption where the SQL content->>'id' path cannot see into envelopes.
+  const persistedMessage = await MessageModel.findByAnyIdInConversation(
+    message.id,
+    conversationId,
+  );
   return persistedMessage?.id ?? message.id;
 }
 
@@ -992,6 +1002,7 @@ function resolveUsableCompaction<
 
 async function getCompactionBoundaryIds(
   compaction: Pick<ConversationCompaction, "compactedThroughMessageId"> | null,
+  conversationId: string,
 ): Promise<string[]> {
   const boundaryId = compaction?.compactedThroughMessageId;
   if (!boundaryId) {
@@ -999,7 +1010,10 @@ async function getCompactionBoundaryIds(
   }
 
   const ids = new Set([boundaryId]);
-  const boundaryMessage = await MessageModel.findByAnyId(boundaryId);
+  const boundaryMessage = await MessageModel.findByAnyIdInConversation(
+    boundaryId,
+    conversationId,
+  );
   if (boundaryMessage?.id) {
     ids.add(boundaryMessage.id);
   }

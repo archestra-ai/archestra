@@ -42,6 +42,14 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     intervalSeconds: 86400,
     payload: {},
   },
+  // Enterprise content-encryption backfill/rotation sweep. O(1) no-op once
+  // complete (and when the feature is disabled); a 10-minute tick keeps a
+  // large backlog progressing without a long-lived task.
+  {
+    taskType: "content_encryption_backfill",
+    intervalSeconds: 600,
+    payload: {},
+  },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

@@ -60,9 +60,14 @@ import config, {
   shouldRunWorker,
 } from "@/config";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
+import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
-import { dropLegacyPayloadTrgmIndexes } from "@/database/index-maintenance";
+import {
+  dropLegacyPayloadTrgmIndexes,
+  dropMessagesContentTrgmIndexUnderEncryption,
+} from "@/database/index-maintenance";
 import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -1234,6 +1239,14 @@ const startWebServer = async () => {
     // Initialize database connection first
     await initializeDatabase();
 
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Fail-closed content-key verification, before any write could encrypt
+    // (or silently plaintext) interaction/message content.
+    await verifyContentEncryptionKey();
+    // SPDX-SnippetEnd
+
     await seedRequiredStartingData();
 
     // Sync system API keys for keyless providers (Vertex AI, vLLM, Ollama, Bedrock)
@@ -1338,6 +1351,11 @@ const startWebServer = async () => {
       // migration 0116 stopped creating them. Idempotent; errors are logged
       // inside and retried next boot.
       void dropLegacyPayloadTrgmIndexes();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      void dropMessagesContentTrgmIndexUnderEncryption();
+      // SPDX-SnippetEnd
     }
 
     // Background job to renew email subscriptions before they expire
@@ -1657,6 +1675,14 @@ const startWorker = async () => {
     // SPDX-SnippetEnd
 
     await initializeDatabase();
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Workers write messages and interactions (scheduled runs, triggers), so
+    // the content-key guard must hold here too.
+    await verifyContentEncryptionKey();
+    // SPDX-SnippetEnd
     cacheManager.start();
     await enterpriseTier.start();
 
@@ -1686,6 +1712,11 @@ const startWorker = async () => {
     // See the shouldRunWorker branch in `start` — same legacy-index cleanup,
     // for the dedicated worker Deployment.
     void dropLegacyPayloadTrgmIndexes();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    void dropMessagesContentTrgmIndexUnderEncryption();
+    // SPDX-SnippetEnd
 
     posthogErrorTrackingService.init().catch((error) => {
       logger.warn(

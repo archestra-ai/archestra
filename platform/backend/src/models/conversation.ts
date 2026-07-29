@@ -11,6 +11,10 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
+import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
+import { decryptMessageRow } from "@/content-encryption/rows.ee";
 import db, { schema, type Transaction } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
@@ -106,6 +110,14 @@ class ConversationModel {
 
       // 1. Conversation title (text column) - uses conversations_title_trgm_idx
       // 2. Message content (JSONB cast to text) - uses messages_content_trgm_idx
+      //
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Under content encryption message bodies are ciphertext, so search
+      // degrades to titles only (documented on the secrets-management page).
+      const searchMessageContent = !isContentEncryptionEnabled();
+      // SPDX-SnippetEnd
       const searchConditions = or(
         // Search in title (handles null titles gracefully)
         and(
@@ -114,11 +126,13 @@ class ConversationModel {
         ),
         // Search through messages JSONB content
         // Uses EXISTS for early termination
-        sql`EXISTS (
+        searchMessageContent
+          ? sql`EXISTS (
           SELECT 1 FROM ${schema.messagesTable}
           WHERE ${schema.messagesTable.conversationId} = ${schema.conversationsTable.id}
           AND ${schema.messagesTable.content}::text ILIKE ${searchPattern}
-        )`,
+        )`
+          : sql`false`,
       );
 
       if (searchConditions) {
@@ -169,7 +183,7 @@ class ConversationModel {
             // Only include messages that match the search pattern (for relevance)
             // or the first few messages (for context)
             sql`(
-              ${schema.messagesTable.content}::text ILIKE ${searchPattern}
+              (${isContentEncryptionEnabled() ? sql`false` : sql`${schema.messagesTable.content}::text ILIKE ${searchPattern}`})
               OR ${schema.messagesTable.id} IN (
                 SELECT m.id FROM ${schema.messagesTable} m
                 WHERE m.conversation_id = ${schema.conversationsTable.id}
@@ -225,6 +239,9 @@ class ConversationModel {
         }
 
         const conversation = conversationMap.get(conversationId);
+        if (row?.message) {
+          decryptMessageRow(row.message);
+        }
         if (
           conversation &&
           row?.message?.content &&
@@ -396,6 +413,9 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
+      if (row.message) {
+        decryptMessageRow(row.message);
+      }
       if (
         row.message?.content &&
         shouldReturnPersistedMessageRow(row.message)
@@ -612,6 +632,9 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
+      if (row.message) {
+        decryptMessageRow(row.message);
+      }
       if (
         row.message?.content &&
         shouldReturnPersistedMessageRow(row.message)

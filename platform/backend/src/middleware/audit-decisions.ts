@@ -628,6 +628,10 @@ export const AUDIT_DECISIONS = {
     reason:
       "secret material; presence audited via parent resource hasSecret flag",
   },
+  contentEncryptionStateTable: {
+    audited: false,
+    reason: "internal backfill progress bookkeeping, no user-facing state",
+  },
   encryptionKeyCanariesTable: {
     audited: false,
     reason:

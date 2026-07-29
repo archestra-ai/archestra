@@ -37,6 +37,23 @@ To accept a rotation without re-encrypting, set `ARCHESTRA_SECRETS_ACCEPT_NEW_EN
 
 See [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](./platform-deployment#authentication--security) for more info.
 
+## Content Encryption at Rest (Enterprise)
+
+> **Enterprise feature:** Contact sales@archestra.ai for licensing information.
+
+Beyond stored secrets, Archestra can encrypt conversation content at rest: LLM proxy request/response payloads (the LLM Logs records) and chat message bodies. Set `ARCHESTRA_CONTENT_ENCRYPTION_SECRET` — a key separate from the stored-secrets key, so a security team can hold it in their own vault and map it to the environment variable at deploy time. Encryption and decryption are transparent; rows written before enablement are encrypted by a background sweep.
+
+Two behaviors change while encryption is on:
+
+- Conversation search matches titles only — message bodies are ciphertext.
+- Claude Code request delta-compression is disabled for new records, so LLM log storage grows faster. Pair encryption with [data retention](./platform-deployment#data-retention).
+
+**Enabling on a running deployment** takes two rollouts, so replicas never mix encrypted writes with readers that lack the key: first deploy with the key in `ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS` (decrypt-capable everywhere, writes unchanged), then move it to `ARCHESTRA_CONTENT_ENCRYPTION_SECRET`.
+
+**Rotating the key** is the same shape: add the new key as `..._PREVIOUS` and roll out, swap the two variables and roll out again, let the background sweep re-encrypt (or run `pnpm --filter backend db:reencrypt-content`), then drop `..._PREVIOUS`.
+
+On every startup Archestra verifies the configured key against previously encrypted content and aborts on a mismatch or a missing key. Unlike stored secrets, there is deliberately no accept-new-key override: chat history cannot be re-entered. Disabling encryption after enabling it is not currently supported.
+
 ## HashiCorp Vault
 
 > **Enterprise feature:** Contact sales@archestra.ai for licensing information.

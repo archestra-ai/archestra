@@ -269,10 +269,13 @@ describe("context compaction helpers", () => {
   });
 
   test("uses persisted message metadata when selecting a new compaction boundary", async () => {
-    const boundaryMessageId = await __test.resolveCompactionBoundaryMessageId({
-      ...msg("client-a1", "assistant", "one reply"),
-      metadata: { persistedMessageId: "db-a1" },
-    } as ChatMessage);
+    const boundaryMessageId = await __test.resolveCompactionBoundaryMessageId(
+      {
+        ...msg("client-a1", "assistant", "one reply"),
+        metadata: { persistedMessageId: "db-a1" },
+      } as ChatMessage,
+      "conversation-1",
+    );
 
     expect(boundaryMessageId).toBe("db-a1");
   });

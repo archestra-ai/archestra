@@ -111,7 +111,6 @@ describe("fetchVllmModels", () => {
   });
 
   test("reports no capabilities when the server omits the field", async () => {
-    // Left absent rather than null so the tiers below still apply.
     fetchSpy.mockResolvedValueOnce(
       new Response(JSON.stringify({ data: [{ id: "m" }] }), { status: 200 }),
     );

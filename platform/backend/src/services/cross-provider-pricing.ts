@@ -123,14 +123,6 @@ export function resolveDiscoveredModelRegistryEntry(params: {
 }
 
 /**
- * Strip a trailing date stamp from a model id, in either the contiguous Bedrock
- * form (`-20250929`) or the hyphenated OpenAI/Azure form (`-2024-08-06`).
- *
- * A bare four-digit suffix is deliberately left alone: Mistral versions models
- * as `-2407`/`-2411`, so stripping it would collapse two differently-priced
- * models onto one registry key.
- */
-/**
  * Describe a model a self-hosted server serves, without asserting anything
  * about the deployment.
  *
@@ -146,9 +138,9 @@ export function resolveDiscoveredModelRegistryEntry(params: {
  * registry entries for one model range over an order of magnitude precisely
  * because each host chooses its own.
  *
- * Returns null unless every match agrees on the modalities, so an alias that
- * collides with an unrelated vendor model reports nothing rather than something
- * plausible.
+ * Returns null unless every match reports identical modalities, so an alias
+ * that collides with an unrelated vendor model reports nothing rather than
+ * something plausible.
  */
 export function resolveSelfHostedModelMetadata(params: {
   modelId: string;
@@ -174,16 +166,38 @@ export function resolveSelfHostedModelMetadata(params: {
   }
 
   const readings = new Set(
-    matches.map((entry) => JSON.stringify(entry.modalities?.input ?? null)),
+    matches.map((entry) => JSON.stringify(entry.modalities ?? null)),
   );
   if (readings.size > 1) {
     return null;
   }
 
-  const metadata = metadataFromEntries(matches);
-  return metadata && { ...metadata, contextLength: null, outputLength: null };
+  // Built here rather than through `metadataFromEntries`, which reverses its
+  // input to let a reseller's row outrank the vendor's. These matches are
+  // already in vendor preference order, so reversing would pick the least
+  // preferred of them.
+  const [preferred] = matches;
+  return {
+    contextLength: null,
+    outputLength: null,
+    inputModalities: preferred.modalities?.input?.length
+      ? preferred.modalities.input
+      : null,
+    outputModalities: preferred.modalities?.output?.length
+      ? preferred.modalities.output
+      : null,
+    supportsToolCalling: firstPresent(matches, (entry) => entry.tool_call),
+  };
 }
 
+/**
+ * Strip a trailing date stamp from a model id, in either the contiguous Bedrock
+ * form (`-20250929`) or the hyphenated OpenAI/Azure form (`-2024-08-06`).
+ *
+ * A bare four-digit suffix is deliberately left alone: Mistral versions models
+ * as `-2407`/`-2411`, so stripping it would collapse two differently-priced
+ * models onto one registry key.
+ */
 export function stripModelDateSuffix(modelId: string): string {
   return modelId.replace(DATE_SUFFIX, "");
 }

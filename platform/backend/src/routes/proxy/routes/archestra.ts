@@ -38,6 +38,7 @@ const archestraProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         apiPrefix: API_PREFIX,
         endpointSuffix: CHAT_COMPLETIONS_SUFFIX,
         upstream: config.llm.archestra.baseUrl as string,
+        // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
         providerName: "Archestra",
       }),
     });
@@ -54,6 +55,7 @@ const archestraProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ArchestraChatCompletionsWithDefaultAgent,
         description:
+          // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
           "Create a chat completion with Archestra (uses default agent)",
         tags: ["LLM Proxy"],
         body: Archestra.API.ChatCompletionRequestSchema,
@@ -84,6 +86,7 @@ const archestraProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ArchestraChatCompletionsWithAgent,
         description:
+          // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
           "Create a chat completion with Archestra for a specific agent",
         tags: ["LLM Proxy"],
         params: z.object({

@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
+import { DEFAULT_APP_NAME } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import config from "@/config";
 import logger from "@/logging";
@@ -191,7 +192,7 @@ async function buildServeContext(token: string): Promise<ServeContext | null> {
   ]);
   if (skills.length === 0) return null;
 
-  const ownerName = organization?.name ?? "Archestra";
+  const ownerName = organization?.name ?? DEFAULT_APP_NAME;
 
   const materializer = marketplaceMaterializer.get();
   const result = await materializer.materialize({

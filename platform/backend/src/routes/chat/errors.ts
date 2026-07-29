@@ -1567,7 +1567,7 @@ function createErrorResponse(
     code,
     message: usageLimitError
       ? formatUsageLimitMessage(usageLimitError.entityType)
-      : ChatErrorMessages[code],
+      : archestraMcpBranding.brandBuiltInText(ChatErrorMessages[code]),
     isRetryable: RetryableErrorCodes.has(code),
     originalError: {
       provider,
@@ -1606,7 +1606,7 @@ export function buildAbortiveTurnError(
     code,
     provider,
     undefined,
-    ChatErrorMessages[code],
+    archestraMcpBranding.brandBuiltInText(ChatErrorMessages[code]),
     "AbortiveTurn",
     undefined,
   );
@@ -1725,7 +1725,7 @@ export function mapProviderError(
       code,
       provider,
       undefined,
-      ChatErrorMessages[code],
+      archestraMcpBranding.brandBuiltInText(ChatErrorMessages[code]),
       "EmptyModelResponseError",
       {
         finishReason: error.finishReason,
@@ -2113,10 +2113,14 @@ export function sanitizeChatErrorForFrontend(
 }
 
 function formatUsageLimitMessage(entityType: string | undefined): string {
+  // Named under the deployment's own brand: this reaches the end user, and the
+  // whole point of the sentence is attributing the block to the platform rather
+  // than the AI provider.
+  const appName = archestraMcpBranding.appName;
   if (!entityType) {
-    return "Archestra blocked this request because a configured usage limit has been reached.";
+    return `${appName} blocked this request because a configured usage limit has been reached.`;
   }
-  return `Archestra blocked this request because the ${entityType.replace(
+  return `${appName} blocked this request because the ${entityType.replace(
     /_/g,
     " ",
   )} usage limit has been reached.`;

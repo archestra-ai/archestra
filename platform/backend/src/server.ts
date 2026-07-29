@@ -239,9 +239,11 @@ export function registerOpenApiSchemas() {
     id: "DeepSeekChatCompletionResponse",
   });
   z.globalRegistry.add(Archestra.API.ChatCompletionRequestSchema, {
+    // white-label-ok: wire identifier, not copy
     id: "ArchestraChatCompletionRequest",
   });
   z.globalRegistry.add(Archestra.API.ChatCompletionResponseSchema, {
+    // white-label-ok: wire identifier, not copy
     id: "ArchestraChatCompletionResponse",
   });
   z.globalRegistry.add(Minimax.API.ChatCompletionRequestSchema, {

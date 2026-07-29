@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { hasPermission, userHasPermission } from "@/auth";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -170,8 +171,8 @@ async function testKeylessAzureEntraOrThrow(
     const errorMessage = error instanceof Error ? error.message : String(error);
     const contextMessage =
       context === "discovery"
-        ? "Archestra could not discover any Azure model deployments. Confirm the Base URL points to an Azure OpenAI resource or Foundry v1 endpoint, and that the Azure identity has permission to read deployments on that resource."
-        : "Archestra could not connect to the Azure inference endpoint. Confirm the Inference URL is reachable and the Azure identity can use models on that endpoint.";
+        ? `${archestraMcpBranding.appName} could not discover any Azure model deployments. Confirm the Base URL points to an Azure OpenAI resource or Foundry v1 endpoint, and that the Azure identity has permission to read deployments on that resource.`
+        : `${archestraMcpBranding.appName} could not connect to the Azure inference endpoint. Confirm the Inference URL is reachable and the Azure identity can use models on that endpoint.`;
     const validationLabel =
       context === "discovery"
         ? "Azure Entra ID validation"

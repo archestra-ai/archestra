@@ -23,6 +23,7 @@ const apiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetApiKeys,
+        // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
         description: "List the authenticated user's Archestra API keys",
         tags: ["API Keys"],
         response: constructResponseSchema(ApiKeyResponseSchema.array()),
@@ -39,6 +40,7 @@ const apiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetApiKey,
+        // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
         description: "Get one authenticated user's Archestra API key",
         tags: ["API Keys"],
         params: ApiKeyIdParamsSchema,
@@ -60,6 +62,7 @@ const apiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.CreateApiKey,
+        // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
         description: "Create an Archestra API key for the authenticated user",
         tags: ["API Keys"],
         body: CreateApiKeyBodySchema,
@@ -88,6 +91,7 @@ const apiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.DeleteApiKey,
+        // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
         description: "Delete an Archestra API key for the authenticated user",
         tags: ["API Keys"],
         params: ApiKeyIdParamsSchema,

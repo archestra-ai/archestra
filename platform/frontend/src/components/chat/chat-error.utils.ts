@@ -2,6 +2,7 @@ import {
   ChatErrorCode,
   ChatErrorMessages,
   type ChatErrorResponse,
+  DEFAULT_APP_NAME,
   isChatErrorResponse,
   RetryableErrorCodes,
 } from "@archestra/shared";
@@ -141,14 +142,34 @@ const BACKEND_ERROR_TYPE_TO_CODE: Record<string, ChatErrorCode> = {
  * same styled error card. Recognizes known client-side patterns (network errors,
  * aborts), known backend error envelopes, and falls back to a generic error.
  */
-export function mapClientError(error: Error): ChatErrorResponse {
+/**
+ * `ChatErrorMessages` is the shared default copy, written under the default
+ * brand. The backend brands it through `archestraMcpBranding` before sending;
+ * these client-side fallbacks (used when no server message arrives) have to do
+ * the same substitution so a white-labeled deployment never shows the vendor's
+ * name in a chat error.
+ *
+ * Mirrors the backend's `archestraMcpBranding.brandBuiltInText` (which the
+ * frontend cannot import) minus the tool-prefix swap, which never appears in
+ * these messages. If that swap ever grows another token, update both.
+ */
+function branded(message: string, appName: string): string {
+  return appName === DEFAULT_APP_NAME
+    ? message
+    : message.split(DEFAULT_APP_NAME).join(appName);
+}
+
+export function mapClientError(
+  error: Error,
+  appName: string = DEFAULT_APP_NAME,
+): ChatErrorResponse {
   const msg = error.message;
 
   for (const pattern of CLIENT_ERROR_PATTERNS) {
     if (pattern.test(msg)) {
       return {
         code: pattern.code,
-        message: ChatErrorMessages[pattern.code],
+        message: branded(ChatErrorMessages[pattern.code], appName),
         isRetryable: RetryableErrorCodes.has(pattern.code),
       };
     }
@@ -185,7 +206,7 @@ export function mapClientError(error: Error): ChatErrorResponse {
   const code = mappedCode ?? ChatErrorCode.Unknown;
   return {
     code,
-    message: displayMessage || ChatErrorMessages[code],
+    message: displayMessage || branded(ChatErrorMessages[code], appName),
     isRetryable: RetryableErrorCodes.has(code),
   };
 }

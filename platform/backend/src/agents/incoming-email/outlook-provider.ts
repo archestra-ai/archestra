@@ -19,7 +19,7 @@ import type {
 } from "@/types";
 import { stripHtmlEmail } from "@/utils/strip-html";
 import {
-  DEFAULT_AGENT_EMAIL_NAME,
+  getDefaultAgentEmailName,
   MAX_ATTACHMENT_SIZE,
   MAX_ATTACHMENTS_PER_EMAIL,
   MAX_TOTAL_ATTACHMENTS_SIZE,
@@ -646,7 +646,7 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
   async sendReply(options: EmailReplyOptions): Promise<string> {
     const { originalEmail, body, htmlBody, agentName } = options;
     const client = this.getGraphClient();
-    const displayName = agentName || DEFAULT_AGENT_EMAIL_NAME;
+    const displayName = agentName || getDefaultAgentEmailName();
 
     logger.info(
       {

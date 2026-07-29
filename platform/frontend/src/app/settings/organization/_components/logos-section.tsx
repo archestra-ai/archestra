@@ -173,6 +173,7 @@ function LogoRow({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-icon.svg" alt="" className="h-6 w-6" />
             <span className="text-xs font-semibold leading-none">
+              {/* white-label-ok: default brand mark, shown only when no white-label logo is configured */}
               Archestra.AI
             </span>
           </div>

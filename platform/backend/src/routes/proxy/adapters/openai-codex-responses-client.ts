@@ -17,6 +17,7 @@ import type {
   ResponseCreateParamsStreaming,
   ResponseStreamEvent,
 } from "openai/resources/responses/responses";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import {
   OPENAI_CODEX_INSTRUCTIONS,
@@ -125,7 +126,9 @@ function applyCodexResponsesTransforms(
     include: Array.from(
       new Set([...existingInclude, "reasoning.encrypted_content"]),
     ),
-    instructions: loose.instructions ?? OPENAI_CODEX_INSTRUCTIONS,
+    instructions:
+      loose.instructions ??
+      archestraMcpBranding.brandBuiltInText(OPENAI_CODEX_INSTRUCTIONS),
   } as unknown as ResponseCreateParamsStreaming;
 }
 

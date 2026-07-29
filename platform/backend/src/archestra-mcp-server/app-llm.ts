@@ -130,9 +130,16 @@ async function runAppLlmCompletion(
       model,
       system: system || undefined,
       prompt: args.prompt,
+      abortSignal: context.abortSignal,
     });
     return structuredSuccessResult({ text: result.text }, result.text);
   } catch (error) {
+    // The caller gave up (its request timeout fired, or the app was torn
+    // down): nobody receives this result, so stop the completion without
+    // treating the abort as a provider failure.
+    if (context.abortSignal?.aborted) {
+      return errorResult("The LLM completion was cancelled.");
+    }
     // 429 is an upstream provider rate limit; 402 is the Archestra token-cost
     // limit block. Both surface to apps as llm_quota — the app-visible action
     // (stop and back off) is the same, so the message does not assert a

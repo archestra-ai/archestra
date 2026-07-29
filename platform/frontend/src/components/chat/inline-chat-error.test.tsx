@@ -3,10 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 vi.mock("sonner");
 
 vi.mock("@/lib/auth/auth.query");
+
+// The card brands the client-side fallback copy, which otherwise reaches for
+// the appearance-settings query and needs a QueryClientProvider.
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useCreateLlmProviderApiKey: () => ({
@@ -30,6 +35,7 @@ import { ProviderAuthRequiredCard } from "./provider-auth-required-card";
 describe("InlineChatError", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAppName).mockReturnValue("Archestra");
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);

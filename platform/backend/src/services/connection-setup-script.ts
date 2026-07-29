@@ -3,6 +3,7 @@ import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CODEX_CLIENT_ID,
+  DEFAULT_APP_NAME,
   EXTERNAL_AGENT_ID_HEADER,
   isDefaultBrandedAppName,
   type SupportedProvider,
@@ -205,7 +206,7 @@ function psq(value: string): string {
 /** Collapse control characters so appName is safe in comments and bare echoes. */
 function sanitizeAppName(appName: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
-  return appName.replace(/[\x00-\x1f\x7f]+/g, " ").trim() || "Archestra";
+  return appName.replace(/[\x00-\x1f\x7f]+/g, " ").trim() || DEFAULT_APP_NAME;
 }
 
 /**

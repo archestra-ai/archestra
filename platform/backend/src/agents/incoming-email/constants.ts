@@ -3,7 +3,10 @@
  *
  * These are kept in a separate file to allow importing without triggering
  * the full module dependency chain (which includes database connections).
+ * The branding singleton imported below keeps that property: at runtime it
+ * pulls only shared constants and `config` (its `@/types` import is type-only).
  */
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 
 /**
  * Interval for background job to check and renew email subscriptions
@@ -32,10 +35,14 @@ export const PROCESSED_EMAIL_RETENTION_MS = 24 * 60 * 60 * 1000; // 24 hours
 export const PROCESSED_EMAIL_CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 /**
- * Default display name for agent email replies
- * Used when the agent's name is not available
+ * Default display name for agent email replies, used when the agent has no name
+ * of its own. Resolved per call rather than as a constant so a white-labeled
+ * deployment sends under its own brand — this string is the `From` name the
+ * recipient sees.
  */
-export const DEFAULT_AGENT_EMAIL_NAME = "Archestra Agent";
+export function getDefaultAgentEmailName(): string {
+  return `${archestraMcpBranding.appName} Agent`;
+}
 
 /**
  * Maximum size for a single email attachment in bytes (10MB)

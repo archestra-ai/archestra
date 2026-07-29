@@ -329,6 +329,7 @@ export const McpAppRuntime = function McpAppRuntime({
     const appBridge = new AppBridge(
       null,
       {
+        // white-label-ok: wire identifier, not copy
         name: "Archestra",
         version: process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0",
       },
@@ -350,6 +351,7 @@ export const McpAppRuntime = function McpAppRuntime({
           ),
           locale: navigator.language,
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          // white-label-ok: wire identifier, not copy
           userAgent: `Archestra/${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}`,
           styles: {
             variables: buildMcpUiStyleVariables(),
@@ -391,7 +393,11 @@ export const McpAppRuntime = function McpAppRuntime({
     // Every exchange (request, response, latency) is reported to the session
     // recorder — these captures are the "mocked MCP responses" a recorded demo
     // replays instead of a live gateway. No-op unless the user is recording.
-    const mcpProxy = async (method: string, params: unknown) => {
+    const mcpProxy = async (
+      method: string,
+      params: unknown,
+      signal?: AbortSignal,
+    ) => {
       const proxyStartedAt = Date.now();
       const recordExchange = (result: unknown, isError: boolean) => {
         recorderRef.current?.captureMcp({
@@ -418,6 +424,11 @@ export const McpAppRuntime = function McpAppRuntime({
           method,
           params,
         }),
+        // The guest's cancellation (its request timeout, or the bridge tearing
+        // down) must reach the backend as a closed connection, or the
+        // dispatched work — an LLM completion in particular — runs and bills
+        // unobserved.
+        signal,
       });
       if (!response.ok) {
         recordExchange({ message: response.statusText }, true);
@@ -446,12 +457,15 @@ export const McpAppRuntime = function McpAppRuntime({
       setToolCallAuthError(null);
     };
     setToolCallAuthError(null);
-    const proxyToolCall = async (params: {
-      name: string;
-      arguments?: unknown;
-    }) => {
+    const proxyToolCall = async (
+      params: {
+        name: string;
+        arguments?: unknown;
+      },
+      signal?: AbortSignal,
+    ) => {
       const generation = ++nextToolCallGeneration;
-      const result = await mcpProxy("tools/call", params);
+      const result = await mcpProxy("tools/call", params, signal);
       if (cancelled) return result;
 
       const authState = resolveMcpAppToolCallAuthState(result);
@@ -492,16 +506,19 @@ export const McpAppRuntime = function McpAppRuntime({
     if (endpoint.kind === "agent") {
       const serverPrefix = endpoint.serverPrefix;
 
-      appBridge.oncalltool = async (params) => {
+      appBridge.oncalltool = async (params, extra) => {
         // Always enforce the server prefix — strip any existing prefix to prevent
         // a compromised MCP App from calling tools on a different server.
         const rawName = parseFullToolName(params.name).toolName;
         const toolName = buildFullToolName(serverPrefix, rawName);
 
-        return proxyToolCall({
-          name: toolName,
-          arguments: params.arguments,
-        });
+        return proxyToolCall(
+          {
+            name: toolName,
+            arguments: params.arguments,
+          },
+          extra.signal,
+        );
       };
 
       // Scope resource/prompt handlers to the owning server to prevent a compromised
@@ -567,11 +584,14 @@ export const McpAppRuntime = function McpAppRuntime({
       // (and ignores the requested URI), and implements ONLY resources/read — so
       // list/template/prompt handlers return empty rather than hitting an
       // unimplemented method.
-      appBridge.oncalltool = async (params) =>
-        proxyToolCall({
-          name: params.name,
-          arguments: params.arguments,
-        });
+      appBridge.oncalltool = async (params, extra) =>
+        proxyToolCall(
+          {
+            name: params.name,
+            arguments: params.arguments,
+          },
+          extra.signal,
+        );
       appBridge.onreadresource = async (params) =>
         mcpProxy("resources/read", params);
       appBridge.onlistresources = async () => ({ resources: [] });
@@ -1361,6 +1381,7 @@ export function buildReplayHostContext(displayMode: McpUiDisplayMode) {
     containerDimensions: {},
     locale: navigator.language,
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    // white-label-ok: wire identifier, not copy
     userAgent: `Archestra/${process.env.NEXT_PUBLIC_APP_VERSION ?? "0.0.0"}`,
     styles: {
       variables: buildMcpUiStyleVariables(),

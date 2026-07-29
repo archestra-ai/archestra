@@ -47,6 +47,7 @@ import {
   useCreateConnectionPassthroughKey,
   useCreateConnectionVirtualKey,
 } from "@/lib/connection-setup.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { cn } from "@/lib/utils";
 import type { ConnectClient, ProxyStep } from "./clients";
@@ -152,6 +153,7 @@ export function ProxyClientInstructions({
   shownProviders,
   baseUrl,
 }: ProxyClientInstructionsProps) {
+  const appName = useAppName();
   const shownSet = useMemo(
     () => (shownProviders ? new Set(shownProviders) : null),
     [shownProviders],
@@ -239,8 +241,16 @@ export function ProxyClientInstructions({
       url,
       tokenPlaceholder: `<your-${selectedProvider}-api-key>`,
       proxyName: toProxyProviderSlug(profileName),
+      appName,
     });
-  }, [client.proxy, selectedProvider, providerLabel, url, profileName]);
+  }, [
+    client.proxy,
+    selectedProvider,
+    providerLabel,
+    url,
+    profileName,
+    appName,
+  ]);
 
   if (client.proxy.kind === "unsupported") {
     return <UnsupportedPanel reason={client.proxy.reason} />;

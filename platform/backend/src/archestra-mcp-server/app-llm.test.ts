@@ -192,6 +192,32 @@ describe("app llm completion", () => {
     expect(archestraError(result).message).not.toContain("boom");
   });
 
+  test("a caller that gave up cancels the model call instead of reporting a provider failure", async () => {
+    const controller = new AbortController();
+    vi.mocked(generateText).mockImplementation(async () => {
+      // The caller disconnects while the model is thinking; the AI SDK then
+      // rejects with the abort, as the real call would.
+      controller.abort();
+      throw new DOMException("This operation was aborted", "AbortError");
+    });
+
+    const result = await executeArchestraTool(
+      llmTool,
+      { prompt: "x" },
+      { ...context, abortSignal: controller.signal },
+    );
+
+    // The signal reaches the model call, so the completion actually stops.
+    expect(vi.mocked(generateText)).toHaveBeenCalledWith(
+      expect.objectContaining({ abortSignal: controller.signal }),
+    );
+    expect((result as any).isError).toBe(true);
+    expect((result as any).content[0].text).toContain("cancelled");
+    // Not a provider failure: no llm_unavailable envelope for the app to
+    // branch on.
+    expect(archestraError(result)).toBeUndefined();
+  });
+
   test("reports llm_unavailable when no provider key is configured", async () => {
     vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue({
       provider: "anthropic",

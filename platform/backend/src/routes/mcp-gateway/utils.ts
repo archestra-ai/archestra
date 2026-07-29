@@ -190,13 +190,13 @@ export function describeGatewayAuthFailure(
 ): string {
   switch (reason) {
     case "idp_not_linked":
-      return "Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an Archestra token or OAuth.";
+      return `Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an ${archestraMcpBranding.appName} token or OAuth.`;
     case "idp_misconfigured":
       return "Invalid token for this profile. The gateway's Identity Provider cannot be used to validate JWTs: it must be an OIDC provider with a client ID and a discoverable JWKS endpoint.";
     case "no_email_claim":
       return "Token validated, but it carries no email claim. Set the Identity Provider's Email Claim attribute mapping to the claim holding the email (IdPs that namespace custom claims do not populate the standard `email` claim).";
     case "unknown_user":
-      return "Token validated, but its email does not match any Archestra user.";
+      return `Token validated, but its email does not match any ${archestraMcpBranding.appName} user.`;
     case "not_org_member":
       return "Token validated, but its user is not a member of this gateway's organization.";
     case "no_gateway_access":

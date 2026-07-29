@@ -35,7 +35,10 @@ import logger from "@/logging";
 import { getActiveSessionId } from "@/observability/request-context";
 import { captureRawProviderErrorInSentry } from "@/observability/sentry";
 import { MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE } from "@/routes/proxy/adapters/microsoft-365-copilot-graph-translator";
-import { SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
+import {
+  GithubCopilot,
+  SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
+} from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { ContextWindowExceededError } from "./normalization/enforce-context-window-limit";
 import { RequestTooLargeError } from "./normalization/enforce-request-size-limit";
@@ -1381,6 +1384,32 @@ function mapMicrosoft365CopilotErrorToCode(
 }
 
 /**
+ * GitHub Copilot shares the OpenAI-compatible error body, but the LLM proxy's
+ * error wrapping keeps only `message`/`type` — the upstream
+ * `model_not_supported` code is gone by the time the chat maps the error, so
+ * the one Copilot-specific case is keyed on the message. Copilot catalogues
+ * models its chat/completions endpoint rejects (the model fetcher verifies
+ * invocability, but a conversation can stay pinned to a model that has since
+ * been dropped), and that deterministic rejection must surface the actionable
+ * "choose a different model" copy, not the retry-suggesting invalid-request
+ * one.
+ */
+function mapGithubCopilotErrorToCode(
+  statusCode: number | undefined,
+  parsedError: ParsedOpenAIError | null,
+): ChatErrorCode {
+  if (
+    statusCode === 400 &&
+    parsedError?.message?.includes(
+      GithubCopilot.API.MODEL_NOT_SUPPORTED_MESSAGE,
+    )
+  ) {
+    return ChatErrorCode.NotFound;
+  }
+  return mapOpenAIErrorToCode(statusCode, parsedError);
+}
+
+/**
  * Registry of provider-specific error parse/map pairs.
  * Using Record<SupportedProvider, ...> ensures TypeScript will error
  * if a new provider is added to SupportedProvider without updating this map.
@@ -1404,7 +1433,10 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   zhipuai: providerErrorHandler(parseZhipuaiError, mapZhipuaiErrorToCode),
   deepseek: openAiCompatibleErrorHandler,
   kimi: openAiCompatibleErrorHandler,
-  "github-copilot": openAiCompatibleErrorHandler,
+  "github-copilot": providerErrorHandler(
+    parseOpenAIError,
+    mapGithubCopilotErrorToCode,
+  ),
   "microsoft-365-copilot": providerErrorHandler(
     parseOpenAIError,
     mapMicrosoft365CopilotErrorToCode,
@@ -1535,7 +1567,7 @@ function createErrorResponse(
     code,
     message: usageLimitError
       ? formatUsageLimitMessage(usageLimitError.entityType)
-      : ChatErrorMessages[code],
+      : archestraMcpBranding.brandBuiltInText(ChatErrorMessages[code]),
     isRetryable: RetryableErrorCodes.has(code),
     originalError: {
       provider,
@@ -1574,7 +1606,7 @@ export function buildAbortiveTurnError(
     code,
     provider,
     undefined,
-    ChatErrorMessages[code],
+    archestraMcpBranding.brandBuiltInText(ChatErrorMessages[code]),
     "AbortiveTurn",
     undefined,
   );
@@ -1693,7 +1725,7 @@ export function mapProviderError(
       code,
       provider,
       undefined,
-      ChatErrorMessages[code],
+      archestraMcpBranding.brandBuiltInText(ChatErrorMessages[code]),
       "EmptyModelResponseError",
       {
         finishReason: error.finishReason,
@@ -2081,10 +2113,14 @@ export function sanitizeChatErrorForFrontend(
 }
 
 function formatUsageLimitMessage(entityType: string | undefined): string {
+  // Named under the deployment's own brand: this reaches the end user, and the
+  // whole point of the sentence is attributing the block to the platform rather
+  // than the AI provider.
+  const appName = archestraMcpBranding.appName;
   if (!entityType) {
-    return "Archestra blocked this request because a configured usage limit has been reached.";
+    return `${appName} blocked this request because a configured usage limit has been reached.`;
   }
-  return `Archestra blocked this request because the ${entityType.replace(
+  return `${appName} blocked this request because the ${entityType.replace(
     /_/g,
     " ",
   )} usage limit has been reached.`;

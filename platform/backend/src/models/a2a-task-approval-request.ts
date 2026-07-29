@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type {
   A2AArchestraApprovalRequest,
   A2AArchestraTaskApprovalDecision,
@@ -61,37 +61,25 @@ class A2ATaskApprovalRequestModel {
     return reqs;
   }
 
-  static async updateDecision(params: {
-    taskId: string;
-    approvalId: string;
-    approved: boolean;
-  }): Promise<void> {
-    const { taskId, approvalId, approved } = params;
-    await db
-      .update(schema.a2aTaskApprovalRequestsTable)
-      .set({ approved, resolved: true, updatedAt: new Date() })
-      .where(
-        and(
-          eq(schema.a2aTaskApprovalRequestsTable.taskId, taskId),
-          eq(schema.a2aTaskApprovalRequestsTable.approvalId, approvalId),
-        ),
-      );
-  }
+  /** Batch variant of findByTaskId (N+1 prevention for task listings). */
+  static async findByTaskIds(
+    taskIds: string[],
+  ): Promise<Map<string, A2ATaskApprovalRequest[]>> {
+    if (taskIds.length === 0) {
+      return new Map();
+    }
+    const reqs = await db
+      .select()
+      .from(schema.a2aTaskApprovalRequestsTable)
+      .where(inArray(schema.a2aTaskApprovalRequestsTable.taskId, taskIds));
 
-  static async updateTaskApprovalDecisions(params: {
-    taskId: string;
-    approvalDecisions: A2AArchestraTaskApprovalDecision[];
-  }): Promise<void> {
-    const { taskId, approvalDecisions } = params;
-    await Promise.all(
-      approvalDecisions.map(async ({ approvalId, approved }) => {
-        await A2ATaskApprovalRequestModel.updateDecision({
-          taskId,
-          approvalId,
-          approved,
-        });
-      }),
-    );
+    const byTask = new Map<string, A2ATaskApprovalRequest[]>();
+    for (const req of reqs) {
+      const list = byTask.get(req.taskId) ?? [];
+      list.push(req);
+      byTask.set(req.taskId, list);
+    }
+    return byTask;
   }
 
   static async delete(id: string): Promise<void> {
@@ -100,11 +88,6 @@ class A2ATaskApprovalRequestModel {
       .where(eq(schema.a2aTaskApprovalRequestsTable.id, id));
   }
 
-  static async deleteByTaskId(taskId: string): Promise<void> {
-    await db
-      .delete(schema.a2aTaskApprovalRequestsTable)
-      .where(eq(schema.a2aTaskApprovalRequestsTable.taskId, taskId));
-  }
 }
 
 export default A2ATaskApprovalRequestModel;

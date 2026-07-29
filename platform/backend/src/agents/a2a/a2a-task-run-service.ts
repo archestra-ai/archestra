@@ -86,7 +86,14 @@ class A2ATaskRunService {
       try {
         pollTick += 1;
         const task = await A2ATaskModel.findById(taskId);
-        if (!task || task.state === "TASK_STATE_CANCELED") {
+        // Anything other than an active run state means this run no longer
+        // owns the task — canceled cross-pod, reaped to FAILED, or the row is
+        // gone. Stop burning model/tool resources either way.
+        if (
+          !task ||
+          (task.state !== "TASK_STATE_SUBMITTED" &&
+            task.state !== "TASK_STATE_WORKING")
+        ) {
           controller.abort();
           return;
         }

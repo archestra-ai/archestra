@@ -245,6 +245,42 @@ export class A2ATaskManager {
     return await A2ATaskManager.loadTaskWithData(task);
   }
 
+  /**
+   * Batch variant of {@link loadTaskWithData}: three queries total for the
+   * whole page instead of three per task (ListTasks N+1 prevention).
+   */
+  static async loadTasksWithData(
+    tasks: A2ATask[],
+  ): Promise<A2ATaskWithData[]> {
+    const taskIds = tasks.map((task) => task.id);
+    const [approvalsByTask, historyByTask, artifactsByTask] = await Promise.all([
+      A2ATaskApprovalRequestModel.findByTaskIds(taskIds),
+      A2AMessageModel.findByTaskIds(taskIds),
+      A2AArtifactModel.findByTaskIds(taskIds),
+    ]);
+
+    return tasks.map((task) => {
+      const approvalRequests = z
+        .array(A2AArchestraApprovalRequestSchema)
+        .parse(
+          (approvalsByTask.get(task.id) ?? []).sort((a, b) =>
+            a.approvalId.localeCompare(b.approvalId),
+          ),
+        );
+      const history = historyByTask.get(task.id) ?? [];
+      const statusMessage = [...history]
+        .reverse()
+        .find((m) => m.role === A2AProtocolRole.Agent);
+      return {
+        ...task,
+        approvalRequests,
+        history,
+        statusMessage,
+        artifacts: artifactsByTask.get(task.id) ?? [],
+      };
+    });
+  }
+
   static async createTask(params: {
     context: A2AContext;
     actor: A2AActor;
@@ -380,42 +416,6 @@ export class A2ATaskManager {
       approvalRequests,
     });
     return { ...task, approvalRequests };
-  }
-
-  static async updateTaskApprovalDecisions(params: {
-    task: A2ATaskWithData;
-    approvalDecisions: A2AArchestraTaskApprovalDecision[];
-  }): Promise<A2ATaskWithData> {
-    const { task, approvalDecisions } = params;
-    await A2ATaskApprovalRequestModel.updateTaskApprovalDecisions({
-      taskId: task.id,
-      approvalDecisions,
-    });
-
-    // Update the task object with new approval decisions locally to avoid stale data reading
-    const approvalDecisionsMap: Record<
-      string,
-      A2AArchestraTaskApprovalDecision
-    > = {};
-    approvalDecisions.forEach((d) => {
-      approvalDecisionsMap[d.approvalId] = d;
-    });
-    const updatedApprovalRequests = task.approvalRequests.map((req) => {
-      const decision = approvalDecisionsMap[req.approvalId];
-      if (decision) {
-        return { ...req, approved: decision.approved, resolved: true };
-      }
-      return req;
-    });
-
-    return { ...task, approvalRequests: updatedApprovalRequests };
-  }
-
-  static async removeTaskApprovalRequests(
-    task: A2ATaskWithData,
-  ): Promise<A2ATaskWithData> {
-    await A2ATaskApprovalRequestModel.deleteByTaskId(task.id);
-    return { ...task, approvalRequests: [] };
   }
 
   static async updateTaskState(

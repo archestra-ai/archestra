@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { coerceMalformedToolInputs } from "@archestra/shared";
+import { z } from "zod";
 import {
   convertToModelMessages,
   type FilePart,
@@ -199,6 +200,13 @@ export class A2AManager {
       followFromSeq: number;
     }) => void;
   }): Promise<A2AProtocolSendMessageResponse> {
+    // Set once an approval resume has CAS'd the task to WORKING: if anything
+    // between that point and the run lifecycle taking ownership throws
+    // (history load, compaction, team lookup), the catch below settles the
+    // task to FAILED instead of stranding a heartbeat-less WORKING task
+    // until the reaper fires.
+    let resumedWorkingTask: { taskId: string; contextId: string } | null =
+      null;
     try {
       const { actor, agentId, request, systemParams, abortSignal } = params;
       const fullTaskMode = this.config.taskMode === "full";
@@ -293,6 +301,9 @@ export class A2AManager {
           task = updatedTask;
           taskWasSwitchedToWorkingState = switchedToWorkingState;
           taskApprovalDecisionsWasApplied = approvalDecisionsWasApplied;
+          if (fullTaskMode && switchedToWorkingState) {
+            resumedWorkingTask = { taskId: task.id, contextId: task.contextId };
+          }
         }
       }
 
@@ -681,6 +692,23 @@ export class A2AManager {
 
       return { message: resultMessage };
     } catch (error) {
+      // A resumed task is WORKING but its run may never have started; settle
+      // it so pollers see a terminal outcome. If the run's own lifecycle
+      // already settled it (or a cancel won), this CAS is a no-op.
+      if (resumedWorkingTask) {
+        await this.settleFailedRun({
+          taskId: resumedWorkingTask.taskId,
+          contextId: resumedWorkingTask.contextId,
+          statusReason:
+            error instanceof Error ? error.message : String(error),
+        }).catch((settleError) => {
+          logger.error(
+            { settleError, taskId: resumedWorkingTask?.taskId },
+            "[A2AManager] Failed to settle a resumed task after a send error",
+          );
+        });
+      }
+
       if (error instanceof A2AError) {
         throw error;
       }
@@ -944,8 +972,13 @@ export class A2AManager {
 
   /**
    * Resolve a task for this route's agent + actor. Tasks bound to a different
-   * agent answer TaskNotFound (existence non-disclosure); legacy rows with no
-   * binding fall back to the actor/context ownership check alone.
+   * agent answer TaskNotFound (existence non-disclosure); rows with no
+   * binding (pre-binding tasks, tasks whose agent was deleted) fall back to
+   * the actor/context ownership check alone. That fallback is deliberately
+   * actor-scoped, not open: reaching such a task through another agent still
+   * requires a gateway token valid for THAT agent plus ownership of the
+   * task's context, so no other actor ever gains access — the only latitude
+   * is which of their own agent endpoints the owner may use.
    */
   private async findTaskForAgent(params: {
     taskId: string;
@@ -1138,8 +1171,11 @@ export class A2AManager {
       }
 
       // Partial decision: some requests still pending — persist the applied
-      // decisions atomically, task state stays INPUT_REQUIRED.
-      await A2ATaskModel.applyApprovalDecisions({
+      // decisions atomically, task state stays INPUT_REQUIRED. The model
+      // re-checks state and resolved-ness inside the transaction, so a
+      // concurrent cancel/resume/duplicate decision surfaces here instead of
+      // silently overwriting.
+      const applied = await A2ATaskModel.applyApprovalDecisions({
         taskId: task.id,
         lastMessage: { id: lastMessage.id, content: lastMessageContent },
         approvalDecisions: approvalDecisions.map((d) => ({
@@ -1147,6 +1183,15 @@ export class A2AManager {
           approved: d.approved,
         })),
       });
+      if (applied === "task_not_input_required") {
+        throw new A2AError(
+          A2AErrorKind.TaskIsNotInputRequired,
+          "the task changed state while the decisions were being applied",
+        );
+      }
+      if (applied === "approval_already_resolved") {
+        throw new A2AError(A2AErrorKind.ApprovalIdAlreadyResolved);
+      }
       task = { ...task, approvalRequests: updatedApprovalRequests };
       return { task, approvalDecisionsWasApplied: true };
     }
@@ -1248,19 +1293,34 @@ export class A2AManager {
       );
     }
 
-    // The watermark is read AFTER the snapshot's data was loaded: an event
-    // that lands in between is simply re-covered by the first poll (events
-    // strictly after the watermark), never dropped. nextEventSeq - 1 is the
-    // last allocated sequence.
-    const row = await A2ATaskModel.findById(task.id);
-    if (!row) {
-      throw new A2AError(A2AErrorKind.TaskNotFound);
+    // The snapshot must be consistent with the watermark: an event landing
+    // between the watermark read and the snapshot assembly would either be
+    // skipped (watermark after snapshot) or double-delivered on top of the
+    // snapshot's artifact content (watermark before snapshot). Re-read the
+    // allocator after assembling the snapshot and retry until it is stable —
+    // with one writer per task and 250ms delta batching, a retry is rare.
+    let snapshot = task;
+    let watermark = task.nextEventSeq - 1;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const after = await A2ATaskModel.findById(snapshot.id);
+      if (!after) {
+        throw new A2AError(A2AErrorKind.TaskNotFound);
+      }
+      if (after.nextEventSeq - 1 === watermark) {
+        return {
+          task: A2ATaskManager.toProtocolTask(snapshot),
+          taskId: snapshot.id,
+          watermark,
+        };
+      }
+      watermark = after.nextEventSeq - 1;
+      snapshot = await A2ATaskManager.loadTaskWithData(after);
     }
 
     return {
-      task: A2ATaskManager.toProtocolTask(task),
-      taskId: task.id,
-      watermark: row.nextEventSeq - 1,
+      task: A2ATaskManager.toProtocolTask(snapshot),
+      taskId: snapshot.id,
+      watermark,
     };
   }
 
@@ -1309,9 +1369,7 @@ export class A2AManager {
       pageSize,
     });
 
-    const withData = await Promise.all(
-      tasks.map((task) => A2ATaskManager.loadTaskWithData(task)),
-    );
+    const withData = await A2ATaskManager.loadTasksWithData(tasks);
 
     const last = tasks[tasks.length - 1];
     const nextPageToken =
@@ -1405,7 +1463,12 @@ function decodeListTasksPageToken(token: string): {
   try {
     const decoded = JSON.parse(Buffer.from(token, "base64url").toString());
     const timestamp = new Date(decoded.t);
-    if (Number.isNaN(timestamp.getTime()) || typeof decoded.id !== "string") {
+    if (
+      Number.isNaN(timestamp.getTime()) ||
+      // The id is cast to ::uuid in SQL — validate here so a malformed token
+      // is a clean -32602 instead of a database error.
+      !z.uuid().safeParse(decoded.id).success
+    ) {
       throw new Error("malformed");
     }
     return { stateChangedAt: timestamp, id: decoded.id };

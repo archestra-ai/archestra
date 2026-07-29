@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -64,6 +65,13 @@ const a2aTaskTable = pgTable(
       table.stateChangedAt,
       table.id,
     ),
+    // Reaper scans: only tasks claiming a live run are candidates, so a
+    // partial index keeps the periodic stale-heartbeat scan off the table.
+    index("a2a_task_active_heartbeat_idx")
+      .on(table.lastHeartbeatAt)
+      .where(
+        sql`${table.state} IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING')`,
+      ),
   ],
 );
 

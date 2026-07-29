@@ -1,5 +1,5 @@
 {
-  "id": "ec589df2-c26f-47ab-b532-c4f44c8cba71",
+  "id": "6410cb2b-a720-410f-8fd5-5b08c658d7f4",
   "prevId": "8463f0f7-963c-4535-9526-f79357c51f1c",
   "version": "7",
   "dialect": "postgresql",
@@ -775,6 +775,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "a2a_task_active_heartbeat_idx": {
+          "name": "a2a_task_active_heartbeat_idx",
+          "columns": [
+            {
+              "expression": "last_heartbeat_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"a2a_task\".\"state\" IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING')",
           "concurrently": false,
           "method": "btree",
           "with": {}

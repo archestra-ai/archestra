@@ -21,6 +21,15 @@ const ACTIVE_RUN_STATES: A2ATaskState[] = [
 
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+/** Thrown inside the approval-decision transaction to roll it back cleanly. */
+class ApprovalConflictError extends Error {
+  constructor(
+    readonly conflict: "task_not_input_required" | "approval_already_resolved",
+  ) {
+    super(`Approval decision conflict: ${conflict}`);
+  }
+}
+
 class A2ATaskModel {
   static async create(data: InsertA2ATask): Promise<A2ATask> {
     const [task] = await db
@@ -292,34 +301,63 @@ class A2ATaskModel {
   /**
    * Apply approval decisions that do NOT yet resume the task (some requests
    * are still pending): the updated approval UI message and the approval-row
-   * resolutions commit together.
+   * resolutions commit together, guarded against concurrent lifecycle
+   * changes — the task must still be INPUT_REQUIRED (a cancellation or
+   * duplicate resume makes this a no-op returning "task_not_input_required"),
+   * and every decision must land on a still-unresolved row (a concurrent
+   * decision on the same approval returns "approval_already_resolved").
+   * Nothing is written on either conflict.
    */
   static async applyApprovalDecisions(params: {
     taskId: string;
     lastMessage: { id: string; content: unknown };
     approvalDecisions: { approvalId: string; approved: boolean }[];
-  }): Promise<void> {
-    await db.transaction(async (tx) => {
-      await tx
-        .update(schema.a2aMessagesTable)
-        .set({ content: params.lastMessage.content, updatedAt: new Date() })
-        .where(eq(schema.a2aMessagesTable.id, params.lastMessage.id));
+  }): Promise<"applied" | "task_not_input_required" | "approval_already_resolved"> {
+    try {
+      await db.transaction(async (tx) => {
+        // Row-lock the task and assert its state inside the transaction; the
+        // manager's earlier read is unguarded and may be stale.
+        const [task] = await tx
+          .select({ state: schema.a2aTasksTable.state })
+          .from(schema.a2aTasksTable)
+          .where(eq(schema.a2aTasksTable.id, params.taskId))
+          .for("update");
+        if (task?.state !== "TASK_STATE_INPUT_REQUIRED") {
+          throw new ApprovalConflictError("task_not_input_required");
+        }
 
-      for (const decision of params.approvalDecisions) {
-        await tx
-          .update(schema.a2aTaskApprovalRequestsTable)
-          .set({ approved: decision.approved, resolved: true })
-          .where(
-            and(
-              eq(schema.a2aTaskApprovalRequestsTable.taskId, params.taskId),
-              eq(
-                schema.a2aTaskApprovalRequestsTable.approvalId,
-                decision.approvalId,
+        for (const decision of params.approvalDecisions) {
+          const updated = await tx
+            .update(schema.a2aTaskApprovalRequestsTable)
+            .set({ approved: decision.approved, resolved: true })
+            .where(
+              and(
+                eq(schema.a2aTaskApprovalRequestsTable.taskId, params.taskId),
+                eq(
+                  schema.a2aTaskApprovalRequestsTable.approvalId,
+                  decision.approvalId,
+                ),
+                eq(schema.a2aTaskApprovalRequestsTable.resolved, false),
               ),
-            ),
-          );
+            )
+            .returning({ id: schema.a2aTaskApprovalRequestsTable.id });
+          if (updated.length === 0) {
+            throw new ApprovalConflictError("approval_already_resolved");
+          }
+        }
+
+        await tx
+          .update(schema.a2aMessagesTable)
+          .set({ content: params.lastMessage.content, updatedAt: new Date() })
+          .where(eq(schema.a2aMessagesTable.id, params.lastMessage.id));
+      });
+    } catch (error) {
+      if (error instanceof ApprovalConflictError) {
+        return error.conflict;
       }
-    });
+      throw error;
+    }
+    return "applied";
   }
 
   /**
@@ -468,11 +506,13 @@ class A2ATaskModel {
 
   /**
    * ListTasks page for one actor + agent. Ordered by status-change time
-   * (falling back to createdAt for pre-migration rows) descending, id
-   * descending as the tiebreaker; the cursor is that same (timestamp, id)
-   * pair, so heartbeats and message appends can never destabilize pagination.
-   * Legacy tasks without an agent binding belong to whichever agent the
-   * actor reaches them through, so `agentId IS NULL` rows are included.
+   * descending (migration 0373 backfilled `state_changed_at` for pre-existing
+   * rows and every writer sets it, so the column is de-facto non-null and the
+   * ordering can use its index directly), id descending as the tiebreaker;
+   * the cursor is that same (timestamp, id) pair, so heartbeats and message
+   * appends can never destabilize pagination. Legacy tasks without an agent
+   * binding belong to whichever agent the actor reaches them through, so
+   * `agentId IS NULL` rows are included.
    */
   static async listForActor(params: {
     actorKind: string;
@@ -484,7 +524,7 @@ class A2ATaskModel {
     cursor?: { stateChangedAt: Date; id: string };
     pageSize: number;
   }): Promise<{ tasks: A2ATask[]; totalSize: number }> {
-    const orderingTimestamp = sql`COALESCE(${schema.a2aTasksTable.stateChangedAt}, ${schema.a2aTasksTable.createdAt})`;
+    const orderingTimestamp = schema.a2aTasksTable.stateChangedAt;
 
     const filters = and(
       eq(schema.a2aContextsTable.actorKind, params.actorKind),

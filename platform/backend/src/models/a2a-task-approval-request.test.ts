@@ -96,71 +96,6 @@ describe("A2ATaskApprovalRequestModel", () => {
     });
   });
 
-  describe("updateDecision", () => {
-    test("updates a single approval request decision", async () => {
-      const context = await createContext();
-      const task = await createTask(context.id);
-      const [created] = await A2ATaskApprovalRequestModel.bulkCreateRaw([
-        {
-          ...makeApprovalRequest("approval-1"),
-          taskId: task.id,
-        },
-      ]);
-
-      await A2ATaskApprovalRequestModel.updateDecision({
-        taskId: task.id,
-        approvalId: created.approvalId,
-        approved: true,
-      });
-
-      const found = await A2ATaskApprovalRequestModel.findById(created.id);
-
-      expect(found?.approved).toBe(true);
-      expect(found?.resolved).toBe(true);
-    });
-  });
-
-  describe("updateTaskApprovalDecisions", () => {
-    test("updates multiple approval decisions on a task", async () => {
-      const context = await createContext();
-      const task = await createTask(context.id);
-      await A2ATaskApprovalRequestModel.bulkCreate({
-        taskId: task.id,
-        approvalRequests: [
-          makeApprovalRequest("approval-1"),
-          makeApprovalRequest("approval-2"),
-          makeApprovalRequest("approval-3"),
-        ],
-      });
-
-      await A2ATaskApprovalRequestModel.updateTaskApprovalDecisions({
-        taskId: task.id,
-        approvalDecisions: [
-          { approvalId: "approval-1", approved: true },
-          { approvalId: "approval-3", approved: false },
-        ],
-      });
-
-      const found = await A2ATaskApprovalRequestModel.findByTaskId(task.id);
-      const byApprovalId = Object.fromEntries(
-        found.map((req) => [req.approvalId, req]),
-      );
-
-      expect(byApprovalId["approval-1"]).toMatchObject({
-        approved: true,
-        resolved: true,
-      });
-      expect(byApprovalId["approval-2"]).toMatchObject({
-        approved: false,
-        resolved: false,
-      });
-      expect(byApprovalId["approval-3"]).toMatchObject({
-        approved: false,
-        resolved: true,
-      });
-    });
-  });
-
   describe("delete", () => {
     test("removes a single approval request", async () => {
       const context = await createContext();
@@ -176,21 +111,5 @@ describe("A2ATaskApprovalRequestModel", () => {
       expect(await A2ATaskApprovalRequestModel.findById(created.id)).toBeNull();
     });
 
-    test("removes all approval requests for a task", async () => {
-      const context = await createContext();
-      const task = await createTask(context.id);
-      await A2ATaskApprovalRequestModel.bulkCreate({
-        taskId: task.id,
-        approvalRequests: [
-          makeApprovalRequest("approval-1"),
-          makeApprovalRequest("approval-2"),
-        ],
-      });
-
-      await A2ATaskApprovalRequestModel.deleteByTaskId(task.id);
-      expect(await A2ATaskApprovalRequestModel.findByTaskId(task.id)).toEqual(
-        [],
-      );
-    });
   });
 });

@@ -485,8 +485,17 @@ export function AppSessionPlayer({
         ? {
             ...validBundle.recording,
             // Frame payloads leave base64 exactly once, here at bundle-open;
-            // every path after this handles Blobs/bytes only.
-            events: reviveRecordingEvents(validBundle.recording.events),
+            // every path after this handles Blobs/bytes only. DOM paints get
+            // the same img-src widening as the segments: a recorded head
+            // repaint carries the live session's CSP meta, and a meta inserted
+            // by a replayed paint is enforced on top of the segment's policy —
+            // un-widened, it re-blocks every image the widening just allowed.
+            events: reviveRecordingEvents(validBundle.recording.events).map(
+              (event) =>
+                event.kind === "dom" && typeof event.html === "string"
+                  ? { ...event, html: widenReplayImageCsp(event.html) }
+                  : event,
+            ),
             // The replayed chat is the capture seen through the viewer's
             // presentation edits: the AI consolidation (unless disabled),
             // minus removed messages, with manual user-text overrides.
@@ -2629,7 +2638,9 @@ function PlayerSurface({
   const replayHtml = useMemo(
     () =>
       neutralizeAppScripts(
-        relocalizeSandboxAssets(segment?.html ?? "", sandboxResult.baseUrl),
+        widenReplayImageCsp(
+          relocalizeSandboxAssets(segment?.html ?? "", sandboxResult.baseUrl),
+        ),
         // Deferring a remote stylesheet trades font fidelity for a fast first
         // paint — the right trade for someone watching, the wrong one for an
         // export. Nobody is waiting on the offline renderer, and its output is
@@ -6352,6 +6363,30 @@ export function relocalizeSandboxAssets(
  */
 export const replaySandboxPrefix = (conversationId: string | undefined) =>
   `archestra-app-replay-${conversationId}`;
+
+/**
+ * Let a replay show the images the recorded session referenced.
+ *
+ * The live app runs under the platform's fixed CSP allowlist, whose `img-src`
+ * admits only the bundled CDN and font hosts — an app that hotlinks any other
+ * image host (GitHub avatars, say) renders broken images, and the recorder
+ * captures markup, not pixels, so every replay inherits the same blanks. In a
+ * replay that strictness buys nothing: the app's scripts are neutralized
+ * ({@link neutralizeAppScripts}), the document is fixed recorded content, and
+ * an image fetch can neither run code nor read the page. So the segment's CSP
+ * meta gets `https:` added to `img-src`, and the replay shows what the app
+ * meant to show. Only the serialized segment the player is about to mount is
+ * rewritten — a live app's CSP is untouched. A segment without a CSP meta
+ * passes through unchanged (its frame has no CSP to widen).
+ *
+ * @public — exported for testability
+ */
+export function widenReplayImageCsp(html: string): string {
+  return html.replace(
+    /(<meta[^>]*Content-Security-Policy[^>]*\bimg-src)(?= )/i,
+    "$1 https:",
+  );
+}
 
 /**
  * Stop the app's own code from running in a replay.

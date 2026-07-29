@@ -22,6 +22,7 @@ import {
   revealSchedule,
   trimCutsToExportLimit,
   uncutRecording,
+  widenReplayImageCsp,
 } from "./app-session-player";
 
 type Recording = Parameters<typeof buildPlayback>[0];
@@ -1267,6 +1268,40 @@ describe("relocalizeSandboxAssets", () => {
   it("returns the html unchanged when there is no base to point at", () => {
     const recorded = `<script src="https://a.dev/_sandbox/x.js"></script>`;
     expect(relocalizeSandboxAssets(recorded, "")).toBe(recorded);
+  });
+});
+
+describe("widenReplayImageCsp", () => {
+  // The exact meta shape the serve path bakes into every segment — with the
+  // fixed platform allowlist that blocks any other image host (the GitHub
+  // avatars of a recorded PR-dashboard app being the case that surfaced this).
+  const cspMeta =
+    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; ` +
+    `script-src 'unsafe-inline' https://a.dev/_sandbox/ext-apps-app.js; ` +
+    `img-src data: blob: cdn.jsdelivr.net fonts.gstatic.com; font-src data:">`;
+
+  it("admits any https image host in the replayed segment's CSP", () => {
+    const html = widenReplayImageCsp(
+      `${cspMeta}<img src="https://avatars.example.com/u/1">`,
+    );
+    expect(html).toContain(
+      "img-src https: data: blob: cdn.jsdelivr.net fonts.gstatic.com;",
+    );
+  });
+
+  it("touches only img-src — the script allowlist stays as recorded", () => {
+    const html = widenReplayImageCsp(cspMeta);
+    expect(html).toContain(
+      "script-src 'unsafe-inline' https://a.dev/_sandbox/ext-apps-app.js;",
+    );
+    expect(html.match(/https:/g)?.length).toBe(
+      (cspMeta.match(/https:/g)?.length ?? 0) + 1,
+    );
+  });
+
+  it("leaves a segment without a CSP meta unchanged", () => {
+    const html = `<body><img src="https://x.dev/a.png"> img-src </body>`;
+    expect(widenReplayImageCsp(html)).toBe(html);
   });
 });
 

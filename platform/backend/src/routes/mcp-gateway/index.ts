@@ -19,6 +19,7 @@ import {
   buildDiscoverResult,
   extractTraceContext,
   isDiscoverRequest,
+  isMethodRemovedForRevision,
   MCP_PROTOCOL_VERSION_HEADER,
   type McpProtocolRevision,
   type ProtocolResolution,
@@ -470,6 +471,28 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: (request.body as { id?: string | number })?.id ?? null,
           };
         }
+      }
+
+      // 2026-07-28 removes ping, logging/setLevel, and resources
+      // subscription methods. A client that declared that revision gets
+      // method-not-found rather than an answer from a surface it opted out
+      // of; legacy clients are untouched.
+      const bodyMethod = (request.body as { method?: string })?.method;
+      if (
+        isMethodRemovedForRevision({
+          method: bodyMethod,
+          revision: resolution.revision,
+        })
+      ) {
+        reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
+        return {
+          jsonrpc: "2.0",
+          error: {
+            code: -32601,
+            message: `Method "${bodyMethod}" was removed in protocol version ${resolution.revision}.`,
+          },
+          id: (request.body as { id?: string | number })?.id ?? null,
+        };
       }
 
       // `server/discover` replaces the `initialize` handshake under 2026-07-28.

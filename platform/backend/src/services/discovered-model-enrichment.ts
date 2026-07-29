@@ -2,6 +2,7 @@ import type { ModelsDevApiResponse } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { resolveDiscoveredModelRegistryEntry } from "@/services/cross-provider-pricing";
+import { lookupOpenAiPublishedPrices } from "@/services/openai-published-pricing";
 import type { Model } from "@/types";
 
 /**
@@ -29,15 +30,27 @@ export async function enrichDiscoveredModel(params: {
     modelId: model.modelId,
     modelsDevData,
   });
-  if (!resolved) {
+  // Covers the Codex models the registry omits, and the case where it places
+  // the model but publishes no price for it.
+  const published = resolved?.prices?.promptPricePerToken
+    ? null
+    : lookupOpenAiPublishedPrices(model.modelId);
+  if (!resolved && !published) {
     return false;
   }
 
-  const { prices, metadata } = resolved;
+  const { prices, metadata } = resolved ?? { prices: null, metadata: null };
   await ModelModel.applyRegistryCapabilities(model.id, {
-    promptPricePerToken: prices?.promptPricePerToken ?? null,
-    completionPricePerToken: prices?.completionPricePerToken ?? null,
-    cacheReadPricePerToken: prices?.cacheReadPricePerToken ?? null,
+    promptPricePerToken:
+      prices?.promptPricePerToken ?? published?.promptPricePerToken ?? null,
+    completionPricePerToken:
+      prices?.completionPricePerToken ??
+      published?.completionPricePerToken ??
+      null,
+    cacheReadPricePerToken:
+      prices?.cacheReadPricePerToken ??
+      published?.cacheReadPricePerToken ??
+      null,
     cacheWritePricePerToken: prices?.cacheWritePricePerToken ?? null,
     contextLength: metadata?.contextLength ?? null,
     outputLength: metadata?.outputLength ?? null,

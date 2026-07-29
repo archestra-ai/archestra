@@ -338,6 +338,59 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     expect(names).toEqual([...names].sort());
   });
 
+  test("ping answers for legacy clients and is refused for 2026-07-28", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const { agent, token } = await setup({ makeAgent, makeOrganization });
+
+    // A legacy client keeps the SDK's automatic pong.
+    const legacy = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "ping", id: 20 },
+    });
+    expect(legacy.statusCode).toBe(200);
+    expect(legacy.json()).toMatchObject({ id: 20, result: {} });
+
+    // A client that declared 2026-07-28 opted out of the surface ping
+    // belongs to, so answering would be serving the wrong revision.
+    const stateless = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value, {
+        "mcp-protocol-version": STATELESS_MCP_PROTOCOL_REVISION,
+        "mcp-method": "ping",
+      }),
+      payload: { jsonrpc: "2.0", method: "ping", id: 21 },
+    });
+    expect(stateless.statusCode).toBe(200);
+    expect(stateless.json().error).toMatchObject({ code: -32601 });
+    expect(stateless.json().error.message).toContain("removed");
+  });
+
+  test("capabilities no longer advertise unimplemented subscriptions", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const { agent, token } = await setup({ makeAgent, makeOrganization });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value, {
+        "mcp-protocol-version": STATELESS_MCP_PROTOCOL_REVISION,
+        "mcp-method": "server/discover",
+      }),
+      payload: { jsonrpc: "2.0", method: "server/discover", id: 22 },
+    });
+
+    const { capabilities } = response.json().result;
+    expect(capabilities.resources).not.toHaveProperty("subscribe");
+    expect(capabilities.resources.listChanged).toBe(false);
+  });
+
   test("GET discovery advertises both supported revisions", async ({
     makeAgent,
     makeOrganization,

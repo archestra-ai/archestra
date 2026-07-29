@@ -124,6 +124,7 @@ import {
   withCompleteResultEnvelope,
   withPrivateCacheHint,
 } from "./protocol";
+import { clientDeclaredTasks, runToolCallMaybeTask } from "./tasks";
 
 export { deriveAuthMethod };
 
@@ -632,9 +633,18 @@ export async function createAgentServer(params: {
     );
   });
 
-  server.setRequestHandler(
-    CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }, extra) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+    const { name, arguments: args } = request.params;
+
+    // Tasks extension (io.modelcontextprotocol/tasks): an eligible call —
+    // the client declared the extension in this request's _meta — races the
+    // sync threshold and detaches into a durable background task when it
+    // outlives it. Everything below (dispatch, policies, envelope, metrics,
+    // persistence) runs identically either way; only who is waiting for the
+    // outcome changes.
+    const executeCallToolRequest = async (
+      taskAbortSignal: AbortSignal,
+    ): Promise<Record<string, unknown>> => {
       const startTime = Date.now();
       const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
 
@@ -931,6 +941,9 @@ export async function createAgentServer(params: {
               tokenAuth,
               {
                 availableTool,
+                // Tasks: lets tasks/cancel on this replica abort the upstream
+                // call instead of letting it run to a discarded result.
+                abortSignal: taskAbortSignal,
                 elicitationHandler: async (request) => {
                   // MRTR: a retry already carries the answer, so consume it
                   // instead of asking again.
@@ -1098,8 +1111,20 @@ export async function createAgentServer(params: {
           data: error instanceof Error ? error.message : "Unknown error",
         };
       }
-    },
-  );
+    };
+
+    return runToolCallMaybeTask({
+      eligible: mrtrEnabled && clientDeclaredTasks({ params: request.params }),
+      agentId,
+      principal: deriveStatePrincipal({
+        userId: tokenAuth?.userId,
+        tokenId: tokenAuth?.tokenId,
+        organizationId: tokenAuth?.organizationId,
+      }),
+      toolName: name,
+      execute: executeCallToolRequest,
+    });
+  });
 
   logger.info({ agentId }, "MCP server instance created");
   return { server: mcpServer, agent };

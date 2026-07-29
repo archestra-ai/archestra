@@ -1687,6 +1687,15 @@ const config = {
   mcpGateway: {
     endpoint: "/v1/mcp",
     /**
+     * How long a tool call from a Tasks-capable client runs synchronously
+     * before the gateway upgrades it to an MCP task (Tasks extension). Lower
+     * values task more calls; higher values keep more calls synchronous.
+     */
+    tasksSyncThresholdMs: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_GATEWAY_TASKS_SYNC_THRESHOLD_MS,
+      10000,
+    ),
+    /**
      * Per-request timeout (ms) for an upstream MCP tool call made through the
      * gateway. The MCP SDK defaults to 60s, which is too short for tools that
      * do slow work (long-running scrapers, report builders, etc.). Raise this

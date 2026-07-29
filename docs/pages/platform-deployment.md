@@ -1282,6 +1282,8 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
 - **`ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS`** - Per-request timeout, in milliseconds, for an upstream MCP tool call made through the gateway.
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
+- **`ARCHESTRA_MCP_GATEWAY_TASKS_SYNC_THRESHOLD_MS`** - How long a tool call from a Tasks-capable MCP client runs synchronously, in milliseconds, before the gateway turns it into a background task the client polls.
+  - Default: `10000` (10 seconds)
 
 ### MCP Servers
 

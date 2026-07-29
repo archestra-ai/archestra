@@ -7,6 +7,7 @@ import {
 import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
+import { MCP_TASKS_EXTENSION_ID } from "./tasks";
 
 /**
  * MCP protocol revision support for the gateway.
@@ -259,6 +260,12 @@ export function buildGatewayServerCapabilities(
       listChanged: false,
     },
     extensions: {
+      // Tasks negotiation rides per-request _meta capabilities, which exist
+      // only on the stateless revision; the task methods are gated the same
+      // way, so a legacy client is not shown an extension it cannot invoke.
+      ...(revision === STATELESS_MCP_PROTOCOL_REVISION
+        ? { [MCP_TASKS_EXTENSION_ID]: {} }
+        : {}),
       ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
       ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
       ...MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,

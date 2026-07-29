@@ -574,10 +574,23 @@ export function AccessLevelSelector({
     return "";
   };
 
+  /** The short note beside the label; the reason itself sits under it. */
+  const getDisabledLabel = (value: string) => {
+    if (value === "personal") return "Unavailable";
+    if (value === "team" && (!canReadTeams || !canShareWithTeams))
+      return "Requires permission";
+    if (value === "team" && hasNoAvailableTeams) return "No teams available";
+    if (value === "org") return "Requires permission";
+    return undefined;
+  };
+
   const scopedOptions: VisibilityOption<AgentVisibilityChoice>[] =
     scopeOptions.map((option) => ({
       ...option,
       disabled: isOptionDisabled(option.value),
+      disabledLabel: isOptionDisabled(option.value)
+        ? getDisabledLabel(option.value)
+        : undefined,
       disabledReason: isOptionDisabled(option.value)
         ? getDisabledReason(option.value)
         : undefined,

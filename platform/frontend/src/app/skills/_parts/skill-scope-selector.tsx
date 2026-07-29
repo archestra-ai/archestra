@@ -82,10 +82,15 @@ export function SkillScopeSelector({
       description: "Share this skill with selected teams",
       icon: Users,
       disabled: scope !== "team" && (!canShareTeams || hasNoTeams),
+      disabledLabel: !canShareTeams
+        ? "Requires permission"
+        : hasNoTeams
+          ? "No teams available"
+          : undefined,
       disabledReason: !canShareTeams
         ? "You need skill:team-admin permission to share with teams"
         : hasNoTeams
-          ? "No teams are available to share with"
+          ? "There are no teams to share with yet. Create one from Settings → Teams."
           : undefined,
     },
     {
@@ -94,6 +99,7 @@ export function SkillScopeSelector({
       description: "Anyone in your org can use this skill",
       icon: Globe,
       disabled: scope !== "org" && !isSkillAdmin,
+      disabledLabel: !isSkillAdmin ? "Requires permission" : undefined,
       disabledReason: !isSkillAdmin
         ? "You need skill:admin permission to make this available org-wide"
         : undefined,

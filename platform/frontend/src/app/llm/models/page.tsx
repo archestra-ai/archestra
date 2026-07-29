@@ -720,9 +720,12 @@ function EditModelDialog({
         ? {
             ...option,
             disabled: true,
+            disabledLabel: !canReadTeams
+              ? "Requires permission"
+              : "No teams available",
             disabledReason: !canReadTeams
               ? "Team selection requires permission to view teams."
-              : "No teams available. Create a team first.",
+              : "There are no teams to share with yet. Create one from Settings → Teams.",
           }
         : option,
     ),
@@ -926,7 +929,7 @@ function EditModelDialog({
               render={({ field }) => (
                 <FormItem>
                   <VisibilitySelector
-                    label="Limit to teams"
+                    label="Who can use this model"
                     value={accessScope}
                     options={accessScopeOptions}
                     onValueChange={(scope) => {

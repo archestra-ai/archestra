@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import type { ModelsDevApiResponse } from "@/clients/models-dev-client";
-import { resolveCrossProviderPrices } from "./cross-provider-pricing";
+import {
+  resolveCrossProviderPrices,
+  resolveDiscoveredModelRegistryEntry,
+} from "./cross-provider-pricing";
 
 // Minimal models.dev fixture mirroring real shapes: the canonical `anthropic`
 // entry carries cache prices; the `amazon-bedrock` entry is keyed by the Bedrock
@@ -297,4 +300,60 @@ test("returns null for providers that match models.dev keys directly", () => {
   });
 
   expect(prices).toBeNull();
+});
+
+describe("resolveDiscoveredModelRegistryEntry", () => {
+  // A client can send any model name to any gateway endpoint, and the row is
+  // recorded under the endpoint's provider. Provider-scoped resolution then
+  // matches nothing, even when the registry lists the model under its own
+  // vendor, so the model lands on the fabricated default estimate.
+  test("prices a vendor model that arrived at a mismatched provider endpoint", () => {
+    const resolved = resolveDiscoveredModelRegistryEntry({
+      provider: "bedrock",
+      modelId: "gpt-4o",
+      modelsDevData: MODELS_DEV,
+    });
+
+    expect(resolved?.prices).toEqual({
+      promptPricePerToken: "0.0000025",
+      completionPricePerToken: "0.00001",
+      cacheReadPricePerToken: "0.00000125",
+      cacheWritePricePerToken: null,
+    });
+  });
+
+  test("still prefers the provider-scoped match when one exists", () => {
+    const resolved = resolveDiscoveredModelRegistryEntry({
+      provider: "bedrock",
+      modelId: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      modelsDevData: MODELS_DEV,
+    });
+
+    // The bedrock entry, not a registry-wide guess.
+    expect(resolved?.prices?.promptPricePerToken).toBe("0.000003");
+    expect(resolved?.metadata?.contextLength).toBeNull();
+  });
+
+  test("abstains when no first-party vendor lists the model", () => {
+    expect(
+      resolveDiscoveredModelRegistryEntry({
+        provider: "bedrock",
+        modelId: "somevendor.private-model-v3",
+        modelsDevData: MODELS_DEV,
+      }),
+    ).toBeNull();
+  });
+
+  test("does not resolve a model listed only by a reseller", () => {
+    // `us.meta.llama3-3-70b-instruct-v1:0` exists in the fixture under
+    // amazon-bedrock only. Reached as a bare id under another provider it must
+    // not be priced from that reseller row.
+    expect(
+      resolveDiscoveredModelRegistryEntry({
+        provider: "openai",
+        modelId: "us.meta.llama3-3-70b-instruct-v1:0",
+        modelsDevData: MODELS_DEV,
+      }),
+    ).toBeNull();
+  });
 });

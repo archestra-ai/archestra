@@ -16,8 +16,8 @@ use dagger_sdk::core::gql_client::GraphQlExtension;
 use dagger_sdk::core::graphql_client::{DefaultGraphQLClient, GraphQLError};
 use dagger_sdk::errors::{ConnectError, DaggerError};
 use dagger_sdk::{
-    Config, Container, ContainerWithExecOpts, ContainerWithNewFileOpts, DaggerConn, Query,
-    ReturnType,
+    Config, Container, ContainerWithExecOpts, ContainerWithFileOpts, ContainerWithNewFileOpts,
+    DaggerConn, Query, ReturnType,
 };
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
@@ -784,7 +784,8 @@ fn replay_step_fs_layers(step: &ReplayStep) -> usize {
     match step {
         // with_exec
         ReplayStep::Command(_) => 1,
-        // with_new_file + with_exec
+        // inline: with_new_file + decode with_exec. host-synced: parent-dir
+        // with_exec + with_file. both snapshot twice.
         ReplayStep::File(_) => 2,
         // with_new_file per file (base64 also runs a decode exec) + one chown exec
         ReplayStep::SkillMount(mount) => {
@@ -863,7 +864,7 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
                 }
             }
             ReplayStep::File(file) => {
-                container = apply_upload_file(container, index, file)?;
+                container = apply_upload_file(client, container, index, file)?;
                 if budget.charge(UPLOAD_CHAIN_LINKS) {
                     container = checkpoint(client, container).await?;
                 }
@@ -916,10 +917,14 @@ async fn materialize(client: &DaggerConn, warm: Container, req: &RunRequest) -> 
 /// sandbox roots — replaying an upload can't clobber a file an earlier command
 /// created next to the target. each step removes its own staged file.
 fn apply_upload_file(
+    client: &DaggerConn,
     container: Container,
     index: usize,
     file: &ReplayInputFile,
 ) -> Result<Container> {
+    if let Some(host_path) = file.host_path.as_deref() {
+        return apply_host_synced_file(client, container, file, host_path);
+    }
     let temp_path = format!("/tmp/.archestra-upload-{index}");
     let decode = match file.encoding.as_str() {
         "base64" => format!(
@@ -954,6 +959,43 @@ fn apply_upload_file(
         .with_user("root")
         .with_new_file(&temp_path, &file.content)
         .with_exec(vec!["bash".to_string(), "-c".to_string(), script])
+        .with_user(SKILL_SANDBOX_USER))
+}
+
+/// write a host-synced upload at its absolute path. the bytes ride BuildKit
+/// filesync from the client's spool file into a content-addressed layer — the
+/// recipe carries only the spool path (validated against `spoolRoot` at the
+/// boundary), so re-materializing never re-ships the payload. parent dirs are
+/// created and handed to the sandbox user exactly like the inline arm;
+/// `with_file` sets the file's owner directly, so the inline arm's staged
+/// decode/chown exec has no counterpart here.
+fn apply_host_synced_file(
+    client: &DaggerConn,
+    container: Container,
+    file: &ReplayInputFile,
+    host_path: &str,
+) -> Result<Container> {
+    let mut create_parents = String::new();
+    for dir in ancestor_dirs(&file.path) {
+        let quoted = shell_quote(&dir);
+        create_parents.push_str(&format!(
+            "[ -d {quoted} ] || {{ mkdir {quoted} && chown {SKILL_SANDBOX_USER} {quoted}; }} && "
+        ));
+    }
+    let script = format!("{create_parents}true");
+    let synced = client.host().file(host_path);
+    Ok(container
+        .with_user("root")
+        .with_exec(vec!["bash".to_string(), "-c".to_string(), script])
+        .with_file_opts(
+            &file.path,
+            synced,
+            ContainerWithFileOpts {
+                owner: Some(SKILL_SANDBOX_USER),
+                permissions: Some(0o644),
+                expand: None,
+            },
+        )
         .with_user(SKILL_SANDBOX_USER))
 }
 
@@ -1721,6 +1763,7 @@ mod tests {
                 path: "/home/sandbox/x".to_string(),
                 encoding: "utf8".to_string(),
                 content: String::new(),
+                host_path: None,
             }),
             ReplayStep::SkillMount(ReplaySkillMount {
                 skill_name: "s".to_string(),

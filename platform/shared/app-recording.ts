@@ -493,10 +493,10 @@ export const APP_RECORDING_RENDER_FPS = 24;
  * A minute is also the length that makes a full-motion canvas app submittable
  * at all. The bundle stores video base64 inside its JSON and the upload
  * base64-encodes that JSON again, so a byte of recorded video costs ~1.78
- * bytes by the time api.github.com sees it: at the SDK's 1 Mbit/s governor
- * ceiling a minute lands near 13MB on the wire, comfortably under the largest
- * submission the gallery has actually accepted. Two minutes at the old
- * 3 Mbit/s ceiling reached ~76MB and was refused outright.
+ * bytes by the time api.github.com sees it: at the SDK's 3 Mbit/s governor
+ * ceiling a worst-case all-motion minute lands near 38MB on the wire, inside
+ * GitHub's file ceiling ({@link GITHUB_MAX_FILE_BYTES}); two minutes runs to
+ * ~76MB and is refused outright.
  */
 export const APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS = 60_000;
 
@@ -560,12 +560,33 @@ export const APP_RECORDING_CAPTURE_HEADROOM = 3;
  *
  * The gallery submission is bounded separately and far more tightly, by what
  * api.github.com accepts as a request body once base64 has had its way with
- * the bundle. This one only has to keep a renderer from being handed
- * something absurd: capture keeps real bundles orders of magnitude below it —
- * the SDK's governor bounds video at 1 Mbit/s across all streams, so even a
- * three-minute all-motion raw take stays near 30MB serialized.
+ * the bundle ({@link GITHUB_MAX_FILE_BYTES}). This one only has to keep a
+ * renderer from being handed something absurd: capture keeps real bundles
+ * below it — the SDK's byte-rate governor bounds video at 3 Mbit/s across all
+ * streams, so even the longest raw take the recorder allows (the capture
+ * headroom over a one-minute final cut) serializes under ~90MB.
  */
 export const APP_RECORDING_MAX_BUNDLE_BYTES = 100 * 1024 * 1024;
+
+/**
+ * The strictest ceiling api.github.com imposes on any endpoint a gallery
+ * submission's upload could use. GitHub's number, not a product quota, and
+ * deliberately not a millimetre under it: a submission GitHub would have
+ * taken must never be refused by a check of ours.
+ *
+ * The one measurement we have is a 57MB bundle refused by BOTH upload paths —
+ * the contents API answered "the file is too large to be processed", the Git
+ * Data API's blob endpoint "your input was too large to process". That is
+ * consistent with this ceiling and says nothing about which endpoint to use,
+ * which is why the upload stays on the plain contents API.
+ *
+ * Both ends of the gallery pipeline hold to this ONE bound: the submission
+ * gate refuses only what GitHub itself would refuse, and the review fetch
+ * admits everything the gate lets through. A cap tighter on either side
+ * turns a submission the gallery accepted into one the platform cannot
+ * review.
+ */
+export const GITHUB_MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 export const APP_RECORDING_RENDER_REGION_ATTR =
   "data-app-recording-render-region";

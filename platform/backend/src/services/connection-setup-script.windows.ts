@@ -13,6 +13,7 @@ import { archestraMarkWithText } from "./archestra-mark";
 import {
   claudeCodeOAuthNextStep,
   codexAttributionHeaderLines,
+  copilotAttributionHeadersValue,
   type SetupScriptContext,
   type SetupScriptProxySection,
 } from "./connection-setup-script";
@@ -685,6 +686,10 @@ copilot mcp get ${psq(ctx.mcp.serverName)}`);
       const apply = [
         psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.type, psq("openai")),
         psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.baseUrl, psq(ctx.proxy.url)),
+        psApplyUserEnv(
+          COPILOT_PROVIDER_ENV_KEYS.headers,
+          psq(copilotAttributionHeadersValue(ctx.proxy)),
+        ),
       ];
       if (ctx.proxy.virtualKey) {
         apply.push(
@@ -857,6 +862,7 @@ if ([string]::IsNullOrEmpty($ArchGhcpToken)) {
 Say 'Applying Copilot provider settings (GitHub Copilot via OpenAI-compatible protocol)'
 ${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.type, psq("openai"))}
 ${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.baseUrl, psq(proxy.url))}
+${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.headers, psq(copilotAttributionHeadersValue(proxy)))}
 if (-not [string]::IsNullOrEmpty($ArchGhcpToken)) {
   ${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.apiKey, "$ArchGhcpToken")}
   ${PS_COPILOT_APPLIED_OK}

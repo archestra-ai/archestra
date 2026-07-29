@@ -290,6 +290,7 @@ function copilotWindowsProxyDisconnect(_ctx: StartupGuardContext): string {
     COPILOT_PROVIDER_ENV_KEYS.type,
     COPILOT_PROVIDER_ENV_KEYS.baseUrl,
     COPILOT_PROVIDER_ENV_KEYS.apiKey,
+    COPILOT_PROVIDER_ENV_KEYS.headers,
   ]
     .map((n) => `'${n}'`)
     .join(", ");
@@ -305,15 +306,16 @@ function copilotWindowsProxyDisconnect(_ctx: StartupGuardContext): string {
  * Copilot CLI's proxy disconnect: Copilot is configured through
  * `COPILOT_PROVIDER_*` environment exports (connect prints them for the user to
  * paste into a shell profile), so the reverse is best-effort — strip any
- * `export COPILOT_PROVIDER_{TYPE,BASE_URL,API_KEY}=…` lines from the common
- * shell profiles, leaving the user's own `COPILOT_MODEL` choice untouched.
+ * `export COPILOT_PROVIDER_{TYPE,BASE_URL,API_KEY,HEADERS}=…` lines from the
+ * common shell profiles, leaving the user's own `COPILOT_MODEL` choice
+ * untouched.
  */
 function copilotProxyDisconnect(_ctx: StartupGuardContext): string {
   return `disconnect_proxy() {
   for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
     [ -f "$profile" ] || continue
-    grep -Eq '^[[:space:]]*export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY)=' "$profile" 2>/dev/null || continue
-    grep -Ev '^[[:space:]]*export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY)=' "$profile" > "$profile.archestra-tmp" 2>/dev/null && mv "$profile.archestra-tmp" "$profile"
+    grep -Eq '^[[:space:]]*export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)=' "$profile" 2>/dev/null || continue
+    grep -Ev '^[[:space:]]*export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)=' "$profile" > "$profile.archestra-tmp" 2>/dev/null && mv "$profile.archestra-tmp" "$profile"
   done
 }
 

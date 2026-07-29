@@ -346,12 +346,14 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // attribute requests to the user via X-Archestra-Virtual-Key, reusing
           // the (otherwise-null) virtualApiKeyId column to carry the passthrough
           // key id. Applies to Claude Code (Anthropic subscription or the user's
-          // own Bedrock credentials) and Codex (the user's own OpenAI key).
+          // own Bedrock credentials), Codex (the user's own OpenAI key), and the
+          // Copilot CLI (GitHub Copilot subscription, via COPILOT_PROVIDER_HEADERS).
           // Best-effort: silently skipped without llmVirtualKey:create.
           attributePassthrough &&
           ((clientId === "claude-code" &&
             (provider === "anthropic" || provider === "bedrock")) ||
-            (clientId === "codex" && provider === "openai"))
+            (clientId === "codex" && provider === "openai") ||
+            (clientId === "copilot-cli" && provider === "github-copilot"))
         ) {
           const canCreateVirtualKey = await userHasPermission(
             user.id,

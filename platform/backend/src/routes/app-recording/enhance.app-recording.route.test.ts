@@ -7,7 +7,7 @@ import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import config from "@/config";
 import { ConversationModel, MessageModel, OrganizationModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { useRouteTestApp } from "@/test/route-test-app";
 import appRecordingRoutes from "./app-recording.routes";
@@ -93,12 +93,17 @@ describe("POST /api/app-recordings/enhance", () => {
   beforeEach(async ({ makeMember }) => {
     await makeMember(ctx.user.id, ctx.organizationId);
     config.hackathonRecorder.enabled = true;
-    // Bypass the date window by default so these cases don't depend on the
-    // wall clock sitting inside the hackathon — the date gate has its own
-    // tests below, which turn this back off. This file uses vi.mock, so it
-    // runs in the isolated project where config is NOT auto-restored between
-    // tests; every case must set the baseline it needs, hence both flags here.
-    config.hackathonRecorder.overrideActive = true;
+    // Pin the clock inside the hackathon window by default so these cases
+    // don't depend on the wall clock — the date gate has no bypass and has
+    // its own tests below, which move the clock outside the window. This file
+    // uses vi.mock, so it runs in the isolated project where config is NOT
+    // auto-restored between tests; every case must set the baseline it needs.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(APPS_HACKATHON_OPENS_AT_MS);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   /** A chat that built something, as the enhancement reads it. */
@@ -251,7 +256,6 @@ describe("POST /api/app-recordings/enhance", () => {
   });
 
   test("403s before the hackathon has started", async () => {
-    config.hackathonRecorder.overrideActive = false;
     vi.useFakeTimers({ shouldAdvanceTime: true });
     // Comfortably before the window: shouldAdvanceTime lets the clock tick
     // through the request, so a boundary-hugging value would slip into the
@@ -277,7 +281,6 @@ describe("POST /api/app-recordings/enhance", () => {
     // since before the closing date stops serving the feature the moment it
     // passes — with the deployment flag and the organization toggle both still
     // on, as they are here.
-    config.hackathonRecorder.overrideActive = false;
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(APPS_HACKATHON_CLOSES_AT_MS);
     try {
@@ -290,27 +293,6 @@ describe("POST /api/app-recordings/enhance", () => {
       expect(response.json().error.message).toContain(
         "The Apps Hackathon has ended",
       );
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  test("the staging override bypasses the date window entirely", async () => {
-    // Staging runs the override to exercise the recorder outside the hackathon
-    // window. Outside it here (before it opens), the date gate must NOT fire —
-    // the request falls through to the ordinary ownership check instead, which
-    // is a 404 for this random conversation, not a 403 about the dates.
-    config.hackathonRecorder.overrideActive = true;
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    vi.setSystemTime(APPS_HACKATHON_OPENS_AT_MS - 60 * 60 * 1000);
-    try {
-      const response = await ctx.app.inject({
-        method: "POST",
-        url: "/api/app-recordings/enhance",
-        payload: { conversationId: randomUUID(), appName: "Demo App" },
-      });
-      expect(response.statusCode).toBe(404);
-      expect(response.json().error.message).toContain("Conversation not found");
     } finally {
       vi.useRealTimers();
     }

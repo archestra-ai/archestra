@@ -647,10 +647,10 @@ class WebSocketService {
     // Get accessible servers for this user.
     // NOTE: This list is captured once at subscription time. If servers are added/removed
     // after subscribing, the client won't see them until they re-subscribe (e.g. page refresh).
-    const allServers = await McpServerModel.findAll(
-      clientContext.userId,
-      clientContext.userIsMcpServerAdmin,
-    );
+    const allServers = await McpServerModel.findAll({
+      userId: clientContext.userId,
+      isMcpServerAdmin: clientContext.userIsMcpServerAdmin,
+    });
 
     // Filter to local servers only (remote servers don't have K8s deployments)
     const localServers = allServers.filter((s) => s.serverType === "local");

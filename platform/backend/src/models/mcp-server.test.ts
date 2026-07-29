@@ -122,7 +122,9 @@ describe("McpServerModel", () => {
       await McpServerUserModel.assignUserToMcpServer(server.id, user2.id);
 
       // findAll as admin (no access control)
-      const allServers = await McpServerModel.findAll(undefined, true);
+      const allServers = await McpServerModel.findAll({
+        isMcpServerAdmin: true,
+      });
       const found = allServers.find((s) => s.id === server.id);
       expect(found).toBeDefined();
       if (!found) return;
@@ -155,7 +157,10 @@ describe("McpServerModel", () => {
       const server = await makeMcpServer();
 
       // findAll with the viewing org → the auto-mode agent is surfaced.
-      const withOrg = await McpServerModel.findAll(undefined, true, org.id);
+      const withOrg = await McpServerModel.findAll({
+        isMcpServerAdmin: true,
+        organizationId: org.id,
+      });
       const found = mustExist(withOrg.find((s) => s.id === server.id));
       expect(found.autoModeAgents).toEqual([
         { id: autoAgent.id, name: "Auto Agent" },
@@ -171,7 +176,9 @@ describe("McpServerModel", () => {
 
       // Opt-in: without an org the decoration is skipped (stays empty), so
       // existing callers are unaffected.
-      const withoutOrg = await McpServerModel.findAll(undefined, true);
+      const withoutOrg = await McpServerModel.findAll({
+        isMcpServerAdmin: true,
+      });
       const foundNoOrg = mustExist(withoutOrg.find((s) => s.id === server.id));
       expect(foundNoOrg.autoModeAgents).toEqual([]);
     });
@@ -181,7 +188,9 @@ describe("McpServerModel", () => {
     }) => {
       const server = await makeMcpServer();
 
-      const allServers = await McpServerModel.findAll(undefined, true);
+      const allServers = await McpServerModel.findAll({
+        isMcpServerAdmin: true,
+      });
       const found = allServers.find((s) => s.id === server.id);
       expect(found).toBeDefined();
       if (!found) return;
@@ -202,7 +211,9 @@ describe("McpServerModel", () => {
       await McpServerUserModel.assignUserToMcpServer(server.id, user2.id);
       await McpServerUserModel.assignUserToMcpServer(server.id, user3.id);
 
-      const allServers = await McpServerModel.findAll(undefined, true);
+      const allServers = await McpServerModel.findAll({
+        isMcpServerAdmin: true,
+      });
       // Ensure the server only appears once despite 3 users (LEFT JOIN dedup)
       const matching = allServers.filter((s) => s.id === server.id);
       expect(matching).toHaveLength(1);
@@ -234,10 +245,10 @@ describe("McpServerModel", () => {
         scope: "org",
       });
 
-      const otherMemberView = await McpServerModel.findAll(
-        otherMember.id,
-        false,
-      );
+      const otherMemberView = await McpServerModel.findAll({
+        userId: otherMember.id,
+        isMcpServerAdmin: false,
+      });
       expect(otherMemberView.find((s) => s.id === server.id)).toBeDefined();
     });
 
@@ -265,10 +276,16 @@ describe("McpServerModel", () => {
         scope: "personal",
       });
 
-      const ownerView = await McpServerModel.findAll(owner.id, false);
+      const ownerView = await McpServerModel.findAll({
+        userId: owner.id,
+        isMcpServerAdmin: false,
+      });
       expect(ownerView.find((s) => s.id === server.id)).toBeDefined();
 
-      const otherView = await McpServerModel.findAll(otherMember.id, false);
+      const otherView = await McpServerModel.findAll({
+        userId: otherMember.id,
+        isMcpServerAdmin: false,
+      });
       expect(otherView.find((s) => s.id === server.id)).toBeUndefined();
     });
 
@@ -303,10 +320,16 @@ describe("McpServerModel", () => {
         teamId: team.id,
       });
 
-      const memberView = await McpServerModel.findAll(teamMember.id, false);
+      const memberView = await McpServerModel.findAll({
+        userId: teamMember.id,
+        isMcpServerAdmin: false,
+      });
       expect(memberView.find((s) => s.id === server.id)).toBeDefined();
 
-      const nonMemberView = await McpServerModel.findAll(nonMember.id, false);
+      const nonMemberView = await McpServerModel.findAll({
+        userId: nonMember.id,
+        isMcpServerAdmin: false,
+      });
       expect(nonMemberView.find((s) => s.id === server.id)).toBeUndefined();
     });
 
@@ -351,7 +374,10 @@ describe("McpServerModel", () => {
         teamId: team.id,
       });
 
-      const adminView = await McpServerModel.findAll(admin.id, true);
+      const adminView = await McpServerModel.findAll({
+        userId: admin.id,
+        isMcpServerAdmin: true,
+      });
       const adminIds = adminView.map((s) => s.id);
       expect(adminIds).toContain(orgServer.id);
       expect(adminIds).toContain(personalServer.id);
@@ -1314,12 +1340,9 @@ describe("McpServerModel", () => {
       const deleted = await makeRemoteServer({ catalogId: catalog.id });
       await McpServerModel.delete(deleted.id);
 
-      const deletedBucket = await McpServerModel.findAll(
-        undefined,
-        undefined,
-        undefined,
-        "deleted",
-      );
+      const deletedBucket = await McpServerModel.findAll({
+        status: "deleted",
+      });
       expect(deletedBucket.map((s) => s.id)).toEqual([deleted.id]);
       expect(deletedBucket[0].deletedAt).not.toBeNull();
 

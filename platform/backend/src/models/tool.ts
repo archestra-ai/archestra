@@ -3470,7 +3470,7 @@ class ToolModel {
     if (userId && !isAgentAdmin) {
       const [agentIds, mcpServers] = await Promise.all([
         AgentTeamModel.getUserAccessibleAgentIds(userId, false),
-        McpServerModel.findAll(userId, false),
+        McpServerModel.findAll({ userId, isMcpServerAdmin: false }),
       ]);
       accessibleAgentIds = agentIds;
       accessibleMcpServerIds = new Set(mcpServers.map((s) => s.id));

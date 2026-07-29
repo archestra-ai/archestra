@@ -1376,7 +1376,10 @@ async function handleListMcpServerDeployments(
       "mcpServerInstallation",
       "admin",
     );
-    const servers = await McpServerModel.findAll(context.userId, isAdmin);
+    const servers = await McpServerModel.findAll({
+      userId: context.userId,
+      isMcpServerAdmin: isAdmin,
+    });
 
     if (servers.length === 0) {
       return successResult("No MCP server deployments found.");

@@ -290,10 +290,10 @@ class McpServerModel {
       );
   }
 
-  static async findAll(
-    userId?: string,
-    isMcpServerAdmin?: boolean,
-    organizationId?: string,
+  static async findAll(params?: {
+    userId?: string;
+    isMcpServerAdmin?: boolean;
+    organizationId?: string;
     /**
      * Lifecycle bucket, defaulting to active installs. "deleted" lists
      * uninstall tombstones — used by the audit-log entity filter so a
@@ -301,8 +301,14 @@ class McpServerModel {
      * ids only ever cover active installs, so non-admin callers get an empty
      * deleted bucket.
      */
-    status: "active" | "deleted" = "active",
-  ): Promise<McpServer[]> {
+    status?: "active" | "deleted";
+  }): Promise<McpServer[]> {
+    const {
+      userId,
+      isMcpServerAdmin,
+      organizationId,
+      status = "active",
+    } = params ?? {};
     // Single query with LEFT JOINs for all related data including assigned users,
     // eliminating the consecutive DB query for user details.
     const query = db

@@ -130,10 +130,10 @@ describe("useMcpServers permission gating", () => {
 
     renderMcpServers({ status: "deleted" });
 
-    // The deleted bucket requires mcpServerInstallation:delete on the
-    // backend; without it the query must not fire (it would 403).
+    // The deleted bucket needs read (middleware) AND delete (handler) to
+    // return 200; without both the query must not fire (it would 403).
     expect(useHasPermissions).toHaveBeenCalledWith({
-      mcpServerInstallation: ["delete"],
+      mcpServerInstallation: ["read", "delete"],
     });
     expect(getMcpServersMock).not.toHaveBeenCalled();
   });

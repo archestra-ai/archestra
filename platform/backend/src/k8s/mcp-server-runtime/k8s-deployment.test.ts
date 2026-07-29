@@ -3215,35 +3215,6 @@ describe("K8sDeployment.createK8sSecret", () => {
   });
 });
 
-describe("K8sDeployment.constructK8sSecretName", () => {
-  test.each([
-    {
-      testName: "constructs secret name with valid UUID",
-      mcpServerId: "123e4567-e89b-12d3-a456-426614174000",
-      expected: "mcp-server-123e4567-e89b-12d3-a456-426614174000-secrets",
-    },
-    {
-      testName: "constructs secret name with simple ID",
-      mcpServerId: "simple-id",
-      expected: "mcp-server-simple-id-secrets",
-    },
-    {
-      testName: "constructs secret name with numeric ID",
-      mcpServerId: "12345",
-      expected: "mcp-server-12345-secrets",
-    },
-    {
-      testName: "constructs secret name with alphanumeric ID",
-      mcpServerId: "abc123def456",
-      expected: "mcp-server-abc123def456-secrets",
-    },
-  ])("$testName", ({ mcpServerId, expected }) => {
-    const result = K8sDeployment.constructK8sSecretName(mcpServerId);
-    expect(result).toBe(expected);
-    expect(result).toMatch(/^mcp-server-.+-secrets$/);
-  });
-});
-
 describe("K8sDeployment.generateDeploymentSpec - serviceAccountName", () => {
   test("does not set serviceAccountName when not provided in localConfig", () => {
     const mockMcpServer = {

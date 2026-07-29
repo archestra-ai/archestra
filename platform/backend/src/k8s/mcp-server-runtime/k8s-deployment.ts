@@ -34,6 +34,7 @@ import {
   customYamlToDeployment,
   resolvePlaceholders,
 } from "./k8s-yaml-generator";
+import { constructHttpServiceName, constructK8sSecretName } from "./naming";
 import {
   buildManagedAwsApplicationNetworkPolicy,
   buildManagedCiliumNetworkPolicy,
@@ -297,8 +298,6 @@ interface K8sDeploymentOptions {
  * K8sDeployment manages a single MCP server running as a Kubernetes Deployment.
  */
 export default class K8sDeployment {
-  private static readonly MAX_K8S_LABEL_LENGTH = 63;
-  private static readonly HTTP_SERVICE_SUFFIX = "-service";
   private mcpServer: McpServer;
   private k8sApi: k8s.CoreV1Api;
   private k8sAppsApi: k8s.AppsV1Api;
@@ -392,51 +391,11 @@ export default class K8sDeployment {
   }
 
   /**
-   * Constructs the Kubernetes Secret name for an MCP server.
-   *
-   * Multi-tenant catalogs share a catalog-stable secret so all callers' pods
-   * reference the same secret (env vars are catalog-level). Single-tenant
-   * gets a per-mcpServer secret.
-   */
-  static constructK8sSecretName(
-    mcpServerId: string,
-    catalogItem?: InternalMcpCatalog | null,
-    catalogId?: string | null,
-  ): string {
-    if (catalogItem?.multitenant && catalogId) {
-      return `mcp-server-mt-${catalogId.slice(0, 8)}-secrets`;
-    }
-    return `mcp-server-${mcpServerId}-secrets`;
-  }
-
-  /**
-   * Service name for a streamable-http deployment. Not just
-   * `<deploymentName>-service`: the base is truncated/sanitized so the result
-   * fits the 63-char RFC 1123 label limit (legacy deployment names can exceed
-   * it). Static so the orphan sweep can recompute the name for a deployment
-   * it never hydrated into a K8sDeployment.
-   */
-  static constructHttpServiceName(deploymentName: string): string {
-    const maxBaseLength =
-      K8sDeployment.MAX_K8S_LABEL_LENGTH -
-      K8sDeployment.HTTP_SERVICE_SUFFIX.length;
-
-    const base = deploymentName
-      .replace(/\./g, "-")
-      .slice(0, maxBaseLength)
-      .replace(/^[^a-z0-9]+/, "")
-      .replace(/[^a-z0-9]+$/g, "");
-
-    const normalizedBase = base.length > 0 ? base : "mcp-server";
-    return `${normalizedBase}${K8sDeployment.HTTP_SERVICE_SUFFIX}`;
-  }
-
-  /**
    * Returns the K8s Secret name for this MCP server, taking multi-tenancy
    * into account using the cached catalogItem if available.
    */
   private getK8sSecretName(): string {
-    return K8sDeployment.constructK8sSecretName(
+    return constructK8sSecretName(
       this.mcpServer.id,
       this.catalogItem,
       this.mcpServer.catalogId,
@@ -3153,7 +3112,7 @@ export default class K8sDeployment {
   }
 
   private constructHttpServiceName(): string {
-    return K8sDeployment.constructHttpServiceName(this.deploymentName);
+    return constructHttpServiceName(this.deploymentName);
   }
 
   private getK8sNetworkPolicyName(): string {

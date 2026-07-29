@@ -28,6 +28,7 @@ import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
 } from "./k8s-deployment";
+import { constructHttpServiceName, constructK8sSecretName } from "./naming";
 import { constructManagedNetworkPolicyName } from "./network-policy";
 import type {
   AvailableTool,
@@ -1680,83 +1681,13 @@ export class McpServerRuntimeManager {
           const server = serverById.get(serverId);
           if (!server) {
             if (tombstonedIds.has(serverId)) {
-              logger.info(
-                { deploymentName, serverId, deploymentNamespace },
-                "Deleting MCP deployment for a soft-deleted install",
-              );
-              try {
-                await this.k8sAppsApi.deleteNamespacedDeployment({
-                  name: deploymentName,
-                  namespace: deploymentNamespace,
-                });
-              } catch (err) {
-                logger.warn(
-                  { err, deploymentName, deploymentNamespace },
-                  "Failed to delete MCP deployment for soft-deleted install",
-                );
-              }
-              try {
-                await this.k8sApi.deleteNamespacedService({
-                  name: K8sDeployment.constructHttpServiceName(deploymentName),
-                  namespace: deploymentNamespace,
-                });
-              } catch (err) {
-                logger.debug(
-                  { err, deploymentName, deploymentNamespace },
-                  "No service to delete for soft-deleted install (or already gone)",
-                );
-              }
-              // A failed delete-time teardown also strands the env secret,
-              // docker registry pull secrets, and network policy — and for a
-              // tombstone this sweep is the last cleaner, so reclaim them
-              // here. The single-tenant secret name derives from the server
-              // id alone; a multitenant install's shared per-catalog secret
-              // has a different name and is left alone. CNI-flavor network
-              // policies (Cilium/GKE/AWS) are not swept — they carry no
-              // secret material and their cleanup needs the CRD clients'
-              // per-provider logic in K8sDeployment.
-              try {
-                await this.k8sApi.deleteNamespacedSecret({
-                  name: K8sDeployment.constructK8sSecretName(serverId),
-                  namespace: deploymentNamespace,
-                });
-              } catch (err) {
-                logger.debug(
-                  { err, serverId, deploymentNamespace },
-                  "No env secret to delete for soft-deleted install (or already gone)",
-                );
-              }
-              try {
-                const regcreds = await this.k8sApi.listNamespacedSecret({
-                  namespace: deploymentNamespace,
-                  labelSelector: `mcp-server-id=${sanitizeLabelValue(serverId)},type=regcred`,
-                });
-                for (const regcred of regcreds.items) {
-                  if (!regcred.metadata?.name) continue;
-                  await this.k8sApi.deleteNamespacedSecret({
-                    name: regcred.metadata.name,
-                    namespace: deploymentNamespace,
-                  });
-                }
-              } catch (err) {
-                logger.warn(
-                  { err, serverId, deploymentNamespace },
-                  "Failed to delete registry secrets for soft-deleted install",
-                );
-              }
-              if (this.k8sNetworkingApi) {
-                try {
-                  await this.k8sNetworkingApi.deleteNamespacedNetworkPolicy({
-                    name: constructManagedNetworkPolicyName(deploymentName),
-                    namespace: deploymentNamespace,
-                  });
-                } catch (err) {
-                  logger.debug(
-                    { err, deploymentName, deploymentNamespace },
-                    "No network policy to delete for soft-deleted install (or already gone)",
-                  );
-                }
-              }
+              await this.sweepTombstonedDeployment({
+                deploymentName,
+                serverId,
+                deploymentNamespace,
+                k8sApi: this.k8sApi,
+                k8sAppsApi: this.k8sAppsApi,
+              });
             }
             continue;
           }
@@ -1802,9 +1733,15 @@ export class McpServerRuntimeManager {
                   name: deploymentName,
                   namespace: deploymentNamespace,
                 });
+                // Derive the service name rather than guessing
+                // `<deployment>-service`: this branch fires precisely on a
+                // diverged legacy name, and legacy names are capped at 253
+                // (constructLegacyMcpDeploymentName) while the derived service
+                // name is truncated to fit 63. Guessing would 404 and leak the
+                // real Service.
                 await this.k8sApi
                   .deleteNamespacedService({
-                    name: `${deploymentName}-service`,
+                    name: constructHttpServiceName(deploymentName),
                     namespace: deploymentNamespace,
                   })
                   .catch(() => {});
@@ -1849,8 +1786,12 @@ export class McpServerRuntimeManager {
           }
 
           try {
+            // Reached only when the live name is stale/legacy — the uncapped
+            // shape whose derived service name gets truncated — so the name
+            // must be derived, not guessed (see the stale-namespace teardown
+            // above).
             await this.k8sApi.deleteNamespacedService({
-              name: `${deploymentName}-service`,
+              name: constructHttpServiceName(deploymentName),
               namespace: deploymentNamespace,
             });
           } catch (err) {
@@ -1863,6 +1804,117 @@ export class McpServerRuntimeManager {
       }
     } catch (error) {
       logger.warn({ err: error }, "Failed to sweep orphaned MCP deployments");
+    }
+  }
+
+  /**
+   * Tear down the cluster objects of an install that was soft-deleted but
+   * whose delete-time teardown failed (e.g. cluster unreachable at uninstall).
+   * Without this the tombstone would keep its pod running forever.
+   *
+   * Every step is best-effort and independently guarded: a tombstone's objects
+   * are usually already partly gone, and one missing object must not stop the
+   * rest from being reclaimed.
+   *
+   * The API clients are passed in rather than read off `this` because the
+   * caller has already proven them defined; that narrowing does not survive a
+   * method boundary.
+   */
+  private async sweepTombstonedDeployment(params: {
+    deploymentName: string;
+    serverId: string;
+    deploymentNamespace: string;
+    k8sApi: k8s.CoreV1Api;
+    k8sAppsApi: k8s.AppsV1Api;
+  }): Promise<void> {
+    const {
+      deploymentName,
+      serverId,
+      deploymentNamespace,
+      k8sApi,
+      k8sAppsApi,
+    } = params;
+
+    logger.info(
+      { deploymentName, serverId, deploymentNamespace },
+      "Deleting MCP deployment for a soft-deleted install",
+    );
+
+    try {
+      await k8sAppsApi.deleteNamespacedDeployment({
+        name: deploymentName,
+        namespace: deploymentNamespace,
+      });
+    } catch (err) {
+      logger.warn(
+        { err, deploymentName, deploymentNamespace },
+        "Failed to delete MCP deployment for soft-deleted install",
+      );
+    }
+
+    try {
+      await k8sApi.deleteNamespacedService({
+        name: constructHttpServiceName(deploymentName),
+        namespace: deploymentNamespace,
+      });
+    } catch (err) {
+      logger.debug(
+        { err, deploymentName, deploymentNamespace },
+        "No service to delete for soft-deleted install (or already gone)",
+      );
+    }
+
+    // A failed delete-time teardown also strands the env secret, docker
+    // registry pull secrets, and network policy — and for a tombstone this
+    // sweep is the last cleaner, so reclaim them here. The single-tenant
+    // secret name derives from the server id alone; a multitenant install's
+    // shared per-catalog secret has a different name and is left alone.
+    // CNI-flavor network policies (Cilium/GKE/AWS) are not swept — they carry
+    // no secret material and their cleanup needs the CRD clients'
+    // per-provider logic in K8sDeployment.
+    try {
+      await k8sApi.deleteNamespacedSecret({
+        name: constructK8sSecretName(serverId),
+        namespace: deploymentNamespace,
+      });
+    } catch (err) {
+      logger.debug(
+        { err, serverId, deploymentNamespace },
+        "No env secret to delete for soft-deleted install (or already gone)",
+      );
+    }
+
+    try {
+      const regcreds = await k8sApi.listNamespacedSecret({
+        namespace: deploymentNamespace,
+        labelSelector: `mcp-server-id=${sanitizeLabelValue(serverId)},type=regcred`,
+      });
+      for (const regcred of regcreds.items) {
+        if (!regcred.metadata?.name) continue;
+        await k8sApi.deleteNamespacedSecret({
+          name: regcred.metadata.name,
+          namespace: deploymentNamespace,
+        });
+      }
+    } catch (err) {
+      logger.warn(
+        { err, serverId, deploymentNamespace },
+        "Failed to delete registry secrets for soft-deleted install",
+      );
+    }
+
+    if (this.k8sNetworkingApi) {
+      try {
+        await this.k8sNetworkingApi.deleteNamespacedNetworkPolicy({
+          name: constructManagedNetworkPolicyName(deploymentName),
+          namespace: deploymentNamespace,
+        });
+      } catch (err) {
+        logger.debug(
+          { err, deploymentName, deploymentNamespace },
+          "No network policy to delete for soft-deleted install (or already gone)",
+        );
+      }
     }
   }
 

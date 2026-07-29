@@ -40,11 +40,14 @@ type McpServersParams = McpServersQuery & {
 };
 
 export function useMcpServers(params?: McpServersParams) {
-  // The endpoint requires mcpServerInstallation:read — and :delete for the
-  // status:"deleted" tombstone bucket; skip the request for users whose role
-  // lacks it instead of letting it 403.
+  // The endpoint requires mcpServerInstallation:read, enforced by the
+  // access-control middleware for every bucket; the status:"deleted"
+  // tombstone bucket additionally requires :delete, enforced in the handler.
+  // Both are needed to get a 200, so gate on both and skip the request for
+  // users whose role lacks either instead of letting it 403.
   const { data: canListInstallations } = useHasPermissions({
-    mcpServerInstallation: [params?.status === "deleted" ? "delete" : "read"],
+    mcpServerInstallation:
+      params?.status === "deleted" ? ["read", "delete"] : ["read"],
   });
 
   return useQuery({

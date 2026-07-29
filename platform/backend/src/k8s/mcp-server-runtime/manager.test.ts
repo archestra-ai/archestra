@@ -167,29 +167,6 @@ vi.mock("./k8s-deployment", () => {
       static collectImagePullSecretNames(): string[] {
         return [];
       }
-      // Mirrors the real naming: shared per-catalog secret for multitenant,
-      // per-install secret otherwise.
-      static constructK8sSecretName(
-        mcpServerId: string,
-        catalogItem?: { multitenant?: boolean } | null,
-        catalogId?: string | null,
-      ): string {
-        if (catalogItem?.multitenant && catalogId) {
-          return `mcp-server-mt-${catalogId.slice(0, 8)}-secrets`;
-        }
-        return `mcp-server-${mcpServerId}-secrets`;
-      }
-      // Mirrors the real truncation: the base is capped at 55 chars so the
-      // service name fits the 63-char RFC 1123 label limit (legacy
-      // deployment names can exceed it).
-      static constructHttpServiceName(deploymentName: string): string {
-        const base = deploymentName
-          .replace(/\./g, "-")
-          .slice(0, 55)
-          .replace(/^[^a-z0-9]+/, "")
-          .replace(/[^a-z0-9]+$/g, "");
-        return `${base.length > 0 ? base : "mcp-server"}-service`;
-      }
       // Mirrors the real frozen-first logic: the stored deploymentName wins;
       // the name-derived recompute is only the NULL fallback.
       static constructDeploymentName(
@@ -2244,6 +2221,59 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
     );
   });
 
+  test("deletes a long legacy orphan via the truncated service name", async () => {
+    // Legacy `mcp-<slug>` names are capped at 253 chars, but the derived
+    // service name is truncated to fit the 63-char RFC 1123 limit. The sweep
+    // must derive it rather than guess `<deployment>-service`, or the orphaned
+    // Service outlives the Deployment it belonged to — and since the sweep
+    // enumerates Deployments, nothing ever revisits it.
+    const longLegacyName = `mcp-${"a".repeat(60)}`;
+    const truncatedServiceName = `${longLegacyName.slice(0, 55)}-service`;
+
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const mockDeleteService = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: mockDeleteService },
+      mockK8sAppsApi: {
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [
+            {
+              metadata: {
+                name: longLegacyName,
+                labels: {
+                  app: "mcp-server",
+                  "mcp-server-id": "123e4567-e89b-12d3-a456-426614174000",
+                },
+              },
+            },
+          ],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+
+    await callCleanup(manager, [
+      {
+        id: "123e4567-e89b-12d3-a456-426614174000",
+        name: "current-name",
+        catalogId: "cat-1",
+        // Frozen by the adopt pass, so the live long name is a stale orphan.
+        deploymentName: "mcp-current-name",
+      },
+    ]);
+
+    expect(mockDeleteDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({ name: longLegacyName }),
+    );
+    expect(mockDeleteService).toHaveBeenCalledWith(
+      expect.objectContaining({ name: truncatedServiceName }),
+    );
+    // The regression: the guessed name never existed in the cluster.
+    expect(mockDeleteService).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: `${longLegacyName}-service` }),
+    );
+  });
+
   test("deletes deployments whose install was soft-deleted (failed delete-time teardown)", async () => {
     const TOMBSTONED_ID = "123e4567-e89b-12d3-a456-426614174111";
     const UNKNOWN_ID = "123e4567-e89b-12d3-a456-426614174222";
@@ -2541,6 +2571,115 @@ describe("McpServerRuntimeManager.cleanupOrphanedDeployments", () => {
     expect(tornDown).toBeDefined();
     // Name matches the frozen name, so no additional direct deletes fire.
     expect(mockDeleteDeployment).not.toHaveBeenCalled();
+
+    // Restore module-mock defaults so later tests aren't polluted.
+    vi.mocked(McpServerModel.findById).mockResolvedValue(null);
+    vi.mocked(InternalMcpCatalogModel.findById).mockReset();
+    vi.mocked(OrganizationModel.getById).mockResolvedValue({
+      id: "test-org",
+      defaultNetworkPolicy: null,
+    } as unknown as Awaited<ReturnType<typeof OrganizationModel.getById>>);
+  });
+
+  test("tears down a diverged long-named stale-namespace copy via the truncated service name", async () => {
+    // Same stale-namespace scenario, but the live object carries a diverged
+    // legacy name that the constructed-name teardown misses, so it is deleted
+    // directly by its live name. That name is long, so its derived service
+    // name is truncated and must be derived rather than guessed.
+    const serverId = "123e4567-e89b-12d3-a456-426614174000";
+    const longLegacyName = `mcp-${"a".repeat(60)}`;
+    const truncatedServiceName = `${longLegacyName.slice(0, 55)}-service`;
+    const serverRow = {
+      id: serverId,
+      name: "current-name",
+      catalogId: "cat-default-env",
+      deploymentName: "mcp-current-name",
+      secretId: null,
+      ownerId: null,
+      teamId: null,
+      scope: "org" as const,
+      reinstallRequired: false,
+      localInstallationStatus: "idle" as const,
+      localInstallationError: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      serverType: "local" as const,
+    };
+    const catalogRow = {
+      id: "cat-default-env",
+      serverType: "local" as const,
+      multitenant: false,
+      environmentId: null,
+      organizationId: "org-1",
+      localConfig: { command: "node", arguments: ["server.js"] },
+    };
+
+    const McpServerModel = (await import("@/models/mcp-server")).default;
+    const InternalMcpCatalogModel = (
+      await import("@/models/internal-mcp-catalog")
+    ).default;
+    const OrganizationModel = (await import("@/models/organization")).default;
+    vi.mocked(McpServerModel.findById).mockResolvedValue(
+      serverRow as unknown as Awaited<
+        ReturnType<typeof McpServerModel.findById>
+      >,
+    );
+    vi.mocked(InternalMcpCatalogModel.findById).mockResolvedValue(
+      catalogRow as unknown as Awaited<
+        ReturnType<typeof InternalMcpCatalogModel.findById>
+      >,
+    );
+    vi.mocked(OrganizationModel.getById).mockResolvedValue({
+      id: "org-1",
+      defaultEnvironmentNamespace: "org-default-ns",
+    } as unknown as Awaited<ReturnType<typeof OrganizationModel.getById>>);
+
+    const mockDeleteDeployment = vi.fn().mockResolvedValue({});
+    const mockDeleteService = vi.fn().mockResolvedValue({});
+    const manager = await createManagerWithMockK8s({
+      mockK8sApi: { deleteNamespacedService: mockDeleteService },
+      mockK8sAppsApi: {
+        listNamespacedDeployment: vi.fn().mockResolvedValue({
+          items: [
+            {
+              metadata: {
+                name: longLegacyName,
+                labels: { app: "mcp-server", "mcp-server-id": serverId },
+              },
+            },
+          ],
+        }),
+        deleteNamespacedDeployment: mockDeleteDeployment,
+      },
+    });
+    // getOrLoadDeployment (namespaceOverride teardown path) needs the full
+    // client set.
+    const managerAny = manager as unknown as Record<string, unknown>;
+    managerAny.k8sNetworkingApi = {};
+    managerAny.k8sCustomObjectsApi = {
+      getAPIResources: vi.fn().mockResolvedValue({ resources: [] }),
+    };
+    managerAny.k8sAttach = {};
+    managerAny.k8sLog = {};
+    managerAny.k8sExec = {};
+
+    mockRemoveDeployment.mockClear();
+    mockK8sDeploymentInstances.length = 0;
+
+    await callCleanup(manager, [serverRow]);
+
+    // Constructed-name teardown still runs for the stale-namespace copy.
+    expect(mockRemoveDeployment).toHaveBeenCalledTimes(1);
+    // …and the diverged live name is reaped directly, service name derived.
+    expect(mockDeleteDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({ name: longLegacyName }),
+    );
+    expect(mockDeleteService).toHaveBeenCalledWith(
+      expect.objectContaining({ name: truncatedServiceName }),
+    );
+    expect(mockDeleteService).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: `${longLegacyName}-service` }),
+    );
 
     // Restore module-mock defaults so later tests aren't polluted.
     vi.mocked(McpServerModel.findById).mockResolvedValue(null);

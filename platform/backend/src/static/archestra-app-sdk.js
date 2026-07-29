@@ -257,6 +257,12 @@
   };
   const LLM_COMPLETE_TOOL = "archestra__llm_complete";
 
+  // Upper bound for one host tool round-trip, overriding the MCP SDK's 60s
+  // default request timeout. A reasoning model spends minutes thinking before
+  // the completion returns, so the guest must not gate tool calls stricter
+  // than the platform's own upstream LLM client ceiling (10 minutes).
+  const TOOL_CALL_TIMEOUT_MS = 10 * 60 * 1000;
+
   const textOf = (result) =>
     (result.content || [])
       .filter((c) => c && c.type === "text")
@@ -284,7 +290,10 @@
    */
   const callTool = async (name, args) => {
     const app = await connectPromise;
-    const result = await app.callServerTool({ name, arguments: args || {} });
+    const result = await app.callServerTool(
+      { name, arguments: args || {} },
+      { timeout: TOOL_CALL_TIMEOUT_MS },
+    );
     if (result.isError) {
       const platformError = archestraErrorOf(result);
       if (

@@ -478,6 +478,28 @@ describe("Apps SDK runtime", () => {
     }
   });
 
+  test("llm.complete stays bounded: a completion beyond the 10-minute tool-call ceiling still times out", async () => {
+    vi.useFakeTimers();
+    try {
+      const ceilingMs = 10 * 60_000;
+      results.push({
+        __slow: true,
+        delayMs: ceilingMs + 60_000,
+        result: {
+          content: [{ type: "text", text: "too late" }],
+          structuredContent: { text: "too late" },
+        },
+      });
+      const pending = archestra.llm.complete("run forever");
+      const settled = expect(pending).rejects.toThrow("MCP error -32001");
+      await vi.advanceTimersByTimeAsync(ceilingMs + 60_000);
+      await settled;
+      calls.pop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("llm.prompt builds a string with no host round-trip", () => {
     const before = calls.length;
     const built = archestra.llm.prompt`Hello ${"world"} (${42})`;

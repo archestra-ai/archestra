@@ -1065,6 +1065,10 @@ describe("renderSetupScript (windows)", () => {
       "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY', $ArchGhcpToken, 'User')",
     );
     expect(script).not.toContain("+ $ArchGhcpToken");
+    // BYOK needs an explicit model to launch: default applied when unset
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_MODEL', 'gpt-4o', 'User')",
+    );
   });
 
   test("copilot-cli virtual-key: applies COPILOT_* env vars to session and User scope", () => {
@@ -1079,6 +1083,15 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain(
       "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY', 'arch_deadbeefcafe', 'User')",
     );
+    // a BYOK provider without an explicit model refuses to launch, so an
+    // unset COPILOT_MODEL gets the provider default — never overwriting one
+    expect(script).toContain(
+      "if ([string]::IsNullOrEmpty($env:COPILOT_MODEL))",
+    );
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_MODEL', 'gpt-5.5', 'User')",
+    );
+    expect(script).toContain("Keeping your existing COPILOT_MODEL");
     // the pre-apply behavior printed instructions instead of acting
     expect(script).not.toContain("use setx or System settings");
   });

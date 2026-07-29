@@ -5,6 +5,7 @@ import {
   CODEX_CLIENT_ID,
   COPILOT_PROVIDER_ENV_KEYS,
   DEFAULT_APP_NAME,
+  DEFAULT_MODELS,
   EXTERNAL_AGENT_ID_HEADER,
   isDefaultBrandedAppName,
   type SupportedProvider,
@@ -822,7 +823,7 @@ cli copilot mcp get ${sh(ctx.mcp.serverName)}`);
       sections.push(`say ${sh(`Copilot provider settings (${ctx.proxy.providerLabel} via OpenAI-compatible protocol)`)}
 cat <<'ARCHESTRA_COPILOT'
 
-Add these lines to your shell profile (e.g. ~/.zshrc), set ${COPILOT_PROVIDER_ENV_KEYS.model} to the model you use:
+Add these lines to your shell profile (e.g. ~/.zshrc); adjust ${COPILOT_PROVIDER_ENV_KEYS.model} if you use a different model:
   export ${COPILOT_PROVIDER_ENV_KEYS.type}="openai"
   export ${COPILOT_PROVIDER_ENV_KEYS.baseUrl}=${sh(ctx.proxy.url)}
   export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}=${
@@ -830,7 +831,7 @@ Add these lines to your shell profile (e.g. ~/.zshrc), set ${COPILOT_PROVIDER_EN
       ? sh(ctx.proxy.virtualKey)
       : `"<your-${ctx.proxy.provider}-api-key>"`
   }
-  export ${COPILOT_PROVIDER_ENV_KEYS.model}="<model-name>"
+  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${DEFAULT_MODELS[ctx.proxy.provider]}"
 ARCHESTRA_COPILOT`);
     }
   }
@@ -986,7 +987,7 @@ fi
 
 say 'Copilot provider settings (GitHub Copilot via OpenAI-compatible protocol)'
 echo
-echo 'Add these lines to your shell profile (e.g. ~/.zshrc), set ${COPILOT_PROVIDER_ENV_KEYS.model} to the model you use:'
+echo 'Add these lines to your shell profile (e.g. ~/.zshrc); adjust ${COPILOT_PROVIDER_ENV_KEYS.model} if you use a different model:'
 printf '  export ${COPILOT_PROVIDER_ENV_KEYS.type}="openai"\\n'
 printf '  export ${COPILOT_PROVIDER_ENV_KEYS.baseUrl}="%s"\\n' ${sh(proxy.url)}
 if [ -n "$ARCHESTRA_GHCP_TOKEN" ]; then
@@ -994,7 +995,7 @@ if [ -n "$ARCHESTRA_GHCP_TOKEN" ]; then
 else
   printf '  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}="%s"\\n' '<your-github-oauth-token>'
 fi
-printf '  export ${COPILOT_PROVIDER_ENV_KEYS.model}="<model-name>"\\n'`;
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${DEFAULT_MODELS["github-copilot"]}"\\n'`;
 }
 
 // ===================================================================

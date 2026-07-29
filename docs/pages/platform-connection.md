@@ -122,7 +122,7 @@ Cursor is a desktop app, so the script edits its files directly and prints the U
 The `copilot` CLI must be on your `PATH`.
 
 - **MCP gateway** — runs `copilot mcp add --transport http <name> <url>`.
-- **LLM proxy** — on Windows the script sets the `COPILOT_PROVIDER_*` variables for you: in the current session and in your User environment. On macOS and Linux it prints `export` lines to add to your shell profile — a piped script cannot set variables in your shell there. Set `COPILOT_MODEL` yourself on both. For a GitHub Copilot subscription the script runs the GitHub device flow locally, so your token never leaves the machine.
+- **LLM proxy** — on Windows the script sets the `COPILOT_PROVIDER_*` variables for you: in the current session and in your User environment. An unset `COPILOT_MODEL` gets the provider's default model; your own value is kept. On macOS and Linux the script prints `export` lines to add to your shell profile — a piped script cannot set variables in your shell there. For a GitHub Copilot subscription the script runs the GitHub device flow locally, so your token never leaves the machine.
 - **Skills** — runs `copilot plugin marketplace add`.
 - **Startup guard** — installs a pre-loader that checks your Archestra remotes before every `copilot` launch. See [Startup Guard](#startup-guard).
 - **Backup** — none; the proxy settings are environment variables.

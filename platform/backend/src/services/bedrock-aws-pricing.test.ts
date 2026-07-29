@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { resolveBedrockAwsPrices } from "./bedrock-aws-pricing";
+import {
+  AWS_PRICE_IDENTITY,
+  resolveBedrockAwsPrices,
+} from "./bedrock-aws-pricing";
 
 function resolve(modelId: string, underlyingModelName?: string) {
   return resolveBedrockAwsPrices({
@@ -85,5 +88,35 @@ describe("resolveBedrockAwsPrices", () => {
         modelId: "claude-sonnet-4-5",
       }),
     ).toBeNull();
+  });
+
+  test("does not price a model AWS omits by falling back to a generic entry", () => {
+    // AWS lists no Opus 4.7/4.8/5, Sonnet 5 or Fable 5. Their names share a
+    // prefix with the legacy "Claude" and "Claude Opus 4" listings, whose prices
+    // are three to four times wrong for them, so each must resolve to nothing
+    // and let the registry price it.
+    for (const modelId of [
+      "us.anthropic.claude-opus-4-8",
+      "us.anthropic.claude-opus-4-7",
+      "us.anthropic.claude-opus-5",
+      "us.anthropic.claude-sonnet-5",
+      "us.anthropic.claude-fable-5",
+    ]) {
+      expect(resolve(modelId)).toBeNull();
+    }
+  });
+
+  test("every mapped identity is priced, and none is a bare family name", () => {
+    // A generic listing such as "Claude" or "Claude Opus 4" prices a whole
+    // family at one legacy rate; mapping a specific model onto one is the
+    // failure this guards.
+    const GENERIC = new Set(["Claude", "Claude Opus 4", "Amazon Bedrock"]);
+    for (const [modelId, identity] of Object.entries(AWS_PRICE_IDENTITY)) {
+      expect(GENERIC.has(identity)).toBe(false);
+      // The identity is transcribed from AWS by hand, so a typo — or a listing
+      // AWS renames on a later refresh — resolves to nothing and drops the
+      // model onto the fabricated estimate without failing anything else.
+      expect(resolve(modelId)).not.toBeNull();
+    }
   });
 });

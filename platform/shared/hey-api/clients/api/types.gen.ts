@@ -31062,7 +31062,6 @@ export type GetConfigResponses = {
             chatopsTelegramEnabled: boolean;
             kbAutoSyncPermissionsEnabled: boolean;
             hackathonRecorderEnabled: boolean;
-            hackathonRecorderOverrideActive: boolean;
             hackathonVideoDownloadEnabled: boolean;
             hackathonMaxFinalCutMs: number;
             hackathonGalleryRepo: {
@@ -63625,6 +63624,7 @@ export type InitiateOAuthResponse = InitiateOAuthResponses[keyof InitiateOAuthRe
 export type HandleOAuthCallbackData = {
     body: {
         code: string;
+        iss?: string;
         state: string;
     };
     path?: never;

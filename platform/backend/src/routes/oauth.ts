@@ -18,6 +18,7 @@ import {
   type OAuthRefreshOutcome,
 } from "@/services/oauth-refresh-classification";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
+import { validateAuthorizationResponseIssuer } from "./oauth-issuer-validation";
 
 /**
  * Generate PKCE code verifier
@@ -246,6 +247,10 @@ async function discoverAuthorizationServerMetadataWithOverrides(
   token_endpoint: string;
   registration_endpoint?: string;
   scopes_supported?: string[];
+  /** RFC 8414 issuer identifier. */
+  issuer?: string;
+  /** RFC 9207 Section 2.3 advertisement. */
+  authorization_response_iss_parameter_supported?: boolean;
 }> {
   const discoveryUrl = overrides?.authServerUrl || serverUrl;
   const urls = buildDiscoveryUrls(discoveryUrl, overrides?.wellKnownUrl);
@@ -294,6 +299,12 @@ interface DiscoveredEndpoints {
   authorizationEndpoint: string;
   tokenEndpoint: string;
   registrationEndpoint?: string;
+  /**
+   * Issuer identifier and RFC 9207 support, carried out of discovery so the
+   * authorization step can record what the callback will verify against.
+   */
+  issuer?: string;
+  issParameterSupported?: boolean;
 }
 
 interface ExplicitOAuthEndpoints {
@@ -403,6 +414,9 @@ export async function discoverOAuthEndpoints(
         metadata.authorization_endpoint,
       tokenEndpoint: explicitEndpoints.tokenEndpoint ?? metadata.token_endpoint,
       registrationEndpoint: metadata.registration_endpoint,
+      issuer: typeof metadata.issuer === "string" ? metadata.issuer : undefined,
+      issParameterSupported:
+        metadata.authorization_response_iss_parameter_supported === true,
     };
   } catch (error) {
     if (
@@ -434,6 +448,8 @@ async function registerOAuthClient(
   registrationEndpoint: string,
   clientMetadata: {
     client_name: string;
+    /** OIDC application_type; see SEP-837. */
+    application_type?: "native" | "web";
     redirect_uris: string[];
     grant_types?: string[];
     response_types?: string[];
@@ -478,6 +494,15 @@ interface OAuthStateData {
   clientId?: string;
   clientSecret?: string;
   registrationResult?: Record<string, unknown>;
+  /**
+   * Issuer of the authorization server this flow was started against, and
+   * whether it advertised RFC 9207 support. Recorded here because the callback
+   * has to compare against the server the flow *began* with — reading it from
+   * config at callback time would compare a value the attacker may have
+   * influenced against itself.
+   */
+  issuer?: string;
+  issParameterSupported?: boolean;
 }
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
@@ -848,6 +873,8 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Discover authorization server metadata to get the correct authorization endpoint
         let authorizationEndpoint: string;
         let registrationEndpoint: string | undefined;
+        let discoveredIssuer: string | undefined;
+        let discoveredIssSupported: boolean | undefined;
 
         // For proxy servers, skip discovery and use the MCP server URL directly
         if (oauthConfig.requires_proxy) {
@@ -867,6 +894,8 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             );
             authorizationEndpoint = endpoints.authorizationEndpoint;
             registrationEndpoint = endpoints.registrationEndpoint;
+            discoveredIssuer = endpoints.issuer;
+            discoveredIssSupported = endpoints.issParameterSupported;
           } catch (error) {
             fastify.log.error(
               { error },
@@ -897,6 +926,10 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 redirect_uris: [redirectUri],
                 grant_types: ["authorization_code", "refresh_token"],
                 response_types: ["code"],
+                // SEP-837: OIDC servers default an omitted application_type to
+                // "web", which then rejects the localhost-style redirect URIs a
+                // self-hosted deployment uses. Non-OIDC servers ignore it.
+                application_type: "native",
                 scope: scopesToUse.join(" "),
               },
             );
@@ -942,6 +975,8 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
           clientId,
           clientSecret,
           registrationResult,
+          issuer: discoveredIssuer,
+          issParameterSupported: discoveredIssSupported,
         });
 
         // Build authorization URL using the discovered authorization endpoint
@@ -998,6 +1033,8 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["OAuth"],
         body: z.object({
           code: z.string(),
+          /** RFC 9207 issuer identifier, when the authorization server sends it. */
+          iss: z.string().optional(),
           state: z.string(),
         }),
         response: constructResponseSchema(
@@ -1013,11 +1050,36 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async ({ body: { code, state } }, reply) => {
+    async ({ body: { code, state, iss } }, reply) => {
       // Retrieve OAuth state (also deletes it to prevent replay attacks)
       const oauthState = await getAndDeleteOAuthState(state);
       if (!oauthState) {
         throw new ApiError(400, "Invalid or expired OAuth state");
+      }
+
+      // RFC 9207 (SEP-2468): confirm this response came from the authorization
+      // server the flow started against, BEFORE the code is transmitted
+      // anywhere. Once the code has been sent to the wrong token endpoint the
+      // mix-up has already succeeded, so ordering is the mitigation.
+      const issuerCheck = validateAuthorizationResponseIssuer({
+        responseIssuer: iss,
+        recordedIssuer: oauthState.issuer,
+        issParameterSupported: oauthState.issParameterSupported,
+      });
+      if (!issuerCheck.ok) {
+        fastify.log.warn(
+          {
+            catalogId: oauthState.catalogId,
+            reason: issuerCheck.reason,
+          },
+          "Rejected OAuth authorization response failing issuer validation",
+        );
+        throw new ApiError(
+          400,
+          issuerCheck.reason === "issuer_missing"
+            ? "Authorization response is missing the required iss parameter."
+            : "Authorization response issuer does not match the authorization server this flow started against.",
+        );
       }
 
       // Get catalog item to retrieve OAuth configuration (with resolved secrets for runtime)

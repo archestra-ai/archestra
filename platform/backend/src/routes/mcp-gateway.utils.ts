@@ -119,6 +119,7 @@ import {
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
+  withCompleteResultEnvelope,
   withPrivateCacheHint,
 } from "./mcp-gateway.protocol";
 
@@ -254,6 +255,16 @@ export async function createAgentServer(params: {
 }): Promise<{ server: McpServer; agent: AgentInfo }> {
   const { agentId, tokenAuth, mrtr } = params;
   const mrtrEnabled = mrtr?.enabled === true;
+
+  /**
+   * Stamp an ordinary result. Deliberately not applied to the MRTR
+   * InputRequiredResult, which carries `input_required` instead.
+   */
+  const complete = <T extends object>(result: T): T =>
+    withCompleteResultEnvelope(result, {
+      name: `archestra-agent-${agentId}`,
+      version: config.api.version,
+    });
   const mcpServer = new McpServer(
     {
       name: `archestra-agent-${agentId}`,
@@ -532,7 +543,12 @@ export async function createAgentServer(params: {
 
     // SEP-2549 freshness hints. Always private: this list is filtered per
     // caller, so it must never be shared across users by an intermediary.
-    return { tools: toolsList, ...buildPrivateListCacheHint() };
+    // Deterministic order: the revision asks servers to return tools stably so
+    // client-side caching and LLM prompt caches can actually hit. Without it
+    // the ttlMs hint above advertises freshness for a list that reshuffles.
+    toolsList.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+
+    return complete({ tools: toolsList, ...buildPrivateListCacheHint() });
   });
 
   server.setRequestHandler(
@@ -548,7 +564,7 @@ export async function createAgentServer(params: {
           { agentId, uri, resultType: typeof result },
           "Resource read successful",
         );
-        return withPrivateCacheHint(result);
+        return complete(withPrivateCacheHint(result));
       } catch (error) {
         // A third-party tool can advertise a `ui://` UI resource whose upstream
         // server does not actually implement `resources/read` (returning -32601
@@ -584,20 +600,22 @@ export async function createAgentServer(params: {
   // servers reached with the caller's own credentials, so results differ per
   // caller and must not be shared by an intermediary.
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return withPrivateCacheHint(
-      await mcpClient.listResources(agentId, tokenAuth),
+    return complete(
+      withPrivateCacheHint(await mcpClient.listResources(agentId, tokenAuth)),
     );
   });
 
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-    return withPrivateCacheHint(
-      await mcpClient.listResourceTemplates(agentId, tokenAuth),
+    return complete(
+      withPrivateCacheHint(
+        await mcpClient.listResourceTemplates(agentId, tokenAuth),
+      ),
     );
   });
 
   server.setRequestHandler(ListPromptsRequestSchema, async () => {
-    return withPrivateCacheHint(
-      await mcpClient.listPrompts(agentId, tokenAuth),
+    return complete(
+      withPrivateCacheHint(await mcpClient.listPrompts(agentId, tokenAuth)),
     );
   });
 

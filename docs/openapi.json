@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.19"
+    "version": "1.3.21"
   },
   "components": {
     "schemas": {
@@ -112052,9 +112052,6 @@
                         "hackathonRecorderEnabled": {
                           "type": "boolean"
                         },
-                        "hackathonRecorderOverrideActive": {
-                          "type": "boolean"
-                        },
                         "hackathonVideoDownloadEnabled": {
                           "type": "boolean"
                         },
@@ -112108,7 +112105,6 @@
                         "chatopsTelegramEnabled",
                         "kbAutoSyncPermissionsEnabled",
                         "hackathonRecorderEnabled",
-                        "hackathonRecorderOverrideActive",
                         "hackathonVideoDownloadEnabled",
                         "hackathonMaxFinalCutMs",
                         "hackathonGalleryRepo"
@@ -247351,6 +247347,9 @@
                 "type": "object",
                 "properties": {
                   "code": {
+                    "type": "string"
+                  },
+                  "iss": {
                     "type": "string"
                   },
                   "state": {

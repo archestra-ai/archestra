@@ -313,6 +313,32 @@ describe("A2AManager.sendMessage", () => {
     expect(executeA2AMessage.mock.calls[0][0].message).toBe("first\nsecond");
   });
 
+  test("a blank text part does not pad the joined turn", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = new A2AManager();
+    executeA2AMessage.mockClear();
+    executeA2AMessage.mockReturnValue({
+      responseUiMessage: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        parts: [{ type: "text", text: "response" }],
+      },
+      text: "response(text)",
+    });
+
+    await sendMessageWithParts(manager, agent.id, [
+      { text: "" },
+      { text: "hi" },
+    ]);
+
+    expect(executeA2AMessage).toHaveBeenCalledTimes(1);
+    // Not "\nhi" — the blank part is gone before the join, so it contributes no
+    // separator to the text the model receives.
+    expect(executeA2AMessage.mock.calls[0][0].message).toBe("hi");
+  });
+
   test("a message carrying only a file part executes", async ({
     makeAgent,
   }) => {

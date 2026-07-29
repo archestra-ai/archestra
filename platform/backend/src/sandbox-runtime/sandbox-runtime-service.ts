@@ -58,6 +58,11 @@ interface RunCommandParams extends SandboxLimits {
   timeoutSeconds: number;
   replayEntries?: ReplayEntry[];
   /**
+   * Client-local directory every host-synced replay upload (`hostPath`) must
+   * resolve under. Required whenever `replayEntries` carry a `hostPath`.
+   */
+  spoolRoot?: string;
+  /**
    * The environment isolation target. When set, the native session pool runs
    * this command on that environment's engine; omitted uses the process-default
    * engine.
@@ -83,6 +88,8 @@ interface ReadArtifactParams extends SandboxLimits {
    */
   defaultCwd: string;
   replayEntries?: ReplayEntry[];
+  /** See {@link RunCommandParams.spoolRoot}. */
+  spoolRoot?: string;
   /**
    * The environment isolation target. Artifact extraction replays the recorded
    * commands, so it must run on the same per-environment engine the sandbox ran
@@ -170,6 +177,7 @@ class SandboxRuntimeService {
           traceparent: getTraceparent(),
           replayEntries: params.replayEntries ?? [],
           limits: this.limits(params),
+          spoolRoot: params.spoolRoot,
           command: params.command,
           cwd: params.cwd,
           timeoutSeconds: params.timeoutSeconds,
@@ -193,6 +201,7 @@ class SandboxRuntimeService {
           traceparent: getTraceparent(),
           replayEntries: params.replayEntries ?? [],
           limits: this.limits(params),
+          spoolRoot: params.spoolRoot,
           path: params.path,
           defaultCwd: params.defaultCwd,
           environment: params.environment,

@@ -247076,6 +247076,9 @@
                   "code": {
                     "type": "string"
                   },
+                  "iss": {
+                    "type": "string"
+                  },
                   "state": {
                     "type": "string"
                   }

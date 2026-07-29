@@ -572,6 +572,11 @@ describe("OAuth helper functions", () => {
         authorizationEndpoint: "https://auth.example.com/authorize",
         tokenEndpoint: "https://auth.example.com/token",
         registrationEndpoint: undefined,
+        // Carried out of discovery for the RFC 9207 issuer check. This
+        // metadata declares neither, so there is nothing to record and the
+        // server has not advertised iss support.
+        issuer: undefined,
+        issParameterSupported: false,
       });
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(fetchMock).toHaveBeenCalledWith(
@@ -639,6 +644,8 @@ describe("OAuth helper functions", () => {
         authorizationEndpoint: "https://legacy-idp.example.com/oauth/authorize",
         tokenEndpoint: "https://legacy-idp.example.com/oauth/token",
         registrationEndpoint: "https://auth.example.com/register",
+        issuer: undefined,
+        issParameterSupported: false,
       });
 
       globalThis.fetch = originalFetch;

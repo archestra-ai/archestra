@@ -311,6 +311,33 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     }
   });
 
+  test("results carry the complete envelope and a stable tool order", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const { agent, token } = await setup({ makeAgent, makeOrganization });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 12 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const { result } = response.json();
+
+    // Every ordinary result is "complete"; older clients ignore the field.
+    expect(result.resultType).toBe("complete");
+    expect(result._meta["io.modelcontextprotocol/serverInfo"]).toMatchObject({
+      name: `archestra-agent-${agent.id}`,
+    });
+
+    // Stable order is what makes the ttlMs hint worth anything to a cache.
+    const names = (result.tools as Array<{ name: string }>).map((t) => t.name);
+    expect(names).toEqual([...names].sort());
+  });
+
   test("GET discovery advertises both supported revisions", async ({
     makeAgent,
     makeOrganization,

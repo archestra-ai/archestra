@@ -18,6 +18,7 @@ import {
   type OAuthRefreshOutcome,
 } from "@/services/oauth-refresh-classification";
 import { ApiError, constructResponseSchema, UuidIdSchema } from "@/types";
+import { checkPreregisteredCredentialBinding } from "./oauth-issuer-binding";
 import { validateAuthorizationResponseIssuer } from "./oauth-issuer-validation";
 
 /**
@@ -907,6 +908,26 @@ const oauthRoutes: FastifyPluginAsyncZod = async (fastify) => {
             throw new ApiError(
               502,
               `Failed to discover OAuth endpoints: ${error instanceof Error ? error.message : String(error)}. Verify the server's OAuth metadata (.well-known) endpoints are reachable.`,
+            );
+          }
+        }
+
+        // SEP-2352: operator-configured credentials belong to the authorization
+        // server they were registered with. Dynamically registered ones are not
+        // persisted — a fresh registration happens every flow — so only the
+        // configured case can go stale, and we cannot mint a replacement for
+        // it. Surface the mismatch rather than presenting one server's client
+        // identity to another.
+        if (clientId) {
+          const binding = checkPreregisteredCredentialBinding({
+            configuredAuthServer: oauthConfig.auth_server_url,
+            discoveredIssuer,
+            clientId,
+          });
+          if (!binding.ok) {
+            throw new ApiError(
+              400,
+              "The configured OAuth client belongs to a different authorization server than this resource now uses. Update the configured credentials or clear them to register with the new server.",
             );
           }
         }

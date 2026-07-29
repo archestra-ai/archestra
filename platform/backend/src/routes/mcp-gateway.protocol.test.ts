@@ -15,6 +15,7 @@ import {
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   deriveRequestTargetName,
+  extractTraceContext,
   isDiscoverRequest,
   isResourceUnavailableError,
   LEGACY_MCP_PROTOCOL_REVISION,
@@ -363,6 +364,48 @@ describe("server/discover", () => {
     expect(capabilities.extensions).toHaveProperty(
       "io.modelcontextprotocol/ui",
     );
+  });
+});
+
+describe("extractTraceContext", () => {
+  const traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+
+  test("reads W3C trace context a client attached", () => {
+    expect(
+      extractTraceContext({
+        params: {
+          _meta: { traceparent, tracestate: "vendor=x", baggage: "k=v" },
+        },
+      }),
+    ).toEqual({ traceparent, tracestate: "vendor=x", baggage: "k=v" });
+  });
+
+  test("traceparent alone is enough to join a trace", () => {
+    expect(extractTraceContext({ params: { _meta: { traceparent } } })).toEqual(
+      {
+        traceparent,
+      },
+    );
+  });
+
+  test("context without traceparent cannot join a trace", () => {
+    // tracestate and baggage only decorate traceparent; without it there is
+    // nothing to link spans to.
+    expect(
+      extractTraceContext({ params: { _meta: { tracestate: "vendor=x" } } }),
+    ).toBeUndefined();
+  });
+
+  test("a request carrying no context reports none", () => {
+    expect(extractTraceContext({ params: {} })).toBeUndefined();
+    expect(extractTraceContext({})).toBeUndefined();
+    expect(extractTraceContext(null)).toBeUndefined();
+  });
+
+  test("non-string values are ignored rather than propagated", () => {
+    expect(
+      extractTraceContext({ params: { _meta: { traceparent: 42 } } }),
+    ).toBeUndefined();
   });
 });
 

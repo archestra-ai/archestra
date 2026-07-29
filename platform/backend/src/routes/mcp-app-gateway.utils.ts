@@ -51,6 +51,7 @@ import type { CommonToolCall } from "@/types";
 import { appOwner } from "@/types";
 import { APP_LAUNCH_TOOL_NAME, type App } from "@/types/app";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
+import { RESOURCE_NOT_FOUND_ERROR_CODE } from "./mcp-gateway.protocol";
 import {
   deriveAuthMethod,
   normalizeToolInputSchema,
@@ -125,7 +126,7 @@ export async function createAppServer(
       // a foreign URI (keeps listed == served and avoids mislabeled caching).
       if (uri !== getArchestraAppResourceUri(appId)) {
         throw {
-          code: -32002,
+          code: RESOURCE_NOT_FOUND_ERROR_CODE,
           message: `Resource not found: ${uri}`,
         };
       }
@@ -232,7 +233,10 @@ export async function buildAppUiResource(
     ? await AppVersionModel.findByAppAndVersion(appId, current.latestVersion)
     : null;
   if (!head) {
-    throw { code: -32002, message: `App resource not found for ${appId}` };
+    throw {
+      code: RESOURCE_NOT_FOUND_ERROR_CODE,
+      message: `App resource not found for ${appId}`,
+    };
   }
   const viewer = tokenAuth.userId
     ? await UserModel.getById(tokenAuth.userId)

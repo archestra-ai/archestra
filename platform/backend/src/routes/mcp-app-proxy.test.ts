@@ -539,7 +539,8 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().error?.code).toBe(-32002);
+    // SEP-2164 moved missing-resource errors onto JSON-RPC Invalid Params.
+    expect(response.json().error?.code).toBe(-32602);
   });
 
   // ---- External MCP clients (Bearer token) ----

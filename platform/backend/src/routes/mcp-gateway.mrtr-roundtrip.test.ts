@@ -220,7 +220,9 @@ describe("MRTR round trip", () => {
 
     const result = await getCallToolHandler(server)(callToolRequest(), {});
 
-    expect(result.resultType).toBeUndefined();
+    // Completed calls are stamped "complete"; only MRTR interim results carry
+    // "input_required".
+    expect(result.resultType).toBe("complete");
     expect(result.isError).toBeFalsy();
     // The upstream received the client's answer rather than being asked again.
     expect(JSON.stringify(result.content)).toContain("apollo");
@@ -262,6 +264,52 @@ describe("MRTR round trip", () => {
     expect(result.isError).toBe(true);
   });
 
+  test("an ordinary tool result carries the complete envelope", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeMcpServer,
+    makeAgentTool,
+  }) => {
+    // tools/call results were the gap: list and read results already carried
+    // the envelope, so a client could not rely on it being present everywhere.
+    const { agent, tokenAuth } = await seed({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+      makeInternalMcpCatalog,
+      makeTool,
+      makeMcpServer,
+      makeAgentTool,
+    } as never);
+
+    vi.spyOn(mcpClient, "executeToolCallForOwner").mockResolvedValue({
+      id: "call_1",
+      name: TOOL_NAME,
+      content: [{ type: "text", text: "done" }],
+      isError: false,
+    } as never);
+
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth,
+      mrtr: { enabled: true, clientCapabilities: { elicitation: {} } },
+    });
+
+    const result = await getCallToolHandler(server)(callToolRequest(), {});
+
+    expect(result.resultType).toBe("complete");
+    expect(
+      (result._meta as Record<string, unknown>)[
+        "io.modelcontextprotocol/serverInfo"
+      ],
+    ).toMatchObject({ name: `archestra-agent-${agent.id}` });
+  });
+
   test("a legacy client keeps the in-band elicitation path", async ({
     makeOrganization,
     makeUser,
@@ -298,6 +346,6 @@ describe("MRTR round trip", () => {
     });
 
     expect(sendRequest).toHaveBeenCalled();
-    expect(result.resultType).toBeUndefined();
+    expect(result.resultType).toBe("complete");
   });
 });

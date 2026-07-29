@@ -5,6 +5,7 @@ import {
   E2eTestId,
   getIdentityProviderDialogNavButtonTestId,
   getIdpRoleMappingRuleRowTestId,
+  KC_MEMBER_USER,
   KEYCLOAK_OIDC,
   KEYCLOAK_SAML,
   SSO_DOMAIN,
@@ -472,6 +473,8 @@ async function deleteExistingProviderIfExists(
 async function signInViaIdentityProvider(params: {
   browser: Browser;
   providerName: string;
+  /** Defaults to the admin test user; pass another to sign in as them. */
+  user?: { username: string; password: string };
 }): Promise<{
   context: Awaited<ReturnType<Browser["newContext"]>>;
   page: Page;
@@ -494,7 +497,7 @@ async function signInViaIdentityProvider(params: {
     options: { name: new RegExp(params.providerName, "i") },
   });
 
-  const loginSucceeded = await loginViaKeycloak(page);
+  const loginSucceeded = await loginViaKeycloak(page, params.user);
   expect(loginSucceeded).toBe(true);
   await expectAuthenticated(page, 15_000);
 
@@ -621,7 +624,11 @@ test.describe("Identity Provider Team Sync E2E", () => {
 
     const providerName = `TeamSyncOIDC${Date.now()}`;
     const teamName = makeRandomString(8, "SyncTeam");
-    const externalGroup = "archestra-admins"; // Matches Keycloak admin user's group
+    // The member user's Keycloak group — deliberately NOT the admin's. The admin
+    // creates the team below and so is already one of its members; SSO sync
+    // leaves an existing manual membership alone, which would leave nothing for
+    // this test to observe. Syncing a different user exercises the add path.
+    const externalGroup = "archestra-users";
 
     // STEP 1: Authenticate and create OIDC provider
     await ensureAdminAuthenticated(page);
@@ -682,10 +689,11 @@ test.describe("Identity Provider Team Sync E2E", () => {
     });
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 5000 });
 
-    // STEP 4: Test SSO login with admin user (in archestra-admins group)
+    // STEP 4: Test SSO login with the member user (in archestra-users group)
     const { context: ssoContext } = await signInViaIdentityProvider({
       browser,
       providerName,
+      user: KC_MEMBER_USER,
     });
 
     try {
@@ -711,11 +719,11 @@ test.describe("Identity Provider Team Sync E2E", () => {
         }>;
 
         const syncedMember = members.find(
-          (member) => member.email === ADMIN_EMAIL,
+          (member) => member.email === KC_MEMBER_USER.email,
         );
         expect(
           syncedMember,
-          `Expected ${ADMIN_EMAIL} to appear in synced members for ${teamName}`,
+          `Expected ${KC_MEMBER_USER.email} to appear in synced members for ${teamName}`,
         ).toBeDefined();
         expect(syncedMember?.syncedFromSso).toBe(true);
       }).toPass({ timeout: 120_000, intervals: [3000, 5000, 7000, 10000] });

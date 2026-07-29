@@ -3,6 +3,7 @@ import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CODEX_CLIENT_ID,
+  COPILOT_PROVIDER_ENV_KEYS,
   DEFAULT_APP_NAME,
   EXTERNAL_AGENT_ID_HEADER,
   isDefaultBrandedAppName,
@@ -821,15 +822,15 @@ cli copilot mcp get ${sh(ctx.mcp.serverName)}`);
       sections.push(`say ${sh(`Copilot provider settings (${ctx.proxy.providerLabel} via OpenAI-compatible protocol)`)}
 cat <<'ARCHESTRA_COPILOT'
 
-Add these lines to your shell profile (e.g. ~/.zshrc), set COPILOT_MODEL to the model you use:
-  export COPILOT_PROVIDER_TYPE="openai"
-  export COPILOT_PROVIDER_BASE_URL=${sh(ctx.proxy.url)}
-  export COPILOT_PROVIDER_API_KEY=${
+Add these lines to your shell profile (e.g. ~/.zshrc), set ${COPILOT_PROVIDER_ENV_KEYS.model} to the model you use:
+  export ${COPILOT_PROVIDER_ENV_KEYS.type}="openai"
+  export ${COPILOT_PROVIDER_ENV_KEYS.baseUrl}=${sh(ctx.proxy.url)}
+  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}=${
     ctx.proxy.virtualKey
       ? sh(ctx.proxy.virtualKey)
       : `"<your-${ctx.proxy.provider}-api-key>"`
   }
-  export COPILOT_MODEL="<model-name>"
+  export ${COPILOT_PROVIDER_ENV_KEYS.model}="<model-name>"
 ARCHESTRA_COPILOT`);
     }
   }
@@ -985,15 +986,15 @@ fi
 
 say 'Copilot provider settings (GitHub Copilot via OpenAI-compatible protocol)'
 echo
-echo 'Add these lines to your shell profile (e.g. ~/.zshrc), set COPILOT_MODEL to the model you use:'
-printf '  export COPILOT_PROVIDER_TYPE="openai"\\n'
-printf '  export COPILOT_PROVIDER_BASE_URL="%s"\\n' ${sh(proxy.url)}
+echo 'Add these lines to your shell profile (e.g. ~/.zshrc), set ${COPILOT_PROVIDER_ENV_KEYS.model} to the model you use:'
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.type}="openai"\\n'
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.baseUrl}="%s"\\n' ${sh(proxy.url)}
 if [ -n "$ARCHESTRA_GHCP_TOKEN" ]; then
-  printf '  export COPILOT_PROVIDER_API_KEY="%s"\\n' "$ARCHESTRA_GHCP_TOKEN"
+  printf '  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}="%s"\\n' "$ARCHESTRA_GHCP_TOKEN"
 else
-  printf '  export COPILOT_PROVIDER_API_KEY="%s"\\n' '<your-github-oauth-token>'
+  printf '  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}="%s"\\n' '<your-github-oauth-token>'
 fi
-printf '  export COPILOT_MODEL="<model-name>"\\n'`;
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.model}="<model-name>"\\n'`;
 }
 
 // ===================================================================

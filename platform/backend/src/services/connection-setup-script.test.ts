@@ -1059,8 +1059,44 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain("Invoke-RestMethod");
     // never the well-known CI variable name
     expect(script).not.toContain("GITHUB_TOKEN");
-    // token only ever surfaces via a runtime variable in the export lines
-    expect(script).toContain("$ArchGhcpToken");
+    // token is applied as the provider env var (session + User scope) straight
+    // from the runtime variable, and never echoed to the console
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY', $ArchGhcpToken, 'User')",
+    );
+    expect(script).not.toContain("+ $ArchGhcpToken");
+  });
+
+  test("copilot-cli virtual-key: applies COPILOT_* env vars to session and User scope", () => {
+    const script = renderSetupScript(fullContext("copilot-cli", "windows"));
+    expect(script).toContain("$env:COPILOT_PROVIDER_TYPE = 'openai'");
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_TYPE', 'openai', 'User')",
+    );
+    expect(script).toContain(
+      "$env:COPILOT_PROVIDER_BASE_URL = 'https://archestra.example.com/v1/anthropic/profile-123'",
+    );
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY', 'arch_deadbeefcafe', 'User')",
+    );
+    // the pre-apply behavior printed instructions instead of acting
+    expect(script).not.toContain("use setx or System settings");
+  });
+
+  test("copilot-cli openai passthrough: applies type/base URL, leaves the key to the user", () => {
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli", "windows"),
+      proxy: OPENAI_PASSTHROUGH_PROXY,
+    });
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_BASE_URL', 'https://archestra.example.com/v1/openai/profile-123', 'User')",
+    );
+    expect(script).not.toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY'",
+    );
+    expect(script).toContain(
+      '$env:COPILOT_PROVIDER_API_KEY = "<your-openai-api-key>"',
+    );
   });
 
   test("cursor: merges mcp.json and prints manual model steps", () => {

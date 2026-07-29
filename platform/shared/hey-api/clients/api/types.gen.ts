@@ -12061,6 +12061,11 @@ export type GetAgentsResponses = {
                 id: string;
                 name: string;
             }>;
+            users?: Array<{
+                id: string;
+                name: string;
+                email: string;
+            }>;
             labels: Array<{
                 key: string;
                 value: string;
@@ -12135,6 +12140,7 @@ export type CreateAgentData = {
         } | null;
         deletedAt?: unknown;
         teams?: Array<string>;
+        users?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
@@ -12305,6 +12311,11 @@ export type CreateAgentResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         labels: Array<{
             key: string;
@@ -12515,6 +12526,11 @@ export type GetAllAgentsResponses = {
             id: string;
             name: string;
         }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -12699,6 +12715,11 @@ export type GetDefaultMcpGatewayResponses = {
             id: string;
             name: string;
         }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -12882,6 +12903,11 @@ export type GetDefaultLlmProxyResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         labels: Array<{
             key: string;
@@ -13145,6 +13171,11 @@ export type ImportAgentResponses = {
             teams: Array<{
                 id: string;
                 name: string;
+            }>;
+            users?: Array<{
+                id: string;
+                name: string;
+                email: string;
             }>;
             labels: Array<{
                 key: string;
@@ -13423,6 +13454,11 @@ export type GetAgentResponses = {
             id: string;
             name: string;
         }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         labels: Array<{
             key: string;
             value: string;
@@ -13488,6 +13524,7 @@ export type UpdateAgentData = {
         } | null;
         deletedAt?: unknown;
         teams?: Array<string>;
+        users?: Array<string>;
         labels?: Array<{
             key: string;
             value: string;
@@ -13660,6 +13697,11 @@ export type UpdateAgentResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         labels: Array<{
             key: string;
@@ -13855,6 +13897,11 @@ export type CloneAgentResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         labels: Array<{
             key: string;
@@ -14564,6 +14611,11 @@ export type RestoreAgentResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users?: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         labels: Array<{
             key: string;
@@ -17583,6 +17635,7 @@ export type GetAppsResponses = {
             pinnedAt: string | null;
             source: 'owned';
             id: string;
+            slug: string | null;
             scope: 'personal' | 'team' | 'org';
             authorId: string | null;
             authorName: string | null;
@@ -17628,6 +17681,7 @@ export type GetAppsResponse = GetAppsResponses[keyof GetAppsResponses];
 export type CreateAppData = {
     body: {
         name: string;
+        slug?: string;
         description?: string;
         scope?: 'personal' | 'team' | 'org';
         html?: string;
@@ -17728,6 +17782,7 @@ export type CreateAppResponses = {
         organizationId: string;
         authorId: string | null;
         name: string;
+        slug: string | null;
         description: string | null;
         templateId: string | null;
         mcpServerId: string | null;
@@ -18644,6 +18699,7 @@ export type GetAppResponses = {
         organizationId: string;
         authorId: string | null;
         name: string;
+        slug: string | null;
         description: string | null;
         templateId: string | null;
         mcpServerId: string | null;
@@ -18695,6 +18751,7 @@ export type GetAppResponse = GetAppResponses[keyof GetAppResponses];
 export type UpdateAppData = {
     body: {
         name?: string;
+        slug?: string;
         description?: string | null;
         scope?: 'personal' | 'team' | 'org';
         html?: string;
@@ -18797,6 +18854,7 @@ export type UpdateAppResponses = {
         organizationId: string;
         authorId: string | null;
         name: string;
+        slug: string | null;
         description: string | null;
         templateId: string | null;
         mcpServerId: string | null;
@@ -18918,6 +18976,7 @@ export type EnableAppResponses = {
         organizationId: string;
         authorId: string | null;
         name: string;
+        slug: string | null;
         description: string | null;
         templateId: string | null;
         mcpServerId: string | null;
@@ -19049,6 +19108,7 @@ export type DisableAppResponses = {
         organizationId: string;
         authorId: string | null;
         name: string;
+        slug: string | null;
         description: string | null;
         templateId: string | null;
         mcpServerId: string | null;
@@ -31002,7 +31062,6 @@ export type GetConfigResponses = {
             chatopsTelegramEnabled: boolean;
             kbAutoSyncPermissionsEnabled: boolean;
             hackathonRecorderEnabled: boolean;
-            hackathonRecorderOverrideActive: boolean;
             hackathonVideoDownloadEnabled: boolean;
             hackathonMaxFinalCutMs: number;
             hackathonGalleryRepo: {
@@ -55521,10 +55580,10 @@ export type GetLlmModelsResponses = {
             pricePerMillionInput: string | null;
             pricePerMillionOutput: string | null;
             isCustomPrice: boolean;
-            priceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
+            priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
             pricePerMillionCacheRead: string | null;
             pricePerMillionCacheWrite: string | null;
-            cachePriceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
+            cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
         };
         isBest?: boolean;
         isFree: boolean;
@@ -55746,13 +55805,18 @@ export type GetModelsWithApiKeysResponses = {
             id: string;
             name: string;
         }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         pricePerMillionInput: string | null;
         pricePerMillionOutput: string | null;
         isCustomPrice: boolean;
-        priceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
+        priceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
         pricePerMillionCacheRead: string | null;
         pricePerMillionCacheWrite: string | null;
-        cachePriceSource: 'custom' | 'models_dev' | 'derived_multiplier' | 'default';
+        cachePriceSource: 'custom' | 'models_dev' | 'aws' | 'derived_multiplier' | 'default';
         isFree: boolean;
         effectiveContextLength: number | null;
     }>;
@@ -55782,6 +55846,7 @@ export type UpdateModelData = {
             reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
         } | null;
         teamIds?: Array<string>;
+        userIds?: Array<string>;
     };
     path: {
         id: string;
@@ -63559,6 +63624,7 @@ export type InitiateOAuthResponse = InitiateOAuthResponses[keyof InitiateOAuthRe
 export type HandleOAuthCallbackData = {
     body: {
         code: string;
+        iss?: string;
         state: string;
     };
     path?: never;
@@ -70242,8 +70308,9 @@ export type GetProjectsResponses = {
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
         conversationCount: number;
-        visibility: 'organization' | 'team';
+        visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
+        shareUserNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
     }>;
@@ -70339,8 +70406,9 @@ export type CreateProjectResponses = {
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
         conversationCount: number;
-        visibility: 'organization' | 'team';
+        visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
+        shareUserNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
     };
@@ -70437,8 +70505,9 @@ export type CreateProjectFromConversationResponses = {
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
         conversationCount: number;
-        visibility: 'organization' | 'team';
+        visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
+        shareUserNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
     };
@@ -70617,11 +70686,13 @@ export type GetProjectResponses = {
         viewerRole: 'owner' | 'shared' | 'admin';
         ownerName: string | null;
         conversationCount: number;
-        visibility: 'organization' | 'team';
+        visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
+        shareUserNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
         shareTeamIds: Array<string> | null;
+        shareUserIds: Array<string> | null;
     };
 };
 
@@ -70718,8 +70789,9 @@ export type UpdateProjectResponse = UpdateProjectResponses[keyof UpdateProjectRe
 
 export type SetProjectShareData = {
     body: {
-        visibility: 'organization' | 'team' | 'none';
+        visibility: 'organization' | 'team' | 'user' | 'none';
         teamIds?: Array<string>;
+        userIds?: Array<string>;
     };
     path: {
         id: string;
@@ -74247,6 +74319,11 @@ export type GetSkillsResponses = {
                 id: string;
                 name: string;
             }>;
+            users: Array<{
+                id: string;
+                name: string;
+                email: string;
+            }>;
             environments: Array<{
                 id: string;
                 name: string;
@@ -74286,6 +74363,7 @@ export type CreateSkillData = {
         }>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
+        userIds?: Array<string>;
         /**
          * Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.
          */
@@ -74411,6 +74489,11 @@ export type CreateSkillResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         environments: Array<{
             id: string;
@@ -74545,6 +74628,11 @@ export type ConvertAgentToSkillResponses = {
             teams: Array<{
                 id: string;
                 name: string;
+            }>;
+            users: Array<{
+                id: string;
+                name: string;
+                email: string;
             }>;
             environments: Array<{
                 id: string;
@@ -74858,6 +74946,11 @@ export type GetSkillResponses = {
             id: string;
             name: string;
         }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         environments: Array<{
             id: string;
             name: string;
@@ -74886,6 +74979,7 @@ export type UpdateSkillData = {
         }>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
+        userIds?: Array<string>;
         /**
          * Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.
          */
@@ -75013,6 +75107,11 @@ export type UpdateSkillResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         environments: Array<{
             id: string;
@@ -75322,6 +75421,11 @@ export type ResetSkillResponses = {
             id: string;
             name: string;
         }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
         environments: Array<{
             id: string;
             name: string;
@@ -75464,6 +75568,11 @@ export type UpdateSkillGithubSyncResponses = {
         teams: Array<{
             id: string;
             name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
         }>;
         environments: Array<{
             id: string;
@@ -75874,6 +75983,7 @@ export type ImportGithubSkillsData = {
         skillPaths: Array<string>;
         scope?: 'personal' | 'team' | 'org';
         teamIds?: Array<string>;
+        userIds?: Array<string>;
         /**
          * Pull schedule for the imported skills. Every import is synced from the repo and read-only in the app until disconnected. Defaults to daily.
          */

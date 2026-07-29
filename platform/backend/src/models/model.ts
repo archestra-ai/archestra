@@ -15,6 +15,7 @@ import {
 import { sanitizeOutputLimit } from "@/clients/models-dev-client";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
+import { resolveBedrockAwsPrices } from "@/services/bedrock-aws-pricing";
 import type {
   CreateModel,
   Model,
@@ -41,6 +42,17 @@ interface EffectivePricing {
   /** Source of the cache price, or null when unpriced. */
   cacheSource: PriceSource | null;
 }
+
+/**
+ * Providers that charge no per-token rate, so their real price is zero rather
+ * than unknown: the operator runs the server (vLLM, self-hosted Ollama), or the
+ * vendor bills a flat subscription metered on compute time (Ollama's cloud).
+ */
+const PROVIDERS_BILLING_NO_TOKEN_RATE = new Set<SupportedProvider>([
+  "ollama",
+  "ollama-native",
+  "vllm",
+]);
 
 /**
  * Returns default token prices for a model.
@@ -666,7 +678,7 @@ class ModelModel {
     provider?: SupportedProvider,
   ): EffectivePricing {
     const { pricePerMillionInput, pricePerMillionOutput, source } =
-      ModelModel.getEffectiveBasePricing(model, modelId);
+      ModelModel.getEffectiveBasePricing(model, modelId, provider);
     const cache = ModelModel.getEffectiveCachePricing(
       model,
       pricePerMillionInput,
@@ -687,6 +699,7 @@ class ModelModel {
   private static getEffectiveBasePricing(
     model: Model | null,
     modelId?: string,
+    provider?: SupportedProvider,
   ): {
     pricePerMillionInput: string;
     pricePerMillionOutput: string;
@@ -704,11 +717,36 @@ class ModelModel {
       };
     }
 
-    // Tier 2: models.dev synced price (convert per-token to per-million)
+    // Tier 2: registry-synced price (convert per-token to per-million). The
+    // stored columns do not record which registry supplied them, so the source
+    // is re-derived by re-running the AWS snapshot lookup. AWS only fills what
+    // models.dev omits, so matching the stored value is what identifies it as
+    // the source; a mismatch means the registry won. When both agree the
+    // attribution is ambiguous and either label describes the same number.
     if (
       model?.promptPricePerToken != null &&
       model?.completionPricePerToken != null
     ) {
+      const awsPrices = resolveBedrockAwsPrices({
+        provider: model.provider,
+        modelId: model.modelId,
+      });
+      // Compared as numbers: both sides are decimal strings, but the stored one
+      // has been through Postgres numeric and carries its scale's trailing
+      // zeros, so "0.0000033" and "0.00000330" are the same price.
+      const samePrice = (a: string | null, b: string) =>
+        a != null && Number.parseFloat(a) === Number.parseFloat(b);
+      const syncedSource: PriceSource =
+        samePrice(
+          awsPrices?.promptPricePerToken ?? null,
+          model.promptPricePerToken,
+        ) &&
+        samePrice(
+          awsPrices?.completionPricePerToken ?? null,
+          model.completionPricePerToken,
+        )
+          ? "aws"
+          : "models_dev";
       return {
         pricePerMillionInput: (
           Number.parseFloat(model.promptPricePerToken) * 1_000_000
@@ -716,11 +754,33 @@ class ModelModel {
         pricePerMillionOutput: (
           Number.parseFloat(model.completionPricePerToken) * 1_000_000
         ).toFixed(2),
-        source: "models_dev",
+        source: syncedSource,
       };
     }
 
-    // Tier 3: Default fallback
+    // Tier 3: Default fallback. The generic estimate below assumes an unknown
+    // price exists to be approximated; for these providers none does, so it
+    // fabricates one — inflating recorded spend and burning cost limits against
+    // tokens nobody is billed for. vLLM is an inference server the operator
+    // runs. Ollama bills no per-token rate on either transport: a self-hosted
+    // server charges nothing, and its cloud offering is a flat monthly
+    // subscription metered on GPU time rather than tokens.
+    //
+    // Listed explicitly rather than derived from the self-hosted-provider set
+    // it currently matches, so that adding a keyless provider that does bill
+    // per token cannot silently make its traffic free.
+    const resolvedProvider = model?.provider ?? provider;
+    if (
+      resolvedProvider &&
+      PROVIDERS_BILLING_NO_TOKEN_RATE.has(resolvedProvider)
+    ) {
+      return {
+        pricePerMillionInput: "0.00",
+        pricePerMillionOutput: "0.00",
+        source: "default",
+      };
+    }
+
     const nameForDefault = model?.modelId ?? modelId ?? "";
     return {
       ...getDefaultModelPrice(nameForDefault),

@@ -5,6 +5,7 @@ import {
   FileModel,
   SkillModel,
   SkillSandboxConversationGoneError,
+  SkillSandboxFileModel,
   SkillSandboxModel,
   SkillSandboxReplayEventModel,
   SkillVersionModel,
@@ -270,7 +271,11 @@ describe("SkillSandboxReplayEventModel", () => {
     }
     expect(a.command.id).toBe(commandA.id);
     expect(u.upload.id).toBe(upload.id);
-    expect(u.upload.data?.toString("utf8")).toBe("a,b");
+    expect(
+      (await SkillSandboxFileModel.findUploadDataById(u.upload.id))?.toString(
+        "utf8",
+      ),
+    ).toBe("a,b");
     expect(m.mount.skillName).toBe("alpha");
     // SKILL.md is carried as the version body; requirements.txt as a version file.
     expect(m.content).toBe("# alpha");

@@ -1,6 +1,7 @@
 import {
   APP_RECORDING_VIEWPORT_ASPECT,
   archestraApiSdk,
+  GITHUB_MAX_FILE_BYTES,
   healBundleMcpServers,
   slugify,
 } from "@archestra/shared";
@@ -1340,24 +1341,6 @@ function base64ToBytes(base64: string): Uint8Array {
   }
   return bytes;
 }
-
-/**
- * The strictest ceiling api.github.com imposes on any endpoint this upload
- * could use. GitHub's number, not a product quota, and deliberately not a
- * millimetre under it: a submission GitHub would have taken must never be
- * refused here.
- *
- * The one measurement we have is a 57MB bundle refused by BOTH upload paths —
- * the contents API answered "the file is too large to be processed", the Git
- * Data API's blob endpoint "your input was too large to process". That is
- * consistent with this ceiling and says nothing about which endpoint to use,
- * which is why the upload stays on the plain contents API.
- *
- * Capture is what keeps real bundles far below it rather than this check: a
- * minute at the SDK's governor lands around 10MB, so the gate exists for
- * recordings made before those bounds, not for new ones.
- */
-const GITHUB_MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 function mb(bytes: number): number {
   return Math.round(bytes / (1024 * 1024));

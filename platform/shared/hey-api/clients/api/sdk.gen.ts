@@ -957,7 +957,7 @@ export const pinExternalApp = <ThrowOnError extends boolean = false>(options: Op
 export const deleteApp = <ThrowOnError extends boolean = false>(options: Options<DeleteAppData, ThrowOnError>) => (options.client ?? client).delete<DeleteAppResponses, DeleteAppErrors, ThrowOnError>({ url: '/api/apps/{appId}', ...options });
 
 /**
- * Get a single app by id, if the caller may view it.
+ * Get a single app by id or slug, if the caller may view it.
  *
  * Authentication:
  *

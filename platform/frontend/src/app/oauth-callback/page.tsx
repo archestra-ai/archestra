@@ -40,6 +40,8 @@ import {
 } from "@/lib/mcp/mcp-server.query";
 import { replaceBrowserUrl } from "@/lib/utils/browser-redirect";
 import {
+  buildOAuthCallbackPayload,
+  extractOAuthCallbackParams,
   getOAuthCallbackErrorState,
   type OAuthCallbackErrorState,
   toInternalReturnPath,
@@ -57,10 +59,8 @@ function OAuthCallbackContent() {
 
   useEffect(() => {
     const handleOAuthCallback = async () => {
-      const code = searchParams.get("code");
-      const error = searchParams.get("error");
-      const errorDescription = searchParams.get("error_description");
-      const state = searchParams.get("state");
+      const { code, error, errorDescription, state, iss } =
+        extractOAuthCallbackParams(searchParams);
 
       const initialError = getOAuthCallbackErrorState({
         code,
@@ -97,7 +97,9 @@ function OAuthCallbackContent() {
       try {
         // Exchange authorization code for access token
         const { catalogId, name, secretId } =
-          await callbackMutation.mutateAsync({ code, state });
+          await callbackMutation.mutateAsync(
+            buildOAuthCallbackPayload({ code, state, iss }),
+          );
 
         // Check if this is a re-authentication flow
         const mcpServerId = getOAuthMcpServerId();

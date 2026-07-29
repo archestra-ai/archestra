@@ -20,6 +20,10 @@ import {
 import { modelFetchers } from "@/routes/chat/model-fetchers";
 import type { FetchedModelCapabilities } from "@/routes/chat/model-fetchers/types";
 import {
+  type BedrockAwsPrices,
+  resolveBedrockAwsPrices,
+} from "@/services/bedrock-aws-pricing";
+import {
   type CrossProviderMetadata,
   type CrossProviderPrices,
   resolveCrossProviderMetadata,
@@ -288,6 +292,16 @@ export function buildModelsToUpsert(params: {
       underlyingModelName: model.underlyingModelName,
       modelsDevData,
     };
+    // Fills the tail models.dev omits — retired and non-chat Bedrock models
+    // that would otherwise fall through to the fabricated default estimate.
+    // It sits below the registry because AWS names a model by display name,
+    // so a snapshot lookup can land on a whole family ("Claude Opus 4") and
+    // price a newer member at an older member's rate.
+    const awsPrices = resolveBedrockAwsPrices({
+      provider,
+      modelId: model.id,
+      underlyingModelName: model.underlyingModelName,
+    });
     const crossProviderPrices = isReseller
       ? resolveCrossProviderPrices(crossProviderArgs)
       : null;
@@ -302,6 +316,7 @@ export function buildModelsToUpsert(params: {
       fetched: model.capabilities,
       crossProviderPrices,
       crossProviderMetadata,
+      awsPrices,
       underlyingModelName: model.underlyingModelName,
     });
 
@@ -426,6 +441,8 @@ export function resolveModelCapabilities(params: {
   crossProviderPrices?: CrossProviderPrices | null;
   /** Capabilities derived from the underlying vendor entry for Bedrock/Azure. */
   crossProviderMetadata?: CrossProviderMetadata | null;
+  /** Prices published by AWS for a Bedrock model. Used where the registry has none. */
+  awsPrices?: BedrockAwsPrices | null;
   /** Underlying vendor model name, when the fetcher can determine it (Azure). */
   underlyingModelName?: string | null;
 }): ProviderModelCapabilities {
@@ -436,6 +453,7 @@ export function resolveModelCapabilities(params: {
     fetched,
     crossProviderPrices,
     crossProviderMetadata,
+    awsPrices,
     underlyingModelName,
   } = params;
   const inferredCapabilities = inferModelCapabilities({
@@ -493,11 +511,13 @@ export function resolveModelCapabilities(params: {
         fetched?.promptPricePerToken ??
         capabilities?.promptPricePerToken ??
         crossProviderPrices?.promptPricePerToken ??
+        awsPrices?.promptPricePerToken ??
         null,
       completionPricePerToken:
         fetched?.completionPricePerToken ??
         capabilities?.completionPricePerToken ??
         crossProviderPrices?.completionPricePerToken ??
+        awsPrices?.completionPricePerToken ??
         null,
       cacheReadPricePerToken:
         fetched?.cacheReadPricePerToken ??

@@ -19,7 +19,48 @@ describe("TeamModel", () => {
       expect(team.name).toBe("Engineering");
       expect(team.description).toBe("Engineering team");
       expect(team.organizationId).toBe(org.id);
-      expect(team.members).toEqual([]);
+    });
+
+    test("adds the creator as a team admin", async ({
+      makeUser,
+      makeOrganization,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+
+      const team = await TeamModel.create({
+        name: "Engineering",
+        organizationId: org.id,
+        createdBy: user.id,
+      });
+
+      expect(team.members).toHaveLength(1);
+      expect(team.members?.[0]).toMatchObject({
+        userId: user.id,
+        role: ADMIN_ROLE_NAME,
+        // Manual membership: SSO team sync only removes rows it synced itself.
+        syncedFromSso: false,
+      });
+
+      // Persisted, not just returned.
+      expect(await TeamModel.isUserInTeam(team.id, user.id)).toBe(true);
+      expect(await TeamModel.getUserAdminTeamIds(user.id)).toContain(team.id);
+    });
+
+    test("the creator's team is one of their own teams", async ({
+      makeUser,
+      makeOrganization,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+
+      const team = await TeamModel.create({
+        name: "Engineering",
+        organizationId: org.id,
+        createdBy: user.id,
+      });
+
+      expect(await TeamModel.getUserTeamIds(user.id)).toEqual([team.id]);
     });
   });
 

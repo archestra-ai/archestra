@@ -16,11 +16,11 @@ import {
 } from "fastify-type-provider-zod";
 import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import mcpGatewayRoutes from "./mcp-gateway";
+import mcpGatewayRoutes from "./index";
 import {
   LEGACY_MCP_PROTOCOL_REVISION,
   STATELESS_MCP_PROTOCOL_REVISION,
-} from "./mcp-gateway.protocol";
+} from "./protocol";
 
 function makeMcpHeaders(
   token: string,
@@ -309,6 +309,33 @@ describe("MCP Gateway - protocol revision negotiation", () => {
       expect(result.ttlMs).toBeGreaterThan(0);
       expect(result.cacheScope).toBe("private");
     }
+  });
+
+  test("results carry the complete envelope and a stable tool order", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const { agent, token } = await setup({ makeAgent, makeOrganization });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 12 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const { result } = response.json();
+
+    // Every ordinary result is "complete"; older clients ignore the field.
+    expect(result.resultType).toBe("complete");
+    expect(result._meta["io.modelcontextprotocol/serverInfo"]).toMatchObject({
+      name: `archestra-agent-${agent.id}`,
+    });
+
+    // Stable order is what makes the ttlMs hint worth anything to a cache.
+    const names = (result.tools as Array<{ name: string }>).map((t) => t.name);
+    expect(names).toEqual([...names].sort());
   });
 
   test("GET discovery advertises both supported revisions", async ({

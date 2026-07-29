@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq, inArray, sql } from "drizzle-orm";
+import { asc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertSkillSandboxCommand,
   SandboxFileOrigin,
   SkillSandboxCommand,
   SkillSandboxFile,
+  SkillSandboxFileMetadata,
   SkillSandboxSkillMount,
   SkillVersionFile,
 } from "@/types";
@@ -47,7 +48,7 @@ interface SkillMountRef {
  */
 type SkillSandboxReplayEntry =
   | { kind: "command"; sequence: number; command: SkillSandboxCommand }
-  | { kind: "upload"; sequence: number; upload: SkillSandboxFile }
+  | { kind: "upload"; sequence: number; upload: SkillSandboxFileMetadata }
   | {
       kind: "skill_mount";
       sequence: number;
@@ -259,7 +260,7 @@ class SkillSandboxReplayEventModel {
         kind: schema.skillSandboxReplayEventsTable.kind,
         sequence: schema.skillSandboxReplayEventsTable.sequence,
         command: schema.skillSandboxCommandsTable,
-        upload: schema.skillSandboxFilesTable,
+        fileId: schema.skillSandboxReplayEventsTable.fileId,
         mount: schema.skillSandboxSkillMountsTable,
         versionContent: schema.skillVersionsTable.content,
       })
@@ -269,13 +270,6 @@ class SkillSandboxReplayEventModel {
         eq(
           schema.skillSandboxReplayEventsTable.commandId,
           schema.skillSandboxCommandsTable.id,
-        ),
-      )
-      .leftJoin(
-        schema.skillSandboxFilesTable,
-        eq(
-          schema.skillSandboxReplayEventsTable.fileId,
-          schema.skillSandboxFilesTable.id,
         ),
       )
       .leftJoin(
@@ -294,6 +288,23 @@ class SkillSandboxReplayEventModel {
       )
       .where(eq(schema.skillSandboxReplayEventsTable.sandboxId, sandboxId))
       .orderBy(asc(schema.skillSandboxReplayEventsTable.sequence));
+
+    // batch-load upload metadata in one query — never the payload. Bytes load
+    // lazily at replay-entry build time, where a spool hit skips them entirely
+    // (see `skills-sandbox/upload-spool.ts`).
+    const fileIds = rows
+      .map((r) => r.fileId)
+      .filter((id): id is string => id != null);
+    const uploadById = new Map<string, SkillSandboxFileMetadata>();
+    if (fileIds.length > 0) {
+      const uploadRows = await db
+        .select(uploadMetadataColumns)
+        .from(schema.skillSandboxFilesTable)
+        .where(inArray(schema.skillSandboxFilesTable.id, fileIds));
+      for (const upload of uploadRows) {
+        uploadById.set(upload.id, upload);
+      }
+    }
 
     // batch-load the version files for every mounted version in one query, then
     // group by version id so each skill_mount entry carries its full file set.
@@ -327,17 +338,15 @@ class SkillSandboxReplayEventModel {
             sequence: row.sequence,
             command: row.command,
           };
-        case "upload":
-          if (!row.upload) {
+        case "upload": {
+          const upload = row.fileId ? uploadById.get(row.fileId) : undefined;
+          if (!upload) {
             throw new Error(
               `replay event ${row.sequence} for sandbox ${sandboxId} is an upload but has no file row`,
             );
           }
-          return {
-            kind: "upload",
-            sequence: row.sequence,
-            upload: normalizeByteaField(row.upload, "data"),
-          };
+          return { kind: "upload", sequence: row.sequence, upload };
+        }
         case "skill_mount":
           if (!row.mount || row.versionContent == null) {
             throw new Error(
@@ -393,3 +402,8 @@ function stripNullBytes<T extends string | null | undefined>(value: T): T {
     typeof value === "string" ? value.replaceAll("\u0000", "") : value
   ) as T;
 }
+
+// every column except the payload — the replay listing is metadata-only.
+const { data: _uploadData, ...uploadMetadataColumns } = getTableColumns(
+  schema.skillSandboxFilesTable,
+);

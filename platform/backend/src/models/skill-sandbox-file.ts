@@ -34,6 +34,20 @@ class SkillSandboxFileModel {
   }
 
   /**
+   * Bytes for one upload row, loaded lazily. The replay listing carries
+   * metadata only, so payloads are read exactly when a spool miss or a
+   * small-file inline needs them (see `skills-sandbox/upload-spool.ts`).
+   */
+  static async findUploadDataById(id: string): Promise<Buffer | null> {
+    const [row] = await db
+      .select({ data: schema.skillSandboxFilesTable.data })
+      .from(schema.skillSandboxFilesTable)
+      .where(eq(schema.skillSandboxFilesTable.id, id));
+    if (!row) return null;
+    return normalizeByteaField(row, "data").data;
+  }
+
+  /**
    * Chat-attachment ids already staged into a sandbox, so auto-staging only
    * appends the not-yet-present delta.
    */

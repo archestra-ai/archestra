@@ -497,7 +497,7 @@ const MATRIX: MatrixRow[] = [
     },
   },
   {
-    name: "bedrock/global.anthropic.claude-sonnet-4-5 — a different region prefix resolves identically",
+    name: "bedrock/global.anthropic.claude-sonnet-4-5 — the registry prices every endpoint tier the same",
     provider: "bedrock",
     modelId: "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
     expected: {
@@ -508,7 +508,7 @@ const MATRIX: MatrixRow[] = [
       supportsToolCalling: true,
       pricePerMillionInput: "3.00",
       pricePerMillionOutput: "15.00",
-      priceSource: "models_dev",
+      priceSource: "aws",
       pricePerMillionCacheRead: "0.3",
       pricePerMillionCacheWrite: "3.75",
       cachePriceSource: "models_dev",
@@ -526,7 +526,7 @@ const MATRIX: MatrixRow[] = [
       supportsToolCalling: true,
       pricePerMillionInput: "0.06",
       pricePerMillionOutput: "0.24",
-      priceSource: "models_dev",
+      priceSource: "aws",
       pricePerMillionCacheRead: "0.015",
       pricePerMillionCacheWrite: "0.075",
       cachePriceSource: "models_dev",
@@ -544,7 +544,7 @@ const MATRIX: MatrixRow[] = [
       supportsToolCalling: true,
       pricePerMillionInput: "1.35",
       pricePerMillionOutput: "5.40",
-      priceSource: "models_dev",
+      priceSource: "aws",
       pricePerMillionCacheRead: "0.135",
       pricePerMillionCacheWrite: "1.6875",
       cachePriceSource: "derived_multiplier",
@@ -588,7 +588,7 @@ const MATRIX: MatrixRow[] = [
     },
   },
   {
-    name: "bedrock/us.anthropic.claude-3-sonnet — retired from the registry, so nothing can price it",
+    name: "bedrock/us.anthropic.claude-3-sonnet — retired from the registry, priced by AWS",
     provider: "bedrock",
     modelId: "us.anthropic.claude-3-sonnet-20240229-v1:0",
     expected: {
@@ -597,16 +597,16 @@ const MATRIX: MatrixRow[] = [
       inputModalities: null,
       outputModalities: null,
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
-      priceSource: "default",
-      pricePerMillionCacheRead: "5",
-      pricePerMillionCacheWrite: "62.5",
+      pricePerMillionInput: "3.00",
+      pricePerMillionOutput: "15.00",
+      priceSource: "aws",
+      pricePerMillionCacheRead: "0.3",
+      pricePerMillionCacheWrite: "3.75",
       cachePriceSource: "derived_multiplier",
     },
   },
   {
-    name: "bedrock/amazon.titan-embed-text-v1 — retired from the registry",
+    name: "bedrock/amazon.titan-embed-text-v1 — embedding, priced by AWS on input alone",
     provider: "bedrock",
     modelId: "amazon.titan-embed-text-v1",
     expected: {
@@ -615,16 +615,16 @@ const MATRIX: MatrixRow[] = [
       inputModalities: null,
       outputModalities: null,
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
-      priceSource: "default",
-      pricePerMillionCacheRead: "5",
-      pricePerMillionCacheWrite: "62.5",
+      pricePerMillionInput: "0.10",
+      pricePerMillionOutput: "0.00",
+      priceSource: "aws",
+      pricePerMillionCacheRead: "0.01",
+      pricePerMillionCacheWrite: "0.125",
       cachePriceSource: "derived_multiplier",
     },
   },
   {
-    name: "bedrock/us.meta.llama3-2-90b — retired from the registry",
+    name: "bedrock/us.meta.llama3-2-90b — retired from the registry, priced by AWS",
     provider: "bedrock",
     modelId: "us.meta.llama3-2-90b-instruct-v1:0",
     expected: {
@@ -633,16 +633,16 @@ const MATRIX: MatrixRow[] = [
       inputModalities: null,
       outputModalities: null,
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
-      priceSource: "default",
-      pricePerMillionCacheRead: "5",
-      pricePerMillionCacheWrite: "62.5",
+      pricePerMillionInput: "0.72",
+      pricePerMillionOutput: "0.72",
+      priceSource: "aws",
+      pricePerMillionCacheRead: "0.072",
+      pricePerMillionCacheWrite: "0.9",
       cachePriceSource: "derived_multiplier",
     },
   },
   {
-    name: "bedrock/us.anthropic.claude-3-haiku — unpriced '-haiku' id falls to the $30 tier",
+    name: 'bedrock/us.anthropic.claude-3-haiku — a real price replaces the "-haiku" $30 tier',
     provider: "bedrock",
     modelId: "us.anthropic.claude-3-haiku-20240307-v1:0",
     expected: {
@@ -651,11 +651,11 @@ const MATRIX: MatrixRow[] = [
       inputModalities: null,
       outputModalities: null,
       supportsToolCalling: null,
-      pricePerMillionInput: "30.00",
-      pricePerMillionOutput: "30.00",
-      priceSource: "default",
-      pricePerMillionCacheRead: "3",
-      pricePerMillionCacheWrite: "37.5",
+      pricePerMillionInput: "0.25",
+      pricePerMillionOutput: "1.25",
+      priceSource: "aws",
+      pricePerMillionCacheRead: "0.025",
+      pricePerMillionCacheWrite: "0.3125",
       cachePriceSource: "derived_multiplier",
     },
   },
@@ -804,7 +804,8 @@ const MATRIX: MatrixRow[] = [
     },
   },
 
-  // --- Ollama: local models, absent from models.dev entirely --------------
+  // --- Ollama: local models, absent from models.dev entirely, and billed
+  // no per-token rate on either transport (zero, not the generic estimate) ---
   {
     name: "ollama/a Modelfile num_ctx caps the window below the architectural one",
     provider: "ollama",
@@ -819,8 +820,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text"],
       outputModalities: ["text"],
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
       priceSource: "default",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
@@ -838,8 +839,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text"],
       outputModalities: ["text"],
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
       priceSource: "default",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
@@ -857,8 +858,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text"],
       outputModalities: [],
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
       priceSource: "default",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
@@ -1007,7 +1008,7 @@ const MATRIX: MatrixRow[] = [
  * the guard below fails until someone updates this number, which is the moment
  * to ask whether that model should really be unpriced.
  */
-const EXPECTED_DEFAULT_PRICED_ROWS = 11;
+const EXPECTED_DEFAULT_PRICED_ROWS = 7;
 
 describe("model capability matrix", () => {
   for (const row of MATRIX) {

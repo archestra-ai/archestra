@@ -335,6 +335,7 @@ function SkillsList() {
         <ResourceVisibilityBadge
           scope={row.original.scope}
           teams={row.original.teams}
+          users={row.original.users}
           authorId={row.original.authorId}
           authorName={row.original.authorName}
           currentUserId={currentUserId}

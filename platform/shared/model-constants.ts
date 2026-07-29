@@ -555,6 +555,31 @@ export const CACHE_PRICE_MULTIPLIERS: Partial<
 };
 
 /**
+ * A bracketed context-variant marker some clients append to a Claude model id,
+ * such as the `[1m]` in `claude-opus-4-8[1m]`.
+ */
+const CLAUDE_CONTEXT_VARIANT_SUFFIX = /\[\d+[km]\]$/i;
+
+/**
+ * Drop a client-side context-variant marker from a Claude model id.
+ *
+ * The marker is a client convention, not part of any Anthropic model id: every
+ * Claude model with a 1M-token window has it by default, needs no beta header,
+ * and bills at standard pricing, so the marked id names the same model at the
+ * same price. Carried through to storage it becomes a second model record that
+ * no catalog lists, leaving it permanently unpriced and billed at the fallback
+ * estimate.
+ *
+ * Scoped to Claude ids, and to markers shaped like a token count, so an
+ * unrecognised bracketed segment on any other provider is left alone.
+ */
+export function stripClaudeContextVariantSuffix(modelId: string): string {
+  return /claude/i.test(modelId)
+    ? modelId.replace(CLAUDE_CONTEXT_VARIANT_SUFFIX, "")
+    : modelId;
+}
+
+/**
  * True for OpenAI models served only (or only fully) through the Responses API
  * (`/v1/responses`), so the chat client must route them to the Responses
  * transport instead of `/v1/chat/completions`:

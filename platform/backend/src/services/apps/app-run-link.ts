@@ -5,19 +5,23 @@
 // raw-UUID link label or a leading-slash-dropped relative href — and so a name
 // (unrestricted in its characters) can never inject markdown wherever it appears.
 
-// An app's standalone page. Root-relative on purpose: origin-qualifying it would
+/** The identity fields the standalone-page URL is built from. */
+type AppRunTarget = { id: string; slug?: string | null };
+
+// An app's standalone page, addressed by its slug when it has one and by its id
+// otherwise — both resolve. Root-relative on purpose: origin-qualifying it would
 // break white-label deployments served from another host.
-export function appRunUrl(appId: string): string {
-  return `/a/${appId}`;
+export function appRunUrl(app: AppRunTarget): string {
+  return `/a/${app.slug ?? app.id}`;
 }
 
 // A markdown link to an app's standalone page, labeled with its name, safe to
 // interpolate into model-facing text the chat renders as markdown. The label is
 // escaped so a name containing `](` cannot terminate the label and inject a
 // second link; a blank or whitespace-only name falls back to a visible label.
-export function appRunLink(name: string, appId: string): string {
+export function appRunLink(name: string, app: AppRunTarget): string {
   const label = escapeAppNameForModelText(name);
-  return `[${label === "" ? "Open app" : label}](${appRunUrl(appId)})`;
+  return `[${label === "" ? "Open app" : label}](${appRunUrl(app)})`;
 }
 
 // An app name made safe to interpolate as literal text into model-facing

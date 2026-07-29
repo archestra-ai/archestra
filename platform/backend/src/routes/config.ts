@@ -102,8 +102,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               kbAutoSyncPermissionsEnabled: z.boolean(),
               /** App session recording (record/replay/download app demos). */
               hackathonRecorderEnabled: z.boolean(),
-              /** Staging override active: recorder bypasses the hackathon date window. */
-              hackathonRecorderOverrideActive: z.boolean(),
               /**
                * The offline video export is offered. Off by default: a render
                * drives a headless browser for as long as the cut runs, and the
@@ -180,8 +178,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
           kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,
           hackathonRecorderEnabled: config.hackathonRecorder.enabled,
-          hackathonRecorderOverrideActive:
-            config.hackathonRecorder.overrideActive,
           hackathonVideoDownloadEnabled:
             config.hackathonRecorder.videoDownloadEnabled,
           hackathonMaxFinalCutMs: config.hackathonRecorder.maxFinalCutMs,

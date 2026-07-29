@@ -7,15 +7,17 @@ import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import { AgentModel, McpToolCallModel } from "@/models";
 import { UuidOrSlugSchema } from "@/types";
+import { getPublicRequestOrigin } from "../request-origin";
 import {
   deriveStatePrincipal,
   extractMrtrParams,
   readClientCapabilities,
   supportsInputRequired,
   verifyRequestState,
-} from "./mcp-gateway.mrtr";
+} from "./mrtr";
 import {
   buildDiscoverResult,
+  extractTraceContext,
   isDiscoverRequest,
   MCP_PROTOCOL_VERSION_HEADER,
   type McpProtocolRevision,
@@ -25,7 +27,7 @@ import {
   STATELESS_MCP_PROTOCOL_REVISION,
   SUPPORTED_MCP_PROTOCOL_REVISIONS,
   validateRoutingHeaders,
-} from "./mcp-gateway.protocol";
+} from "./protocol";
 import {
   authenticateMCPGatewayRequest,
   createAgentServer,
@@ -36,8 +38,7 @@ import {
   extractPassthroughHeaders,
   extractProfileIdAndTokenFromRequest,
   validateMCPGatewayToken,
-} from "./mcp-gateway.utils";
-import { getPublicRequestOrigin } from "./request-origin";
+} from "./utils";
 
 // =============================================================================
 // MCP Gateway request handling (stateless mode)
@@ -139,6 +140,17 @@ async function handleMcpPostRequest(
   // Read from the raw body: the SDK's request schemas drop unknown params, so
   // these are gone by the time a request handler runs.
   const mrtrParams = extractMrtrParams(body);
+
+  // SEP-414: a client may attach W3C trace context, which lets its spans, the
+  // gateway's, and the upstream server's join one trace. Logged on the request
+  // so a trace id present in the client is findable here.
+  const traceContext = extractTraceContext(body);
+  if (traceContext) {
+    fastify.log.debug(
+      { profileId, traceparent: traceContext.traceparent },
+      "MCP request carries W3C trace context",
+    );
+  }
   const isInitialize =
     typeof body?.method === "string" && body.method === "initialize";
 

@@ -248,10 +248,11 @@ class ProjectService {
 
     const projectIds = candidates.map((c) => c.project.id);
     const ownerIds = [...new Set(candidates.map((c) => c.project.userId))];
-    const [counts, pins, ownerNames] = await Promise.all([
+    const [counts, pins, ownerNames, shareUsers] = await Promise.all([
       ProjectModel.countConversations(projectIds),
       ProjectPinModel.getPinnedAtForProjects({ userId, projectIds }),
       UserModel.getNamesByIds(ownerIds),
+      ProjectShareModel.getShareUsersForProjects(projectIds),
     ]);
     return candidates.map(({ project, viewerRole }) => ({
       id: project.id,
@@ -271,6 +272,13 @@ class ProjectService {
         project.visibility === "team"
           ? (shareTeams.get(project.id) ?? []).map((t) => t.name)
           : null,
+      // Same gate as shareTeamNames: without these a project shared with named
+      // people renders as private, which is the opposite of what happened.
+      shareUserNames:
+        (viewerRole === "owner" || viewerRole === "admin") &&
+        project.visibility === "user"
+          ? (shareUsers.get(project.id) ?? []).map((u) => u.name)
+          : null,
       pinnedAt: pins.get(project.id) ?? null,
       createdAt: project.createdAt,
     }));
@@ -283,16 +291,18 @@ class ProjectService {
     allowAdminOversight?: boolean;
   }): Promise<ProjectDetail> {
     const { project, viewerRole } = await this.requireViewable(params);
-    const [share, counts, pins, ownerNames, shareTeams] = await Promise.all([
-      ProjectShareModel.findByProjectId(project.id),
-      ProjectModel.countConversations([project.id]),
-      ProjectPinModel.getPinnedAtForProjects({
-        userId: params.userId,
-        projectIds: [project.id],
-      }),
-      UserModel.getNamesByIds([project.userId]),
-      ProjectShareModel.getShareTeamsForProjects([project.id]),
-    ]);
+    const [share, counts, pins, ownerNames, shareTeams, shareUsers] =
+      await Promise.all([
+        ProjectShareModel.findByProjectId(project.id),
+        ProjectModel.countConversations([project.id]),
+        ProjectPinModel.getPinnedAtForProjects({
+          userId: params.userId,
+          projectIds: [project.id],
+        }),
+        UserModel.getNamesByIds([project.userId]),
+        ProjectShareModel.getShareTeamsForProjects([project.id]),
+        ProjectShareModel.getShareUsersForProjects([project.id]),
+      ]);
     // Share targets are visible to whoever can manage the project (so the edit
     // dialog can populate sharing): the owner, or a project admin — including on
     // a project merely shared with them (viewerRole "shared"), so they still get
@@ -316,9 +326,14 @@ class ProjectService {
       conversationCount: counts.get(project.id) ?? 0,
       visibility: share?.visibility ?? null,
       shareTeamIds: canManage ? (share?.teamIds ?? []) : null,
+      shareUserIds: canManage ? (share?.userIds ?? []) : null,
       shareTeamNames:
         viewerRole === "owner" && share?.visibility === "team"
           ? (shareTeams.get(project.id) ?? []).map((t) => t.name)
+          : null,
+      shareUserNames:
+        canManage && share?.visibility === "user"
+          ? (shareUsers.get(project.id) ?? []).map((u) => u.name)
           : null,
       pinnedAt: pins.get(project.id) ?? null,
       createdAt: project.createdAt,
@@ -416,6 +431,7 @@ class ProjectService {
     userId: string;
     visibility: ProjectShareVisibility | null;
     teamIds: string[];
+    userIds?: string[];
   }): Promise<void> {
     await this.requireManageable(params);
     // Org-wide visibility is a broadcast to the whole organization, so both
@@ -445,6 +461,7 @@ class ProjectService {
       createdByUserId: params.userId,
       visibility: params.visibility,
       teamIds: params.teamIds,
+      userIds: params.userIds ?? [],
     });
   }
 

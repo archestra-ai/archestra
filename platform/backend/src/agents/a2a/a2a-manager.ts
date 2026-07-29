@@ -16,7 +16,7 @@ import {
   UserModel,
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
-import { validateMCPGatewayToken } from "@/routes/mcp-gateway.utils";
+import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import type { A2AContext, A2AMessage } from "@/types";
 import type { InteractionSource } from "../../../../shared";
 import { type A2AAttachment, executeA2AMessage } from "../a2a-executor";

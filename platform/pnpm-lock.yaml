@@ -47,7 +47,7 @@ overrides:
   form-data@<4: 3.0.5
   '@hono/node-server': 1.19.14
   body-parser: 2.2.1
-  dompurify: 3.4.10
+  dompurify: 3.4.12
   glob: 11.1.0
   esbuild: '>=0.28.1'
   adm-zip: 0.6.0
@@ -398,8 +398,8 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1
       dompurify:
-        specifier: 3.4.10
-        version: 3.4.10
+        specifier: 3.4.12
+        version: 3.4.12
       dotenv:
         specifier: ^17.3.1
         version: 17.3.1
@@ -741,8 +741,8 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0
       dompurify:
-        specifier: 3.4.10
-        version: 3.4.10
+        specifier: 3.4.12
+        version: 3.4.12
       elkjs:
         specifier: ^0.11.1
         version: 0.11.1
@@ -7340,8 +7340,8 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
-  dompurify@3.4.10:
-    resolution: {integrity: sha512-0xzNv0e7oYC6yyuOGZIABPM4qtg3QxLFniDNPP4ZP90wR8Yq3zgwpRbrNiT4N3IKqDbbYFEJLV+JWEs19aZ//w==}
+  dompurify@3.4.12:
+    resolution: {integrity: sha512-zQvGet8Z2sWbQhCmfFz/T5QWH2oBmjnqK3qvOjaqaNLrLEF912WamU+ohnTp0TCep/MFVHpdJuCZEdFOdTnEFg==}
 
   domutils@3.2.2:
     resolution: {integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==}
@@ -18000,7 +18000,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.4.10:
+  dompurify@3.4.12:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -19602,7 +19602,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
       dayjs: 1.11.19
-      dompurify: 3.4.10
+      dompurify: 3.4.12
       es-toolkit: 1.45.1
       katex: 0.16.28
       khroma: 2.1.0
@@ -19849,7 +19849,7 @@ snapshots:
 
   monaco-editor@0.55.1:
     dependencies:
-      dompurify: 3.4.10
+      dompurify: 3.4.12
       marked: 14.0.0
 
   ms@2.1.3: {}
@@ -20337,7 +20337,7 @@ snapshots:
       '@posthog/core': 1.40.2
       '@posthog/types': 1.393.0
       core-js: 3.49.0
-      dompurify: 3.4.10
+      dompurify: 3.4.12
       fflate: 0.4.8
       preact: 10.29.7
       query-selector-shadow-dom: 1.0.1

@@ -103,6 +103,12 @@ export type InsertSkillSandboxCommand = z.infer<
   typeof InsertSkillSandboxCommandSchema
 >;
 export type SkillSandboxFile = z.infer<typeof SelectSkillSandboxFileSchema>;
+/**
+ * An upload row without its payload. The replay listing reads metadata only;
+ * bytes load lazily when a spool miss or a small-file inline actually needs
+ * them (see `skills-sandbox/upload-spool.ts`).
+ */
+export type SkillSandboxFileMetadata = Omit<SkillSandboxFile, "data">;
 export type InsertSkillSandboxFile = z.infer<
   typeof InsertSkillSandboxFileSchema
 >;

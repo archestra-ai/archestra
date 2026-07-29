@@ -15,9 +15,10 @@ import { ApiError } from "@/types";
  * organization must not have switched it off. Not 400 for any of them — the
  * request is well formed and there is nothing the caller can change about it.
  *
- * The staging override is the one thing that skips the date window (it forces
- * the feature on there in the first place), so Archestra's own staging can
- * exercise the recorder before the hackathon opens and after it closes.
+ * The date window has no bypass. The staging override forces the deployment
+ * flag on for Archestra's own licensed staging (see
+ * parseHackathonRecorderEnabled), but the window binds every deployment
+ * equally — the hackathon being over means over, staging included.
  *
  * Shared by every hackathon-recorder surface: the app-recording routes and the
  * gallery-share device-auth relay.
@@ -35,7 +36,7 @@ export async function assertAppsHackathonAvailable(
   }
   // Read per request rather than captured at boot: a pod that started before
   // an edge of the window would otherwise keep answering as it did then.
-  if (!config.hackathonRecorder.overrideActive && !isAppsHackathonOpen()) {
+  if (!isAppsHackathonOpen()) {
     throw new ApiError(
       403,
       Date.now() < APPS_HACKATHON_OPENS_AT_MS

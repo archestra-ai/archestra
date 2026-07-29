@@ -534,48 +534,59 @@ test("an over-limit non-ingestible attachment is reported as unavailable, not st
   const conversation = await makeConversation(agent.id, {
     organizationId: agent.organizationId,
   });
-  // Just over the auto-staging limit, so it is never staged into the sandbox.
-  const bytes = Buffer.alloc(config.skillsSandbox.artifactBytesLimit + 1);
-  const row = await ConversationAttachmentModel.create({
-    organizationId: conversation.organizationId,
-    conversationId: conversation.id,
-    uploadedByUserId: conversation.userId,
-    originalName: "huge.bin",
-    mimeType: "application/octet-stream",
-    fileSize: bytes.byteLength,
-    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
-    fileData: bytes,
-  });
+  // The staging limit defaults to the storage cap, so a genuinely over-limit
+  // row would be 50 MiB — shrink the limit instead of allocating that.
+  const original = config.skillsSandbox.artifactBytesLimit;
+  (config.skillsSandbox as { artifactBytesLimit: number }).artifactBytesLimit =
+    1024;
+  try {
+    // Just over the auto-staging limit, so it is never staged into the sandbox.
+    const bytes = Buffer.alloc(config.skillsSandbox.artifactBytesLimit + 1);
+    const row = await ConversationAttachmentModel.create({
+      organizationId: conversation.organizationId,
+      conversationId: conversation.id,
+      uploadedByUserId: conversation.userId,
+      originalName: "huge.bin",
+      mimeType: "application/octet-stream",
+      fileSize: bytes.byteLength,
+      contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+      fileData: bytes,
+    });
 
-  const input: ChatMessage[] = [
-    {
-      role: "user",
-      parts: [
-        {
-          type: "file",
-          url: `/api/chat/attachments/${row.id}/content`,
-          mediaType: "application/octet-stream",
-          filename: "huge.bin",
-        },
-      ],
-    },
-  ];
+    const input: ChatMessage[] = [
+      {
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: `/api/chat/attachments/${row.id}/content`,
+            mediaType: "application/octet-stream",
+            filename: "huge.bin",
+          },
+        ],
+      },
+    ];
 
-  const output = await materializeAttachments({
-    messages: input,
-    conversationId: conversation.id,
-    ingestibleMimeTypes: INGESTIBLE,
-    sandboxAvailable: true,
-  });
+    const output = await materializeAttachments({
+      messages: input,
+      conversationId: conversation.id,
+      ingestibleMimeTypes: INGESTIBLE,
+      sandboxAvailable: true,
+    });
 
-  const part = expectPresent(output[0].parts?.[0]);
-  expect(part.type).toBe("text");
-  expect(part.text).toContain("too large");
-  // Not staged (no sandbox path), not inlined, and no session-authed URL the
-  // sandbox couldn't fetch anyway.
-  expect(part.text).not.toContain("/home/sandbox/attachments");
-  expect(part.text).not.toContain("/api/chat/attachments");
-  expect(part.text).not.toContain("data:");
+    const part = expectPresent(output[0].parts?.[0]);
+    expect(part.type).toBe("text");
+    expect(part.text).toContain("too large");
+    // Not staged (no sandbox path), not inlined, and no session-authed URL the
+    // sandbox couldn't fetch anyway.
+    expect(part.text).not.toContain("/home/sandbox/attachments");
+    expect(part.text).not.toContain("/api/chat/attachments");
+    expect(part.text).not.toContain("data:");
+  } finally {
+    (
+      config.skillsSandbox as { artifactBytesLimit: number }
+    ).artifactBytesLimit = original;
+  }
 });
 
 test("a non-ingestible attachment without a sandbox points at the Files panel, never the sandbox", async ({

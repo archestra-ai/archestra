@@ -272,12 +272,17 @@ export function useSetProjectShare() {
   return useMutation({
     mutationFn: async (params: {
       id: string;
-      visibility: "organization" | "team" | "none";
+      visibility: "organization" | "team" | "user" | "none";
       teamIds: string[];
+      userIds: string[];
     }) => {
       const { error } = await setProjectShare({
         path: { id: params.id },
-        body: { visibility: params.visibility, teamIds: params.teamIds },
+        body: {
+          visibility: params.visibility,
+          teamIds: params.teamIds,
+          userIds: params.userIds,
+        },
       });
       if (error) {
         handleApiError(error);

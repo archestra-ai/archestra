@@ -1,3 +1,6 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import config from "@/config";
 import {
   ConversationAttachmentModel,
   SkillSandboxFileModel,
@@ -12,6 +15,7 @@ import {
   skillSandboxRuntimeService,
 } from "./skill-sandbox-runtime-service";
 import { SkillSandboxError } from "./types";
+import { SANDBOX_UPLOAD_SPOOL_ROOT, SPOOL_MIN_BYTES } from "./upload-spool";
 
 async function seedAttachment(params: {
   organizationId: string;
@@ -491,8 +495,89 @@ describe("stageConversationAttachments (db)", () => {
     if (upload?.kind !== "upload") throw new Error("expected an upload event");
     // filename is sanitized (space -> underscore) and lands under the dir.
     expect(upload.upload.path).toBe("/home/sandbox/attachments/pi_mc.gif");
-    expect(upload.upload.data?.toString("utf8")).toBe("GIF89a-bytes");
+    expect(
+      (
+        await SkillSandboxFileModel.findUploadDataById(upload.upload.id)
+      )?.toString("utf8"),
+    ).toBe("GIF89a-bytes");
     expect(upload.upload.sourceAttachmentId).not.toBeNull();
+  });
+
+  test("stages at upload time and warms the spool, before any sandbox op", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeConversation,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: org.id,
+    });
+    if (!conversation) throw new Error("conversation seed failed");
+
+    const data = Buffer.alloc(SPOOL_MIN_BYTES, 0x64);
+    await seedAttachment({
+      organizationId: org.id,
+      conversationId: conversation.id,
+      userId: user.id,
+      name: "big.bin",
+      data,
+    });
+
+    // the upload-time path checks the feature flag itself (no engine needed —
+    // staging is pure DB + spool I/O).
+    const originalEnabled = config.skillsSandbox.enabled;
+    (config.skillsSandbox as { enabled: boolean }).enabled = true;
+    let spooledId: string | null = null;
+    try {
+      await skillSandboxRuntimeService.stageConversationAttachmentsNow({
+        organizationId: org.id,
+        userId: user.id,
+        conversationId: conversation.id,
+      });
+
+      const sandbox = await SkillSandboxModel.findOrCreateDefault({
+        organizationId: org.id,
+        userId: user.id,
+        conversationId: conversation.id,
+        defaultCwd: "/home/sandbox",
+      });
+      const log = await SkillSandboxReplayEventModel.listBySandbox(sandbox.id);
+      const uploads = log.filter((e) => e.kind === "upload");
+      expect(uploads).toHaveLength(1);
+      const [upload] = uploads;
+      if (upload?.kind !== "upload")
+        throw new Error("expected an upload event");
+      expect(upload.upload.path).toBe("/home/sandbox/attachments/big.bin");
+      spooledId = upload.upload.id;
+
+      // spool warmed from the bytes in hand, before any materialize
+      const spooled = await fs.readFile(
+        path.join(SANDBOX_UPLOAD_SPOOL_ROOT, upload.upload.id),
+      );
+      expect(spooled.equals(data)).toBe(true);
+
+      // idempotent: a second upload-time call appends nothing
+      await skillSandboxRuntimeService.stageConversationAttachmentsNow({
+        organizationId: org.id,
+        userId: user.id,
+        conversationId: conversation.id,
+      });
+      const logAfter = await SkillSandboxReplayEventModel.listBySandbox(
+        sandbox.id,
+      );
+      expect(logAfter.filter((e) => e.kind === "upload")).toHaveLength(1);
+    } finally {
+      (config.skillsSandbox as { enabled: boolean }).enabled = originalEnabled;
+      if (spooledId) {
+        await fs.rm(path.join(SANDBOX_UPLOAD_SPOOL_ROOT, spooledId), {
+          force: true,
+        });
+      }
+    }
   });
 
   test("is idempotent and picks up attachments added on a later turn", async ({

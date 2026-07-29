@@ -19,7 +19,7 @@ import { AgentModel } from "@/models";
 import {
   extractBearerToken,
   validateMCPGatewayToken,
-} from "@/routes/mcp-gateway.utils";
+} from "@/routes/mcp-gateway/utils";
 import { ApiError, UuidIdSchema } from "@/types";
 
 /**

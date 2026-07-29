@@ -38,7 +38,11 @@ import { useAssignableTeams } from "@/lib/teams/team.query";
 
 type App = archestraApiTypes.GetAppResponses["200"];
 
-type FormValues = { name: string; description: string };
+type FormValues = { name: string; slug: string; description: string };
+
+// Mirrors the backend's AppSlugSchema so a malformed URL is caught before the
+// round-trip. Uniqueness is only knowable server-side and comes back as a 409.
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
  * What the visibility control offers. Wider than the stored scope: an app
@@ -83,7 +87,11 @@ export function AppSettingsForm({
   const assignedTools = appToolsQuery.data;
 
   const form = useForm<FormValues>({
-    defaultValues: { name: app.name, description: app.description ?? "" },
+    defaultValues: {
+      name: app.name,
+      slug: app.slug ?? "",
+      description: app.description ?? "",
+    },
   });
 
   const [environmentId, setEnvironmentId] = useState<string | null>(
@@ -188,6 +196,7 @@ export function AppSettingsForm({
       description: "Anyone in your org can use this app",
       icon: Globe,
       disabled: scope !== "org" && !isAppAdmin,
+      disabledLabel: !isAppAdmin ? "Requires permission" : undefined,
       disabledReason: !isAppAdmin
         ? "You need app:admin permission to make this available org-wide"
         : undefined,
@@ -263,6 +272,13 @@ export function AppSettingsForm({
       body.name = values.name.trim();
       body.description = values.description.trim() || null;
       body.environmentId = environmentId;
+      // Sent only when it actually changed, so a save that touches other fields
+      // never re-sends the slug and 409s against the app's own row. Blank is
+      // "leave it alone", not "clear it" — there is no way to unset a URL.
+      const slug = values.slug.trim();
+      if (slug !== "" && slug !== app.slug) {
+        body.slug = slug;
+      }
     }
     const result = await updateApp.mutateAsync({ appId: app.id, body });
     if (!result) return;
@@ -340,6 +356,54 @@ export function AppSettingsForm({
                   {form.formState.errors.name.message}
                 </p>
               ) : null}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="app-settings-slug">URL</Label>
+              <div className="flex items-center gap-1">
+                <span className="shrink-0 text-sm text-muted-foreground">
+                  /a/
+                </span>
+                <Input
+                  id="app-settings-slug"
+                  placeholder="sales-dashboard"
+                  aria-invalid={!!form.formState.errors.slug}
+                  // Only one of the two is rendered at a time, so point at
+                  // whichever is actually in the DOM or the message goes
+                  // unannounced (same wiring as components/ui/form.tsx).
+                  aria-describedby={
+                    form.formState.errors.slug
+                      ? "app-settings-slug-error"
+                      : "app-settings-slug-help"
+                  }
+                  {...form.register("slug", {
+                    maxLength: {
+                      value: 100,
+                      message: "URL must be 100 characters or fewer.",
+                    },
+                    validate: (value) =>
+                      value.trim() === "" ||
+                      SLUG_PATTERN.test(value.trim()) ||
+                      "Use lowercase letters, numbers and single hyphens.",
+                  })}
+                />
+              </div>
+              {form.formState.errors.slug?.message ? (
+                <p
+                  id="app-settings-slug-error"
+                  className="text-xs text-destructive"
+                >
+                  {form.formState.errors.slug.message}
+                </p>
+              ) : (
+                <p
+                  id="app-settings-slug-help"
+                  className="text-xs text-muted-foreground"
+                >
+                  Where this app opens. Changing it breaks links that used the
+                  old URL.
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-1.5">

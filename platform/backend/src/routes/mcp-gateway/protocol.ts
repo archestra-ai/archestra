@@ -69,11 +69,63 @@ export const MCP_CLIENT_CAPABILITIES_META_KEY =
 export const SERVER_DISCOVER_METHOD = "server/discover";
 
 /**
+ * W3C Trace Context keys the revision fixes for `_meta` (SEP-414).
+ *
+ * Naming them in the spec is the whole value: a host, its client SDK, this
+ * gateway, and the upstream server can join one span tree in an OpenTelemetry
+ * backend instead of each inventing a key.
+ */
+export const TRACE_CONTEXT_META_KEYS = [
+  "traceparent",
+  "tracestate",
+  "baggage",
+] as const;
+
+export type TraceContext = Partial<
+  Record<(typeof TRACE_CONTEXT_META_KEYS)[number], string>
+>;
+
+/**
+ * Read W3C trace context a client attached to a request.
+ *
+ * Returns undefined when nothing usable is present, so callers can tell "no
+ * context" apart from "empty context" without inspecting the object.
+ */
+export function extractTraceContext(body: unknown): TraceContext | undefined {
+  if (typeof body !== "object" || body === null) return undefined;
+  const params = (body as { params?: unknown }).params;
+  if (typeof params !== "object" || params === null) return undefined;
+  const meta = (params as { _meta?: unknown })._meta;
+  if (typeof meta !== "object" || meta === null) return undefined;
+
+  const source = meta as Record<string, unknown>;
+  const context: TraceContext = {};
+  for (const key of TRACE_CONTEXT_META_KEYS) {
+    const value = source[key];
+    if (typeof value === "string" && value !== "") {
+      context[key] = value;
+    }
+  }
+
+  // `traceparent` is what actually links spans; tracestate and baggage only
+  // decorate it, so context without it cannot join a trace.
+  return context.traceparent ? context : undefined;
+}
+
+/**
  * Error codes from the revision's allocation policy, which reserves
  * -32020..-32099 for the specification. These replace the generic JSON-RPC
  * codes an earlier draft used, so they are not interchangeable with -32600.
  */
 export const HEADER_MISMATCH_ERROR_CODE = -32020;
+
+/**
+ * Missing-resource errors. SEP-2164 moved these off the MCP-specific -32002
+ * onto JSON-RPC's generic Invalid Params. `isResourceUnavailableError` still
+ * accepts the old code, so an upstream that has not migrated keeps working —
+ * this is only what the gateway itself emits.
+ */
+export const RESOURCE_NOT_FOUND_ERROR_CODE = -32602;
 export const UNSUPPORTED_PROTOCOL_VERSION_ERROR_CODE = -32022;
 
 /**
@@ -116,6 +168,35 @@ export function buildPrivateListCacheHint(): CacheHint {
     ttlMs: LIST_CACHE_TTL_MS,
     cacheScope: PRIVATE_CACHE_SCOPE,
   };
+}
+
+/**
+ * `_meta` key servers use to identify themselves on each result, replacing what
+ * `initialize` reported once per connection.
+ */
+export const MCP_SERVER_INFO_META_KEY = "io.modelcontextprotocol/serverInfo";
+
+/**
+ * Stamp a result as an ordinary, complete one and identify the server.
+ *
+ * Every result carries `resultType` in this revision; `complete` is the
+ * ordinary case, as opposed to the `input_required` interim result MRTR
+ * returns. Older clients treat a missing field as `complete`, so emitting it
+ * unconditionally is safe for both revisions.
+ */
+export function withCompleteResultEnvelope<T extends object>(
+  result: T,
+  serverInfo: { name: string; version: string },
+): T {
+  const existingMeta = (result as { _meta?: Record<string, unknown> })._meta;
+  return {
+    ...result,
+    resultType: COMPLETE_RESULT_TYPE,
+    _meta: {
+      ...existingMeta,
+      [MCP_SERVER_INFO_META_KEY]: serverInfo,
+    },
+  } as T;
 }
 
 /**

@@ -12,7 +12,7 @@ import {
 import { vi } from "vitest";
 import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import mcpGatewayRoutes from "./mcp-gateway";
+import mcpGatewayRoutes from "./index";
 
 const executeToolCallForOwnerMock = vi.hoisted(() => vi.fn());
 

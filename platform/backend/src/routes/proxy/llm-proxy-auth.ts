@@ -25,7 +25,7 @@ import {
   OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { validateExternalIdpToken } from "@/routes/mcp-gateway.utils";
+import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import {

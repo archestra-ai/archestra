@@ -75,8 +75,9 @@ import {
 } from "./skill-commands";
 
 // Fallback sandbox artifact limit when /api/config has not loaded yet (mirrors
-// the backend default). Only consulted when a sandbox is available.
-const DEFAULT_SANDBOX_ARTIFACT_BYTES = 16 * 1024 * 1024;
+// the backend default, which tracks the chat attachment storage cap). Only
+// consulted when a sandbox is available.
+const DEFAULT_SANDBOX_ARTIFACT_BYTES = DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES;
 
 function formatBytes(bytes: number): string {
   return bytes >= 1024 * 1024

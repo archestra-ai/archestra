@@ -9,6 +9,7 @@ type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   source: "owned",
   id: "owned-1",
+  slug: "my-owned-app",
   name: "My Owned App",
   description: "An owned app",
   scope: "org",

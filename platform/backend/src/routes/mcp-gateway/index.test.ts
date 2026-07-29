@@ -37,7 +37,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import mcpGatewayRoutes from "./mcp-gateway";
+import mcpGatewayRoutes from "./index";
 
 /**
  * Helper to create MCP gateway request headers

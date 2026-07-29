@@ -5,6 +5,7 @@ import {
   getChatMcpToolUiResourceUris,
 } from "@/clients/chat-mcp-client";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
+import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
@@ -38,6 +39,7 @@ export async function buildChatContext(params: {
   hookRunCollector: CollectedHookRun[];
   elicitation: ChatMcpElicitationBridge;
   subagentToolStream: SubagentToolStreamBridge;
+  taskBridge: ChatTaskBridge;
   abortSignal: AbortSignal;
 }): Promise<{
   mcpTools: Record<string, Tool>;
@@ -61,6 +63,7 @@ export async function buildChatContext(params: {
     hookRunCollector,
     elicitation,
     subagentToolStream,
+    taskBridge,
     abortSignal,
   } = params;
 
@@ -92,6 +95,7 @@ export async function buildChatContext(params: {
       user,
       hookRunCollector,
       subagentToolStream,
+      taskBridge,
       repeatTracker,
     }),
     getChatMcpToolUiResourceUris(agentId),

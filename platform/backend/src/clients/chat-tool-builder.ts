@@ -35,6 +35,7 @@ import {
 import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
+import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import type {
@@ -54,6 +55,7 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import type {
   Tool as CatalogTool,
   ChatToolExecutionClaim,
@@ -108,6 +110,12 @@ export interface ChatToolContext {
    * delegation call that spawned them.
    */
   subagentToolStream?: SubagentToolStreamBridge;
+  /**
+   * Bridge that detaches a long-running tool call into a durable, cancellable
+   * MCP task and surfaces it as a live card (chat path only). Absent in
+   * headless runs, where there is no one to watch or cancel it.
+   */
+  taskBridge?: ChatTaskBridge;
   mcpGwToken: McpGatewayToken;
   considerContextUntrusted: boolean;
   /**
@@ -299,6 +307,8 @@ export function buildMcpGatewayTool(params: {
               considerContextUntrusted: ctx.considerContextUntrusted,
               abortSignal: ctx.abortSignal,
               elicitation: ctx.elicitation,
+              taskBridge: ctx.taskBridge,
+              toolCallId: options.toolCallId,
               isUiProvidingTool,
             });
           }
@@ -1007,6 +1017,10 @@ interface ToolExecutionContext {
   considerContextUntrusted: boolean;
   abortSignal?: AbortSignal;
   elicitation?: ChatMcpElicitationBridge;
+  /** Detaches this call into a cancellable task if it runs long (chat only). */
+  taskBridge?: ChatTaskBridge;
+  /** The model's id for this call, linking a task card to the call it backs. */
+  toolCallId?: string;
   /**
    * Set when the tool's gateway-listed definition carries a `ui://` resource,
    * i.e. it may be advertised top-level while unassigned. Gates the dynamic
@@ -1044,6 +1058,8 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
     mcpGwToken,
     abortSignal,
     elicitation,
+    taskBridge,
+    toolCallId,
     isUiProvidingTool,
   } = ctx;
   throwIfAborted(abortSignal);
@@ -1121,9 +1137,11 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
       }
     : undefined;
 
-  let result: Awaited<ReturnType<typeof mcpClient.executeToolCallForOwner>>;
-  try {
-    result = await mcpClient.executeToolCallForOwner(
+  // Run the upstream call under `signal`, which is the chat run's signal on the
+  // ordinary path and additionally carries task cancellation when this call has
+  // detached into a task.
+  const callUpstream = (signal: AbortSignal | undefined, detachable: boolean) =>
+    mcpClient.executeToolCallForOwner(
       toolCall,
       agentOwner(agentId),
       tokenAuthContext,
@@ -1135,12 +1153,31 @@ async function executeMcpTool(ctx: ToolExecutionContext): Promise<{
         // Cancels the in-flight upstream call when the chat run is stopped,
         // instead of letting it run to completion past the post-call
         // throwIfAborted below. Covers subagents too (shared builder).
-        abortSignal,
+        abortSignal: signal,
+        // A detached call outlives the synchronous timeout by design; without
+        // this it would still be killed at that bound and the task could never
+        // outlast it.
+        ...(detachable ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
         ...(elicitation
           ? { elicitationHandler: elicitation.createHandler({ toolName }) }
           : {}),
       },
     );
+
+  let result: Awaited<ReturnType<typeof mcpClient.executeToolCallForOwner>>;
+  try {
+    result =
+      taskBridge && toolCallId
+        ? await taskBridge.runMaybeTask({
+            agentId,
+            userId,
+            toolCallId,
+            toolName,
+            abortSignal,
+            execute: (taskSignal) =>
+              callUpstream(mergeSignals(abortSignal, taskSignal), true),
+          })
+        : await callUpstream(abortSignal, false);
     reportToolMetrics({
       toolName,
       agentId,
@@ -1545,6 +1582,19 @@ function buildTokenAuthContext({
     isUserToken: mcpGwToken.isUserToken,
     userId: mcpGwToken.isUserToken ? userId : undefined,
   };
+}
+
+/**
+ * Abort when either source aborts. A detached call answers to two of them: the
+ * chat run stopping, and the task itself being cancelled.
+ */
+function mergeSignals(
+  a: AbortSignal | undefined,
+  b: AbortSignal | undefined,
+): AbortSignal | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  return AbortSignal.any([a, b]);
 }
 
 function throwIfAborted(abortSignal?: AbortSignal): void {

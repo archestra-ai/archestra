@@ -91,6 +91,34 @@ export default class McpGatewayTaskModel {
     });
   }
 
+  /**
+   * Cancel a task the caller owns, in one guarded statement.
+   *
+   * The principal match is the authorization: a task belonging to someone else
+   * (or already terminal, or expired) reports false, which is also the caller's
+   * signal that there was nothing to abort. Doing this as a single conditional
+   * update rather than read-then-write means a concurrent completion cannot
+   * slip between the check and the write.
+   */
+  static async cancelForPrincipal(params: {
+    taskId: string;
+    principal: string;
+  }): Promise<boolean> {
+    const updated = await db
+      .update(schema.mcpGatewayTasksTable)
+      .set({ status: "cancelled", updatedAt: sql`now()` })
+      .where(
+        and(
+          eq(schema.mcpGatewayTasksTable.id, params.taskId),
+          eq(schema.mcpGatewayTasksTable.principal, params.principal),
+          eq(schema.mcpGatewayTasksTable.status, "working"),
+          gt(schema.mcpGatewayTasksTable.expiresAt, new Date()),
+        ),
+      )
+      .returning({ id: schema.mcpGatewayTasksTable.id });
+    return updated.length > 0;
+  }
+
   private static async transitionIfWorking(
     taskId: string,
     changes: {

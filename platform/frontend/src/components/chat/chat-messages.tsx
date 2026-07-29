@@ -8,6 +8,8 @@ import {
   extractMcpExecutedAs,
   getArchestraToolFullName,
   HOOK_RUN_PART_TYPE,
+  MCP_TASK_PART_TYPE,
+  type McpTaskPartData,
   parseArchestraAppResourceUri,
   parseFullToolName,
   type ResourceVisibilityScope,
@@ -55,6 +57,7 @@ import {
   HookRunChip,
   type HookRunChipData,
 } from "@/components/chat/hook-run-chip";
+import { McpTaskCard } from "@/components/chat/mcp-task-card";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
@@ -64,7 +67,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
+import {
+  useCancelChatMcpTask,
+  useProfileToolsWithIds,
+} from "@/lib/chat/chat.query";
 import { useUpdateChatMessage } from "@/lib/chat/chat-message.query";
 import {
   getToolErrorText,
@@ -297,6 +303,23 @@ export function ChatMessages({
   const earlyToolUiStarts = session?.earlyToolUiStarts || {};
   const contextCompaction = session?.contextCompaction;
   const hasPendingMcpElicitation = Boolean(session?.pendingMcpElicitation);
+
+  // Cancelling a background task. The card keeps rendering from the streamed
+  // part; this only disables the button between the click and the backend
+  // flipping the row, so the action can't be fired twice.
+  const cancelMcpTaskMutation = useCancelChatMcpTask();
+  const [cancellingTaskId, setCancellingTaskId] = useState<string | null>(null);
+  const handleCancelMcpTask = useCallback(
+    async (taskId: string) => {
+      setCancellingTaskId(taskId);
+      try {
+        await cancelMcpTaskMutation.mutateAsync(taskId);
+      } finally {
+        setCancellingTaskId(null);
+      }
+    },
+    [cancelMcpTaskMutation],
+  );
 
   // Debounce resize mode change when exiting edit mode to let DOM settle
   const isEditing = editingPartKey !== null;
@@ -1205,6 +1228,27 @@ export function ChatMessages({
                       }
 
                       default: {
+                        // A tool call that detached into a background task.
+                        // Live while it runs (the backend re-emits the part on
+                        // each status change, and the AI SDK reconciles it by
+                        // id), and persisted so the turn still explains itself
+                        // after a reload.
+                        if (part.type === MCP_TASK_PART_TYPE) {
+                          const taskData = (part as { data?: McpTaskPartData })
+                            .data;
+                          if (!taskData?.taskId) return null;
+                          return (
+                            <McpTaskCard
+                              key={partKey}
+                              task={taskData}
+                              onCancel={handleCancelMcpTask}
+                              isCancelling={
+                                cancellingTaskId === taskData.taskId
+                              }
+                            />
+                          );
+                        }
+
                         // Inline hook-run debug entry (a model-invisible
                         // `data-hook-run` part the backend splices into the turn).
                         if (part.type === HOOK_RUN_PART_TYPE) {

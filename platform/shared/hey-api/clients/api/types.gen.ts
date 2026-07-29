@@ -26109,6 +26109,91 @@ export type ResolveChatMcpElicitationResponses = {
 
 export type ResolveChatMcpElicitationResponse = ResolveChatMcpElicitationResponses[keyof ResolveChatMcpElicitationResponses];
 
+export type CancelChatMcpTaskData = {
+    body?: never;
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/chat/tasks/{taskId}/cancel';
+};
+
+export type CancelChatMcpTaskErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CancelChatMcpTaskError = CancelChatMcpTaskErrors[keyof CancelChatMcpTaskErrors];
+
+export type CancelChatMcpTaskResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        cancelled: boolean;
+    };
+};
+
+export type CancelChatMcpTaskResponse = CancelChatMcpTaskResponses[keyof CancelChatMcpTaskResponses];
+
 export type StopChatStreamData = {
     body?: never;
     path: {

@@ -22,16 +22,7 @@ export async function getMemberKeycloakJwt(): Promise<string> {
   return getKeycloakJwtForUser(KC_MEMBER_USER);
 }
 
-/**
- * Sign in at the Keycloak login form. Defaults to the admin test user, whose
- * email matches the Archestra admin so the accounts link; pass
- * {@link KC_MEMBER_USER} to sign in as someone else — needed whenever a test
- * must act as a user who is not already provisioned or already a team member.
- */
-export async function loginViaKeycloak(
-  ssoPage: Page,
-  user: { username: string; password: string } = KC_TEST_USER,
-): Promise<boolean> {
+export async function loginViaKeycloak(ssoPage: Page): Promise<boolean> {
   await ssoPage.waitForURL(/.*localhost:30081.*|.*keycloak.*/, {
     timeout: 30000,
   });
@@ -39,11 +30,11 @@ export async function loginViaKeycloak(
 
   const usernameField = ssoPage.getByLabel("Username or email");
   await usernameField.waitFor({ state: "visible", timeout: 10000 });
-  await usernameField.fill(user.username);
+  await usernameField.fill(KC_TEST_USER.username);
 
   const passwordField = ssoPage.getByRole("textbox", { name: "Password" });
   await passwordField.waitFor({ state: "visible", timeout: 10000 });
-  await passwordField.fill(user.password);
+  await passwordField.fill(KC_TEST_USER.password);
 
   await clickButton({ page: ssoPage, options: { name: "Sign In" } });
 

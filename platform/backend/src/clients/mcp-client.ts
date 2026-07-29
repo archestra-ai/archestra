@@ -96,6 +96,7 @@ import {
   type McpElicitationHandler,
   withMcpElicitationCapability,
 } from "./mcp-elicitation";
+import { mcpParamHeadersForCall } from "./mcp-param-headers";
 
 const MCP_CLIENT_EXTENSION_CAPABILITIES = {
   ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
@@ -450,6 +451,35 @@ class McpClient {
     const { tool, catalogItem, resolvedToolCall } = validationResult;
     // Use the resolved name (may have been prefixed by suffix fallback lookup)
     toolCall = resolvedToolCall;
+
+    // SEP-2243 x-mcp-header: mirror annotated argument values into
+    // Mcp-Param-* headers on the upstream call. Widening the passthrough set
+    // deliberately reuses its whole pipeline — the headers are merged into the
+    // transport exactly where passthrough headers are, and the credential
+    // fingerprint check discards a cached connection whose baked headers no
+    // longer match, so per-call values cannot leak across pooled calls.
+    const mcpParamHeaders = mcpParamHeadersForCall({
+      inputSchema: tool.parameters,
+      args: toolCall.arguments,
+    });
+    if (mcpParamHeaders && tokenAuth) {
+      tokenAuth = {
+        ...tokenAuth,
+        passthroughHeaders: {
+          ...tokenAuth.passthroughHeaders,
+          ...mcpParamHeaders,
+        },
+      };
+    } else if (mcpParamHeaders) {
+      // Every gateway request carries token auth, so this should be
+      // unreachable — but if a call path without auth context ever reaches an
+      // annotated tool, the mirrored headers are dropped, and that should be
+      // visible rather than silent.
+      logger.debug(
+        { toolName: toolCall.name, headers: Object.keys(mcpParamHeaders) },
+        "Skipping Mcp-Param headers: no token auth context to carry them",
+      );
+    }
 
     // App backing servers have no upstream to connect to: the `open` launch tool is
     // served in-process. Hand the host the app's UI resource pointer (the
@@ -1424,6 +1454,8 @@ class McpClient {
     if (!tool && availableTool && availableTool.name === toolCall.name) {
       tool = {
         toolName: availableTool.name,
+        parameters:
+          (availableTool.parameters as Record<string, unknown> | null) ?? null,
         rawName: availableTool.rawName,
         mcpServerId: null,
         credentialResolutionMode: "dynamic",

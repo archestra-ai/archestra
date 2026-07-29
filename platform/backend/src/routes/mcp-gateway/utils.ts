@@ -48,6 +48,7 @@ import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
@@ -272,9 +273,11 @@ export async function createAgentServer(params: {
       version: config.api.version,
     },
     {
-      // Shared with the `server/discover` payload so the capabilities a
-      // 2025-11-25 client learns at `initialize` and a 2026-07-28 client learns
-      // on demand cannot drift apart.
+      // The legacy revision's capability set: `initialize` is only ever
+      // answered for 2025-11-25-and-older clients, which have no notification
+      // channel, so `tools.listChanged` stays false here. `server/discover`
+      // deliberately passes the negotiated revision instead and may advertise
+      // `tools.listChanged: true`, backed by `subscriptions/listen`.
       capabilities: buildGatewayServerCapabilities(),
     },
   );
@@ -315,8 +318,19 @@ export async function createAgentServer(params: {
     // filter runs BEFORE filterExposedTools, so an excluded always-exposed
     // built-in is dropped here and never re-admitted below. Empty (no-op)
     // unless the agent's accessAllTools setting is on.
-    const { tools: mcpTools, exclusionSets } =
+    const { tools: fetchedMcpTools, exclusionSets } =
       await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+
+    // SEP-2243: a tool definition with an invalid x-mcp-header annotation must
+    // be excluded from tools/list (with a warning), so one malformed upstream
+    // definition cannot poison the rest of the list.
+    const mcpTools = fetchedMcpTools.filter(
+      (tool) =>
+        !isToolRejectedForMcpHeaders({
+          toolName: tool.name,
+          inputSchema: tool.parameters,
+        }),
+    );
 
     // A tools/list is served to one of two surfaces, and the whole gateway/chat
     // difference lives in this policy. An internal chat (agentType "agent") is

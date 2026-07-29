@@ -69,6 +69,32 @@ export const MCP_CLIENT_CAPABILITIES_META_KEY =
 export const SERVER_DISCOVER_METHOD = "server/discover";
 
 /**
+ * Methods 2026-07-28 removes from the protocol (SEP-2575). A client that
+ * declared that revision and calls one gets method-not-found — answering would
+ * mean serving a revision surface the client explicitly opted out of. Clients
+ * on earlier revisions are unaffected; the SDK keeps answering `ping` for
+ * them, and the rest never had handlers here.
+ */
+export const METHODS_REMOVED_IN_STATELESS_REVISION = new Set([
+  "ping",
+  "logging/setLevel",
+  "resources/subscribe",
+  "resources/unsubscribe",
+]);
+
+export function isMethodRemovedForRevision(params: {
+  method: string | undefined;
+  revision: McpProtocolRevision;
+}): boolean {
+  const { method, revision } = params;
+  return (
+    revision === STATELESS_MCP_PROTOCOL_REVISION &&
+    typeof method === "string" &&
+    METHODS_REMOVED_IN_STATELESS_REVISION.has(method)
+  );
+}
+
+/**
  * W3C Trace Context keys the revision fixes for `_meta` (SEP-414).
  *
  * Naming them in the spec is the whole value: a host, its client SDK, this
@@ -216,9 +242,19 @@ export function withPrivateCacheHint<T extends object>(
  */
 export function buildGatewayServerCapabilities(): McpServerCapabilitiesWithExtensions {
   return {
+    // Neither subscription flag is advertised, in any revision, because
+    // neither was ever implemented: no `resources/subscribe` handler exists —
+    // callers always got method-not-found — and no `list_changed`
+    // notification has ever been sent (the stateless transport has no channel
+    // to carry one). Advertising them cost real behavior: a client seeing
+    // `listChanged: true` may cache its lists indefinitely waiting for a
+    // notification that never comes. Freshness is signalled by the SEP-2549
+    // `ttlMs`/`cacheScope` hints on every cacheable result instead. In
+    // 2026-07-28 `resources/subscribe` is removed outright in favour of
+    // `subscriptions/listen`, which the gateway can advertise if it ever
+    // grows an event source to back it.
     resources: {
-      subscribe: true,
-      listChanged: true,
+      listChanged: false,
     },
     extensions: {
       ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,

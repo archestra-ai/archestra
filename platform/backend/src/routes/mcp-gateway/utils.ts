@@ -119,6 +119,7 @@ import {
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
+  type McpProtocolRevision,
   withCompleteResultEnvelope,
   withPrivateCacheHint,
 } from "./protocol";

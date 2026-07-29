@@ -153,34 +153,62 @@ export async function runToolCallMaybeTask(params: {
   });
   mcpGatewayTaskRunner.register(task.id, controller);
 
-  // Detached continuation: settle the row whichever way the call goes. A
-  // result carrying `input_required` means the tool asked for interactive
-  // input after the client had already been detached — nobody is there to
-  // answer, so the task fails with a reason the client can act on.
-  execution
-    .then(async (result) => {
-      if (result?.resultType === "input_required") {
-        await McpGatewayTaskModel.failIfWorking(task.id, {
-          code: -32603,
-          message:
-            "The tool requested interactive input while running as a background task. Re-run it without task mode to answer interactively.",
-        });
-        return;
+  // Detached continuation: settle the row whichever way the call goes.
+  //
+  // The tool's outcome is decided BEFORE anything is written, so a failing DB
+  // write can never be mistaken for a failing tool — deciding and persisting
+  // in the same try/catch would let a write error on the success path fall
+  // into the failure path and record the opposite of what happened. When the
+  // write itself fails there is nowhere left to record that, so the row stays
+  // `working` and its expiry is what ends the client's polling (see schema).
+  // Nothing awaits this chain, so it must never reject: an escaping rejection
+  // takes the process down under Node's default unhandled-rejection policy.
+  void (async () => {
+    let outcome: TaskOutcome;
+    try {
+      const result = await execution;
+      outcome =
+        // `input_required` means the tool asked for interactive input after
+        // the client had already been detached — nobody is there to answer,
+        // so the task fails with a reason the client can act on.
+        result?.resultType === "input_required"
+          ? {
+              kind: "failed",
+              error: {
+                code: -32603,
+                message:
+                  "The tool requested interactive input while running as a background task. Re-run it without task mode to answer interactively.",
+              },
+            }
+          : { kind: "completed", result };
+    } catch (error) {
+      outcome = {
+        kind: "failed",
+        error: {
+          code:
+            isRecord(error) && typeof error.code === "number"
+              ? error.code
+              : -32603,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      };
+    }
+
+    try {
+      if (outcome.kind === "completed") {
+        await McpGatewayTaskModel.completeIfWorking(task.id, outcome.result);
+      } else {
+        await McpGatewayTaskModel.failIfWorking(task.id, outcome.error);
       }
-      await McpGatewayTaskModel.completeIfWorking(task.id, result);
-    })
-    .catch(async (error) => {
-      await McpGatewayTaskModel.failIfWorking(task.id, {
-        code:
-          isRecord(error) && typeof error.code === "number"
-            ? error.code
-            : -32603,
-        message: error instanceof Error ? error.message : String(error),
-      });
-    })
-    .finally(() => {
+    } catch (error) {
+      logger.error(
+        { agentId, taskId: task.id, toolName, err: error },
+        "Failed to persist the outcome of a background MCP task; the row stays working until it expires",
+      );
+    } finally {
       mcpGatewayTaskRunner.release(task.id);
-    });
+    }
+  })();
 
   logger.info(
     { agentId, taskId: task.id, toolName, thresholdMs },
@@ -252,6 +280,11 @@ export async function handleTaskMethod(params: {
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/** What a detached execution settled to, decided before anything is written. */
+type TaskOutcome =
+  | { kind: "completed"; result: Record<string, unknown> }
+  | { kind: "failed"; error: Record<string, unknown> };
 
 function buildCreateTaskResult(task: McpGatewayTask): Record<string, unknown> {
   return {

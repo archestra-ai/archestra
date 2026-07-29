@@ -124,6 +124,11 @@ import {
   withCompleteResultEnvelope,
   withPrivateCacheHint,
 } from "./protocol";
+import {
+  clientDeclaredTasks,
+  runToolCallMaybeTask,
+  TASK_TTL_MS,
+} from "./tasks";
 
 export { deriveAuthMethod };
 
@@ -634,9 +639,21 @@ export async function createAgentServer(params: {
     );
   });
 
-  server.setRequestHandler(
-    CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }, extra) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+    const { name, arguments: args } = request.params;
+
+    // Tasks extension (io.modelcontextprotocol/tasks): an eligible call —
+    // the client declared the extension in this request's _meta — races the
+    // sync threshold and detaches into a durable background task when it
+    // outlives it. Everything below (dispatch, policies, envelope, metrics,
+    // persistence) runs identically either way; only who is waiting for the
+    // outcome changes.
+    const taskEligible =
+      mrtrEnabled && clientDeclaredTasks({ params: request.params });
+
+    const executeCallToolRequest = async (
+      taskAbortSignal: AbortSignal,
+    ): Promise<Record<string, unknown>> => {
       const startTime = Date.now();
       const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
 
@@ -933,6 +950,13 @@ export async function createAgentServer(params: {
               tokenAuth,
               {
                 availableTool,
+                // Tasks: tasks/cancel on this replica aborts the gateway-side
+                // await; whether the upstream stops working is up to the
+                // upstream (stateless HTTP servers run on — see tasks.ts).
+                abortSignal: taskAbortSignal,
+                // A call that may detach is bounded by the task TTL, not the
+                // synchronous patience window (see mcp-client).
+                ...(taskEligible ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
                 elicitationHandler: async (request) => {
                   // MRTR: a retry already carries the answer, so consume it
                   // instead of asking again.
@@ -1100,8 +1124,20 @@ export async function createAgentServer(params: {
           data: error instanceof Error ? error.message : "Unknown error",
         };
       }
-    },
-  );
+    };
+
+    return runToolCallMaybeTask({
+      eligible: taskEligible,
+      agentId,
+      principal: deriveStatePrincipal({
+        userId: tokenAuth?.userId,
+        tokenId: tokenAuth?.tokenId,
+        organizationId: tokenAuth?.organizationId,
+      }),
+      toolName: name,
+      execute: executeCallToolRequest,
+    });
+  });
 
   logger.info({ agentId }, "MCP server instance created");
   return { server: mcpServer, agent };

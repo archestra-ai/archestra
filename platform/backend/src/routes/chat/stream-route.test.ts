@@ -1779,13 +1779,18 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     expect(response.statusCode).toBe(200);
     await executionPromise;
 
+    // Transient: these fire before the model stream's `start` chunk, and a
+    // non-transient pre-start data part makes the client mint a phantom
+    // assistant message per attach (see prepare-model-messages.ts).
     expect(writerWrites).toContainEqual({
       type: "data-context-compaction-start",
       data: { trigger: "auto" },
+      transient: true,
     });
     expect(writerWrites).toContainEqual({
       type: "data-context-compaction-finish",
       data: { status: "skipped", reason: "not_beneficial" },
+      transient: true,
     });
   });
 

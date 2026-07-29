@@ -34,6 +34,7 @@ import {
   formatCallerIdentity,
   useMcpToolCalls,
 } from "@/lib/mcp/mcp-tool-call.query";
+import { resolveMcpToolCallStatus } from "@/lib/mcp-logs/tool-call-status";
 import { formatDate } from "@/lib/utils";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
@@ -379,20 +380,31 @@ function McpToolCallsTable({
         const result = row.original.toolResult;
         const method = row.original.method || "tools/call";
 
-        // For tools/call, check isError
+        // For tools/call, resolve success / error / cancelled (a call the
+        // user stopped mid-flight — neither a success nor a failure).
         if (
           method === "tools/call" &&
           result &&
           typeof result === "object" &&
           "isError" in result
         ) {
-          const isError = (result as { isError: boolean }).isError;
+          const status = resolveMcpToolCallStatus(result);
           return (
             <Badge
-              variant={isError ? "destructive" : "default"}
+              variant={
+                status === "error"
+                  ? "destructive"
+                  : status === "cancelled"
+                    ? "secondary"
+                    : "default"
+              }
               className="text-xs whitespace-nowrap"
             >
-              {isError ? "Error" : "Success"}
+              {status === "error"
+                ? "Error"
+                : status === "cancelled"
+                  ? "Cancelled"
+                  : "Success"}
             </Badge>
           );
         }

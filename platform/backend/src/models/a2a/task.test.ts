@@ -3,6 +3,7 @@ import { A2AProtocolTaskState } from "@/agents/a2a/a2a-protocol";
 import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import A2AContextModel from "./context";
+import A2AMessageModel from "./message";
 import A2ATaskModel from "./task";
 
 async function createContext() {
@@ -426,6 +427,116 @@ describe("A2ATaskModel", () => {
         afterSeq: 0,
       });
       expect(read?.events).toEqual([]);
+    });
+  });
+
+  describe("deleteTerminalTasksOlderThan", () => {
+    async function makeTaskWithHistory(state: A2AProtocolTaskState) {
+      const context = await createContext();
+      const task = await A2ATaskModel.create({ contextId: context.id, state });
+      const userMessage = await A2AMessageModel.createWithId({
+        id: crypto.randomUUID(),
+        contextId: context.id,
+        taskId: task.id,
+        role: "ROLE_USER",
+        parts: [{ text: "ask" }],
+        content: { id: "u", role: "user", parts: [] },
+      });
+      await db.insert(schema.a2aArtifactsTable).values({
+        taskId: task.id,
+        name: "agent-response",
+        parts: [{ text: "answer" }],
+      });
+      return { context, task, userMessage };
+    }
+
+    const backdate = (taskId: string, ms: number) =>
+      db
+        .update(schema.a2aTasksTable)
+        .set({ stateChangedAt: new Date(Date.now() - ms) })
+        .where(eq(schema.a2aTasksTable.id, taskId));
+
+    test("deletes an expired terminal task and its artifacts", async () => {
+      const { task } = await makeTaskWithHistory(
+        A2AProtocolTaskState.Completed,
+      );
+      await backdate(task.id, 10 * 24 * 60 * 60 * 1000);
+
+      const deleted = await A2ATaskModel.deleteTerminalTasksOlderThan({
+        retentionMs: 24 * 60 * 60 * 1000,
+        batchSize: 100,
+      });
+
+      expect(deleted).toBe(1);
+      expect(await A2ATaskModel.findById(task.id)).toBeNull();
+      const artifacts = await db
+        .select()
+        .from(schema.a2aArtifactsTable)
+        .where(eq(schema.a2aArtifactsTable.taskId, task.id));
+      expect(artifacts).toEqual([]);
+    });
+
+    test("keeps the conversation history the deleted task pointed at", async () => {
+      const { context, task, userMessage } = await makeTaskWithHistory(
+        A2AProtocolTaskState.Completed,
+      );
+      await backdate(task.id, 10 * 24 * 60 * 60 * 1000);
+
+      await A2ATaskModel.deleteTerminalTasksOlderThan({
+        retentionMs: 24 * 60 * 60 * 1000,
+        batchSize: 100,
+      });
+
+      // a2a_message cascades on task_id, so a naive delete would take the
+      // user's turns with it and break a context that is still in use.
+      const surviving = await A2AMessageModel.findById(userMessage.id);
+      expect(surviving).not.toBeNull();
+      expect(surviving?.taskId).toBeNull();
+      expect(surviving?.contextId).toBe(context.id);
+      expect(await A2AMessageModel.findByContextId(context.id)).toHaveLength(1);
+    });
+
+    test("spares tasks inside the window and tasks that are still active", async () => {
+      const { task: fresh } = await makeTaskWithHistory(
+        A2AProtocolTaskState.Completed,
+      );
+      const { task: running } = await makeTaskWithHistory(
+        A2AProtocolTaskState.Working,
+      );
+      await backdate(running.id, 10 * 24 * 60 * 60 * 1000);
+
+      const deleted = await A2ATaskModel.deleteTerminalTasksOlderThan({
+        retentionMs: 24 * 60 * 60 * 1000,
+        batchSize: 100,
+      });
+
+      expect(deleted).toBe(0);
+      expect(await A2ATaskModel.findById(fresh.id)).not.toBeNull();
+      // An old task still WORKING is an orphan for the reaper to settle, not
+      // something retention may delete out from under a live run.
+      expect(await A2ATaskModel.findById(running.id)).not.toBeNull();
+    });
+
+    test("honors the batch size so one sweep cannot run unbounded", async () => {
+      for (let i = 0; i < 3; i++) {
+        const { task } = await makeTaskWithHistory(
+          A2AProtocolTaskState.Completed,
+        );
+        await backdate(task.id, 10 * 24 * 60 * 60 * 1000);
+      }
+
+      expect(
+        await A2ATaskModel.deleteTerminalTasksOlderThan({
+          retentionMs: 24 * 60 * 60 * 1000,
+          batchSize: 2,
+        }),
+      ).toBe(2);
+      expect(
+        await A2ATaskModel.deleteTerminalTasksOlderThan({
+          retentionMs: 24 * 60 * 60 * 1000,
+          batchSize: 2,
+        }),
+      ).toBe(1);
     });
   });
 });

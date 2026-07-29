@@ -1277,6 +1277,14 @@ Each MCP server automatically gets a unique hash-based subdomain (e.g., `a1b2c3d
 
 The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS` (the same variables that control CORS). When set, only those origins can embed the sandbox iframe. When neither is set (local dev), all origins are accepted.
 
+### A2A Gateway
+
+- **`ARCHESTRA_A2A_TASK_RETENTION_DAYS`** - How long a finished A2A task is kept before it is deleted, along with its artifacts and stream events.
+  - Default: `90`. Set to `0` to keep tasks forever.
+  - Only terminal tasks (completed, failed, canceled, rejected) are eligible; a task still running is never deleted.
+  - The task's messages are detached before it goes, so the conversation history they belong to is untouched — only the task-scoped view of them is lost. The agent's answer also stays in that history.
+  - Deletion runs in bounded batches on the same background sweep that reaps orphaned tasks, so a large backlog is worked down over several passes.
+
 ### MCP Gateway
 
 - **`ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS`** - Per-request timeout, in milliseconds, for an upstream MCP tool call made through the gateway.

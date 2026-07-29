@@ -103,6 +103,18 @@ describe("a2a v2 AgentCard conformance", () => {
     expect(card.documentationUrl).toEqual(expect.any(String));
   });
 
+  test("names the provider running the agent", async () => {
+    const card = (await fetchCard()).json();
+
+    // Both fields are REQUIRED by AgentProvider, so an empty string is as
+    // broken as a missing key.
+    expect(card.provider.organization).toEqual(expect.any(String));
+    expect(card.provider.organization.length).toBeGreaterThan(0);
+    // The deployment itself, not the vendor docs link carried separately.
+    expect(card.provider.url).toMatch(/^https?:\/\//);
+    expect(card.provider.url).not.toBe(card.documentationUrl);
+  });
+
   test("version tracks the agent so a cached card cannot go stale", async () => {
     const card = (await fetchCard()).json();
     // "1" was the old hardcoded value — it could never invalidate a cache.

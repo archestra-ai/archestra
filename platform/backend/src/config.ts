@@ -849,6 +849,22 @@ const parsePositiveInt = (
   return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
 };
 
+/**
+ * Like {@link parsePositiveInt} but accepts 0, for knobs where zero is a
+ * meaningful setting rather than a missing one — a retention window of 0
+ * means "keep forever", not "use the default".
+ *
+ * @public — exported for testability
+ */
+export const parseNonNegativeInt = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!envValue) return defaultValue;
+  const parsed = Number.parseInt(envValue, 10);
+  return !Number.isNaN(parsed) && parsed >= 0 ? parsed : defaultValue;
+};
+
 /** @public — exported for testability */
 export const parseSampleRate = (
   envValue: string | undefined,
@@ -1729,6 +1745,16 @@ const config = {
   },
   a2aV2Gateway: {
     endpoint: "/v2/a2a",
+    /**
+     * How long a terminal A2A task is retained before the reaper deletes it
+     * (with its artifacts and stream events). Its messages are detached
+     * first, so the conversation history they belong to is never affected.
+     * 0 keeps tasks forever.
+     */
+    taskRetentionDays: parseNonNegativeInt(
+      process.env.ARCHESTRA_A2A_TASK_RETENTION_DAYS,
+      90,
+    ),
   },
   agents: {
     incomingEmail: {

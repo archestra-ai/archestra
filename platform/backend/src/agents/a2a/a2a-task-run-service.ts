@@ -1,3 +1,4 @@
+import config from "@/config";
 import logger from "@/logging";
 import { A2ATaskModel } from "@/models";
 import {
@@ -12,6 +13,11 @@ const STOP_POLL_INTERVAL_MS = 2 * 1000;
 const STALE_RUN_MS = 10 * 60 * 1000;
 const REAP_INTERVAL_MS = 60 * 1000;
 const TERMINAL_EVENT_RETENTION_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Tasks deleted per sweep, so one tick cannot hold a long transaction. */
+const RETENTION_BATCH_SIZE = 500;
+/** Batches per tick, bounding how long a single sweep runs. */
+const RETENTION_MAX_BATCHES = 10;
 
 const ORPHANED_TASK_REASON =
   "The server executing this task stopped before the run completed.";
@@ -200,11 +206,46 @@ class A2ATaskRunService {
       if (reaped > 0) {
         logger.info({ reaped }, "Reaped stale A2A task runs");
       }
+      // Stream events are transport, not the record: nothing can subscribe
+      // to a task that settled an hour ago, so their events are dead weight.
       await A2ATaskModel.deleteEventsOfTerminalTasksOlderThan(
         TERMINAL_EVENT_RETENTION_MS,
       );
+
+      await this.sweepExpiredTasks();
     } catch (error) {
       logger.warn({ error }, "Failed to reap stale A2A task runs");
+    }
+  }
+
+  /**
+   * Delete terminal tasks past the configured retention window. Runs in
+   * bounded batches so a backlog is worked down over several ticks instead of
+   * one enormous transaction.
+   */
+  private async sweepExpiredTasks(): Promise<void> {
+    const retentionDays = config.a2aV2Gateway.taskRetentionDays;
+    if (retentionDays <= 0) {
+      return;
+    }
+
+    let deleted = 0;
+    for (let batch = 0; batch < RETENTION_MAX_BATCHES; batch++) {
+      const removed = await A2ATaskModel.deleteTerminalTasksOlderThan({
+        retentionMs: retentionDays * DAY_MS,
+        batchSize: RETENTION_BATCH_SIZE,
+      });
+      deleted += removed;
+      if (removed < RETENTION_BATCH_SIZE) {
+        break;
+      }
+    }
+
+    if (deleted > 0) {
+      logger.info(
+        { deleted, retentionDays },
+        "Deleted expired A2A tasks past their retention window",
+      );
     }
   }
 

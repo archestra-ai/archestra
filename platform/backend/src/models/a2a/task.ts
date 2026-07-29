@@ -13,6 +13,14 @@ import type {
   InsertA2ATaskApprovalRequest,
 } from "@/types";
 
+/** Terminal states: absorbing, and the only ones eligible for retention. */
+const TERMINAL_TASK_STATES: A2ATaskState[] = [
+  "TASK_STATE_COMPLETED",
+  "TASK_STATE_FAILED",
+  "TASK_STATE_CANCELED",
+  "TASK_STATE_REJECTED",
+];
+
 /** States that may hold a live run (heartbeats, delta appends, reaping). */
 const ACTIVE_RUN_STATES: A2ATaskState[] = [
   "TASK_STATE_SUBMITTED",
@@ -655,17 +663,65 @@ class A2ATaskModel {
           .from(schema.a2aTasksTable)
           .where(
             and(
-              inArray(schema.a2aTasksTable.state, [
-                "TASK_STATE_COMPLETED",
-                "TASK_STATE_FAILED",
-                "TASK_STATE_CANCELED",
-                "TASK_STATE_REJECTED",
-              ]),
+              inArray(schema.a2aTasksTable.state, TERMINAL_TASK_STATES),
               lt(schema.a2aTasksTable.stateChangedAt, cutoff),
             ),
           ),
       ),
     );
+  }
+
+  /**
+   * Delete terminal tasks past their retention window, in bounded batches.
+   *
+   * Before a task row goes, its messages are detached from it. `a2a_message`
+   * cascades on `task_id`, and those rows are ALSO the context's conversation
+   * history — deleting the task would silently take a user's turns with it and
+   * break the thread for a context that is still in use. Detaching leaves them
+   * as ordinary context messages, which is what they always were; only the
+   * task-scoped view of them is lost.
+   *
+   * Artifacts and stream events cascade with the task, which is correct: both
+   * belong to the task alone, and the answer text also survives in the agent
+   * message that stays behind.
+   *
+   * Returns how many tasks were deleted, so the caller can keep going while a
+   * full batch comes back.
+   */
+  static async deleteTerminalTasksOlderThan(params: {
+    retentionMs: number;
+    batchSize: number;
+  }): Promise<number> {
+    const cutoff = new Date(Date.now() - params.retentionMs);
+
+    const expired = await db
+      .select({ id: schema.a2aTasksTable.id })
+      .from(schema.a2aTasksTable)
+      .where(
+        and(
+          inArray(schema.a2aTasksTable.state, TERMINAL_TASK_STATES),
+          lt(schema.a2aTasksTable.stateChangedAt, cutoff),
+        ),
+      )
+      .limit(params.batchSize);
+
+    if (expired.length === 0) {
+      return 0;
+    }
+    const ids = expired.map((row) => row.id);
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.a2aMessagesTable)
+        .set({ taskId: null })
+        .where(inArray(schema.a2aMessagesTable.taskId, ids));
+
+      await tx
+        .delete(schema.a2aTasksTable)
+        .where(inArray(schema.a2aTasksTable.id, ids));
+    });
+
+    return ids.length;
   }
 
   static async updateState(

@@ -134,6 +134,7 @@ import {
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import {
   UserShareField,
+  useUserShareChoice,
   useUserShareOption,
 } from "@/components/user-share-field";
 import {
@@ -530,18 +531,15 @@ export function AccessLevelSelector({
   const canShareWithTeams = isAdmin || isTeamAdmin;
   const userOption = useUserShareOption<AgentVisibilityChoice>("user");
   // An agent shared with named people stays `personal` in storage and carries
-  // grants, so "user" is a reading of (scope, userIds) mapped back on change.
-  const choice: AgentVisibilityChoice =
-    scope === "personal" && assignedUserIds.length > 0 ? "user" : scope;
-  const handleChoiceChange = (next: AgentVisibilityChoice) => {
-    if (next === "user") {
-      onScopeChange("personal");
-      return;
-    }
-    // Leaving Users revokes what it left behind rather than stranding it.
-    onUserIdsChange?.([]);
-    onScopeChange(next);
-  };
+  // grants beside it, so "user" is a synthetic choice rather than a scope.
+  const { isUserChoice, selectChoice } = useUserShareChoice<AgentScope>({
+    scope,
+    personalScope: "personal",
+    userIds: assignedUserIds,
+    onScopeChange,
+    onUserIdsChange,
+  });
+  const choice: AgentVisibilityChoice = isUserChoice ? "user" : scope;
 
   const isOptionDisabled = (value: string) => {
     if (value === "personal" && initialScope && initialScope !== "personal")
@@ -602,7 +600,7 @@ export function AccessLevelSelector({
       heading={`Who can use this ${agentTypeDisplayName[agentType] || "agent"}`}
       value={choice}
       options={options}
-      onValueChange={handleChoiceChange}
+      onValueChange={selectChoice}
     >
       {choice === "user" && onUserIdsChange && (
         <UserShareField

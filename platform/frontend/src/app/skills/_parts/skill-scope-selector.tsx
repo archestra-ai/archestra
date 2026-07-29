@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import {
   UserShareField,
+  useUserShareChoice,
   useUserShareOption,
 } from "@/components/user-share-field";
 import {
@@ -57,17 +58,16 @@ export function SkillScopeSelector({
   // "user" is a reading of (scope, userIds) that this control maps both ways.
   const supportsUserSharing = onUserIdsChange !== undefined;
   const userOption = useUserShareOption<SkillVisibilityChoice>("user");
-  const choice: SkillVisibilityChoice =
-    scope === "personal" && userIds.length > 0 ? "user" : scope;
-  const handleChoiceChange = (next: SkillVisibilityChoice) => {
-    if (next === "user") {
-      onScopeChange("personal");
-      return;
-    }
-    // Leaving Users revokes what it left behind rather than stranding it.
-    onUserIdsChange?.([]);
-    onScopeChange(next);
-  };
+  const { isUserChoice, selectChoice } = useUserShareChoice<
+    ResourceVisibilityScope
+  >({
+    scope,
+    personalScope: "personal",
+    userIds,
+    onScopeChange,
+    onUserIdsChange,
+  });
+  const choice: SkillVisibilityChoice = isUserChoice ? "user" : scope;
 
   const options: VisibilityOption<SkillVisibilityChoice>[] = [
     {
@@ -106,7 +106,7 @@ export function SkillScopeSelector({
       heading="Who can use this skill"
       value={choice}
       options={options}
-      onValueChange={handleChoiceChange}
+      onValueChange={selectChoice}
     >
       {choice === "user" && onUserIdsChange && (
         <UserShareField value={userIds} onValueChange={onUserIdsChange} />

@@ -130,6 +130,9 @@ function CompactCircle({
   // cancelled from the expanded card.
   const { task } = useMcpTaskFor(toolCallId);
   const isBackground = task?.status === "working" && state === "running";
+  // A cancelled task still reports a tool result, so the underlying state
+  // reads as completed. It wasn't — the user stopped it.
+  const isCancelled = task?.status === "cancelled";
   const elapsed = useElapsedSince(task?.startedAt ?? 0, Boolean(isBackground));
   const stateSuffix = isBackground
     ? " (running in the background)"
@@ -170,8 +173,10 @@ function CompactCircle({
             <span
               className={cn(
                 "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
-                state === "completed" && "bg-green-500",
-                state === "running" &&
+                isCancelled && "bg-muted-foreground",
+                !isCancelled && state === "completed" && "bg-green-500",
+                !isCancelled &&
+                  state === "running" &&
                   (isBackground
                     ? "bg-amber-500 animate-pulse"
                     : "bg-blue-500 animate-pulse"),
@@ -183,15 +188,17 @@ function CompactCircle({
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           {parseFullToolName(toolName).toolName.replace(/_/g, " ")}
-          {isBackground
-            ? ` (running in the background · ${formatElapsed(elapsed)})`
-            : state === "running"
-              ? " (running)"
-              : state === "error"
-                ? " (error)"
-                : state === "denied"
-                  ? " (denied)"
-                  : ""}
+          {isCancelled
+            ? " (cancelled)"
+            : isBackground
+              ? ` (running in the background · ${formatElapsed(elapsed)})`
+              : state === "running"
+                ? " (running)"
+                : state === "error"
+                  ? " (error)"
+                  : state === "denied"
+                    ? " (denied)"
+                    : ""}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -594,11 +601,14 @@ function ExpandedToolCard({
   const logsButton = errorText ? (
     <ToolErrorLogsButton toolName={toolName} />
   ) : null;
-  const headerState = getToolHeaderState({
-    state: part.state || "input-available",
-    toolResultPart,
-    errorText,
-  });
+  const headerState =
+    task?.status === "cancelled"
+      ? ("output-cancelled" as const)
+      : getToolHeaderState({
+          state: part.state || "input-available",
+          toolResultPart,
+          errorText,
+        });
 
   return (
     <Tool open>

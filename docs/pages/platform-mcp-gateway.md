@@ -106,6 +106,7 @@ Older revisions still work too. Anything back to `2024-11-05` is accepted and se
 | Missing-resource error | `-32002` | `-32602` |
 | `ping` and `logging/setLevel` | Answered | Removed — method-not-found |
 | Change notifications | None | `subscriptions/listen` stream for tool-list changes |
+| `x-mcp-header` params | Ignored | Mirrored to `Mcp-Param-*` headers on upstream calls |
 
 Both revisions see the same tools, the same access control, and the same policies. The differences are all in how a client talks to the gateway, not in what it can reach.
 

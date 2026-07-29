@@ -392,6 +392,61 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     expect(capabilities.resources.listChanged).toBe(false);
   });
 
+  test("a tool with an invalid x-mcp-header annotation is excluded from tools/list", async ({
+    makeAgent,
+    makeOrganization,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const org = await makeOrganization();
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "xh-catalog",
+    });
+
+    // Invalid: number is explicitly forbidden as an annotated type.
+    const invalid = await makeTool({
+      catalogId: catalog.id,
+      name: "xh-catalog__bad",
+      parameters: {
+        type: "object",
+        properties: { n: { type: "number", "x-mcp-header": "N" } },
+      },
+    });
+    const valid = await makeTool({
+      catalogId: catalog.id,
+      name: "xh-catalog__good",
+      parameters: {
+        type: "object",
+        properties: { region: { type: "string", "x-mcp-header": "Region" } },
+      },
+    });
+    await makeAgentTool(agent.id, invalid.id);
+    await makeAgentTool(agent.id, valid.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 30 },
+    });
+
+    const names = (response.json().result.tools as Array<{ name: string }>).map(
+      (t) => t.name,
+    );
+    // One malformed definition must not poison the rest of the list.
+    expect(names).toContain("xh-catalog__good");
+    expect(names).not.toContain("xh-catalog__bad");
+  });
+
   test("GET discovery advertises both supported revisions", async ({
     makeAgent,
     makeOrganization,

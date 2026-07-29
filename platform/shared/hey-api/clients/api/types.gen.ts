@@ -63567,6 +63567,7 @@ export type InitiateOAuthResponse = InitiateOAuthResponses[keyof InitiateOAuthRe
 export type HandleOAuthCallbackData = {
     body: {
         code: string;
+        iss?: string;
         state: string;
     };
     path?: never;

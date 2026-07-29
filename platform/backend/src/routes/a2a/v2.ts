@@ -37,9 +37,10 @@ import config from "@/config";
 import { AgentModel } from "@/models";
 import {
   extractBearerToken,
+  resolveTokenOrganizationId,
   validateMCPGatewayToken,
 } from "@/routes/mcp-gateway/utils";
-import { ApiError, UuidIdSchema } from "@/types";
+import { type Agent, ApiError, UuidIdSchema } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
 
 /**
@@ -130,6 +131,71 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const { endpoint } = config.a2aV2Gateway;
   const router = new A2AV2Router();
 
+  // Registry: every agent card this credential can reach. A gateway token
+  // belongs to a user, team, or organization rather than to one agent, so
+  // "which agents can I talk to" is a real question that otherwise has no
+  // answer over A2A — the agent id has to travel out of band.
+  fastify.get(
+    `${endpoint}/agents`,
+    {
+      schema: {
+        description:
+          "List the A2A AgentCards the presented credential is allowed to reach",
+        tags: ["A2A"],
+        response: {
+          200: z.object({ agents: z.array(A2AAgentCardSchema) }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const token = extractBearerToken(request);
+      if (!token) {
+        reply.header("WWW-Authenticate", 'Bearer realm="a2a"');
+        throw new ApiError(
+          401,
+          "Authorization header required. Use: Bearer <platform_token>",
+        );
+      }
+
+      const organizationId = await resolveTokenOrganizationId(token);
+      if (!organizationId) {
+        reply.header(
+          "WWW-Authenticate",
+          'Bearer realm="a2a", error="invalid_token"',
+        );
+        // Also the answer for a credential that is only meaningful against a
+        // named agent (an IdP JWT, an OAuth token): those clients already know
+        // their agent and can fetch its card directly.
+        throw new ApiError(
+          401,
+          "Listing agents requires a platform token. Fetch a specific agent's card instead.",
+        );
+      }
+
+      const candidates =
+        await AgentModel.findA2ARegistryCandidates(organizationId);
+
+      // Authorize with the very same check the per-agent card endpoint runs,
+      // rather than a second implementation that could drift and disclose an
+      // agent a direct fetch would refuse.
+      const permitted = await Promise.all(
+        candidates.map(async (agent) =>
+          (await validateMCPGatewayToken(agent.id, token)) ? agent : null,
+        ),
+      );
+
+      const baseUrl = resolveA2ABaseUrl(request);
+      const agents = permitted
+        .filter((agent) => agent !== null)
+        .map((agent) => buildAgentCard({ agent, baseUrl, endpoint }));
+
+      // Per-principal output, so any cache must be private. Short-lived
+      // because the set changes with team membership, not just card content.
+      reply.header("Cache-Control", "private, max-age=60");
+      return { agents };
+    },
+  );
+
   // GET AgentCard for an internal agent
   fastify.get(
     `${endpoint}/:agentId/.well-known/agent-card.json`,
@@ -185,68 +251,11 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(401, "Invalid or unauthorized token");
       }
 
-      const baseUrl = resolveA2ABaseUrl(request);
-      const securitySchemes = buildA2ASecuritySchemes();
-
-      // Build skills array with a single skill representing the agent. `tags`
-      // is REQUIRED by the spec and is what LLM-driven agent selection reads,
-      // so derive something meaningful rather than shipping an empty list.
-      const skillId = agent.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_|_$/g, "");
-      const skills = [
-        {
-          id: skillId,
-          name: agent.name,
-          description: agent.description || agent.systemPrompt || agent.name,
-          tags: buildSkillTags(agent.name),
-          examples: [`Ask ${agent.name} a question and read the reply.`],
-          inputModes: A2A_DEFAULT_INPUT_MODES,
-          outputModes: A2A_DEFAULT_OUTPUT_MODES,
-        },
-      ];
-
-      const card = {
-        name: agent.name,
-        description: agent.description || agent.systemPrompt || "",
-        // Clients cache the card against this value, so it must move whenever
-        // the card's content can — the agent's own revision timestamp is the
-        // one thing that does.
-        version: buildCardVersion(agent.updatedAt),
-        documentationUrl: getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a),
-        // Who runs this agent. `url` is the deployment itself rather than the
-        // vendor documentation already carried by `documentationUrl` — for a
-        // self-hosted install that is the part which actually identifies the
-        // provider.
-        provider: {
-          url: baseUrl,
-          organization: archestraMcpBranding.appName,
-        },
-        supportedInterfaces: [
-          {
-            url: `${baseUrl}${endpoint}/${agent.id}`,
-            protocolBinding: "JSONRPC",
-            protocolVersion: "1.0",
-          },
-        ],
-        capabilities: {
-          streaming: true,
-          pushNotifications: true,
-          // We serve exactly one card, and it is already authenticated, so
-          // there is no separate extended card to fetch.
-          extendedAgentCard: false,
-        },
-        securitySchemes,
-        // Any one of the declared schemes is sufficient; each alternative is
-        // its own requirement object per the spec's OpenAPI-style semantics.
-        securityRequirements: Object.keys(securitySchemes).map((name) => ({
-          [name]: [],
-        })),
-        defaultInputModes: A2A_DEFAULT_INPUT_MODES,
-        defaultOutputModes: A2A_DEFAULT_OUTPUT_MODES,
-        skills,
-      };
+      const card = buildAgentCard({
+        agent,
+        baseUrl: resolveA2ABaseUrl(request),
+        endpoint,
+      });
 
       // Cards are cheap to recompute but clients poll them; a weak validator
       // keyed on the content lets a conditional request answer 304.
@@ -693,6 +702,81 @@ function translateEventForVersion(
  * connection during long silent gaps between text deltas.
  */
 const SSE_HEARTBEAT_INTERVAL_MS = 15_000;
+
+/**
+ * Build one agent's card. Shared by the per-agent well-known endpoint and the
+ * registry so the two can never describe the same agent differently.
+ */
+function buildAgentCard(params: {
+  agent: Pick<
+    Agent,
+    "id" | "name" | "description" | "systemPrompt" | "updatedAt"
+  >;
+  baseUrl: string;
+  endpoint: string;
+}) {
+  const { agent, baseUrl, endpoint } = params;
+  const securitySchemes = buildA2ASecuritySchemes();
+
+  // A single skill representing the agent. `tags` is REQUIRED by the spec and
+  // is what LLM-driven agent selection reads, so derive something meaningful
+  // rather than shipping an empty list.
+  const skillId = agent.name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+
+  return {
+    name: agent.name,
+    description: agent.description || agent.systemPrompt || "",
+    // Clients cache the card against this value, so it must move whenever the
+    // card's content can — the agent's own revision timestamp is the one
+    // thing that does.
+    version: buildCardVersion(agent.updatedAt),
+    documentationUrl: getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a),
+    // Who runs this agent. `url` is the deployment itself rather than the
+    // vendor documentation already carried by `documentationUrl` — for a
+    // self-hosted install that is the part which actually identifies the
+    // provider.
+    provider: {
+      url: baseUrl,
+      organization: archestraMcpBranding.appName,
+    },
+    supportedInterfaces: [
+      {
+        url: `${baseUrl}${endpoint}/${agent.id}`,
+        protocolBinding: "JSONRPC",
+        protocolVersion: "1.0",
+      },
+    ],
+    capabilities: {
+      streaming: true,
+      pushNotifications: true,
+      // We serve exactly one card, and it is already authenticated, so there
+      // is no separate extended card to fetch.
+      extendedAgentCard: false,
+    },
+    securitySchemes,
+    // Any one of the declared schemes is sufficient; each alternative is its
+    // own requirement object per the spec's OpenAPI-style semantics.
+    securityRequirements: Object.keys(securitySchemes).map((name) => ({
+      [name]: [],
+    })),
+    defaultInputModes: A2A_DEFAULT_INPUT_MODES,
+    defaultOutputModes: A2A_DEFAULT_OUTPUT_MODES,
+    skills: [
+      {
+        id: skillId,
+        name: agent.name,
+        description: agent.description || agent.systemPrompt || agent.name,
+        tags: buildSkillTags(agent.name),
+        examples: [`Ask ${agent.name} a question and read the reply.`],
+        inputModes: A2A_DEFAULT_INPUT_MODES,
+        outputModes: A2A_DEFAULT_OUTPUT_MODES,
+      },
+    ],
+  };
+}
 
 /**
  * Authentication schemes the gateway accepts, declared so a client can

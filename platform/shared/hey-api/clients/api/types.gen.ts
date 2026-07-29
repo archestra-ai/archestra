@@ -11781,6 +11781,65 @@ export type PostV1A2aByAgentIdResponses = {
 
 export type PostV1A2aByAgentIdResponse = PostV1A2aByAgentIdResponses[keyof PostV1A2aByAgentIdResponses];
 
+export type GetV2A2aAgentsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v2/a2a/agents';
+};
+
+export type GetV2A2aAgentsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        agents: Array<{
+            name: string;
+            description: string;
+            version: string;
+            documentationUrl?: string;
+            provider: {
+                url: string;
+                organization: string;
+            };
+            supportedInterfaces: Array<{
+                url: string;
+                protocolBinding: string;
+                protocolVersion: string;
+            }>;
+            capabilities: {
+                streaming: boolean;
+                pushNotifications: boolean;
+                extendedAgentCard: boolean;
+            };
+            securitySchemes: {
+                [key: string]: {
+                    type: string;
+                    scheme?: string;
+                    bearerFormat?: string;
+                    description?: string;
+                };
+            };
+            securityRequirements: Array<{
+                [key: string]: Array<string>;
+            }>;
+            defaultInputModes: Array<string>;
+            defaultOutputModes: Array<string>;
+            skills: Array<{
+                id: string;
+                name: string;
+                description: string;
+                tags: Array<string>;
+                examples?: Array<string>;
+                inputModes: Array<string>;
+                outputModes: Array<string>;
+            }>;
+        }>;
+    };
+};
+
+export type GetV2A2aAgentsResponse = GetV2A2aAgentsResponses[keyof GetV2A2aAgentsResponses];
+
 export type GetV2A2aByAgentIdWellKnownAgentCardJsonData = {
     body?: never;
     path: {

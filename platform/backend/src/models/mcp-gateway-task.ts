@@ -1,4 +1,4 @@
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, lte, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   McpGatewayTask,
@@ -117,6 +117,57 @@ export default class McpGatewayTaskModel {
       )
       .returning({ id: schema.mcpGatewayTasksTable.id });
     return updated.length > 0;
+  }
+
+  /**
+   * Flip every expired `working` row to `failed`.
+   *
+   * The extension sanctions this explicitly: "servers MAY mark a task as
+   * `failed` at any point after the TTL elapses". A row still `working` past
+   * its expiry means the replica executing it died before writing an outcome
+   * — reads already refuse expired rows either way, so this is about the row
+   * telling the truth: a task whose executor is gone is a failed task, not a
+   * running one. The `working` guard means a still-live execution that
+   * settles concurrently wins exactly as it does against cancellation.
+   * Idempotent and replica-safe; every backend pod may sweep.
+   */
+  static async failExpired(): Promise<number> {
+    const updated = await db
+      .update(schema.mcpGatewayTasksTable)
+      .set({
+        status: "failed",
+        error: {
+          code: -32603,
+          message: "Task expired before it produced a result",
+        },
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          eq(schema.mcpGatewayTasksTable.status, "working"),
+          lte(schema.mcpGatewayTasksTable.expiresAt, new Date()),
+        ),
+      )
+      .returning({ id: schema.mcpGatewayTasksTable.id });
+    return updated.length;
+  }
+
+  /**
+   * Delete rows whose expiry is at least `graceMs` in the past.
+   *
+   * The extension's retention stance: after the TTL a server may "subsequently
+   * delete it at any time", and answering not-found for a purged task is
+   * compliant — which reads already do the moment a row expires. The grace
+   * window exists purely for operators: recent outcomes stay inspectable in
+   * the table for a while before the reaper removes them.
+   */
+  static async purgeExpired(params: { graceMs: number }): Promise<number> {
+    const cutoff = new Date(Date.now() - params.graceMs);
+    const deleted = await db
+      .delete(schema.mcpGatewayTasksTable)
+      .where(lte(schema.mcpGatewayTasksTable.expiresAt, cutoff))
+      .returning({ id: schema.mcpGatewayTasksTable.id });
+    return deleted.length;
   }
 
   private static async transitionIfWorking(

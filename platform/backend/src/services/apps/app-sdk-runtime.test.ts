@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 
 /**
  * Executes the REAL static SDK file (static/archestra-app-sdk.js) in this
@@ -25,11 +25,31 @@ const GUEST_MODULE = `
 export class App {
   constructor() {}
   async connect() {}
-  async callServerTool(params) {
+  async callServerTool(params, options) {
     globalThis.__sdkTestCalls.push(params);
-    const result = globalThis.__sdkTestResults.shift();
-    if (!result) throw new Error("sdk test: no stub result queued");
-    return result;
+    const queued = globalThis.__sdkTestResults.shift();
+    if (!queued) throw new Error("sdk test: no stub result queued");
+    if (!queued.__slow) return queued;
+    // Slow-result path mirrors the request-timeout contract of
+    // @modelcontextprotocol/sdk shared/protocol.js for a host that emits no
+    // progress notifications: the per-request timer is options.timeout
+    // (60s when the caller passes none), and firing it rejects with the
+    // RequestTimeout McpError (-32001).
+    const timeout =
+      options && options.timeout != null ? options.timeout : 60000;
+    return await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(
+          Object.assign(new Error("MCP error -32001: Request timed out"), {
+            code: -32001,
+          }),
+        );
+      }, timeout);
+      setTimeout(() => {
+        clearTimeout(timer);
+        resolve(queued.result);
+      }, queued.delayMs);
+    });
   }
 }
 export class PostMessageTransport {
@@ -434,6 +454,28 @@ describe("Apps SDK runtime", () => {
     await expect(archestra.llm.complete("x")).rejects.toMatchObject({
       code: "llm_unavailable",
     });
+  });
+
+  test("llm.complete resolves for a completion that outlasts the MCP SDK's 60s default request timeout (reasoning models think for minutes)", async () => {
+    vi.useFakeTimers();
+    try {
+      const reasoningLatencyMs = 3 * 60_000;
+      results.push({
+        __slow: true,
+        delayMs: reasoningLatencyMs,
+        result: {
+          content: [{ type: "text", text: "a slowly reasoned answer" }],
+          structuredContent: { text: "a slowly reasoned answer" },
+        },
+      });
+      const pending = archestra.llm.complete("prove it step by step");
+      const settled = expect(pending).resolves.toBe("a slowly reasoned answer");
+      await vi.advanceTimersByTimeAsync(reasoningLatencyMs);
+      await settled;
+      calls.pop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("llm.prompt builds a string with no host round-trip", () => {

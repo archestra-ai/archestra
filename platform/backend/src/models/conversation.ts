@@ -11,7 +11,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import type {
@@ -881,6 +881,73 @@ class ConversationModel {
       ),
     );
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Enterprise data-retention: conversations whose last message activity is
+   * older than the retention window, oldest first. Cross-org by design — the
+   * sweep is an instance-level operator policy, not a user action — and
+   * deliberately includes soft-deleted (trashed) conversations: retention is
+   * the hard floor beneath the trash, so sitting in the trash never extends a
+   * conversation's lifetime. SQL-side cutoff because `last_message_at` is
+   * timestamp-without-time-zone.
+   */
+  static async findExpired(params: {
+    retentionDays: number;
+    limit: number;
+  }): Promise<Array<{ id: string; organizationId: string }>> {
+    const result = await db.execute<{ id: string; organization_id: string }>(
+      sql`
+        SELECT id, organization_id
+        FROM ${schema.conversationsTable}
+        WHERE last_message_at < now()::timestamp - make_interval(days => ${params.retentionDays})
+        ORDER BY last_message_at ASC
+        LIMIT ${params.limit}
+      `,
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      organizationId: row.organization_id,
+    }));
+  }
+
+  /**
+   * Lock a retention candidate and re-check expiry under the lock. Returns
+   * null when the conversation vanished or received activity since selection.
+   * While the returned row lock is held, a concurrent message insert blocks on
+   * its FK check, so the caller can purge and delete without a lost-update
+   * window.
+   */
+  static async lockIfExpired(
+    tx: Transaction,
+    params: { id: string; retentionDays: number },
+  ): Promise<{ id: string; organizationId: string } | null> {
+    const result = await tx.execute<{ id: string; organization_id: string }>(
+      sql`
+        SELECT id, organization_id
+        FROM ${schema.conversationsTable}
+        WHERE id = ${params.id}
+          AND last_message_at < now()::timestamp - make_interval(days => ${params.retentionDays})
+        FOR UPDATE
+      `,
+    );
+    const row = result.rows[0];
+    return row ? { id: row.id, organizationId: row.organization_id } : null;
+  }
+
+  /**
+   * System-level delete by id, no user/org scoping — retention-sweep only.
+   * Runs on the caller's transaction so it composes with the row lock and the
+   * file-row purge taken in the same transaction.
+   */
+  static async deleteExpiredLocked(tx: Transaction, id: string): Promise<void> {
+    await tx
+      .delete(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, id));
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Get the agentId for a conversation (without user context checks)

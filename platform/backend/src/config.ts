@@ -1152,12 +1152,13 @@ export function parseProcessType(value: string | undefined): ProcessType {
 }
 
 /**
- * Parse ARCHESTRA_AUDIT_LOG_RETENTION_DAYS into a non-negative integer.
- * Default is 0 (retention disabled — audit rows are never auto-deleted).
- * Org admins opt in by setting a positive number of days.
+ * Parse a `*_RETENTION_DAYS` env var into a non-negative integer.
+ * Default is 0 (retention disabled — rows are never auto-deleted).
+ * Operators opt in by setting a positive number of days.
  * @public — exported for testability
  */
-export const parseAuditLogRetentionDays = (
+export const parseRetentionDays = (
+  envVarName: string,
   envValue: string | undefined,
 ): number => {
   const DEFAULT_RETENTION_DAYS = 0;
@@ -1166,7 +1167,7 @@ export const parseAuditLogRetentionDays = (
   const parsed = Number.parseInt(value, 10);
   if (Number.isNaN(parsed) || parsed < 0) {
     logger.warn(
-      `Invalid ARCHESTRA_AUDIT_LOG_RETENTION_DAYS value "${value}", using default ${DEFAULT_RETENTION_DAYS} (disabled)`,
+      `Invalid ${envVarName} value "${value}", using default ${DEFAULT_RETENTION_DAYS} (disabled)`,
     );
     return DEFAULT_RETENTION_DAYS;
   }
@@ -2698,8 +2699,27 @@ const config = {
   siteNotificationMessage:
     process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
   auditLog: {
-    retentionDays: parseAuditLogRetentionDays(
+    retentionDays: parseRetentionDays(
+      "ARCHESTRA_AUDIT_LOG_RETENTION_DAYS",
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,
+    ),
+  },
+  // Data-retention windows for content-bearing tables. All default to 0
+  // (disabled). Enterprise-licensed — the boot-time assertion in
+  // data-retention/license-gate.ee.ts fails startup when any of these is set
+  // without an active enterprise license.
+  retention: {
+    llmLogsDays: parseRetentionDays(
+      "ARCHESTRA_LLM_LOGS_RETENTION_DAYS",
+      process.env.ARCHESTRA_LLM_LOGS_RETENTION_DAYS,
+    ),
+    mcpLogsDays: parseRetentionDays(
+      "ARCHESTRA_MCP_LOGS_RETENTION_DAYS",
+      process.env.ARCHESTRA_MCP_LOGS_RETENTION_DAYS,
+    ),
+    chatConversationsDays: parseRetentionDays(
+      "ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS",
+      process.env.ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS,
     ),
   },
 };

@@ -59,6 +59,8 @@ import config, {
   shouldRunWebServer,
   shouldRunWorker,
 } from "@/config";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
+import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import { dropLegacyPayloadTrgmIndexes } from "@/database/index-maintenance";
 import { getTransientDbErrorCode } from "@/database/retry";
@@ -1220,6 +1222,15 @@ const startWebServer = async () => {
   registerAuditLogHook(fastify);
 
   try {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Fails startup when retention windows are configured without a license —
+    // an operator relying on retention for compliance must never run with it
+    // silently disabled.
+    assertRetentionConfigLicensed();
+    // SPDX-SnippetEnd
+
     // Initialize database connection first
     await initializeDatabase();
 
@@ -1638,6 +1649,13 @@ const startWorker = async () => {
   logger.info("Starting in worker-only mode (ARCHESTRA_PROCESS_TYPE=worker)");
 
   try {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Same gate as `start` — the retention sweep runs on the worker.
+    assertRetentionConfigLicensed();
+    // SPDX-SnippetEnd
+
     await initializeDatabase();
     cacheManager.start();
     await enterpriseTier.start();

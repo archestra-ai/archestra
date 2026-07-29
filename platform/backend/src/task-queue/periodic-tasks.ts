@@ -35,6 +35,13 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     payload: {},
   },
   { taskType: "audit_log_cleanup", intervalSeconds: 86400, payload: {} },
+  // Enterprise data-retention sweep over interactions, mcp_tool_calls, and
+  // conversations. A fast no-op while every retention window is disabled.
+  {
+    taskType: "content_retention_cleanup",
+    intervalSeconds: 86400,
+    payload: {},
+  },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

@@ -29,7 +29,6 @@ import config, {
   parseActiveChatRunPollIntervalMs,
   parseActiveUsersRefreshIntervalMs,
   parseAnthropicWifConfig,
-  parseAuditLogRetentionDays,
   parseBodyLimit,
   parseChatMaxOutputTokens,
   parseChatRateMeteredMaxOutputTokens,
@@ -53,6 +52,7 @@ import config, {
   parseOptionalPort,
   parseProcessType,
   parseRefreshTokenReuseGraceSeconds,
+  parseRetentionDays,
   parseSampleRate,
   parseSandboxMemoryMaxBytes,
   parseTrustProxy,
@@ -2453,35 +2453,41 @@ describe("getAppAssetBaseOrigin", () => {
   });
 });
 
-describe("parseAuditLogRetentionDays", () => {
+describe("parseRetentionDays", () => {
+  const parse = (value: string | undefined) =>
+    parseRetentionDays("ARCHESTRA_AUDIT_LOG_RETENTION_DAYS", value);
+
   test("returns 0 (disabled) when env var is not set", () => {
-    expect(parseAuditLogRetentionDays(undefined)).toBe(0);
+    expect(parse(undefined)).toBe(0);
   });
 
   test("returns 0 (disabled) when env var is empty string", () => {
-    expect(parseAuditLogRetentionDays("")).toBe(0);
+    expect(parse("")).toBe(0);
   });
 
   test("returns 0 to keep the sweep disabled", () => {
-    expect(parseAuditLogRetentionDays("0")).toBe(0);
+    expect(parse("0")).toBe(0);
   });
 
   test("returns a valid positive integer (opt-in)", () => {
-    expect(parseAuditLogRetentionDays("90")).toBe(90);
-    expect(parseAuditLogRetentionDays("365")).toBe(365);
+    expect(parse("90")).toBe(90);
+    expect(parse("365")).toBe(365);
   });
 
   test("trims whitespace before parsing", () => {
-    expect(parseAuditLogRetentionDays("  30  ")).toBe(30);
+    expect(parse("  30  ")).toBe(30);
   });
 
-  test("returns default and warns on non-numeric value", () => {
-    expect(parseAuditLogRetentionDays("abc")).toBe(0);
+  test("returns default and warns on non-numeric value, naming the env var", () => {
+    expect(parse("abc")).toBe(0);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("abc"));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("ARCHESTRA_AUDIT_LOG_RETENTION_DAYS"),
+    );
   });
 
   test("returns default and warns on negative value", () => {
-    expect(parseAuditLogRetentionDays("-1")).toBe(0);
+    expect(parse("-1")).toBe(0);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("-1"));
   });
 });

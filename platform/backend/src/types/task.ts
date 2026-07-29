@@ -25,6 +25,7 @@ export const TaskTypeSchema = z.enum([
   "check_due_schedule_triggers",
   "schedule_trigger_run_execute",
   "audit_log_cleanup",
+  "content_retention_cleanup",
   "check_due_skill_github_syncs",
   "skill_github_sync",
 ]);
@@ -63,6 +64,7 @@ export const TASK_LANES = {
     "check_due_schedule_triggers",
     "schedule_trigger_run_execute",
     "audit_log_cleanup",
+    "content_retention_cleanup",
     "check_due_skill_github_syncs",
     "skill_github_sync",
   ],

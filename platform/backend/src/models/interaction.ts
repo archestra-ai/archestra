@@ -691,6 +691,79 @@ class InteractionModel {
     return result.total;
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Enterprise data-retention sweep: delete interactions older than the
+   * retention window, leaf-first.
+   *
+   * A row is only deletable when no other row references it as `parent_id`,
+   * so delta chains erode tip-first across iterations and any ancestor of a
+   * fresh surviving row is retained — reconstruction for survivors can never
+   * truncate, and the deployed `ON DELETE RESTRICT` self-FK can never fire by
+   * design. A concurrent insert racing the NOT EXISTS check trips the FK
+   * (23503); that batch is skipped and re-evaluated on the next sweep.
+   *
+   * The cutoff is computed in SQL (`now() - make_interval(...)`): `created_at`
+   * is `timestamp without time zone`, and a JS Date parameter would shift by
+   * the host's UTC offset.
+   */
+  static async deleteExpired(params: {
+    retentionDays: number;
+    batchSize?: number;
+    maxBatches?: number;
+  }): Promise<number> {
+    const batchSize = params.batchSize ?? 1000;
+    const maxBatches = params.maxBatches ?? 500;
+    let totalDeleted = 0;
+
+    for (let batch = 0; batch < maxBatches; batch++) {
+      let deleted: number;
+      try {
+        const result = await db.execute<{ deleted: number }>(sql`
+          WITH fence AS (
+            SELECT i.id
+            FROM ${schema.interactionsTable} AS i
+            WHERE i.created_at < now()::timestamp - make_interval(days => ${params.retentionDays})
+              AND NOT EXISTS (
+                SELECT 1 FROM ${schema.interactionsTable} AS c
+                WHERE c.parent_id = i.id
+              )
+            LIMIT ${batchSize}
+          ),
+          removed AS (
+            DELETE FROM ${schema.interactionsTable}
+            WHERE id IN (SELECT id FROM fence)
+            RETURNING 1
+          )
+          SELECT COUNT(*)::int AS deleted FROM removed
+        `);
+        deleted = Number(result.rows[0]?.deleted ?? 0);
+      } catch (error) {
+        // Most likely the parent_id RESTRICT FK racing a concurrent insert
+        // that chained onto a row selected for deletion. Safe to stop — the
+        // next sweep re-evaluates leaves from scratch.
+        logger.warn(
+          {
+            error: error instanceof Error ? error.message : String(error),
+            totalDeleted,
+          },
+          "interaction retention sweep: batch failed, deferring to next run",
+        );
+        return totalDeleted;
+      }
+
+      totalDeleted += deleted;
+      // Leaf-first must loop even on short batches: deleting tips can expose
+      // their parents as new leaves. Only an empty round means done.
+      if (deleted === 0) break;
+    }
+
+    return totalDeleted;
+  }
+  // SPDX-SnippetEnd
+
   /**
    * Get all unique external agent IDs with display names
    * Used for filtering dropdowns in the UI

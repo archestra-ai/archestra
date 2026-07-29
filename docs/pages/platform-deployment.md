@@ -1574,6 +1574,22 @@ The audit log records administrative actions (mutations via `/api/*` and auth ev
   - Must be a non-negative integer; invalid values fall back to the default (disabled).
   - When enabled, the sweep runs once every 24 hours as a background task.
 
+### Data Retention
+
+> **Enterprise feature:** Contact sales@archestra.ai for licensing information.
+
+Automatic deletion of content-bearing records after a configurable number of days. All windows are **disabled by default** — records are kept indefinitely until an operator opts in. Startup fails when a window is configured without an active enterprise license, so a deployment relying on retention can never run with it silently disabled. When enabled, a sweep runs once every 24 hours as a background task and deletes in small batches.
+
+- **`ARCHESTRA_LLM_LOGS_RETENTION_DAYS`** - Days to retain LLM proxy logs (the `interactions` records behind the LLM Logs page) before automatic deletion.
+  - Default: `0` (disabled).
+  - Rows that newer records still depend on for request reconstruction are retained until those newer records expire too.
+  - A window shorter than 32 days logs a startup warning: monthly cost-limit periods aggregate these records, so deleting inside that horizon can under-count usage against limits. All-time cost statistics reflect retained records only.
+- **`ARCHESTRA_MCP_LOGS_RETENTION_DAYS`** - Days to retain MCP gateway tool-call logs before automatic deletion.
+  - Default: `0` (disabled).
+- **`ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS`** - Days after a conversation's last message activity before the conversation is automatically deleted, together with its messages, attachments, and conversation files.
+  - Default: `0` (disabled).
+  - Any new message resets the clock — only genuinely idle conversations expire.
+
 ### Maintenance Mode
 
 - **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and displays a custom message to all users blocking access to the platform.

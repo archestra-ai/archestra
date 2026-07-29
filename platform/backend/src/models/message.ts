@@ -43,18 +43,24 @@ class MessageModel {
   }
 
   static async create(data: InsertMessage): Promise<Message> {
-    const [message] = await db
-      .insert(schema.messagesTable)
-      // Monotonic v7 id: with `created_at` at millisecond precision,
-      // back-to-back writes can tie, and every "which message is later?"
-      // question (ordering, delete-subsequent) breaks ties with the id.
-      .values({ id: uuidv7(), ...data })
-      .returning();
+    // Insert and recency-touch are one transaction: retention eligibility is
+    // judged on `lastMessageAt`, so content must never exist with a stale
+    // recency stamp (a crash between the two statements would otherwise leave
+    // a fresh message on a conversation that still looks expired).
+    return withDbTransaction(async (tx) => {
+      const [message] = await tx
+        .insert(schema.messagesTable)
+        // Monotonic v7 id: with `created_at` at millisecond precision,
+        // back-to-back writes can tie, and every "which message is later?"
+        // question (ordering, delete-subsequent) breaks ties with the id.
+        .values({ id: uuidv7(), ...data })
+        .returning();
 
-    // Update conversation's updatedAt so it sorts to the top
-    await MessageModel.touchConversation(data.conversationId);
+      // Update conversation's updatedAt so it sorts to the top
+      await MessageModel.touchConversation(data.conversationId, tx);
 
-    return message;
+      return message;
+    });
   }
 
   static async bulkCreate(
@@ -251,17 +257,22 @@ class MessageModel {
     // Update the specific part's text
     content.parts[partIndex].text = newText;
 
-    // Update the message in the database
-    const [updatedMessage] = await db
-      .update(schema.messagesTable)
-      .set({
-        content,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.messagesTable.id, messageId))
-      .returning();
+    // Content mutation + recency touch are atomic — an edit is fresh activity
+    // and must never leave the conversation looking retention-expired.
+    return withDbTransaction(async (tx) => {
+      const [updatedMessage] = await tx
+        .update(schema.messagesTable)
+        .set({
+          content,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.messagesTable.id, messageId))
+        .returning();
 
-    return updatedMessage;
+      await MessageModel.touchConversation(updatedMessage.conversationId, tx);
+
+      return updatedMessage;
+    });
   }
 
   /**
@@ -279,21 +290,24 @@ class MessageModel {
       throw new Error("Message not found");
     }
 
-    const [updatedMessage] = await db
-      .update(schema.messagesTable)
-      .set({
-        content,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.messagesTable.id, messageId))
-      .returning();
-
     // A content change (e.g. a tool call's final output landing in an existing
     // assistant message) is fresh activity the owner may not have seen, so it
-    // advances the conversation's recency the same way a new message does.
-    await MessageModel.touchConversation(updatedMessage.conversationId);
+    // advances the conversation's recency the same way a new message does —
+    // atomically, so content can never outrun the recency stamp.
+    return withDbTransaction(async (tx) => {
+      const [updatedMessage] = await tx
+        .update(schema.messagesTable)
+        .set({
+          content,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.messagesTable.id, messageId))
+        .returning();
 
-    return updatedMessage;
+      await MessageModel.touchConversation(updatedMessage.conversationId, tx);
+
+      return updatedMessage;
+    });
   }
 
   /**
@@ -408,6 +422,10 @@ class MessageModel {
             ),
           );
       }
+
+      // An edit is fresh activity — advance recency in the same transaction
+      // so retention eligibility can never lag the content change.
+      await MessageModel.touchConversation(message.conversationId, tx);
 
       return updatedMessage;
     };

@@ -45,8 +45,12 @@ export interface BedrockAwsPrices {
  * Keys keep the `-vN` segment: for Amazon it is part of the model name, not a
  * revision, and `titan-embed-text-v1` and `-v2` are different models priced five
  * times apart.
+ *
+ * Every value names one model. A family name like `Claude Opus 4` matches a
+ * listing whose price belongs to a sibling, so it is rejected by test.
+ *
+ * @public — exported for that test; knip --production sees no other consumer.
  */
-/** @public — asserted by bedrock-aws-pricing.test.ts to stay free of generic identities. */
 export const AWS_PRICE_IDENTITY: Record<string, string> = {
   "amazon.nova-2-lite-v1": "Nova 2.0 Lite",
   "amazon.nova-2-sonic-v1": "Nova Sonic 2.0",

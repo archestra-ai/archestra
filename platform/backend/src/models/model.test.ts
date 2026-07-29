@@ -787,6 +787,28 @@ describe("ModelModel", () => {
       );
       expect(after?.discoveredViaLlmProxy).toBe(false);
     });
+
+    test("a repeat call neither duplicates the row nor resets its fields", async () => {
+      await ModelModel.ensureModelExists("repeat-model", "openai");
+      const first = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "repeat-model",
+      );
+      await ModelModel.update(first?.id ?? "", {
+        customPricePerMillionInput: "4.00",
+      });
+
+      await ModelModel.ensureModelExists("repeat-model", "openai");
+
+      const all = await ModelModel.findAll({ provider: "openai" });
+      expect(all.filter((m) => m.modelId === "repeat-model")).toHaveLength(1);
+      const after = await ModelModel.findByProviderAndModelId(
+        "openai",
+        "repeat-model",
+      );
+      expect(after?.id).toBe(first?.id);
+      expect(after?.customPricePerMillionInput).toBe("4.00");
+    });
   });
 
   describe("findLlmProxyModels", () => {

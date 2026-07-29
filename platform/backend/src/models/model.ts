@@ -642,8 +642,12 @@ class ModelModel {
   static async ensureModelExists(
     modelId: string,
     provider: SupportedProvider,
-  ): Promise<void> {
-    await db
+  ): Promise<Model | null> {
+    // RETURNING yields a row only when this call did the insert, which is what
+    // tells the caller a model was seen for the first time and still needs its
+    // registry data. On conflict it yields nothing, so a repeat sighting costs
+    // one statement and leaves the existing row untouched.
+    const [inserted] = await db
       .insert(schema.modelsTable)
       .values({
         externalId: `${provider}/${modelId}`,
@@ -652,7 +656,32 @@ class ModelModel {
         discoveredViaLlmProxy: true,
         lastSyncedAt: new Date(),
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning();
+
+    return inserted ?? null;
+  }
+
+  /**
+   * Write registry-sourced price and limits onto a model, leaving every other
+   * column (custom prices, team links, provenance) as it is.
+   */
+  static async applyRegistryCapabilities(
+    id: string,
+    capabilities: {
+      promptPricePerToken: string | null;
+      completionPricePerToken: string | null;
+      cacheReadPricePerToken: string | null;
+      cacheWritePricePerToken: string | null;
+      contextLength: number | null;
+      outputLength: number | null;
+      supportsToolCalling: boolean | null;
+    },
+  ): Promise<void> {
+    await db
+      .update(schema.modelsTable)
+      .set({ ...capabilities, lastSyncedAt: new Date() })
+      .where(eq(schema.modelsTable.id, id));
   }
 
   /**

@@ -42,8 +42,7 @@ export function resolveCrossProviderPrices(params: {
 }): CrossProviderPrices | null {
   // Entries are ordered by preference (a vendor's canonical entry, which has
   // cache prices, before the region-keyed amazon-bedrock fallback).
-  const entry = resolveCrossProviderEntries(params).find((e) => e.cost);
-  return entry?.cost ? modelsDevCostToPerToken(entry.cost) : null;
+  return pricesFromEntries(resolveCrossProviderEntries(params));
 }
 
 /**
@@ -79,30 +78,47 @@ export function resolveCrossProviderMetadata(params: {
   underlyingModelName?: string | null;
   modelsDevData: ModelsDevApiResponse;
 }): CrossProviderMetadata | null {
-  const entries = resolveCrossProviderEntries(params).reverse();
-  const [preferred] = entries;
-  if (!preferred) {
+  return metadataFromEntries(resolveCrossProviderEntries(params));
+}
+
+/**
+ * Registry match for a model recorded by the LLM proxy, which names the
+ * endpoint's provider rather than the model's own.
+ *
+ * A client may send any model name to any gateway endpoint, so the stored
+ * provider is the endpoint's. Provider-scoped resolution then matches nothing
+ * and the model falls to the fabricated default estimate even when the registry
+ * lists it plainly -- an OpenAI model reaching a Bedrock endpoint is priced at
+ * $50/M against a published $2.50.
+ *
+ * The provider-scoped match is still preferred, because a reseller's own entry
+ * carries the price and limits that actually apply. Only when nothing matches
+ * does this fall back to looking the bare id up among the vendors that make
+ * models, deliberately skipping resellers and aggregators: they republish each
+ * other's models at their own margins, so matching one would trade a wrong
+ * price for a differently wrong price.
+ */
+export function resolveDiscoveredModelRegistryEntry(params: {
+  provider: SupportedProvider;
+  modelId: string;
+  underlyingModelName?: string | null;
+  modelsDevData: ModelsDevApiResponse;
+}): {
+  prices: CrossProviderPrices | null;
+  metadata: CrossProviderMetadata | null;
+} | null {
+  const scoped = resolveCrossProviderEntries(params);
+  const entries = scoped.length
+    ? scoped
+    : toArray(
+        findFirstPartyRegistryEntry(params.modelId, params.modelsDevData),
+      );
+  if (!entries.length) {
     return null;
   }
-
   return {
-    // Limits come from the preferred entry alone. Falling back to the next entry
-    // for a missing limit would reintroduce the overstatement this ordering
-    // exists to prevent: a reseller row that omits `limit.context` would publish
-    // the vendor's larger window — Anthropic's 1M for a model Bedrock serves at
-    // 200K — and an inflated window over-allocates the output budget and admits
-    // requests the reseller rejects. Unknown is reported as null instead.
-    contextLength: preferred.limit?.context ?? null,
-    outputLength: sanitizeOutputLimit(preferred.limit?.output),
-    // Modalities and tool support carry no such risk, so a reseller row that
-    // omits them still benefits from the vendor's values.
-    inputModalities: firstPresent(entries, (entry) =>
-      entry.modalities?.input?.length ? entry.modalities.input : null,
-    ),
-    outputModalities: firstPresent(entries, (entry) =>
-      entry.modalities?.output?.length ? entry.modalities.output : null,
-    ),
-    supportsToolCalling: firstPresent(entries, (entry) => entry.tool_call),
+    prices: pricesFromEntries(entries),
+    metadata: metadataFromEntries(entries),
   };
 }
 
@@ -284,6 +300,82 @@ function findModelsDevModel(params: {
     }
   }
 
+  return null;
+}
+
+function pricesFromEntries(
+  entries: ModelsDevModel[],
+): CrossProviderPrices | null {
+  const entry = entries.find((e) => e.cost);
+  return entry?.cost ? modelsDevCostToPerToken(entry.cost) : null;
+}
+
+function metadataFromEntries(
+  entries: ModelsDevModel[],
+): CrossProviderMetadata | null {
+  const ordered = [...entries].reverse();
+  const [preferred] = ordered;
+  if (!preferred) {
+    return null;
+  }
+
+  return {
+    // Limits come from the preferred entry alone. Falling back to the next entry
+    // for a missing limit would reintroduce the overstatement this ordering
+    // exists to prevent: a reseller row that omits `limit.context` would publish
+    // the vendor's larger window -- Anthropic's 1M for a model Bedrock serves at
+    // 200K -- and an inflated window over-allocates the output budget and admits
+    // requests the reseller rejects. Unknown is reported as null instead.
+    contextLength: preferred.limit?.context ?? null,
+    outputLength: sanitizeOutputLimit(preferred.limit?.output),
+    // Modalities and tool support carry no such risk, so a reseller row that
+    // omits them still benefits from the vendor's values.
+    inputModalities: firstPresent(ordered, (entry) =>
+      entry.modalities?.input?.length ? entry.modalities.input : null,
+    ),
+    outputModalities: firstPresent(ordered, (entry) =>
+      entry.modalities?.output?.length ? entry.modalities.output : null,
+    ),
+    supportsToolCalling: firstPresent(ordered, (entry) => entry.tool_call),
+  };
+}
+
+/**
+ * models.dev providers that publish their own models, in preference order.
+ * Resellers and aggregators are excluded on purpose: they list other vendors'
+ * models at their own rates, so a match there asserts a price the caller is not
+ * being charged.
+ */
+const FIRST_PARTY_REGISTRY_PROVIDERS = [
+  "openai",
+  "anthropic",
+  "google",
+  "meta",
+  "mistral",
+  "deepseek",
+  "xai",
+  "cohere",
+  "moonshotai",
+  "minimax",
+  "alibaba",
+  "nvidia",
+];
+
+function findFirstPartyRegistryEntry(
+  modelId: string,
+  modelsDevData: ModelsDevApiResponse,
+): ModelsDevModel | null {
+  const candidates = dedupe([modelId, stripModelDateSuffix(modelId)]);
+  for (const modelsDevProviderId of FIRST_PARTY_REGISTRY_PROVIDERS) {
+    const entry = findModelsDevModel({
+      modelsDevData,
+      modelsDevProviderId,
+      candidates,
+    });
+    if (entry) {
+      return entry;
+    }
+  }
   return null;
 }
 

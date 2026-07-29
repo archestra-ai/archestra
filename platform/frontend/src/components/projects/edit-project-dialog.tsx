@@ -19,6 +19,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import {
+  UserShareField,
+  useUserShareOption,
+} from "@/components/user-share-field";
+import {
   type VisibilityOption,
   VisibilitySelector,
 } from "@/components/visibility-selector";
@@ -30,7 +34,7 @@ import {
 } from "@/lib/projects/projects.query";
 import { useTeams } from "@/lib/teams/team.query";
 
-type ProjectVisibility = "none" | "organization" | "team";
+type ProjectVisibility = "none" | "organization" | "team" | "user";
 type EditProjectForm = {
   name: string;
   description: string;
@@ -95,6 +99,8 @@ function EditProjectDialogForm({
   const [visibility, setVisibility] =
     useState<ProjectVisibility>(initialVisibility);
   const [teamIds, setTeamIds] = useState<string[]>(project.shareTeamIds ?? []);
+  const [userIds, setUserIds] = useState<string[]>(project.shareUserIds ?? []);
+  const userOption = useUserShareOption<ProjectVisibility>("user");
 
   // Org-wide sharing (both entering and leaving it) is gated behind
   // `project:share-org` on the backend; mirror that here so the dialog doesn't
@@ -120,6 +126,7 @@ function EditProjectDialogForm({
         ? "You don't have permission to share projects with the entire organization."
         : undefined,
     },
+    { ...userOption, disabled: shareLocked || userOption.disabled },
     {
       value: "team",
       label: "Teams",
@@ -138,15 +145,23 @@ function EditProjectDialogForm({
       hasUnsavedChanges(
         [...(project.shareTeamIds ?? [])].sort(),
         [...teamIds].sort(),
+      )) ||
+    (visibility === "user" &&
+      hasUnsavedChanges(
+        [...(project.shareUserIds ?? [])].sort(),
+        [...userIds].sort(),
       ));
   const isDirty = form.formState.isDirty || sharingDirty;
   const teamSelectionMissing = visibility === "team" && teamIds.length === 0;
+  // Same guard as Teams: saving Users with nobody picked would quietly make the
+  // project private again.
+  const userSelectionMissing = visibility === "user" && userIds.length === 0;
   const hasLengthError =
     name.length > PROJECT_NAME_MAX_LENGTH ||
     description.length > PROJECT_DESCRIPTION_MAX_LENGTH;
 
   const onSubmit = form.handleSubmit(async ({ name, description, icon }) => {
-    if (teamSelectionMissing) return;
+    if (teamSelectionMissing || userSelectionMissing) return;
     const ok = await updateProject.mutateAsync({
       id: project.id,
       name: name.trim(),
@@ -156,16 +171,23 @@ function EditProjectDialogForm({
     if (!ok) return;
 
     const nextTeamIds = visibility === "team" ? teamIds : [];
+    // Both lists are always sent, so leaving Teams or Users revokes what that
+    // choice left behind instead of stranding it.
+    const nextUserIds = visibility === "user" ? userIds : [];
     const shareChanged =
       visibility !== initialVisibility ||
       (visibility === "team" &&
         nextTeamIds.slice().sort().join() !==
-          (project.shareTeamIds ?? []).slice().sort().join());
+          (project.shareTeamIds ?? []).slice().sort().join()) ||
+      (visibility === "user" &&
+        nextUserIds.slice().sort().join() !==
+          (project.shareUserIds ?? []).slice().sort().join());
     if (shareChanged) {
       const shareOk = await setShare.mutateAsync({
         id: project.id,
         visibility,
         teamIds: nextTeamIds,
+        userIds: nextUserIds,
       });
       if (!shareOk) return;
     }
@@ -190,7 +212,8 @@ function EditProjectDialogForm({
               isPending ||
               !name.trim().length ||
               hasLengthError ||
-              teamSelectionMissing
+              teamSelectionMissing ||
+              userSelectionMissing
             }
           >
             Save
@@ -253,6 +276,10 @@ function EditProjectDialogForm({
         onValueChange={setVisibility}
         readOnly={shareLocked}
       >
+        {visibility === "user" && (
+          <UserShareField value={userIds} onValueChange={setUserIds} />
+        )}
+
         {visibility === "team" && (
           <div className="space-y-2">
             <Label>Teams</Label>

@@ -380,6 +380,22 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: catalog × team; parent (catalog) audited",
   },
+  agentUsersTable: {
+    audited: false,
+    reason: "join: agent × user; parent (agent) audited",
+  },
+  skillUsersTable: {
+    audited: false,
+    reason: "join: skill × user; parent (skill) audited",
+  },
+  modelUsersTable: {
+    audited: false,
+    reason: "join: model × user; parent (model) audited",
+  },
+  projectShareUsersTable: {
+    audited: false,
+    reason: "join: project share × user; parent (project) audited",
+  },
   mcpCatalogUsersTable: {
     audited: false,
     reason: "join: catalog × user; parent (catalog) audited",

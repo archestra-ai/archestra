@@ -40145,6 +40145,29 @@
                               "additionalProperties": false
                             }
                           },
+                          "users": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "email"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "labels": {
                             "type": "array",
                             "items": {
@@ -40823,6 +40846,13 @@
                       "type": "string"
                     }
                   },
+                  "users": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -41296,6 +41326,29 @@
                         "required": [
                           "id",
                           "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
                         ],
                         "additionalProperties": false
                       }
@@ -42191,6 +42244,29 @@
                           "additionalProperties": false
                         }
                       },
+                      "users": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "email": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "email"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "labels": {
                         "type": "array",
                         "items": {
@@ -43000,6 +43076,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "labels": {
                       "type": "array",
                       "items": {
@@ -43805,6 +43904,29 @@
                         "required": [
                           "id",
                           "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
                         ],
                         "additionalProperties": false
                       }
@@ -44962,6 +45084,29 @@
                             "additionalProperties": false
                           }
                         },
+                        "users": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "email": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "email"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "labels": {
                           "type": "array",
                           "items": {
@@ -45818,6 +45963,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "labels": {
                       "type": "array",
                       "items": {
@@ -46447,6 +46615,12 @@
                       "type": "string"
                     }
                   },
+                  "users": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -46926,6 +47100,29 @@
                         "required": [
                           "id",
                           "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
                         ],
                         "additionalProperties": false
                       }
@@ -48048,6 +48245,29 @@
                         "required": [
                           "id",
                           "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
                         ],
                         "additionalProperties": false
                       }
@@ -50637,6 +50857,29 @@
                         "required": [
                           "id",
                           "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
                         ],
                         "additionalProperties": false
                       }
@@ -218281,6 +218524,29 @@
                           "additionalProperties": false
                         }
                       },
+                      "users": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "email": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "email"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
                       "pricePerMillionInput": {
                         "nullable": true,
                         "type": "string"
@@ -218359,6 +218625,7 @@
                       "isBest",
                       "apiKeys",
                       "teams",
+                      "users",
                       "pricePerMillionInput",
                       "pricePerMillionOutput",
                       "isCustomPrice",
@@ -218737,6 +219004,12 @@
                     }
                   },
                   "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "userIds": {
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -272973,10 +273246,18 @@
                       "type": "string",
                       "enum": [
                         "organization",
-                        "team"
+                        "team",
+                        "user"
                       ]
                     },
                     "shareTeamNames": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "shareUserNames": {
                       "nullable": true,
                       "type": "array",
                       "items": {
@@ -273003,6 +273284,7 @@
                     "conversationCount",
                     "visibility",
                     "shareTeamNames",
+                    "shareUserNames",
                     "pinnedAt",
                     "createdAt"
                   ],
@@ -273360,10 +273642,18 @@
                         "type": "string",
                         "enum": [
                           "organization",
-                          "team"
+                          "team",
+                          "user"
                         ]
                       },
                       "shareTeamNames": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "shareUserNames": {
                         "nullable": true,
                         "type": "array",
                         "items": {
@@ -273390,6 +273680,7 @@
                       "conversationCount",
                       "visibility",
                       "shareTeamNames",
+                      "shareUserNames",
                       "pinnedAt",
                       "createdAt"
                     ],
@@ -273724,10 +274015,18 @@
                       "type": "string",
                       "enum": [
                         "organization",
-                        "team"
+                        "team",
+                        "user"
                       ]
                     },
                     "shareTeamNames": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "shareUserNames": {
                       "nullable": true,
                       "type": "array",
                       "items": {
@@ -273754,6 +274053,7 @@
                     "conversationCount",
                     "visibility",
                     "shareTeamNames",
+                    "shareUserNames",
                     "pinnedAt",
                     "createdAt"
                   ],
@@ -274064,10 +274364,18 @@
                       "type": "string",
                       "enum": [
                         "organization",
-                        "team"
+                        "team",
+                        "user"
                       ]
                     },
                     "shareTeamNames": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "shareUserNames": {
                       "nullable": true,
                       "type": "array",
                       "items": {
@@ -274089,6 +274397,13 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "shareUserIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -274101,9 +274416,11 @@
                     "conversationCount",
                     "visibility",
                     "shareTeamNames",
+                    "shareUserNames",
                     "pinnedAt",
                     "createdAt",
-                    "shareTeamIds"
+                    "shareTeamIds",
+                    "shareUserIds"
                   ],
                   "additionalProperties": false
                 }
@@ -274948,7 +275265,8 @@
                         "type": "string",
                         "enum": [
                           "organization",
-                          "team"
+                          "team",
+                          "user"
                         ]
                       },
                       {
@@ -274960,6 +275278,13 @@
                     ]
                   },
                   "teamIds": {
+                    "default": [],
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "userIds": {
                     "default": [],
                     "type": "array",
                     "items": {
@@ -287209,6 +287534,29 @@
                               "additionalProperties": false
                             }
                           },
+                          "users": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "email"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
                           "environments": {
                             "type": "array",
                             "items": {
@@ -287266,6 +287614,7 @@
                           "updatedAt",
                           "fileCount",
                           "teams",
+                          "users",
                           "environments",
                           "authorName",
                           "usageUserCount"
@@ -287622,6 +287971,12 @@
                       "type": "string"
                     }
                   },
+                  "userIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "environmentIds": {
                     "description": "Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.",
                     "type": "array",
@@ -287863,6 +288218,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "environments": {
                       "type": "array",
                       "items": {
@@ -287913,6 +288291,7 @@
                     "updatedAt",
                     "files",
                     "teams",
+                    "users",
                     "environments"
                   ],
                   "additionalProperties": false
@@ -288416,6 +288795,29 @@
                             "additionalProperties": false
                           }
                         },
+                        "users": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "email": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "email"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
                         "environments": {
                           "type": "array",
                           "items": {
@@ -288466,6 +288868,7 @@
                         "updatedAt",
                         "files",
                         "teams",
+                        "users",
                         "environments"
                       ],
                       "additionalProperties": false
@@ -289282,6 +289685,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "environments": {
                       "type": "array",
                       "items": {
@@ -289332,6 +289758,7 @@
                     "updatedAt",
                     "files",
                     "teams",
+                    "users",
                     "environments"
                   ],
                   "additionalProperties": false
@@ -289638,6 +290065,12 @@
                       "type": "string"
                     }
                   },
+                  "userIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
                   "environmentIds": {
                     "description": "Environments the skill is restricted to. Empty (or omitted on create) makes the skill available to agents in every environment; otherwise only agents in one of the listed environments see it.",
                     "type": "array",
@@ -289889,6 +290322,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "environments": {
                       "type": "array",
                       "items": {
@@ -289939,6 +290395,7 @@
                     "updatedAt",
                     "files",
                     "teams",
+                    "users",
                     "environments"
                   ],
                   "additionalProperties": false
@@ -291281,6 +291738,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "environments": {
                       "type": "array",
                       "items": {
@@ -291331,6 +291811,7 @@
                     "updatedAt",
                     "files",
                     "teams",
+                    "users",
                     "environments"
                   ],
                   "additionalProperties": false
@@ -291844,6 +292325,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "environments": {
                       "type": "array",
                       "items": {
@@ -291894,6 +292398,7 @@
                     "updatedAt",
                     "files",
                     "teams",
+                    "users",
                     "environments"
                   ],
                   "additionalProperties": false
@@ -293526,6 +294031,12 @@
                     ]
                   },
                   "teamIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "userIds": {
                     "type": "array",
                     "items": {
                       "type": "string"

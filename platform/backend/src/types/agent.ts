@@ -221,6 +221,14 @@ export type GatewayAgent = z.infer<typeof GatewayAgentSchema>;
 export const SelectAgentSchema = AgentRowSchema.extend({
   tools: z.array(SelectToolSchema),
   teams: z.array(AgentTeamInfoSchema),
+  // People the agent is shared with individually. A personal-scoped agent with
+  // a non-empty list is shared, not private — the settings form reads the pair
+  // as its Users choice.
+  // Optional like authorName: only the read paths that surface sharing
+  // populate it, so the many internal Agent assemblies stay unchanged.
+  users: z
+    .array(z.object({ id: z.string(), name: z.string(), email: z.string() }))
+    .optional(),
   labels: z.array(AgentLabelWithDetailsSchema),
   authorName: z.string().nullable().optional(),
   authorEmail: z.string().nullable().optional(),
@@ -276,6 +284,9 @@ export const InsertAgentSchemaBase = createInsertSchema(
 )
   .extend({
     teams: z.array(z.string()).default([]),
+    // Individuals the agent is shared with by name. Additive to the scope,
+    // so a personal agent can reach a colleague without going team-wide.
+    users: z.array(z.string()).default([]),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
     // Make organizationId optional - model will auto-assign if not provided
     organizationId: z.string().optional(),
@@ -308,6 +319,7 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
 )
   .extend({
     teams: z.array(z.string()).optional(),
+    users: z.array(z.string()).optional(),
     labels: z.array(AgentLabelWithDetailsSchema).optional(),
     scope: AgentScopeSchema.optional(),
     knowledgeBaseIds: z.array(z.string()).optional(),

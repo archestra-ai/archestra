@@ -196,6 +196,7 @@ export function AppSettingsForm({
       description: "Anyone in your org can use this app",
       icon: Globe,
       disabled: scope !== "org" && !isAppAdmin,
+      disabledLabel: !isAppAdmin ? "Requires permission" : undefined,
       disabledReason: !isAppAdmin
         ? "You need app:admin permission to make this available org-wide"
         : undefined,

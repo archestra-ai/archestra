@@ -34,6 +34,20 @@ type ProjectFixture = {
 
 vi.mock("next/navigation");
 
+// The edit dialog now hosts the shared user-share control, which reads the
+// session and the org member list. This suite is about the card menus, so the
+// control is stubbed rather than wiring those queries into every case.
+vi.mock("@/components/user-share-field", () => ({
+  useUserShareOption: (value: string) => ({
+    value,
+    label: "Users",
+    description: "Share this with selected people",
+    disabled: false,
+    hasCandidates: true,
+  }),
+  UserShareField: () => null,
+}));
+
 vi.mock("@/components/search-input", () => ({
   SearchInput: () => <input aria-label="Search projects" />,
 }));

@@ -726,7 +726,7 @@ const registry = defineArchestraTools([
         }
         if (agentType !== "agent") {
           return errorResult(
-            "render_app displays an app only inside Archestra's chat UI — on " +
+            `render_app displays an app only inside ${archestraMcpBranding.appName}'s chat UI — on ` +
               "this connection it renders nothing. To open an app here, call " +
               "the app's own launch tool directly (its name ends in __open); " +
               "it is in your tool list, keyed by the app's name.",

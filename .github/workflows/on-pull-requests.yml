@@ -336,6 +336,12 @@ jobs:
           pnpm exec turbo check:ci --filter=!@backend
           pnpm exec turbo check:commit --filter=@backend
 
+      # Guards white-labeling: fails when user- or LLM-facing copy hardcodes the
+      # brand instead of resolving the deployment's app name. Occurrences that
+      # legitimately name the vendor carry an inline `white-label-ok:` reason.
+      - name: White-label copy check
+        run: pnpm check:white-label
+
       # Validates the production build (turbo build: next build + backend build +
       # Rust NAPI) compiles on every push. This replaces the per-push Docker image
       # build's only unique signal; turbo remote caching makes it seconds on hit.

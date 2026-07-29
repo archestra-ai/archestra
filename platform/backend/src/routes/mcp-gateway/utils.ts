@@ -124,6 +124,11 @@ import {
   withCompleteResultEnvelope,
   withPrivateCacheHint,
 } from "./protocol";
+import {
+  clientDeclaredTasks,
+  runToolCallMaybeTask,
+  TASK_TTL_MS,
+} from "./tasks";
 
 export { deriveAuthMethod };
 
@@ -185,13 +190,13 @@ export function describeGatewayAuthFailure(
 ): string {
   switch (reason) {
     case "idp_not_linked":
-      return "Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an Archestra token or OAuth.";
+      return `Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an ${archestraMcpBranding.appName} token or OAuth.`;
     case "idp_misconfigured":
       return "Invalid token for this profile. The gateway's Identity Provider cannot be used to validate JWTs: it must be an OIDC provider with a client ID and a discoverable JWKS endpoint.";
     case "no_email_claim":
       return "Token validated, but it carries no email claim. Set the Identity Provider's Email Claim attribute mapping to the claim holding the email (IdPs that namespace custom claims do not populate the standard `email` claim).";
     case "unknown_user":
-      return "Token validated, but its email does not match any Archestra user.";
+      return `Token validated, but its email does not match any ${archestraMcpBranding.appName} user.`;
     case "not_org_member":
       return "Token validated, but its user is not a member of this gateway's organization.";
     case "no_gateway_access":
@@ -634,9 +639,21 @@ export async function createAgentServer(params: {
     );
   });
 
-  server.setRequestHandler(
-    CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }, extra) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+    const { name, arguments: args } = request.params;
+
+    // Tasks extension (io.modelcontextprotocol/tasks): an eligible call —
+    // the client declared the extension in this request's _meta — races the
+    // sync threshold and detaches into a durable background task when it
+    // outlives it. Everything below (dispatch, policies, envelope, metrics,
+    // persistence) runs identically either way; only who is waiting for the
+    // outcome changes.
+    const taskEligible =
+      mrtrEnabled && clientDeclaredTasks({ params: request.params });
+
+    const executeCallToolRequest = async (
+      taskAbortSignal: AbortSignal,
+    ): Promise<Record<string, unknown>> => {
       const startTime = Date.now();
       const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
 
@@ -933,6 +950,13 @@ export async function createAgentServer(params: {
               tokenAuth,
               {
                 availableTool,
+                // Tasks: tasks/cancel on this replica aborts the gateway-side
+                // await; whether the upstream stops working is up to the
+                // upstream (stateless HTTP servers run on — see tasks.ts).
+                abortSignal: taskAbortSignal,
+                // A call that may detach is bounded by the task TTL, not the
+                // synchronous patience window (see mcp-client).
+                ...(taskEligible ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
                 elicitationHandler: async (request) => {
                   // MRTR: a retry already carries the answer, so consume it
                   // instead of asking again.
@@ -1100,8 +1124,20 @@ export async function createAgentServer(params: {
           data: error instanceof Error ? error.message : "Unknown error",
         };
       }
-    },
-  );
+    };
+
+    return runToolCallMaybeTask({
+      eligible: taskEligible,
+      agentId,
+      principal: deriveStatePrincipal({
+        userId: tokenAuth?.userId,
+        tokenId: tokenAuth?.tokenId,
+        organizationId: tokenAuth?.organizationId,
+      }),
+      toolName: name,
+      execute: executeCallToolRequest,
+    });
+  });
 
   logger.info({ agentId }, "MCP server instance created");
   return { server: mcpServer, agent };

@@ -210,6 +210,43 @@ export interface SubagentToolCallPartData {
   errorText?: string;
 }
 
+/**
+ * Type of the inline MCP-task part. A `data-*` part: persisted and rendered in
+ * the chat thread, but dropped from the model conversion
+ * (`convertToModelMessages`), so the LLM never sees it — same class as
+ * `data-subagent-tool-call`. The model still receives the tool's real result
+ * when the task settles; this part exists purely so the user can watch a
+ * long-running call and cancel it. Shared so the backend (emit) and frontend
+ * (render) agree on the wire string.
+ */
+export const MCP_TASK_PART_TYPE = "data-mcp-task";
+
+/** Lifecycle of a gateway-minted MCP task, as the chat UI sees it. */
+export type McpTaskStatus = "working" | "completed" | "failed" | "cancelled";
+
+/**
+ * The `data` payload of a {@link MCP_TASK_PART_TYPE} part: one tool call that
+ * outlived the synchronous threshold and detached into a durable task.
+ *
+ * `toolCallId` links the card to the tool call it belongs to, so the UI can
+ * render it against that call rather than floating loose. `startedAt` is the
+ * absolute epoch the call began — carried explicitly so a card that mounts
+ * late (a reload part-way through a long task) still shows a correct elapsed
+ * time instead of counting from mount.
+ */
+export interface McpTaskPartData {
+  /** Gateway task id — the handle `tasks/get` and cancellation are keyed on. */
+  taskId: string;
+  /** The tool call this task backs. */
+  toolCallId: string;
+  toolName: string;
+  status: McpTaskStatus;
+  /** Epoch milliseconds when the underlying call started. */
+  startedAt: number;
+  /** Why the task ended, when it did not complete cleanly. */
+  errorText?: string;
+}
+
 // Control/telemetry parts the chat UI skips and providers never see. An
 // assistant turn left with only these (e.g. a `step-start` after a dangling
 // tool call is stripped) renders nothing, so it must not count as content.

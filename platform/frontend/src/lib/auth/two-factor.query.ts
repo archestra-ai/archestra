@@ -14,9 +14,19 @@ type AuthClientError = {
  */
 export function useEnableTwoFactorMutation() {
   return useMutation({
-    mutationFn: async (params: { password: string }) => {
+    /**
+     * `issuer` is the label the user's authenticator app shows beside the code.
+     * It has to be passed per-request: Better Auth resolves the issuer as
+     * `body.issuer ?? options.issuer ?? context.appName`, and the latter two are
+     * fixed when the auth instance is constructed at import time — before any
+     * organization row (and so any white-label app name) can be read. Passing it
+     * here is what makes a white-labeled deployment enroll under its own brand
+     * instead of the default one.
+     */
+    mutationFn: async (params: { password: string; issuer: string }) => {
       const { data, error } = await authClient.twoFactor.enable({
         password: params.password,
+        issuer: params.issuer,
       });
 
       if (error) {

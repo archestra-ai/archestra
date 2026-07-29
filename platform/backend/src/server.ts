@@ -85,6 +85,7 @@ import {
 } from "@/services/apps/app-sdk-injection";
 import { posthogErrorTrackingService } from "@/services/error-tracking";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
+import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -240,9 +241,11 @@ export function registerOpenApiSchemas() {
     id: "DeepSeekChatCompletionResponse",
   });
   z.globalRegistry.add(Archestra.API.ChatCompletionRequestSchema, {
+    // white-label-ok: wire identifier, not copy
     id: "ArchestraChatCompletionRequest",
   });
   z.globalRegistry.add(Archestra.API.ChatCompletionResponseSchema, {
+    // white-label-ok: wire identifier, not copy
     id: "ArchestraChatCompletionResponse",
   });
   z.globalRegistry.add(Minimax.API.ChatCompletionRequestSchema, {
@@ -1308,6 +1311,11 @@ const startWebServer = async () => {
     // (no-op unless ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES is set).
     mcpToolsRefreshManager.start();
 
+    // Post-TTL lifecycle for gateway-minted MCP tasks: mark expired orphans
+    // failed, purge rows past the retention grace (the two steps the Tasks
+    // extension sanctions).
+    mcpGatewayTaskReaper.start();
+
     // Start task queue worker for knowledge base connector syncs and embeddings
     // In "web" mode, a separate worker Deployment handles background jobs
     if (shouldRunWorker) {
@@ -1567,6 +1575,8 @@ function registerWebServerShutdown(
       }
 
       mcpToolsRefreshManager.stop();
+
+      mcpGatewayTaskReaper.stop();
 
       instanceAnalyticsService.stop();
 

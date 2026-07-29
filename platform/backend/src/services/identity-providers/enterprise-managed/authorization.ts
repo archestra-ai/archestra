@@ -5,6 +5,7 @@ import {
   OAUTH_SCOPES,
 } from "@archestra/shared";
 import { decodeProtectedHeader } from "jose";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import {
   AgentModel,
@@ -135,14 +136,14 @@ export async function exchangeIdentityAssertionForAccessToken(params: {
 
   if (!validationResult.email) {
     return invalidGrant(
-      "Assertion JWT must include an email claim to link to an Archestra user.",
+      `Assertion JWT must include an email claim to link to an ${archestraMcpBranding.appName} user.`,
     );
   }
 
   const user = await UserModel.findByEmail(validationResult.email);
   if (!user) {
     return invalidGrant(
-      "Assertion JWT email does not match any Archestra user.",
+      `Assertion JWT email does not match any ${archestraMcpBranding.appName} user.`,
     );
   }
 

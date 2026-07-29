@@ -33,6 +33,7 @@ import {
 } from "@/components/visibility-selector";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils";
 import { LlmProviderSelectItems } from "./llm-provider-select-items";
@@ -298,14 +299,17 @@ const PROVIDER_CONFIG: Record<
     consoleName: "DeepSeek Platform",
   },
   archestra: {
+    // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
     name: "Archestra",
     icon: "/icons/archestra.png",
     placeholder: "arch_...",
     enabled: true,
     consoleUrl: "https://archestra.ai/",
+    // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
     consoleName: "Archestra",
     baseUrlRequired: true,
     description:
+      // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
       "Route through another Archestra instance. On that instance, create an LLM Proxy and a virtual API key. Set the Base URL to the proxy's model router (e.g. https://your-archestra/v1/model-router/<llm-proxy-id>) and paste the virtual API key below.",
   },
   kimi: {
@@ -430,6 +434,7 @@ export function LlmProviderApiKeyForm({
   progressive = false,
   onSubscriptionCredential,
 }: LlmProviderApiKeyFormProps) {
+  const appName = useAppName();
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
   const anthropicWifEnabled = useFeature("anthropicWifEnabled");
@@ -995,7 +1000,7 @@ export function LlmProviderApiKeyForm({
                   from the server's environment. Uses the AWS SDK credential
                   chain — IRSA (IAM Roles for Service Accounts), EC2/ECS
                   instance profiles, or environment variables — so no static
-                  keys are stored in Archestra.
+                  keys are stored in {appName}.
                 </p>
                 {bedrockIamAuthEnabled ? (
                   <div className="rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm">
@@ -1022,7 +1027,7 @@ export function LlmProviderApiKeyForm({
                         <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
                           ARCHESTRA_BEDROCK_IAM_AUTH_ENABLED=true
                         </code>{" "}
-                        on the Archestra backend.
+                        on the {appName} backend.
                       </li>
                       <li>
                         Grant the pod's service account (IRSA) or instance

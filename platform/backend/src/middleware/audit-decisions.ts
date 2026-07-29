@@ -235,6 +235,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "MCP tool call log; surfaced via /mcp/logs",
   },
+  mcpGatewayTasksTable: {
+    audited: false,
+    reason:
+      "Ephemeral task handles for in-flight tool calls; the calls themselves are logged in mcp_tool_calls",
+  },
   mcpHttpSessionsTable: {
     audited: false,
     reason: "MCP session-level transport state",

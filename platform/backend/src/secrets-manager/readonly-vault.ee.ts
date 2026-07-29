@@ -1,4 +1,5 @@
 import { isVaultReference, SecretsManagerType } from "@archestra/shared";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import SecretModel from "@/models/secret";
 import {
@@ -177,7 +178,7 @@ export default class ReadonlyVaultSecretManager
 
       throw new ApiError(
         503,
-        "Failed to resolve vault secret references. Please verify the paths exist and Archestra has read access.",
+        `Failed to resolve vault secret references. Please verify the paths exist and ${archestraMcpBranding.appName} has read access.`,
         SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE,
       );
     }

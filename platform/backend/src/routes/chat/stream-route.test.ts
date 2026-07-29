@@ -1326,6 +1326,55 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     });
   });
 
+  // T-959: a GitHub Copilot conversation pins a models.id UUID; the turn must
+  // dereference it to the catalogued provider model name before dispatch —
+  // Copilot 400s ("The requested model is not supported") on anything else.
+  test("dereferences a GitHub Copilot conversation's model FK to the provider model name", async ({
+    makeConversation,
+  }) => {
+    const model = await ModelModel.create({
+      externalId: "github-copilot/gpt-4o",
+      provider: "github-copilot",
+      modelId: "gpt-4o",
+      description: "gpt-4o",
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    const copilotConversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockCreateLLMModelForAgent.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: copilotConversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockCreateLLMModelForAgent).toHaveBeenCalledTimes(1);
+    const dispatch = mockCreateLLMModelForAgent.mock.calls[0]?.[0];
+    expect(dispatch.provider).toBe("github-copilot");
+    // The provider model name — never the models.id UUID the conversation stores.
+    expect(dispatch.model).toBe("gpt-4o");
+    expect(dispatch.model).not.toBe(model.id);
+  });
+
   test("omits reasoningSummary while the credential is negative-cached as unsupported", async ({
     makeConversation,
   }) => {

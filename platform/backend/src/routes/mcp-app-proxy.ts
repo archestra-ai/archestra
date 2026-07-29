@@ -24,7 +24,7 @@ import {
   createStatelessTransport,
   ensureRequestSocketDestroySoon,
   extractBearerToken,
-} from "./mcp-gateway.utils";
+} from "./mcp-gateway/utils";
 import { getPublicRequestOrigin } from "./request-origin";
 
 /**

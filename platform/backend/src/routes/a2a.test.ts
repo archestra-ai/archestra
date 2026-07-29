@@ -14,10 +14,10 @@ vi.mock("@/agents/a2a-executor", () => ({
   executeA2AMessage: (...args: unknown[]) => mockExecuteA2AMessage(...args),
 }));
 
-vi.mock("@/routes/mcp-gateway.utils", async () => {
+vi.mock("@/routes/mcp-gateway/utils", async () => {
   const actual = await vi.importActual<
-    typeof import("@/routes/mcp-gateway.utils")
-  >("@/routes/mcp-gateway.utils");
+    typeof import("@/routes/mcp-gateway/utils")
+  >("@/routes/mcp-gateway/utils");
   return {
     ...actual,
     validateMCPGatewayToken: (...args: unknown[]) =>

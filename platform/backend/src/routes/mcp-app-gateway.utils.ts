@@ -51,11 +51,11 @@ import type { CommonToolCall } from "@/types";
 import { appOwner } from "@/types";
 import { APP_LAUNCH_TOOL_NAME, type App } from "@/types/app";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
-import { RESOURCE_NOT_FOUND_ERROR_CODE } from "./mcp-gateway.protocol";
+import { RESOURCE_NOT_FOUND_ERROR_CODE } from "./mcp-gateway/protocol";
 import {
   deriveAuthMethod,
   normalizeToolInputSchema,
-} from "./mcp-gateway.utils";
+} from "./mcp-gateway/utils";
 
 type McpListTool = ListToolsResult["tools"][number];
 

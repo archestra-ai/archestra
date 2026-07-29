@@ -22,7 +22,7 @@ import {
   resolveProtocolRevision,
   STATELESS_MCP_PROTOCOL_REVISION,
   validateRoutingHeaders,
-} from "./mcp-gateway.protocol";
+} from "./protocol";
 
 const LEGACY_INITIALIZE = {
   jsonrpc: "2.0",

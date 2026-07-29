@@ -16,11 +16,11 @@ import {
 } from "fastify-type-provider-zod";
 import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import mcpGatewayRoutes from "./mcp-gateway";
+import mcpGatewayRoutes from "./index";
 import {
   LEGACY_MCP_PROTOCOL_REVISION,
   STATELESS_MCP_PROTOCOL_REVISION,
-} from "./mcp-gateway.protocol";
+} from "./protocol";
 
 function makeMcpHeaders(
   token: string,

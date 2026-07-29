@@ -12,8 +12,8 @@ import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import { ToolModel } from "@/models";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
-import { RESOURCE_NOT_FOUND_ERROR_CODE } from "./mcp-gateway.protocol";
-import { normalizeToolInputSchema } from "./mcp-gateway.utils";
+import { RESOURCE_NOT_FOUND_ERROR_CODE } from "./mcp-gateway/protocol";
+import { normalizeToolInputSchema } from "./mcp-gateway/utils";
 
 type McpListTool = ListToolsResult["tools"][number];
 

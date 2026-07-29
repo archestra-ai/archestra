@@ -18,7 +18,7 @@ import {
   REQUEST_STATE_TTL_MS,
   supportsInputRequired,
   verifyRequestState,
-} from "./mcp-gateway.mrtr";
+} from "./mrtr";
 
 const PRINCIPAL = "user:alice";
 const METHOD = "tools/call";

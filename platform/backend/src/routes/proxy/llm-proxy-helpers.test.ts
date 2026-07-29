@@ -785,6 +785,28 @@ describe("handleError", () => {
     expect(providerFault.upstream).toBe(true);
   });
 
+  test("marks a status-less in-stream provider error as an upstream failure", () => {
+    // Once the provider's stream commits 200, a failure arrives as an SSE
+    // `error` event that the SDK relays with a parsed provider body but no
+    // HTTP status — e.g. Anthropic's mid-stream `api_error` ("Internal
+    // server error"). Without the upstream marker it was captured as a
+    // crash of ours.
+    const body = {
+      type: "error",
+      error: { type: "api_error", message: "Internal server error" },
+    };
+    const thrown = throwErrorFor(
+      Object.assign(new Error(JSON.stringify(body)), {
+        error: body,
+        headers: new Headers(),
+      }),
+      makeReply(false).reply,
+    );
+
+    expect(thrown.statusCode).toBe(500);
+    expect(thrown.upstream).toBe(true);
+  });
+
   test("does not mark an internal 500 as an upstream failure", () => {
     const thrown = throwErrorFor(
       new TypeError("cannot read x of undefined"),

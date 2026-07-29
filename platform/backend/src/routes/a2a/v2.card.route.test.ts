@@ -82,7 +82,7 @@ describe("a2a v2 AgentCard conformance", () => {
 
     expect(card.capabilities).toEqual({
       streaming: true,
-      pushNotifications: false,
+      pushNotifications: true,
       extendedAgentCard: false,
     });
     // stateTransitionHistory is a pre-1.0 field; a strict validator rejects it.

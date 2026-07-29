@@ -8,8 +8,14 @@ import { A2AManager } from "@/agents/a2a/a2a-manager";
 import {
   type A2AProtocolCancelTaskRequest,
   A2AProtocolCancelTaskRequestSchema,
+  type A2AProtocolDeleteTaskPushNotificationConfigRequest,
+  A2AProtocolDeleteTaskPushNotificationConfigRequestSchema,
+  type A2AProtocolGetTaskPushNotificationConfigRequest,
+  A2AProtocolGetTaskPushNotificationConfigRequestSchema,
   type A2AProtocolGetTaskRequest,
   A2AProtocolGetTaskRequestSchema,
+  type A2AProtocolListTaskPushNotificationConfigsRequest,
+  A2AProtocolListTaskPushNotificationConfigsRequestSchema,
   type A2AProtocolListTasksRequest,
   A2AProtocolListTasksRequestSchema,
   A2AProtocolRole,
@@ -18,6 +24,8 @@ import {
   type A2AProtocolStreamResponse,
   A2AProtocolSubscribeToTaskRequestSchema,
   type A2AProtocolTask,
+  type A2AProtocolTaskPushNotificationConfig,
+  A2AProtocolTaskPushNotificationConfigSchema,
   A2AProtocolTaskState,
   type A2AProtocolVersion,
   resolveA2AProtocolVersion,
@@ -211,7 +219,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ],
         capabilities: {
           streaming: true,
-          pushNotifications: false,
+          pushNotifications: true,
           // We serve exactly one card, and it is already authenticated, so
           // there is no separate extended card to fetch.
           extendedAgentCard: false,
@@ -823,7 +831,11 @@ type A2ARouteFunc = (params: {
     | A2AProtocolSendMessageRequest
     | A2AProtocolGetTaskRequest
     | A2AProtocolCancelTaskRequest
-    | A2AProtocolListTasksRequest;
+    | A2AProtocolListTasksRequest
+    | A2AProtocolTaskPushNotificationConfig
+    | A2AProtocolGetTaskPushNotificationConfigRequest
+    | A2AProtocolListTaskPushNotificationConfigsRequest
+    | A2AProtocolDeleteTaskPushNotificationConfigRequest;
 }) => Promise<unknown>;
 
 /** A validated SSE request: a streaming send, or a task subscription. */
@@ -980,6 +992,41 @@ class A2AV2Router {
               request: params.request as A2AProtocolListTasksRequest,
             }),
           schema: A2AProtocolListTasksRequestSchema,
+        },
+        CreateTaskPushNotificationConfig: {
+          func: async (params) =>
+            this.manager.createTaskPushNotificationConfig({
+              ...params,
+              request: params.request as A2AProtocolTaskPushNotificationConfig,
+            }),
+          schema: A2AProtocolTaskPushNotificationConfigSchema,
+        },
+        GetTaskPushNotificationConfig: {
+          func: async (params) =>
+            this.manager.getTaskPushNotificationConfig({
+              ...params,
+              request:
+                params.request as A2AProtocolGetTaskPushNotificationConfigRequest,
+            }),
+          schema: A2AProtocolGetTaskPushNotificationConfigRequestSchema,
+        },
+        ListTaskPushNotificationConfigs: {
+          func: async (params) =>
+            this.manager.listTaskPushNotificationConfigs({
+              ...params,
+              request:
+                params.request as A2AProtocolListTaskPushNotificationConfigsRequest,
+            }),
+          schema: A2AProtocolListTaskPushNotificationConfigsRequestSchema,
+        },
+        DeleteTaskPushNotificationConfig: {
+          func: async (params) =>
+            this.manager.deleteTaskPushNotificationConfig({
+              ...params,
+              request:
+                params.request as A2AProtocolDeleteTaskPushNotificationConfigRequest,
+            }),
+          schema: A2AProtocolDeleteTaskPushNotificationConfigRequestSchema,
         },
       };
     const route = mapper[method];

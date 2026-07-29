@@ -4,6 +4,7 @@ import {
   A2AProtocolRole,
   type A2AProtocolStreamResponse,
 } from "./a2a-protocol";
+import { a2aPushNotificationService } from "./a2a-push-notification-service";
 
 const DELTA_FLUSH_INTERVAL_MS = 250;
 const HEARTBEAT_INTERVAL_MS = 30 * 1000;
@@ -176,6 +177,15 @@ class A2ATaskRunService {
     for (const id of ids) {
       this.controllers.get(id)?.abort();
     }
+  }
+
+  /**
+   * Push one persisted stream event to the task's registered webhooks.
+   * Fire-and-forget: the event log is the durable record, so a webhook that
+   * is down costs push updates, never the task's outcome.
+   */
+  notify(taskId: string, event: A2AProtocolStreamResponse): void {
+    void a2aPushNotificationService.deliver({ taskId, event });
   }
 
   /** Reap orphans + prune terminal event logs (one interval tick). */

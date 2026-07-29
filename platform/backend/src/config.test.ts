@@ -2490,6 +2490,14 @@ describe("parseRetentionDays", () => {
     expect(parse("-1")).toBe(0);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("-1"));
   });
+
+  test("rejects partially numeric values instead of truncating them", () => {
+    // parseInt would read "30days" as 30 and "1.5" as 1 — for a value that
+    // drives deletion, a typo must disable the sweep, not shrink the window.
+    expect(parse("30days")).toBe(0);
+    expect(parse("1.5")).toBe(0);
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("parseHackathonRecorderEnabled", () => {

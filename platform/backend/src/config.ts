@@ -1164,14 +1164,16 @@ export const parseRetentionDays = (
   const DEFAULT_RETENTION_DAYS = 0;
   const value = envValue?.trim();
   if (!value) return DEFAULT_RETENTION_DAYS;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed) || parsed < 0) {
+  // Strictly digits: retention drives deletion, so a typo like "30days" or
+  // "1.5" must disable the sweep, never silently truncate to an unintended
+  // window.
+  if (!/^\d+$/.test(value)) {
     logger.warn(
       `Invalid ${envVarName} value "${value}", using default ${DEFAULT_RETENTION_DAYS} (disabled)`,
     );
     return DEFAULT_RETENTION_DAYS;
   }
-  return parsed;
+  return Number.parseInt(value, 10);
 };
 
 /**

@@ -2052,6 +2052,7 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
         meta: schema.toolsTable.meta,
+        parameters: schema.toolsTable.parameters,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -2165,6 +2166,7 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
         meta: schema.toolsTable.meta,
+        parameters: schema.toolsTable.parameters,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -2339,6 +2341,7 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
         meta: schema.toolsTable.meta,
+        parameters: schema.toolsTable.parameters,
       })
       .from(schema.toolsTable)
       .innerJoin(
@@ -2384,6 +2387,7 @@ class ToolModel {
         catalogId: schema.toolsTable.catalogId,
         catalogName: schema.internalMcpCatalogTable.name,
         meta: schema.toolsTable.meta,
+        parameters: schema.toolsTable.parameters,
       })
       .from(schema.toolsTable)
       .innerJoin(

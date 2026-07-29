@@ -100,6 +100,35 @@ pub(crate) fn validate_file_encoding(encoding: &str) -> Result<()> {
     }
 }
 
+/// a host-synced upload's client path must be a regular file inside
+/// `spool_root` after canonicalization (symlinks cannot escape), so a recipe
+/// can only ever sync spool-managed bytes — never arbitrary backend files.
+/// the TS layer builds these paths itself from the spool dir and a row id;
+/// this check is the trust boundary if that construction ever regresses.
+pub(crate) fn validate_host_file_path(path: &str, spool_root: &str) -> Result<()> {
+    let root = std::fs::canonicalize(spool_root).map_err(|err| {
+        SandboxError::InvalidInput(format!(
+            "spool root {spool_root:?} is not accessible: {err}"
+        ))
+    })?;
+    let file = std::fs::canonicalize(path).map_err(|err| {
+        SandboxError::InvalidInput(format!(
+            "host-synced file {path:?} is not accessible: {err}"
+        ))
+    })?;
+    if !file.starts_with(&root) {
+        return Err(SandboxError::InvalidInput(format!(
+            "host-synced file {path:?} escapes the spool root"
+        )));
+    }
+    if !file.is_file() {
+        return Err(SandboxError::InvalidInput(format!(
+            "host-synced path {path:?} is not a regular file"
+        )));
+    }
+    Ok(())
+}
+
 pub(crate) fn validate_cwd(cwd: &str) -> Result<()> {
     if cwd.contains('\0') || cwd.split('/').any(|segment| segment == "..") {
         return Err(SandboxError::InvalidInput(format!("invalid cwd: {cwd:?}")));
@@ -260,6 +289,80 @@ mod tests {
         assert!(validate_file_encoding("base64").is_ok());
         assert!(validate_file_encoding("hex").is_err());
         assert!(validate_file_encoding("").is_err());
+    }
+
+    /// unique-per-test scratch dir; std::env::temp_dir is shared, so key on
+    /// pid + test name to keep parallel runs apart.
+    fn host_file_scratch(test: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "archestra-host-file-test-{}-{test}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create scratch dir");
+        dir
+    }
+
+    #[test]
+    fn validate_host_file_path_accepts_regular_file_inside_root() {
+        let root = host_file_scratch("inside");
+        let file = root.join("blob");
+        std::fs::write(&file, b"bytes").expect("write blob");
+        assert!(
+            validate_host_file_path(file.to_str().expect("utf8"), root.to_str().expect("utf8"))
+                .is_ok()
+        );
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn validate_host_file_path_rejects_paths_outside_root() {
+        let root = host_file_scratch("outside-root");
+        let outside = host_file_scratch("outside-file").join("blob");
+        std::fs::write(&outside, b"bytes").expect("write blob");
+        assert!(
+            validate_host_file_path(
+                outside.to_str().expect("utf8"),
+                root.to_str().expect("utf8"),
+            )
+            .is_err()
+        );
+        std::fs::remove_dir_all(root).ok();
+        std::fs::remove_dir_all(outside.parent().expect("parent")).ok();
+    }
+
+    #[test]
+    fn validate_host_file_path_rejects_missing_file_and_directory() {
+        let root = host_file_scratch("missing");
+        assert!(
+            validate_host_file_path(
+                root.join("absent").to_str().expect("utf8"),
+                root.to_str().expect("utf8"),
+            )
+            .is_err()
+        );
+        // the root itself canonicalizes fine but is not a regular file
+        assert!(
+            validate_host_file_path(root.to_str().expect("utf8"), root.to_str().expect("utf8"))
+                .is_err()
+        );
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn validate_host_file_path_rejects_symlink_escape() {
+        let root = host_file_scratch("symlink-root");
+        let target_dir = host_file_scratch("symlink-target");
+        let secret = target_dir.join("secret");
+        std::fs::write(&secret, b"outside").expect("write secret");
+        let link = root.join("blob");
+        std::os::unix::fs::symlink(&secret, &link).expect("create symlink");
+        assert!(
+            validate_host_file_path(link.to_str().expect("utf8"), root.to_str().expect("utf8"),)
+                .is_err()
+        );
+        std::fs::remove_dir_all(root).ok();
+        std::fs::remove_dir_all(target_dir).ok();
     }
 
     #[test]

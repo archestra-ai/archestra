@@ -82,12 +82,26 @@ describe("validateAuthorizationResponseIssuer", () => {
     ).toEqual({ ok: true });
   });
 
-  test("a present iss with nothing recorded cannot be verified, so is rejected", () => {
+  test("a present iss with nothing recorded proceeds unverified", () => {
+    // Proxy flows skip authorization-server discovery by design and so never
+    // record an issuer. Rejecting them would prove nothing and break every
+    // such install; this leaves them exactly where they were before the check.
     expect(
       validateAuthorizationResponseIssuer({
         responseIssuer: ISSUER,
         recordedIssuer: null,
         issParameterSupported: true,
+      }),
+    ).toEqual({ ok: true });
+  });
+
+  test("a mismatch is still caught whenever an issuer was recorded", () => {
+    // The relaxation above must not weaken the case the check exists for.
+    expect(
+      validateAuthorizationResponseIssuer({
+        responseIssuer: "https://evil.example.com",
+        recordedIssuer: ISSUER,
+        issParameterSupported: false,
       }),
     ).toEqual({ ok: false, reason: "issuer_mismatch" });
   });

@@ -56,7 +56,11 @@ let mockOrgPending = false;
 let mockUpdateKnowledgeSettings = vi.fn();
 
 vi.mock("@/lib/organization.query");
+// The provider key form brands its copy with the deployment's app name, which
+// reads appearance settings from the (auto-mocked) organization query above.
+vi.mock("@/lib/hooks/use-app-name");
 
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useDropEmbeddingConfig,
   useOrganization,
@@ -174,6 +178,7 @@ function getEmbeddingModelTrigger() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useAppName).mockReturnValue("Archestra");
   mockUpdateKnowledgeSettings = vi.fn();
   mockOrganization = null;
   mockOrgPending = false;

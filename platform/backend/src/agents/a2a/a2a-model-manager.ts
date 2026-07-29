@@ -7,7 +7,7 @@ import {
   A2ATaskApprovalRequestModel,
   A2ATaskModel,
 } from "@/models";
-import { A2AMessageIdExistsError } from "@/models/a2a-message";
+import { A2AMessageIdExistsError } from "@/models/a2a/message";
 import type { A2AArtifact, A2AContext, A2AMessage, A2ATask } from "@/types";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import {

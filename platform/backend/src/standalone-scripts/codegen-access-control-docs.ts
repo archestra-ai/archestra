@@ -126,6 +126,8 @@ Team membership has its own role, separate from organization RBAC:
 - \`member\`: belongs to the team and can access resources shared with that team
 - \`admin\`: can manage membership and team-scoped settings for that team, such as external group sync mappings
 
+Whoever creates a team joins it as that team's first admin, so they can manage its members straight away.
+
 Team admins do **not** automatically receive organization-level team permissions. Renaming a team, editing its description, creating teams, and deleting teams require the matching organization RBAC permission such as \`team:update\`, \`team:create\`, or \`team:delete\`.
 
 Team roles are also separate from resource actions named \`:team-admin\`. For example, \`agent:team-admin\` controls team-scoped agent management; it does not make the user an admin member of every team.

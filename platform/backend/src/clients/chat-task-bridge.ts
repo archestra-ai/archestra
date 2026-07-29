@@ -150,9 +150,29 @@ export function createChatTaskBridge(): ChatTaskBridge {
       if (settled.status === "completed" && settled.result) {
         return settled.result as never;
       }
-      throw new Error(
-        settled.errorText ?? `Task ${settled.status} before it produced output`,
-      );
+
+      // Never throw: a throw inside a tool execute aborts the whole run and
+      // paints a red "unexpected error" panel over an answer the model already
+      // gave. Hand the outcome back as a tool result instead, the way
+      // executeMcpTool surfaces an upstream tool error.
+      //
+      // A cancellation is deliberately NOT an error — the user asked for it,
+      // so marking it one would style their own action as a failure. The model
+      // still reads the text and can offer to retry. A genuine task failure
+      // stays an error.
+      const cancelled = settled.status === "cancelled";
+      return {
+        content: [
+          {
+            type: "text",
+            text: cancelled
+              ? "The user cancelled this call before it finished, so it produced no result."
+              : (settled.errorText ??
+                "The background task failed before it produced output."),
+          },
+        ],
+        isError: !cancelled,
+      } as never;
     },
 
     collected() {

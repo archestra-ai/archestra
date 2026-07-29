@@ -40,6 +40,12 @@ import {
 } from "./chat-messages.utils";
 import { HookRunChip, type HookRunChipData } from "./hook-run-chip";
 import { McpAppEntryContent, McpAppEntryPill } from "./mcp-app-container";
+import { useMcpTaskFor } from "./mcp-task-context";
+import {
+  formatElapsed,
+  McpTaskStatusRow,
+  useElapsedSince,
+} from "./mcp-task-status";
 import { SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
@@ -102,6 +108,7 @@ type CompactAppContext = {
 
 function CompactCircle({
   toolName,
+  toolCallId,
   state,
   isExpanded,
   isExpandable = true,
@@ -110,6 +117,7 @@ function CompactCircle({
   catalogId,
 }: {
   toolName: string;
+  toolCallId?: string;
   state: "running" | "completed" | "error" | "denied";
   isExpanded: boolean;
   isExpandable?: boolean;
@@ -117,8 +125,15 @@ function CompactCircle({
   icon?: string | null;
   catalogId?: string;
 }) {
-  const stateSuffix =
-    state === "running"
+  // A call that detached into a background task reads as running, but is worth
+  // distinguishing: it is no longer bounded by the usual wait, and it can be
+  // cancelled from the expanded card.
+  const { task } = useMcpTaskFor(toolCallId);
+  const isBackground = task?.status === "working" && state === "running";
+  const elapsed = useElapsedSince(task?.startedAt ?? 0, Boolean(isBackground));
+  const stateSuffix = isBackground
+    ? " (running in the background)"
+    : state === "running"
       ? " (running)"
       : state === "error"
         ? " (error)"
@@ -156,7 +171,10 @@ function CompactCircle({
               className={cn(
                 "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
                 state === "completed" && "bg-green-500",
-                state === "running" && "bg-blue-500 animate-pulse",
+                state === "running" &&
+                  (isBackground
+                    ? "bg-amber-500 animate-pulse"
+                    : "bg-blue-500 animate-pulse"),
                 state === "error" && "bg-destructive",
                 state === "denied" && "bg-orange-500",
               )}
@@ -165,13 +183,15 @@ function CompactCircle({
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           {parseFullToolName(toolName).toolName.replace(/_/g, " ")}
-          {state === "running"
-            ? " (running)"
-            : state === "error"
-              ? " (error)"
-              : state === "denied"
-                ? " (denied)"
-                : ""}
+          {isBackground
+            ? ` (running in the background · ${formatElapsed(elapsed)})`
+            : state === "running"
+              ? " (running)"
+              : state === "error"
+                ? " (error)"
+                : state === "denied"
+                  ? " (denied)"
+                  : ""}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -405,6 +425,7 @@ export function CompactToolGroup({
                 <CompactCircle
                   key={entry.key}
                   toolName={displayToolName}
+                  toolCallId={entry.part.toolCallId}
                   state={state}
                   isExpanded={expandedKey === entry.key}
                   isExpandable={canExpandToolCalls}
@@ -475,6 +496,7 @@ export function CompactToolGroup({
             <CompactCircle
               key={entry.key}
               toolName={displayToolName}
+              toolCallId={entry.part.toolCallId}
               state={state}
               isExpanded={expandedKey === entry.key}
               isExpandable={canExpandToolCalls}
@@ -557,6 +579,11 @@ function ExpandedToolCard({
 }) {
   const { part, toolResultPart, toolName, errorText, nestedToolCalls } = tool;
   const { data: session } = useSession();
+  const {
+    task,
+    cancel: cancelTask,
+    isCancelling: isCancellingTask,
+  } = useMcpTaskFor(part.toolCallId);
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const isApprovalRequested = part.state === "approval-requested";
   // Whose credential the gateway used against the upstream server.
@@ -591,6 +618,13 @@ function ExpandedToolCard({
         }
       />
       <ToolContent>
+        {task ? (
+          <McpTaskStatusRow
+            task={task}
+            onCancel={cancelTask}
+            isCancelling={isCancellingTask}
+          />
+        ) : null}
         {hasInput ? <ToolInput input={part.input} defaultOpen /> : null}
         {nestedToolCalls}
         {isApprovalRequested &&

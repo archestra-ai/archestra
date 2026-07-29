@@ -1204,8 +1204,10 @@ class McpClient {
     }
 
     // Create the client with UI extension capabilities
+    // No `roots`: nothing here implements `roots/list`, and declaring it
+    // invited upstream servers to call a method we always failed. Deprecated
+    // in 2026-07-28 besides.
     const baseCapabilities: ClientCapabilitiesWithExtensions = {
-      roots: { listChanged: true },
       extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
     };
     const capabilities = elicitationHandler
@@ -3246,8 +3248,8 @@ class McpClient {
           secretId,
         );
 
+        // No `roots` — see the identical omission above.
         const capabilities: ClientCapabilitiesWithExtensions = {
-          roots: { listChanged: true },
           extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
         };
 

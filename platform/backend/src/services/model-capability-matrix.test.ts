@@ -147,7 +147,7 @@ const MODELS_DEV: ModelsDevApiResponse = {
         modalities: { input: ["text", "image", "video"], output: ["text"] },
         tool_call: true,
       },
-      // Sub-cent prices: the magnitude that cent-rounding used to destroy.
+      // Sub-cent prices, the magnitude where cent-rounding is lossy.
       "amazon.nova-micro-v1:0": {
         id: "amazon.nova-micro-v1:0",
         name: "Nova Micro",

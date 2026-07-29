@@ -470,6 +470,15 @@ class McpClient {
           ...mcpParamHeaders,
         },
       };
+    } else if (mcpParamHeaders) {
+      // Every gateway request carries token auth, so this should be
+      // unreachable — but if a call path without auth context ever reaches an
+      // annotated tool, the mirrored headers are dropped, and that should be
+      // visible rather than silent.
+      logger.debug(
+        { toolName: toolCall.name, headers: Object.keys(mcpParamHeaders) },
+        "Skipping Mcp-Param headers: no token auth context to carry them",
+      );
     }
 
     // App backing servers have no upstream to connect to: the `open` launch tool is

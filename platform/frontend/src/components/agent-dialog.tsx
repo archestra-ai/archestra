@@ -586,12 +586,26 @@ export function AccessLevelSelector({
   const personalIndex = scopedOptions.findIndex(
     (option) => option.value === "personal",
   );
+  // Sharing with named people is stored as `personal` plus grants, so it is
+  // bound by whatever bars Personal itself. Without this an already-shared
+  // agent offered the option and then refused the save.
+  const personalLocked = isOptionDisabled("personal");
+  const userChoiceOption: VisibilityOption<AgentVisibilityChoice> =
+    personalLocked
+      ? {
+          ...userOption,
+          disabled: true,
+          disabledLabel: "Unavailable",
+          disabledReason:
+            "Sharing with named people keeps this personal, and a shared agent cannot be made personal again.",
+        }
+      : userOption;
   const options: VisibilityOption<AgentVisibilityChoice>[] =
     personalIndex === -1 || !onUserIdsChange
       ? scopedOptions
       : [
           ...scopedOptions.slice(0, personalIndex + 1),
-          userOption,
+          userChoiceOption,
           ...scopedOptions.slice(personalIndex + 1),
         ];
 

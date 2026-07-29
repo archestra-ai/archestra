@@ -719,18 +719,34 @@ class ModelModel {
 
     // Tier 2: registry-synced price (convert per-token to per-million). The
     // stored columns do not record which registry supplied them, so the source
-    // is re-derived: a Bedrock model AWS prices was synced from AWS, since sync
-    // and read consult the same snapshot.
+    // is re-derived by re-running the AWS snapshot lookup. AWS only fills what
+    // models.dev omits, so matching the stored value is what identifies it as
+    // the source; a mismatch means the registry won. When both agree the
+    // attribution is ambiguous and either label describes the same number.
     if (
       model?.promptPricePerToken != null &&
       model?.completionPricePerToken != null
     ) {
-      const syncedSource: PriceSource = resolveBedrockAwsPrices({
+      const awsPrices = resolveBedrockAwsPrices({
         provider: model.provider,
         modelId: model.modelId,
-      })
-        ? "aws"
-        : "models_dev";
+      });
+      // Compared as numbers: both sides are decimal strings, but the stored one
+      // has been through Postgres numeric and carries its scale's trailing
+      // zeros, so "0.0000033" and "0.00000330" are the same price.
+      const samePrice = (a: string | null, b: string) =>
+        a != null && Number.parseFloat(a) === Number.parseFloat(b);
+      const syncedSource: PriceSource =
+        samePrice(
+          awsPrices?.promptPricePerToken ?? null,
+          model.promptPricePerToken,
+        ) &&
+        samePrice(
+          awsPrices?.completionPricePerToken ?? null,
+          model.completionPricePerToken,
+        )
+          ? "aws"
+          : "models_dev";
       return {
         pricePerMillionInput: (
           Number.parseFloat(model.promptPricePerToken) * 1_000_000

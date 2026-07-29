@@ -292,8 +292,11 @@ export function buildModelsToUpsert(params: {
       underlyingModelName: model.underlyingModelName,
       modelsDevData,
     };
-    // AWS publishes Bedrock's own prices, including the premium regional
-    // endpoints carry over global ones, which the public registry flattens.
+    // Fills the tail models.dev omits — retired and non-chat Bedrock models
+    // that would otherwise fall through to the fabricated default estimate.
+    // It sits below the registry because AWS names a model by display name,
+    // so a snapshot lookup can land on a whole family ("Claude Opus 4") and
+    // price a newer member at an older member's rate.
     const awsPrices = resolveBedrockAwsPrices({
       provider,
       modelId: model.id,
@@ -438,7 +441,7 @@ export function resolveModelCapabilities(params: {
   crossProviderPrices?: CrossProviderPrices | null;
   /** Capabilities derived from the underlying vendor entry for Bedrock/Azure. */
   crossProviderMetadata?: CrossProviderMetadata | null;
-  /** Prices published by AWS for a Bedrock model. Authoritative over the registry. */
+  /** Prices published by AWS for a Bedrock model. Used where the registry has none. */
   awsPrices?: BedrockAwsPrices | null;
   /** Underlying vendor model name, when the fetcher can determine it (Azure). */
   underlyingModelName?: string | null;
@@ -506,15 +509,15 @@ export function resolveModelCapabilities(params: {
         null,
       promptPricePerToken:
         fetched?.promptPricePerToken ??
-        awsPrices?.promptPricePerToken ??
         capabilities?.promptPricePerToken ??
         crossProviderPrices?.promptPricePerToken ??
+        awsPrices?.promptPricePerToken ??
         null,
       completionPricePerToken:
         fetched?.completionPricePerToken ??
-        awsPrices?.completionPricePerToken ??
         capabilities?.completionPricePerToken ??
         crossProviderPrices?.completionPricePerToken ??
+        awsPrices?.completionPricePerToken ??
         null,
       cacheReadPricePerToken:
         fetched?.cacheReadPricePerToken ??

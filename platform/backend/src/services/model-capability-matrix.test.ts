@@ -452,7 +452,7 @@ const MATRIX: MatrixRow[] = [
       outputModalities: null,
       supportsToolCalling: null,
       pricePerMillionInput: "1.25",
-      pricePerMillionOutput: "10.00",
+      pricePerMillionOutput: "10",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.125",
       // OpenAI bills nothing to write to the cache, so the derived write is 0.
@@ -473,7 +473,7 @@ const MATRIX: MatrixRow[] = [
       // A fifth of `gpt-5.1-codex`: deriving one from the other by stripping
       // the suffix would bill this at five times its published rate.
       pricePerMillionInput: "0.25",
-      pricePerMillionOutput: "2.00",
+      pricePerMillionOutput: "2",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.025",
       pricePerMillionCacheWrite: "0",
@@ -613,7 +613,7 @@ const MATRIX: MatrixRow[] = [
       outputModalities: null,
       supportsToolCalling: null,
       pricePerMillionInput: "1.25",
-      pricePerMillionOutput: "10.00",
+      pricePerMillionOutput: "10",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.125",
       pricePerMillionCacheWrite: "1.5625",

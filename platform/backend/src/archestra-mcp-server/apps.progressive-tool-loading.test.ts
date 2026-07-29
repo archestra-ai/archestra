@@ -14,7 +14,7 @@ import {
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_SET_APP_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
-import { AppToolModel, EnvironmentModel } from "@/models";
+import { AppModel, AppToolModel, EnvironmentModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -245,6 +245,7 @@ describe("app tool assignment under Load-tools-when-needed", () => {
   // Use search_tools" (T-977: "I can't assign live MCP tools to the app").
   describe("environment-bound Access-all-tools agent", () => {
     let context: ArchestraContext;
+    let envId: string;
     let envToolName: string;
 
     beforeEach(
@@ -259,6 +260,7 @@ describe("app tool assignment under Load-tools-when-needed", () => {
           organizationId,
           name: `Env ${crypto.randomUUID().slice(0, 8)}`,
         });
+        envId = env.id;
         const envCatalog = await makeInternalMcpCatalog({
           organizationId,
           environmentId: env.id,
@@ -288,6 +290,16 @@ describe("app tool assignment under Load-tools-when-needed", () => {
       await expectAssignsThroughFullDispatch(context, envToolName);
     });
 
+    test("scaffold_app binds the app to the authoring agent's environment", async () => {
+      const created = await runTool(context, SCAFFOLD_APP_FULL_NAME, {
+        name: "Env Bound App",
+        tools: [envToolName],
+      });
+      expect(created.isError, resultText(created)).toBe(false);
+      const app = await AppModel.findById(structured(created).id as string);
+      expect(app?.environmentId).toBe(envId);
+    });
+
     test("set_app_tools accepts the environment's live tool on a scaffolded app", async () => {
       // The repair path scaffold_app's partial result points to must work too:
       // scaffold bare, then assign the discovered tool after the fact.
@@ -303,6 +315,23 @@ describe("app tool assignment under Load-tools-when-needed", () => {
       });
       expect(res.isError, resultText(res)).toBe(false);
       expect(structured(res).tools).toEqual([envToolName]);
+    });
+
+    test("Default-environment tools stay assignable as the org baseline", async () => {
+      // liveToolName (outer beforeEach) lives in the Default environment; the
+      // catch-all lets any app draw from that baseline, so scaffolding from an
+      // env-bound agent may combine its environment's tools with Default's.
+      const created = await runTool(context, SCAFFOLD_APP_FULL_NAME, {
+        name: "Mixed Sources Board",
+        tools: [envToolName, liveToolName],
+      });
+      expect(created.isError, resultText(created)).toBe(false);
+      const appId = structured(created).id as string;
+      expect(
+        (await AppToolModel.getToolsForApp(appId))
+          .map((tool) => tool.name)
+          .sort(),
+      ).toEqual([envToolName, liveToolName].sort());
     });
   });
 });

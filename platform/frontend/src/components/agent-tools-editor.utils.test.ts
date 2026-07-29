@@ -14,6 +14,7 @@ import {
   computeSharedPersonalPins,
   getCatalogAssignmentGate,
   getDefaultArchestraToolIds,
+  isCatalogInAppEnvironment,
   isCatalogInEnvironment,
   shouldResetCredentialPin,
   sortAndFilterTools,
@@ -532,6 +533,26 @@ describe("isCatalogInEnvironment", () => {
   it("exempts builtin catalogs from every environment", () => {
     expect(isCatalogInEnvironment(env("env-a", "builtin"), "env-b")).toBe(true);
     expect(isCatalogInEnvironment(env(null, "builtin"), "env-a")).toBe(true);
+  });
+});
+
+describe("isCatalogInAppEnvironment", () => {
+  const env = (environmentId: string | null, serverType = "local") => ({
+    id: "c1",
+    name: "Cat",
+    serverType,
+    environmentId,
+  });
+
+  it("accepts the app's own environment and the Default baseline", () => {
+    expect(isCatalogInAppEnvironment(env("env-a"), "env-a")).toBe(true);
+    expect(isCatalogInAppEnvironment(env(null), "env-a")).toBe(true);
+    expect(isCatalogInAppEnvironment(env(null), null)).toBe(true);
+  });
+
+  it("still rejects a different non-default environment", () => {
+    expect(isCatalogInAppEnvironment(env("env-a"), "env-b")).toBe(false);
+    expect(isCatalogInAppEnvironment(env("env-a"), null)).toBe(false);
   });
 });
 

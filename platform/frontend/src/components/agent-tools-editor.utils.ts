@@ -77,6 +77,22 @@ export function isCatalogInEnvironment(
 }
 
 /**
+ * App variant of {@link isCatalogInEnvironment}: apps additionally accept the
+ * Default environment (null) as a shared baseline, so a Default catalog is
+ * assignable to an app in any environment. Mirrors the backend's
+ * toolInEnvironmentOrDefaultPredicate; agents keep the strict helper.
+ */
+export function isCatalogInAppEnvironment(
+  catalog: EnvScopedCatalog,
+  appEnvironmentId: string | null,
+): boolean {
+  return (
+    isCatalogInEnvironment(catalog, appEnvironmentId) ||
+    (catalog.environmentId ?? null) === null
+  );
+}
+
+/**
  * Whether a catalog item may be assigned to an agent in the tools picker, and
  * how it should read when it is.
  *

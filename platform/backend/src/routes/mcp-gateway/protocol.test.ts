@@ -17,6 +17,7 @@ import {
   deriveRequestTargetName,
   extractTraceContext,
   isDiscoverRequest,
+  isMethodRemovedForRevision,
   isResourceUnavailableError,
   LEGACY_MCP_PROTOCOL_REVISION,
   resolveProtocolRevision,
@@ -359,11 +360,58 @@ describe("server/discover", () => {
     expect(result.resultType).toBe("complete");
   });
 
+  test("unimplemented subscription features are not advertised", () => {
+    // No resources/subscribe handler exists and no list_changed notification
+    // has ever been sent — advertising either made clients wait on signals
+    // that never come. Freshness is carried by the SEP-2549 cache hints.
+    const capabilities = buildGatewayServerCapabilities();
+
+    expect(capabilities.resources).not.toHaveProperty("subscribe");
+    expect(capabilities.resources).toMatchObject({ listChanged: false });
+    expect(capabilities.tools).toMatchObject({ listChanged: false });
+  });
+
   test("capabilities carry the MCP Apps extension", () => {
     const capabilities = buildGatewayServerCapabilities();
     expect(capabilities.extensions).toHaveProperty(
       "io.modelcontextprotocol/ui",
     );
+  });
+});
+
+describe("isMethodRemovedForRevision", () => {
+  test("removed methods are refused only for the revision that removed them", () => {
+    for (const method of [
+      "ping",
+      "logging/setLevel",
+      "resources/subscribe",
+      "resources/unsubscribe",
+    ]) {
+      expect(
+        isMethodRemovedForRevision({
+          method,
+          revision: STATELESS_MCP_PROTOCOL_REVISION,
+        }),
+      ).toBe(true);
+      // A legacy client keeps whatever it had — notably the SDK's ping.
+      expect(
+        isMethodRemovedForRevision({
+          method,
+          revision: LEGACY_MCP_PROTOCOL_REVISION,
+        }),
+      ).toBe(false);
+    }
+  });
+
+  test("surviving methods pass through untouched", () => {
+    for (const method of ["tools/call", "tools/list", "server/discover"]) {
+      expect(
+        isMethodRemovedForRevision({
+          method,
+          revision: STATELESS_MCP_PROTOCOL_REVISION,
+        }),
+      ).toBe(false);
+    }
   });
 });
 

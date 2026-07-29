@@ -11,6 +11,7 @@ import type {
 import { resolveDiscoveredModelRegistryEntry } from "./cross-provider-pricing";
 import { enrichDiscoveredModel } from "./discovered-model-enrichment";
 import { buildModelsToUpsert } from "./model-sync";
+import { lookupOpenAiPublishedPrices } from "./openai-published-pricing";
 
 /**
  * Black-box matrix over model metadata resolution: given a provider, a model id
@@ -439,6 +440,47 @@ const MATRIX: MatrixRow[] = [
     },
   },
 
+  // --- OpenAI: models the registry omits, priced from OpenAI's own list ----
+  {
+    name: "openai/gpt-5.1-codex — absent from the registry, so the published map fills it",
+    provider: "openai",
+    modelId: "gpt-5.1-codex",
+    expected: {
+      contextLength: null,
+      outputLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      pricePerMillionInput: "1.25",
+      pricePerMillionOutput: "10.00",
+      priceSource: "models_dev",
+      pricePerMillionCacheRead: "0.125",
+      // OpenAI bills nothing to write to the cache, so the derived write is 0.
+      pricePerMillionCacheWrite: "0",
+      cachePriceSource: "models_dev",
+    },
+  },
+  {
+    name: "openai/gpt-5.1-codex-mini — priced apart from the model its name contains",
+    provider: "openai",
+    modelId: "gpt-5.1-codex-mini",
+    expected: {
+      contextLength: null,
+      outputLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      // A fifth of `gpt-5.1-codex`: deriving one from the other by stripping
+      // the suffix would bill this at five times its published rate.
+      pricePerMillionInput: "0.25",
+      pricePerMillionOutput: "2.00",
+      priceSource: "models_dev",
+      pricePerMillionCacheRead: "0.025",
+      pricePerMillionCacheWrite: "0",
+      cachePriceSource: "models_dev",
+    },
+  },
+
   // --- Anthropic ----------------------------------------------------------
   {
     name: "anthropic/claude-opus-4-8 — both cache directions synced",
@@ -557,6 +599,25 @@ const MATRIX: MatrixRow[] = [
       pricePerMillionCacheRead: "5",
       pricePerMillionCacheWrite: "62.5",
       cachePriceSource: "derived_multiplier",
+    },
+  },
+  {
+    name: "discovered/bedrock:gpt-5.1-codex — no registry provider carries it, so the published map does",
+    provider: "bedrock",
+    modelId: "gpt-5.1-codex",
+    discovered: true,
+    expected: {
+      contextLength: null,
+      outputLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      pricePerMillionInput: "1.25",
+      pricePerMillionOutput: "10.00",
+      priceSource: "models_dev",
+      pricePerMillionCacheRead: "0.125",
+      pricePerMillionCacheWrite: "1.5625",
+      cachePriceSource: "models_dev",
     },
   },
 
@@ -1189,7 +1250,8 @@ describe("model capability matrix", () => {
             provider: row.provider,
             modelId: row.modelId,
             modelsDevData: MODELS_DEV,
-          })?.prices?.promptPricePerToken == null
+          })?.prices?.promptPricePerToken == null &&
+          lookupOpenAiPublishedPrices(row.modelId) == null
         );
       }
       const [built] = buildModelsToUpsert({

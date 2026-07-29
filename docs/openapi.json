@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.18"
+    "version": "1.3.20"
   },
   "components": {
     "schemas": {
@@ -60926,6 +60926,10 @@
                               "id": {
                                 "type": "string"
                               },
+                              "slug": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "scope": {
                                 "type": "string",
                                 "enum": [
@@ -60976,6 +60980,25 @@
                                   ],
                                   "additionalProperties": false
                                 }
+                              },
+                              "users": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name"
+                                  ],
+                                  "additionalProperties": false
+                                }
                               }
                             },
                             "required": [
@@ -60986,13 +61009,15 @@
                               "pinnedAt",
                               "source",
                               "id",
+                              "slug",
                               "scope",
                               "authorId",
                               "authorName",
                               "viewerRole",
                               "latestVersion",
                               "enabled",
-                              "teams"
+                              "teams",
+                              "users"
                             ],
                             "additionalProperties": false
                           },
@@ -61383,6 +61408,12 @@
                     "minLength": 1,
                     "maxLength": 100
                   },
+                  "slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  },
                   "description": {
                     "type": "string",
                     "maxLength": 500
@@ -61467,6 +61498,10 @@
                       "type": "string"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "description": {
@@ -61575,6 +61610,7 @@
                     "organizationId",
                     "authorId",
                     "name",
+                    "slug",
                     "description",
                     "templateId",
                     "mcpServerId",
@@ -64222,13 +64258,12 @@
         "tags": [
           "Apps"
         ],
-        "description": "Get a single app by id, if the caller may view it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
+        "description": "Get a single app by id or slug, if the caller may view it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: View and run MCP Apps within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              "minLength": 1
             },
             "in": "path",
             "name": "appId",
@@ -64256,6 +64291,10 @@
                       "type": "string"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "description": {
@@ -64366,6 +64405,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "viewerRole": {
                       "type": "string",
                       "enum": [
@@ -64384,6 +64446,7 @@
                     "organizationId",
                     "authorId",
                     "name",
+                    "slug",
                     "description",
                     "templateId",
                     "mcpServerId",
@@ -64396,6 +64459,7 @@
                     "scope",
                     "environmentId",
                     "teams",
+                    "users",
                     "viewerRole",
                     "authorName"
                   ],
@@ -64658,6 +64722,12 @@
                     "minLength": 1,
                     "maxLength": 100
                   },
+                  "slug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                  },
                   "description": {
                     "nullable": true,
                     "type": "string",
@@ -64710,6 +64780,13 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     }
+                  },
+                  "userIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
                   }
                 }
               }
@@ -64749,6 +64826,10 @@
                       "type": "string"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "description": {
@@ -64852,6 +64933,7 @@
                     "organizationId",
                     "authorId",
                     "name",
+                    "slug",
                     "description",
                     "templateId",
                     "mcpServerId",
@@ -65422,6 +65504,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "description": {
                       "nullable": true,
                       "type": "string"
@@ -65530,6 +65616,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "viewerRole": {
                       "type": "string",
                       "enum": [
@@ -65548,6 +65657,7 @@
                     "organizationId",
                     "authorId",
                     "name",
+                    "slug",
                     "description",
                     "templateId",
                     "mcpServerId",
@@ -65560,6 +65670,7 @@
                     "scope",
                     "environmentId",
                     "teams",
+                    "users",
                     "viewerRole",
                     "authorName"
                   ],
@@ -65847,6 +65958,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "slug": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "description": {
                       "nullable": true,
                       "type": "string"
@@ -65955,6 +66070,29 @@
                         "additionalProperties": false
                       }
                     },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "viewerRole": {
                       "type": "string",
                       "enum": [
@@ -65973,6 +66111,7 @@
                     "organizationId",
                     "authorId",
                     "name",
+                    "slug",
                     "description",
                     "templateId",
                     "mcpServerId",
@@ -65985,6 +66124,7 @@
                     "scope",
                     "environmentId",
                     "teams",
+                    "users",
                     "viewerRole",
                     "authorName"
                   ],
@@ -111572,6 +111712,12 @@
                         "sandboxArtifactBytesLimit": {
                           "type": "number"
                         },
+                        "chatAttachmentStorageBytesLimit": {
+                          "type": "number"
+                        },
+                        "apiBodyLimitBytes": {
+                          "type": "number"
+                        },
                         "byosEnabled": {
                           "type": "boolean"
                         },
@@ -111663,8 +111809,13 @@
                         "hackathonRecorderEnabled": {
                           "type": "boolean"
                         },
-                        "hackathonRecorderOverrideActive": {
+                        "hackathonVideoDownloadEnabled": {
                           "type": "boolean"
+                        },
+                        "hackathonMaxFinalCutMs": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
                         },
                         "hackathonGalleryRepo": {
                           "nullable": true,
@@ -111689,6 +111840,8 @@
                         "orchestratorK8sRuntime",
                         "sandbox",
                         "sandboxArtifactBytesLimit",
+                        "chatAttachmentStorageBytesLimit",
+                        "apiBodyLimitBytes",
                         "byosEnabled",
                         "byosVaultKvVersion",
                         "azureOpenAiEntraIdEnabled",
@@ -111709,7 +111862,8 @@
                         "chatopsTelegramEnabled",
                         "kbAutoSyncPermissionsEnabled",
                         "hackathonRecorderEnabled",
-                        "hackathonRecorderOverrideActive",
+                        "hackathonVideoDownloadEnabled",
+                        "hackathonMaxFinalCutMs",
                         "hackathonGalleryRepo"
                       ],
                       "additionalProperties": false
@@ -129104,6 +129258,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -129679,6 +129834,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -130675,6 +130831,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -131371,6 +131528,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -132067,6 +132225,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -132763,6 +132922,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -133338,6 +133498,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -133913,6 +134074,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -136448,6 +136610,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -139717,6 +139880,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -140292,6 +140456,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -140867,6 +141032,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -141442,6 +141608,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -142017,6 +142184,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -142592,6 +142760,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -143167,6 +143336,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -143731,6 +143901,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -144295,6 +144466,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -144859,6 +145031,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -145434,6 +145607,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -146009,6 +146183,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -146584,6 +146759,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -149345,6 +149521,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -152101,6 +152278,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -154862,6 +155040,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -155437,6 +155616,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -156248,6 +156428,7 @@
                                   "a2a:compaction",
                                   "chat:title_generation",
                                   "chat:tool_call_repair",
+                                  "a2a:tool_call_repair",
                                   "skill:description_generation",
                                   "chatops:slack",
                                   "chatops:ms-teams",
@@ -157504,6 +157685,7 @@
                 "a2a:compaction",
                 "chat:title_generation",
                 "chat:tool_call_repair",
+                "a2a:tool_call_repair",
                 "skill:description_generation",
                 "chatops:slack",
                 "chatops:ms-teams",
@@ -157621,6 +157803,7 @@
                               "a2a:compaction",
                               "chat:title_generation",
                               "chat:tool_call_repair",
+                              "a2a:tool_call_repair",
                               "skill:description_generation",
                               "chatops:slack",
                               "chatops:ms-teams",
@@ -157646,6 +157829,7 @@
                                 "a2a:compaction",
                                 "chat:title_generation",
                                 "chat:tool_call_repair",
+                                "a2a:tool_call_repair",
                                 "skill:description_generation",
                                 "chatops:slack",
                                 "chatops:ms-teams",
@@ -158766,6 +158950,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -159341,6 +159526,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -160337,6 +160523,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -161033,6 +161220,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -161729,6 +161917,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -162425,6 +162614,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -163000,6 +163190,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -163575,6 +163766,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -166110,6 +166302,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -169379,6 +169572,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -169954,6 +170148,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -170529,6 +170724,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -171104,6 +171300,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -171679,6 +171876,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -172254,6 +172452,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -172829,6 +173028,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -173393,6 +173593,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -173957,6 +174158,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -174521,6 +174723,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -175096,6 +175299,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -175671,6 +175875,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -176246,6 +176451,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -179007,6 +179213,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -181763,6 +181970,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -184524,6 +184732,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -185099,6 +185308,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -185910,6 +186120,7 @@
                             "a2a:compaction",
                             "chat:title_generation",
                             "chat:tool_call_repair",
+                            "a2a:tool_call_repair",
                             "skill:description_generation",
                             "chatops:slack",
                             "chatops:ms-teams",
@@ -202805,6 +203016,12 @@
                                       "type": "string"
                                     }
                                   },
+                                  "includePaths": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
                                   "labelsToSkip": {
                                     "type": "array",
                                     "items": {
@@ -204089,6 +204306,12 @@
                               "type": "string"
                             }
                           },
+                          "includePaths": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "labelsToSkip": {
                             "type": "array",
                             "items": {
@@ -204986,6 +205209,12 @@
                               "type": "boolean"
                             },
                             "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includePaths": {
                               "type": "array",
                               "items": {
                                 "type": "string"
@@ -206221,6 +206450,12 @@
                                 "type": "string"
                               }
                             },
+                            "includePaths": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
                             "labelsToSkip": {
                               "type": "array",
                               "items": {
@@ -207337,6 +207572,12 @@
                               "type": "string"
                             }
                           },
+                          "includePaths": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "labelsToSkip": {
                             "type": "array",
                             "items": {
@@ -208232,6 +208473,12 @@
                               "type": "boolean"
                             },
                             "fileTypes": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "includePaths": {
                               "type": "array",
                               "items": {
                                 "type": "string"
@@ -217168,6 +217415,7 @@
                             "enum": [
                               "custom",
                               "models_dev",
+                              "aws",
                               "derived_multiplier",
                               "default"
                             ]
@@ -217186,6 +217434,7 @@
                             "enum": [
                               "custom",
                               "models_dev",
+                              "aws",
                               "derived_multiplier",
                               "default"
                             ]
@@ -218048,6 +218297,7 @@
                         "enum": [
                           "custom",
                           "models_dev",
+                          "aws",
                           "derived_multiplier",
                           "default"
                         ]
@@ -218066,6 +218316,7 @@
                         "enum": [
                           "custom",
                           "models_dev",
+                          "aws",
                           "derived_multiplier",
                           "default"
                         ]
@@ -223701,6 +223952,12 @@
                     "transport": {
                       "type": "string"
                     },
+                    "protocolVersions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "capabilities": {
                       "type": "object",
                       "properties": {
@@ -223746,6 +224003,7 @@
                     "version",
                     "agentId",
                     "transport",
+                    "protocolVersions",
                     "capabilities"
                   ],
                   "additionalProperties": false
@@ -296972,6 +297230,528 @@
                     ],
                     "additionalProperties": false
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "llmCost:read"
+          ]
+        }
+      }
+    },
+    "/api/statistics/users": {
+      "get": {
+        "operationId": "getUserStatistics",
+        "tags": [
+          "Statistics"
+        ],
+        "description": "Get per-user usage statistics (requests, tokens, cost and model mix), for AI-adoption reporting. Paginated because user cardinality is unbounded. Only traffic that carries a resolved user identity is included; requests authenticated with a shared credential and no user context are not attributed to anyone.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View LLM usage cost statistics and analytics",
+        "parameters": [
+          {
+            "schema": {
+              "default": "24h",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "5m",
+                    "15m",
+                    "30m",
+                    "1h",
+                    "24h",
+                    "7d",
+                    "30d",
+                    "90d",
+                    "12m",
+                    "all"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^custom:[\\s\\S]{0,}_[\\s\\S]{0,}$",
+                  "description": "Custom timeframe must be in format 'custom:startTime_endTime'"
+                }
+              ]
+            },
+            "in": "query",
+            "name": "timeframe",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": false,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "includeTimeSeries",
+            "required": false,
+            "description": "Include a per-user cost time series. Off by default: it multiplies the response by the number of time buckets."
+          },
+          {
+            "schema": {
+              "default": false,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "includeModels",
+            "required": false,
+            "description": "Include each user's per-model usage breakdown. Off by default: it costs an extra aggregation."
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "totalTokens",
+                "requests",
+                "billedCost",
+                "lastActiveAt",
+                "userName"
+              ]
+            },
+            "in": "query",
+            "name": "sortBy",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "in": "query",
+            "name": "sortDirection",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "userId": {
+                            "type": "string"
+                          },
+                          "userName": {
+                            "type": "string"
+                          },
+                          "userEmail": {
+                            "type": "string"
+                          },
+                          "requests": {
+                            "type": "number"
+                          },
+                          "inputTokens": {
+                            "type": "number"
+                          },
+                          "outputTokens": {
+                            "type": "number"
+                          },
+                          "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "totalTokens": {
+                            "type": "number"
+                          },
+                          "billedCost": {
+                            "type": "number"
+                          },
+                          "subscriptionCost": {
+                            "type": "number"
+                          },
+                          "activeDays": {
+                            "type": "number"
+                          },
+                          "lastActiveAt": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "models": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "model": {
+                                  "type": "string"
+                                },
+                                "requests": {
+                                  "type": "number"
+                                },
+                                "inputTokens": {
+                                  "type": "number"
+                                },
+                                "outputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheReadTokens": {
+                                  "type": "number"
+                                },
+                                "billedCost": {
+                                  "type": "number"
+                                },
+                                "subscriptionCost": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "model",
+                                "requests",
+                                "inputTokens",
+                                "outputTokens",
+                                "cacheReadTokens",
+                                "billedCost",
+                                "subscriptionCost"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "timeSeries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "timestamp": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "timestamp",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "userId",
+                          "userName",
+                          "userEmail",
+                          "requests",
+                          "inputTokens",
+                          "outputTokens",
+                          "cacheReadTokens",
+                          "totalTokens",
+                          "billedCost",
+                          "subscriptionCost",
+                          "activeDays",
+                          "lastActiveAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "currentPage": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "totalPages": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        },
+                        "hasPrev": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "currentPage",
+                        "limit",
+                        "total",
+                        "totalPages",
+                        "hasNext",
+                        "hasPrev"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

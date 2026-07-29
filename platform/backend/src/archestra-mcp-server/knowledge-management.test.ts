@@ -556,9 +556,9 @@ describe("knowledge-management tool execution", () => {
         contextNoOrg,
       );
       expect(result.isError).toBe(true);
-      // Centralized RBAC check catches missing user context before the handler
+      // Centralized RBAC check catches missing org context before the handler
       expect((result.content[0] as any).text).toContain(
-        "User context not available",
+        "Organization context not available",
       );
     });
   });
@@ -1458,7 +1458,7 @@ describe("knowledge-management tool execution", () => {
       );
       expect(result.isError).toBe(true);
       expect((result.content[0] as any).text).toContain(
-        "User context not available",
+        "requires an acting user",
       );
     });
   });

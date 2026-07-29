@@ -90,12 +90,14 @@ describe("PUT /api/projects/:id/share", () => {
     makeCustomRole,
     makeMember,
     makeTeam,
+    makeTeamMember,
   }) => {
     const role = await makeCustomRole(organizationId, {
       permission: PROJECT_PERMISSIONS_WITHOUT_SHARE_ORG,
     });
     await makeMember(user.id, organizationId, { role: role.role });
     const team = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id);
     const project = await makeOwnProject();
 
     const response = await setShare(project.id, {
@@ -140,6 +142,78 @@ describe("PUT /api/projects/:id/share", () => {
     expect(
       (await ProjectShareModel.findByProjectId(project.id))?.visibility,
     ).toBe("organization");
+  });
+
+  test("an owner cannot share with a team they are not a member of", async ({
+    makeMember,
+    makeTeam,
+  }) => {
+    await makeMember(user.id, organizationId);
+    // Created by the owner, but they never joined it.
+    const team = await makeTeam(organizationId, user.id);
+    const project = await makeOwnProject();
+
+    const response = await setShare(project.id, {
+      visibility: "team",
+      teamIds: [team.id],
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toMatch(/teams you are a member of/i);
+    expect(await ProjectShareModel.findByProjectId(project.id)).toBeNull();
+  });
+
+  test("a project admin can share with any team in the organization", async ({
+    makeMember,
+    makeTeam,
+    makeUser,
+  }) => {
+    await makeMember(user.id, organizationId, { role: "admin" });
+    const other = await makeUser();
+    const team = await makeTeam(organizationId, other.id);
+    const project = await makeOwnProject();
+
+    const response = await setShare(project.id, {
+      visibility: "team",
+      teamIds: [team.id],
+    });
+    expect(response.statusCode).toBe(200);
+    expect(
+      (await ProjectShareModel.findByProjectId(project.id))?.teamIds,
+    ).toEqual([team.id]);
+  });
+
+  test("a team from another organization is rejected", async ({
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    await makeMember(user.id, organizationId, { role: "admin" });
+    const otherOrg = await makeOrganization();
+    const outsider = await makeUser();
+    const foreignTeam = await makeTeam(otherOrg.id, outsider.id);
+    const project = await makeOwnProject();
+
+    const response = await setShare(project.id, {
+      visibility: "team",
+      teamIds: [foreignTeam.id],
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/unknown team id/i);
+    expect(await ProjectShareModel.findByProjectId(project.id)).toBeNull();
+  });
+
+  test("a team share with no teams is rejected", async ({ makeMember }) => {
+    await makeMember(user.id, organizationId);
+    const project = await makeOwnProject();
+
+    const response = await setShare(project.id, {
+      visibility: "team",
+      teamIds: [],
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toMatch(/at least one team/i);
+    expect(await ProjectShareModel.findByProjectId(project.id)).toBeNull();
   });
 
   test("an admin can org-share another member's project", async ({

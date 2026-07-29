@@ -1,5 +1,6 @@
 import { deleteAppBacking } from "@/services/apps/app-mcp-backing";
 import { describe, expect, test } from "@/test";
+import { AppSlugSchema } from "@/types/app";
 import AppModel from "./app";
 import AppAccessModel from "./app-access";
 import AppVersionModel from "./app-version";
@@ -348,5 +349,269 @@ describe("AppAccessModel accessibility", () => {
         isAppAdmin: true,
       }),
     ).toBe(true);
+  });
+});
+
+describe("AppModel.generateUniqueSlug", () => {
+  test("derives the slug from the app name", async ({ makeOrganization }) => {
+    const org = await makeOrganization();
+
+    expect(
+      await AppModel.generateUniqueSlug({
+        name: "Sales Dashboard!",
+        organizationId: org.id,
+      }),
+    ).toBe("sales-dashboard");
+  });
+
+  test("suffixes a slug already taken in the organization", async ({
+    makeApp,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await makeApp({ name: "Dashboard", organizationId: org.id });
+
+    const slug = await AppModel.generateUniqueSlug({
+      name: "Dashboard",
+      organizationId: org.id,
+    });
+    expect(slug).toMatch(/^dashboard-[0-9a-f]{6}$/);
+  });
+
+  test("does not suffix across organizations", async ({
+    makeApp,
+    makeOrganization,
+  }) => {
+    // Slugs are unique per org, so another org holding `dashboard` is no reason
+    // to give this one an uglier URL.
+    const other = await makeOrganization();
+    await makeApp({ name: "Dashboard", organizationId: other.id });
+    const org = await makeOrganization();
+
+    expect(
+      await AppModel.generateUniqueSlug({
+        name: "Dashboard",
+        organizationId: org.id,
+      }),
+    ).toBe("dashboard");
+  });
+
+  test("frees a slug when the app holding it is soft-deleted", async ({
+    makeApp,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const app = await makeApp({ name: "Dashboard", organizationId: org.id });
+    await AppModel.delete(app.id);
+
+    expect(
+      await AppModel.generateUniqueSlug({
+        name: "Dashboard",
+        organizationId: org.id,
+      }),
+    ).toBe("dashboard");
+  });
+
+  test.each([
+    ["a name that slugifies to nothing", "!!! ???"],
+    ["a reserved segment", "Catalog"],
+    ["a uuid-shaped name", "7b0839a1-4663-4371-a739-e5dac7f8c33e"],
+  ])("falls back to `app` for %s", async (_label, name) => {
+    const slug = await AppModel.generateUniqueSlug({
+      name,
+      organizationId: crypto.randomUUID(),
+    });
+    expect(slug).toBe("app");
+  });
+
+  test("truncates a long name without leaving a trailing hyphen", async () => {
+    // "aaa… bbb" cut at the boundary would otherwise end in "-", which
+    // AppSlugSchema refuses.
+    const name = `${"a".repeat(92)} bbbbbbbbbb`;
+    const slug = await AppModel.generateUniqueSlug({
+      name,
+      organizationId: crypto.randomUUID(),
+    });
+
+    expect(slug).toBe("a".repeat(92));
+    expect(AppSlugSchema.safeParse(slug).success).toBe(true);
+    // Short enough that the `-<6 hex>` collision suffix still fits the cap.
+    expect(slug.length).toBeLessThanOrEqual(100 - 7);
+  });
+});
+
+describe("AppModel.resolveIdFromIdOrSlug", () => {
+  test("resolves a slug to the app id", async ({ makeApp }) => {
+    const app = await makeApp({ name: "Sales Dashboard" });
+
+    expect(
+      await AppModel.resolveIdFromIdOrSlug({
+        idOrSlug: "sales-dashboard",
+        organizationId: app.organizationId,
+      }),
+    ).toBe(app.id);
+  });
+
+  test("resolves an app id to itself", async ({ makeApp }) => {
+    const app = await makeApp();
+
+    expect(
+      await AppModel.resolveIdFromIdOrSlug({
+        idOrSlug: app.id,
+        organizationId: app.organizationId,
+      }),
+    ).toBe(app.id);
+  });
+
+  test("does not resolve another organization's slug", async ({
+    makeApp,
+    makeOrganization,
+  }) => {
+    const app = await makeApp({ name: "Sales Dashboard" });
+    const other = await makeOrganization();
+
+    expect(
+      await AppModel.resolveIdFromIdOrSlug({
+        idOrSlug: "sales-dashboard",
+        organizationId: other.id,
+      }),
+    ).toBeNull();
+    // ...nor its id, which is likewise scoped to the owning org.
+    expect(
+      await AppModel.resolveIdFromIdOrSlug({
+        idOrSlug: app.id,
+        organizationId: other.id,
+      }),
+    ).toBeNull();
+  });
+
+  test("stops resolving a soft-deleted app", async ({ makeApp }) => {
+    const app = await makeApp({ name: "Sales Dashboard" });
+    await AppModel.delete(app.id);
+
+    expect(
+      await AppModel.resolveIdFromIdOrSlug({
+        idOrSlug: "sales-dashboard",
+        organizationId: app.organizationId,
+      }),
+    ).toBeNull();
+  });
+
+  test("returns null for an unknown segment", async ({ makeApp }) => {
+    const app = await makeApp();
+
+    expect(
+      await AppModel.resolveIdFromIdOrSlug({
+        idOrSlug: "no-such-app",
+        organizationId: app.organizationId,
+      }),
+    ).toBeNull();
+  });
+
+  test("stops resolving the old slug after a rename", async ({ makeApp }) => {
+    const app = await makeApp({ name: "Sales Dashboard" });
+    await AppModel.update({ id: app.id, patch: { slug: "revenue" } });
+
+    const organizationId = app.organizationId;
+    expect(
+      await AppModel.resolveIdFromIdOrSlug({
+        idOrSlug: "revenue",
+        organizationId,
+      }),
+    ).toBe(app.id);
+    expect(
+      await AppModel.resolveIdFromIdOrSlug({
+        idOrSlug: "sales-dashboard",
+        organizationId,
+      }),
+    ).toBeNull();
+    // The id form is the stable address a rename never breaks.
+    expect(
+      await AppModel.resolveIdFromIdOrSlug({
+        idOrSlug: app.id,
+        organizationId,
+      }),
+    ).toBe(app.id);
+  });
+});
+
+describe("AppModel.update slug", () => {
+  test("persists a new slug without disturbing the rest of the app", async ({
+    makeApp,
+  }) => {
+    const app = await makeApp({
+      name: "Sales Dashboard",
+      description: "Tracks revenue",
+    });
+
+    const updated = await AppModel.update({
+      id: app.id,
+      patch: { slug: "revenue" },
+    });
+
+    expect(updated).toMatchObject({
+      id: app.id,
+      slug: "revenue",
+      name: "Sales Dashboard",
+      description: "Tracks revenue",
+      latestVersion: app.latestVersion,
+    });
+  });
+
+  test("does not move the slug when the app is renamed", async ({
+    makeApp,
+  }) => {
+    // The slug is an address the author controls, so a display-name edit must
+    // not silently break every link that used it.
+    const app = await makeApp({ name: "Sales Dashboard" });
+
+    const updated = await AppModel.update({
+      id: app.id,
+      patch: { name: "Revenue Board" },
+    });
+
+    expect(updated?.name).toBe("Revenue Board");
+    expect(updated?.slug).toBe("sales-dashboard");
+  });
+
+  test("accepts a re-send of the app's own slug", async ({ makeApp }) => {
+    // The partial unique index must not fire against the row being updated.
+    const app = await makeApp({ name: "Sales Dashboard" });
+
+    const updated = await AppModel.update({
+      id: app.id,
+      patch: { slug: "sales-dashboard" },
+    });
+
+    expect(updated?.slug).toBe("sales-dashboard");
+  });
+
+  test("rejects a slug another app in the organization holds", async ({
+    makeApp,
+  }) => {
+    const taken = await makeApp({ name: "Taken" });
+    const mine = await makeApp({
+      name: "Mine",
+      organizationId: taken.organizationId,
+    });
+
+    await expect(
+      AppModel.update({ id: mine.id, patch: { slug: "taken" } }),
+    ).rejects.toThrow();
+  });
+
+  test("allows a slug an app in another organization holds", async ({
+    makeApp,
+  }) => {
+    // Slugs are org-scoped, so two tenants may both own /a/dashboard.
+    await makeApp({ name: "Dashboard" });
+    const mine = await makeApp({ name: "Mine" });
+
+    const updated = await AppModel.update({
+      id: mine.id,
+      patch: { slug: "dashboard" },
+    });
+
+    expect(updated?.slug).toBe("dashboard");
   });
 });

@@ -2823,11 +2823,45 @@ describe("POST /api/chat handler composition", () => {
     expect(attachments[0].mimeType).toBe("application/zip");
   });
 
-  test("rejects an attachment over the storage byte limit and persists nothing", async () => {
-    // Just over the artifact/storage limit — too big for the sandbox AND for
-    // Files-panel storage, so the gate still rejects before any bytes persist.
-    const oversized = Buffer.alloc(
+  test("accepts an attachment over the sandbox limit and stores it", async () => {
+    // Too big to stage into the sandbox, but well under the storage cap: the
+    // sandbox is bypassed and the file still lands in the Files panel.
+    const overSandbox = Buffer.alloc(
       config.skillsSandbox.artifactBytesLimit + 1,
+      0x61,
+    );
+    const dataUrl = `data:application/zip;base64,${overSandbox.toString("base64")}`;
+    const response = await postMessage([
+      {
+        id: "msg-1",
+        role: "user",
+        parts: [
+          { type: "text", text: "process this" },
+          {
+            type: "file",
+            url: dataUrl,
+            mediaType: "application/zip",
+            filename: "big.zip",
+          },
+        ],
+      },
+    ]);
+
+    expect(response.statusCode).toBe(200);
+    const attachments =
+      await ConversationAttachmentModel.findByConversationIdWithoutData(
+        conversationId,
+      );
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].originalName).toBe("big.zip");
+    expect(attachments[0].fileSize).toBe(overSandbox.byteLength);
+  });
+
+  test("rejects an attachment over the attachment storage cap and persists nothing", async () => {
+    // Past the one remaining gate — no surface can hold it, so the request is
+    // refused before any bytes persist.
+    const oversized = Buffer.alloc(
+      config.chat.attachmentStorageBytesLimit + 1,
       0x61,
     );
     const dataUrl = `data:application/zip;base64,${oversized.toString("base64")}`;
@@ -2848,6 +2882,7 @@ describe("POST /api/chat handler composition", () => {
     ]);
 
     expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("is too large to attach");
     const attachments =
       await ConversationAttachmentModel.findByConversationIdWithoutData(
         conversationId,

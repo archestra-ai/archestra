@@ -2,11 +2,14 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_EMAIL_ENV_VAR_NAME,
   DEFAULT_ADMIN_PASSWORD,
   DEFAULT_ADMIN_PASSWORD_ENV_VAR_NAME,
   DEFAULT_APP_NAME,
+  DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
+  DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
   DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
   isValidK8sCpuQuantity,
@@ -406,6 +409,8 @@ const DEFAULT_OTEL_ENDPOINT = "http://localhost:4318";
 const DEFAULT_OTEL_CONTENT_MAX_LENGTH = 10_000; // 10KB
 const DEFAULT_REFRESH_TOKEN_REUSE_GRACE_SECONDS = 60;
 const DEFAULT_METRICS_PORT = 9050;
+const DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS = 30 * 1000;
 const MIN_TCP_PORT = 1;
 const MAX_TCP_PORT = 65_535;
 const OTEL_TRACES_PATH = "/v1/traces";
@@ -747,6 +752,44 @@ export const parseMetricsPort = (envValue?: string | undefined): number => {
       `Invalid ARCHESTRA_METRICS_PORT value "${value}", using default ${DEFAULT_METRICS_PORT}`,
     );
     return DEFAULT_METRICS_PORT;
+  }
+
+  return parsed;
+};
+
+/**
+ * Parse the refresh interval for the `llm_active_users` gauge (milliseconds).
+ * `0` disables collection entirely. The value is clamped to a floor because the
+ * underlying query is a DISTINCT count over the (very large) interactions
+ * table, and every replica runs it — a small interval turns into steady
+ * background load for a number that barely moves.
+ * @public — exported for testability
+ */
+export const parseActiveUsersRefreshIntervalMs = (
+  envValue?: string | undefined,
+): number => {
+  const value = envValue?.trim();
+  if (!value) {
+    return DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    logger.warn(
+      `Invalid ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "${value}", using default ${DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS}`,
+    );
+    return DEFAULT_ACTIVE_USERS_REFRESH_INTERVAL_MS;
+  }
+
+  if (parsed === 0) {
+    return 0;
+  }
+
+  if (parsed < MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS) {
+    logger.warn(
+      `ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS value "${value}" is below the ${MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS}ms floor, using the floor`,
+    );
+    return MIN_ACTIVE_USERS_REFRESH_INTERVAL_MS;
   }
 
   return parsed;
@@ -1431,9 +1474,10 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
  * deployment needs no third switch of its own.
  *
  * `enterpriseOverride` is the single escape hatch: it turns the recorder on for
- * Archestra's own licensed staging AND bypasses the date window. It is
- * documented nowhere and named as an enterprise override on purpose, so no
- * customer stumbles onto the enterprise path.
+ * Archestra's own licensed staging. It affects this deployment gate only — the
+ * date window and the organization toggle still apply. It is documented
+ * nowhere and named as an enterprise override on purpose, so no customer
+ * stumbles onto the enterprise path.
  *
  * This is the DEPLOYMENT gate only. Two more gates sit above it at request
  * time — the organization's own toggle, and the hackathon date window —
@@ -1450,6 +1494,44 @@ export function parseHackathonRecorderEnabled(params: {
   }
   return true;
 }
+
+/**
+ * The longest final cut a recording may be submitted or exported at, in ms.
+ *
+ * One bound behind every length surface — the submit button, the submission
+ * flow's own backstop, the video export, the editor's trim-to-limit control and
+ * the tour's "keep it under N" note — so a deployment that raises it raises all
+ * of them together and no surface can quote a number the checks disagree with.
+ *
+ * Rejects a value that is not a positive integer number of milliseconds rather
+ * than silently falling back: a typo here would otherwise read as the platform
+ * ignoring the operator's limit. A hard floor keeps a fat-fingered tiny value
+ * from making every recording unsubmittable.
+ *
+ * Undocumented on purpose, like the rest of the recorder — not in .env.example
+ * or the deployment docs.
+ *
+ * @public — exported for testability
+ */
+export function parseHackathonRecorderMaxFinalCutMs(
+  value: string | undefined,
+): number {
+  const raw = value?.trim();
+  if (!raw) return APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < MIN_HACKATHON_FINAL_CUT_MS) {
+    throw new Error(
+      `ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS must be a whole number of milliseconds >= ${MIN_HACKATHON_FINAL_CUT_MS}, got "${raw}"`,
+    );
+  }
+  return parsed;
+}
+
+/**
+ * Floor for the configurable final-cut limit. Below a few seconds nothing is a
+ * demo and every recording would be born over the line.
+ */
+const MIN_HACKATHON_FINAL_CUT_MS = 5_000;
 
 /**
  * Defaults for the "Archestra App Gallery" sharing surface — the PUBLIC
@@ -2086,6 +2168,27 @@ const config = {
     rateMeteredMaxOutputTokensCeiling: parseChatRateMeteredMaxOutputTokens(
       process.env.ARCHESTRA_CHAT_RATE_METERED_MAX_OUTPUT_TOKENS,
     ),
+    /**
+     * Largest single upload a chat turn may store as a conversation
+     * attachment. Independent of the sandbox artifact limit: bigger files skip
+     * sandbox staging but still land in the Files panel. Raising this needs
+     * `ARCHESTRA_API_BODY_LIMIT` raised too — uploads arrive base64-encoded
+     * (~4/3 of the byte size) alongside the conversation JSON.
+     */
+    attachmentStorageBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT,
+      DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
+    ),
+    /**
+     * Largest attachment that may be embedded in a provider request. Separate
+     * from the storage cap on purpose: a file over this is still stored and
+     * downloadable, it just never reaches the model. Keeps a big upload from
+     * inflating a request past what the provider accepts.
+     */
+    attachmentInlineBytesLimit: parsePositiveInt(
+      process.env.ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT,
+      DEFAULT_CHAT_ATTACHMENT_INLINE_BYTES,
+    ),
   },
   enterpriseFeatures: {
     core: process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
@@ -2105,13 +2208,22 @@ const config = {
         process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
     }),
     /**
-     * The staging override is active. It forces the recorder on for Archestra's
-     * own licensed staging (see parseHackathonRecorderEnabled) AND bypasses the
-     * hackathon date window, so staging can exercise the feature before it
-     * opens and after it closes. Undocumented, same as the override itself.
+     * Offering the offline VIDEO export (the player's download button and the
+     * render endpoints behind it). Off unless a deployment opts in: a render
+     * drives a headless Chromium for as long as the cut runs, which is a cost
+     * no deployment should pay by surprise — and the gallery submission, which
+     * is what the hackathon actually needs, does not depend on it.
+     *
+     * Undocumented on purpose, like the rest of the recorder — not in
+     * .env.example or the deployment docs.
      */
-    overrideActive:
-      process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
+    videoDownloadEnabled:
+      process.env.ARCHESTRA_HACKATHON_RECORDER_VIDEO_DOWNLOAD_ENABLED ===
+      "true",
+    /** The longest final cut that may be submitted or exported (see the parser). */
+    maxFinalCutMs: parseHackathonRecorderMaxFinalCutMs(
+      process.env.ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS,
+    ),
     /**
      * Sharing a recording to the public App Gallery (a PR filed on the
      * participant's own GitHub account). Both values default to the official
@@ -2372,6 +2484,9 @@ const config = {
       endpoint: "/metrics",
       port: parseMetricsPort(process.env.ARCHESTRA_METRICS_PORT),
       secret: process.env.ARCHESTRA_METRICS_SECRET,
+      activeUsersRefreshIntervalMs: parseActiveUsersRefreshIntervalMs(
+        process.env.ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS,
+      ),
     },
     sentry: {
       enabled: sentryDsn !== "",

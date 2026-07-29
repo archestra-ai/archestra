@@ -2,6 +2,7 @@ import {
   getModelReadableMimeTypes,
   INLINE_TEXT_MAX_BYTES,
 } from "@archestra/shared";
+import { vi } from "vitest";
 import config from "@/config";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
@@ -1057,6 +1058,196 @@ test("an inline data: binary document is dropped with a notice on a non-native e
   // The data: bytes are NOT emitted as a document block the endpoint rejects.
   expect(part.text).not.toContain("data:");
   expect(part.url).toBeUndefined();
+});
+
+test("keeps an attachment over the inline budget out of the request", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  // A file the model reads perfectly well, just too big to send. Storing it and
+  // sending it are separate decisions — it stays in the Files panel instead of
+  // being inlined and refused by the provider.
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.from("%PDF-1.4 pretend this is large", "utf8");
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "manual.pdf",
+    mimeType: "application/pdf",
+    // Declared size drives the decision; the row's bytes stay small so the
+    // test doesn't allocate tens of megabytes.
+    fileSize: 45 * 1024 * 1024,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const input: ChatMessage[] = [
+    {
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: `/api/chat/attachments/${row.id}/content`,
+          mediaType: "application/pdf",
+          filename: "manual.pdf",
+        },
+      ],
+    },
+  ];
+
+  const output = await materializeAttachments({
+    messages: input,
+    conversationId: conversation.id,
+    // The model reads PDFs — size is the only reason to divert this one.
+    ingestibleMimeTypes: INGESTIBLE,
+    sandboxAvailable: false,
+    inlineByteLimit: 16 * 1024 * 1024,
+  });
+
+  const part = expectPresent(output[0].parts?.[0]);
+  expect(part.type).toBe("text");
+  expect(part.text).toContain("too large to send to this model");
+  expect(part.text).toContain("Files panel");
+  expect(part.text).toContain(JSON.stringify("manual.pdf"));
+  // Never embedded, so it can't inflate the request past the provider's cap.
+  expect(part.text).not.toContain("data:");
+  expect(part.url).toBeUndefined();
+});
+
+test("inlines a readable attachment that fits the inline budget", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+  const bytes = Buffer.from("%PDF-1.4 small", "utf8");
+  const row = await ConversationAttachmentModel.create({
+    organizationId: conversation.organizationId,
+    conversationId: conversation.id,
+    uploadedByUserId: conversation.userId,
+    originalName: "small.pdf",
+    mimeType: "application/pdf",
+    fileSize: bytes.byteLength,
+    contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+    fileData: bytes,
+  });
+
+  const output = await materializeAttachments({
+    messages: [
+      {
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: `/api/chat/attachments/${row.id}/content`,
+            mediaType: "application/pdf",
+            filename: "small.pdf",
+          },
+        ],
+      },
+    ],
+    conversationId: conversation.id,
+    ingestibleMimeTypes: INGESTIBLE,
+    sandboxAvailable: false,
+    inlineByteLimit: 16 * 1024 * 1024,
+  });
+
+  expect(expectPresent(output[0].parts?.[0]).url).toBe(
+    `data:application/pdf;base64,${bytes.toString("base64")}`,
+  );
+});
+
+test("reads bytes only for attachments that are actually inlined", async ({
+  makeAgent,
+  makeConversation,
+}) => {
+  // A conversation can carry a large file the model will never read (it only
+  // ever gets a one-line notice). Loading its bytes on every subsequent turn
+  // would re-stream it out of Postgres for the life of the conversation.
+  const agent = await makeAgent();
+  const conversation = await makeConversation(agent.id, {
+    organizationId: agent.organizationId,
+  });
+
+  const makeRow = async (mimeType: string, name: string) => {
+    const bytes = Buffer.from(`bytes for ${name}`, "utf8");
+    return ConversationAttachmentModel.create({
+      organizationId: conversation.organizationId,
+      conversationId: conversation.id,
+      uploadedByUserId: conversation.userId,
+      originalName: name,
+      mimeType,
+      fileSize: bytes.byteLength,
+      contentHash: ConversationAttachmentModel.computeContentHash(bytes),
+      fileData: bytes,
+    });
+  };
+  const readable = await makeRow("image/png", "chart.png");
+  const unreadable = await makeRow("application/octet-stream", "archive.zip");
+
+  const refPart = (id: string, mediaType: string, filename: string) => ({
+    type: "file" as const,
+    url: `/api/chat/attachments/${id}/content`,
+    mediaType,
+    filename,
+  });
+
+  const withDataSpy = vi.spyOn(
+    ConversationAttachmentModel,
+    "findByIdsWithData",
+  );
+  try {
+    const output = await materializeAttachments({
+      messages: [
+        {
+          role: "user",
+          parts: [
+            refPart(readable.id, "image/png", "chart.png"),
+            refPart(unreadable.id, "application/octet-stream", "archive.zip"),
+          ],
+        },
+      ],
+      conversationId: conversation.id,
+      ingestibleMimeTypes: INGESTIBLE,
+      sandboxAvailable: true,
+    });
+
+    expect(withDataSpy).toHaveBeenCalledTimes(1);
+    expect(withDataSpy).toHaveBeenCalledWith([readable.id]);
+
+    // Output is unchanged by the optimization: the PNG still inlines, the
+    // opaque binary still becomes a sandbox notice.
+    const inlined = expectPresent(output[0].parts?.[0]);
+    expect(inlined.url).toContain("data:image/png;base64,");
+    const notice = expectPresent(output[0].parts?.[1]);
+    expect(notice.type).toBe("text");
+    expect(notice.text).toContain("/home/sandbox/attachments");
+
+    // A turn referencing only the unreadable file touches no bytes at all.
+    withDataSpy.mockClear();
+    await materializeAttachments({
+      messages: [
+        {
+          role: "user",
+          parts: [
+            refPart(unreadable.id, "application/octet-stream", "archive.zip"),
+          ],
+        },
+      ],
+      conversationId: conversation.id,
+      ingestibleMimeTypes: INGESTIBLE,
+      sandboxAvailable: true,
+    });
+    expect(withDataSpy).toHaveBeenCalledWith([]);
+  } finally {
+    withDataSpy.mockRestore();
+  }
 });
 
 test("no refs in messages returns a clone without DB hits", async () => {

@@ -723,9 +723,10 @@ The following environment variables can be used to configure Archestra Platform.
   - Example: `ARCHESTRA_TRUST_PROXY=true`
 
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM proxy and chat routes.
-  - Default: `50MB` (52428800 bytes)
-  - Format: Numeric bytes (e.g., `52428800`) or human-readable (e.g., `50MB`, `100KB`, `1GB`)
-  - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat
+  - Default: `70MB` (73400320 bytes)
+  - Format: Numeric bytes (e.g., `73400320`) or human-readable (e.g., `70MB`, `100KB`, `1GB`)
+  - Note: Increase this if you have conversations with very large context windows (100k+ tokens) or large file attachments in chat. The default carries a max-size chat attachment as base64 plus room for history; raising `ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT` requires raising this too.
+  - All attachments of one chat message travel in a single request, so this also bounds their combined size. The chat composer blocks a message whose attachments exceed it and asks the user to send them separately.
 
 - **`ARCHESTRA_FRONTEND_URL`** - Setting this variable enables origin validation for CORS and authentication. When set, only requests from this origin (and any in `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`) are allowed. When not set, all origins are accepted.
   - Example: `https://frontend.example.com`
@@ -788,8 +789,9 @@ Upgrading from a chart that ran the bundled engine leaves its cache volume behin
   - Default: `120`
 - **`ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT`** - Maximum captured stdout/stderr per command; output beyond this is truncated.
   - Default: `262144` (256 KiB)
-- **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Maximum size of a file the sandbox can export to the conversation's Files panel.
+- **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Maximum size of a file the sandbox can export to the conversation's Files panel, and of a chat attachment it can stage for the agent to read.
   - Default: `16777216` (16 MiB)
+  - This does not cap what chat can upload. A larger attachment skips sandbox staging and is still stored — see `ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`.
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`** - Sandbox commands the shared Dagger session runs at once, deployment-wide. Raise it with the engine's CPU and memory.
   - Default: `10`
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH`** - Sandbox commands allowed to wait for a free slot. Past this, a command fails with a runtime-at-capacity error instead of queueing.
@@ -1210,6 +1212,16 @@ Enable polling compatibility only when your database endpoint cannot keep sessio
   - Detection runs entirely in the browser — no message content is sent to the backend for scanning. The flag is read from the backend at runtime via `/api/config`, so toggling it does not require a frontend rebuild.
   - Values: `true`, `false`
 
+- **`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`** - Largest single file a chat upload may store as a conversation attachment.
+  - Default: `52428800` (50 MiB)
+  - This is the only size gate on a chat upload. A file the model cannot read, one too big for the sandbox, or one over `ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT` is not rejected: it is stored in the conversation's Files panel, where the user can download it, and the agent is told it is there.
+  - Raise `ARCHESTRA_API_BODY_LIMIT` alongside this. Uploads arrive base64-encoded (about 4/3 the byte size) in the same request as the conversation history, so the body limit must exceed this value by a comfortable margin.
+
+- **`ARCHESTRA_CHAT_ATTACHMENT_INLINE_BYTES_LIMIT`** - Largest single attachment that may be embedded in a request to the LLM provider.
+  - Default: `16777216` (16 MiB)
+  - Storing a file and sending it to a model are separate decisions. A file above this is still stored and downloadable; it just never reaches the model, so a large upload cannot inflate a request past what the provider accepts.
+  - The effective ceiling is the lower of this value and the provider's own documented request limit (Anthropic 32 MiB, Bedrock 20 MiB).
+
 - **`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`** - Upper bound on the output tokens an agent turn (interactive chat and A2A/headless) may generate.
   - Default: `32768`
   - Each turn already requests the model's real output ceiling instead of the provider/SDK default that truncated large tool-call payloads and final submission turns. This variable caps that request for cost control: the turn uses `min(this value, the model's real output ceiling)`, and unsynced models fall back to `8192`.
@@ -1362,6 +1374,11 @@ The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCH
 - **`ARCHESTRA_METRICS_SECRET`** - Bearer token for authenticating metrics endpoint access.
   - Default: `archestra-metrics-secret`
   - Note: When set, clients must include `Authorization: Bearer <token>` header to access `/metrics`
+
+- **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often, in milliseconds, to recompute the `llm_active_users` gauge.
+  - Default: `300000` (5 minutes)
+  - Set to `0` to disable collection entirely
+  - Values below `30000` are raised to that floor: the gauge is a distinct count over the interactions table, so a short interval turns into steady background load for a number that changes slowly
 
 ### Incoming Email Configuration
 

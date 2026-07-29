@@ -20,6 +20,18 @@ const PROVIDER_ATTACHMENT_LIMIT_BYTES: Partial<
   anthropic: 32 * 1024 * 1024,
 };
 
+/**
+ * The provider's documented per-request attachment ceiling, or `undefined` when
+ * it publishes none. Materialization bounds its own inline budget by this so a
+ * single attachment can never be the reason a request is refused — it is left
+ * in the Files panel instead.
+ */
+export function providerAttachmentLimitBytes(
+  provider: SupportedProvider,
+): number | undefined {
+  return PROVIDER_ATTACHMENT_LIMIT_BYTES[provider];
+}
+
 const BASE64_MARKER = ";base64,";
 
 const MiB = 1024 * 1024;

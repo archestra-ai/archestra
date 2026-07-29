@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  APP_RECORDING_CAPTURE_HEADROOM,
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   APP_RECORDING_LIMITS,
   archestraApiSdk,
   connectedMcpServerNames,
@@ -23,6 +25,7 @@ import { useApp, useAppTools } from "@/lib/app.query";
 import {
   fallbackRecordingDescription,
   useInvalidateAppRecording,
+  useMaxFinalCutMs,
 } from "@/lib/app-session-recording/app-recording.query";
 import { serializeRecordingEvents } from "@/lib/app-session-recording/app-recording-binary";
 import {
@@ -98,7 +101,20 @@ export interface AppSessionRecorder {
  */
 const MAX_EVENTS = APP_RECORDING_LIMITS.maxEvents - 5_000;
 const MAX_SEGMENTS = APP_RECORDING_LIMITS.maxSegments - 5;
-const MAX_DURATION_MS = 10 * 60_000;
+/**
+ * How long a capture may run before it stops itself.
+ *
+ * A MULTIPLE of the final cut, so there is something to edit. A take that
+ * stopped dead at the submittable length left the author nothing to cut, and
+ * one that ran without limit produced recordings that could be edited but
+ * never uploaded — the stored bundle used to carry the whole capture however
+ * much of it was cut away. Pruning the cut-away video (`pruneCutEvents`) is
+ * what makes the headroom safe: an edit down to the limit now ships at the
+ * limit's size. Both bounds follow the deployment's configured limit, so
+ * raising it moves them together.
+ */
+const DEFAULT_MAX_DURATION_MS =
+  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS * APP_RECORDING_CAPTURE_HEADROOM;
 /**
  * The SDK flushes its buffer on stop; give that final batch time to arrive —
  * including the video-encoder drain, which flushes each canvas's encoder and
@@ -148,6 +164,12 @@ type RecorderStatus = AppSessionRecorder["status"];
  */
 class AppRecorderCore {
   status: RecorderStatus = "idle";
+  /**
+   * The capture ceiling this deployment configured. Settable rather than
+   * constructor-fixed: the core outlives any one render, and the value arrives
+   * with the config, which resolves after the first paint.
+   */
+  maxDurationMs = DEFAULT_MAX_DURATION_MS;
 
   private readonly listeners = new Set<() => void>();
   private startEpoch = 0;
@@ -331,7 +353,7 @@ class AppRecorderCore {
     this.rebroadcastTimer = setInterval(() => {
       this.postControl("start");
       // Hard stop at the ceiling so a forgotten recording can't grow unbounded.
-      if (Date.now() - this.startEpoch >= MAX_DURATION_MS) void this.stop();
+      if (Date.now() - this.startEpoch >= this.maxDurationMs) void this.stop();
     }, START_REBROADCAST_MS);
   }
 
@@ -518,6 +540,10 @@ export function useOwnAppSessionRecorder(params: {
   const coreRef = useRef<AppRecorderCore | null>(null);
   if (enabled && !coreRef.current) coreRef.current = new AppRecorderCore();
   const core = enabled ? coreRef.current : null;
+  // Capture may run past the submittable length — enough to leave room to
+  // edit, not enough to run away — since what an edit cuts no longer ships.
+  const maxFinalCutMs = useMaxFinalCutMs();
+  if (core) core.maxDurationMs = maxFinalCutMs * APP_RECORDING_CAPTURE_HEADROOM;
 
   const { data: app } = useApp(appId, { toastOnError: false });
   const { data: session } = useSession();

@@ -151,8 +151,10 @@ describe("set_project_share tool", () => {
 
   test("shares an explicit project with teams and unshares it", async ({
     makeTeam,
+    makeTeamMember,
   }) => {
     const team = await makeTeam(organizationId, userId);
+    await makeTeamMember(team.id, userId);
     const project = await projectService.create({
       organizationId,
       userId,
@@ -206,6 +208,31 @@ describe("set_project_share tool", () => {
     );
     expect(unknownTeam.isError).toBe(true);
     expect((unknownTeam.content[0] as any).text).toContain("Unknown team id");
+  });
+
+  test("rejects sharing with a team the caller does not belong to", async ({
+    makeTeam,
+  }) => {
+    // Created by the caller, but they never joined it.
+    const team = await makeTeam(organizationId, userId);
+    const project = await projectService.create({
+      organizationId,
+      userId,
+      name: "not-my-team",
+      description: null,
+    });
+
+    const result = await executeArchestraTool(
+      SHARE_TOOL_NAME,
+      { visibility: "team", team_ids: [team.id], project_id: project.id },
+      baseContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "teams you are a member of",
+    );
+    expect(await ProjectShareModel.findByProjectId(project.id)).toBeNull();
   });
 
   test("errors when the chat has no project and no project_id is given", async ({

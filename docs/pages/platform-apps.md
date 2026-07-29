@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-07-14
+lastUpdated: 2026-07-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,7 +24,13 @@ Authoring is a staged flow — each tool's result points at the next step:
 
 Editing the HTML forks a new immutable version, and the head version is served when the app runs. The procedure and the SDK conventions live in the built-in **build-app** skill, not in the tool descriptions, so the model loads them on demand.
 
-Run or author an app at `/a/:id` (no chat chrome, no sidebar), or run it from chat: a successful `scaffold_app`, `edit_app`, or `render_app` call renders the app inline in the conversation. All surfaces drive the same app-bound runtime, so behavior is identical. Because every owned app is backed by its own MCP server, its server settings — visibility (sharing), environment, assigned tools, and deletion — are managed from its card in the [MCP registry](./platform-mcp), not the authoring page.
+Run or author an app at `/a/:slug` (no chat chrome, no sidebar), or run it from chat: a successful `scaffold_app`, `edit_app`, or `render_app` call renders the app inline in the conversation. All surfaces drive the same app-bound runtime, so behavior is identical. Because every owned app is backed by its own MCP server, its server settings — visibility (sharing), environment, assigned tools, and deletion — are managed from its card in the [MCP registry](./platform-mcp), not the authoring page.
+
+## Who Can Use an App
+
+App settings offers four choices under "Who can use this app". **Personal** keeps it to you. **Users** shares it with people you name — a colleague, for example. **Teams** shares it with whole teams. **Organization** opens it to everyone.
+
+Sharing a chat does not share the apps it renders. Each viewer resolves an app against that app's own visibility. An app you have not shared with someone shows an access message in their view — a personal app in a chat you shared, for example. The chat's share dialog warns you when this will happen, and names the apps, so you can share them with the same people first.
 
 The `/apps` gallery lists everything the viewer can reach in two sections: apps you own, and the interactive apps exposed by your installed external [MCP servers](./platform-mcp). Each `ui://` resource is its own card, titled by the server's display name (*Task Tracker*); when one server exposes several UIs, the title carries the tool — *Task Tracker / show_board*. A card opens the app in a new chat. That chat stays out of your conversation list until you write into it. An owned card carries **Open in new tab** and **Delete** in its overflow menu; an external card carries **Open in new tab** (the standalone runtime) and a link to the backing **MCP server** page (where the server — and its uninstall — lives).
 

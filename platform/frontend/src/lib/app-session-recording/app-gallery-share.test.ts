@@ -336,9 +336,10 @@ describe("submitRecordingToAppGallery", () => {
 
     const failure = await submit({ bundle }).catch((error) => error);
     expect(failure).toBeInstanceOf(Error);
-    // GitHub's real per-file ceiling, phrased as GitHub's — never a
-    // product quota.
-    expect(String(failure)).toMatch(/GitHub refuses files over 100MB/);
+    // GitHub's own strictest ceiling, phrased as GitHub's — never a product
+    // quota, and never tightened on our side: a submission GitHub would have
+    // taken must not be refused here.
+    expect(String(failure)).toMatch(/GitHub refuses uploads over 50MB/);
     // Not even the duplicate pre-flight ran — no request left the browser.
     expect(calls).toHaveLength(0);
   });
@@ -639,6 +640,59 @@ describe("submitRecordingToAppGallery", () => {
     await expect(submit()).rejects.toThrow(
       "GitHub refused the request. Validation Failed",
     );
+  });
+
+  test("retries a ruleset-validation timeout on the upload", async () => {
+    let attempts = 0;
+    stubGithub({
+      respond: (method, url) => {
+        if (method !== "PUT" || !url.includes("/contents/")) return null;
+        attempts++;
+        // GitHub's ruleset check giving up rather than judging the request —
+        // the refusal a large submission draws, which a manual "Try again"
+        // clears. Deliberately NOT a 5xx: what marks it retriable is the
+        // message, since a 5xx is already covered by its own rule.
+        return attempts === 1
+          ? Response.json(
+              { message: "Timed out validating rule" },
+              { status: 422 },
+            )
+          : null;
+      },
+    });
+
+    vi.useFakeTimers();
+    try {
+      const submission = submit();
+      // Enough passes for the flow to reach the failed upload, schedule its
+      // wait, and burn it — without the suite paying the delay in real time.
+      for (let i = 0; i < 4; i++) await vi.advanceTimersByTimeAsync(1_500);
+      await expect(submission).resolves.toEqual({
+        prUrl: "https://github.com/archestra-ai/app-gallery/pull/7",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    // Retried once, then it went through — the participant never saw it.
+    expect(attempts).toBe(2);
+  });
+
+  test("a verdict on the upload surfaces immediately instead of retrying", async () => {
+    let attempts = 0;
+    stubGithub({
+      respond: (method, url) => {
+        if (method !== "PUT" || !url.includes("/contents/")) return null;
+        attempts++;
+        return Response.json({ message: "size is too large" }, { status: 422 });
+      },
+    });
+
+    await expect(submit()).rejects.toThrow(
+      "GitHub refused the request. size is too large",
+    );
+    // Retrying a verdict spends the participant's time and buries the one
+    // message that tells them what to fix.
+    expect(attempts).toBe(1);
   });
 });
 

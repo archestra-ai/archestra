@@ -271,10 +271,18 @@
    * must not cost three times a one-canvas app. Content that outruns even the
    * maximum quantizer settles at the frame shed's line — this ceiling times
    * its headroom — so the ceiling is sized from there: a worst-case
-   * all-motion 30s cut stays ~14MB of video (~19MB as a shared bundle), and
-   * a minutes-long raw take stays under the ~100MB ceilings of the render
-   * and gallery-upload paths. Content below the ceiling never feels it.
+   * all-motion minute stays ~7.5MB of video (~10MB as a bundle, ~13MB once
+   * the upload base64s that bundle again), so what governs the number is what
+   * the gallery upload can carry. Content below the ceiling never feels it —
+   * a static UI encodes to skip blocks whatever the ceiling says.
    */
+  // Sized against what a submission may actually be. The bound that matters is
+  // the FINAL CUT's length, not the ceiling here: at one minute this rate puts
+  // a worst-case all-motion cut near 29MB as a bundle and ~38MB once the
+  // upload base64-encodes it, both inside GitHub's strictest 50MB endpoint
+  // limit whichever of the two it applies to. It was briefly lowered to
+  // 1 Mbit/s to survive a three-minute cut, which cost visible sharpness on
+  // full-motion apps for a length no longer offered.
   const VIDEO_GOVERNOR_MAX_BPS = 3_000_000;
   /**
    * Wide enough for the frame shed to hold the ceiling even when single

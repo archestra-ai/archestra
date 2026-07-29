@@ -1048,6 +1048,113 @@ describe("GithubConnector", () => {
       expect(mdDocs[2].content).toBe("apiVersion: v1");
     });
 
+    test("indexes only files under the configured folders", async () => {
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "abc123" } },
+      });
+
+      mockGetTree.mockResolvedValueOnce({
+        data: {
+          tree: [
+            { type: "blob", path: "README.md", sha: "sha1" },
+            { type: "blob", path: "docs/guide.md", sha: "sha2" },
+            { type: "blob", path: "docs/nested/deep.md", sha: "sha3" },
+            // Shares the "docs" prefix but is a sibling folder, so the
+            // separator boundary has to keep it out.
+            { type: "blob", path: "docs-internal/secret.md", sha: "sha4" },
+            { type: "blob", path: "handbook/policy.md", sha: "sha5" },
+            { type: "blob", path: "src/index.md", sha: "sha6" },
+          ],
+        },
+      });
+
+      mockGetContent
+        .mockResolvedValueOnce({
+          data: { content: Buffer.from("guide").toString("base64") },
+        })
+        .mockResolvedValueOnce({
+          data: { content: Buffer.from("deep").toString("base64") },
+        })
+        .mockResolvedValueOnce({
+          data: { content: Buffer.from("policy").toString("base64") },
+        });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          includeRepositoryFiles: true,
+          // Deliberately messy: surrounding slashes are user habit, not intent.
+          includePaths: ["docs", "/handbook/"],
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const fileDocs = batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "repository_file");
+
+      expect(fileDocs.map((d) => d.metadata.filePath)).toEqual([
+        "docs/guide.md",
+        "docs/nested/deep.md",
+        "handbook/policy.md",
+      ]);
+    });
+
+    test("treats a root-only folder list as the whole repository", async () => {
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+      mockListForRepo.mockResolvedValueOnce({ data: [] });
+
+      mockGetRef.mockResolvedValueOnce({
+        data: { object: { sha: "abc123" } },
+      });
+
+      mockGetTree.mockResolvedValueOnce({
+        data: {
+          tree: [
+            { type: "blob", path: "README.md", sha: "sha1" },
+            { type: "blob", path: "docs/guide.md", sha: "sha2" },
+          ],
+        },
+      });
+
+      mockGetContent
+        .mockResolvedValueOnce({
+          data: { content: Buffer.from("readme").toString("base64") },
+        })
+        .mockResolvedValueOnce({
+          data: { content: Buffer.from("guide").toString("base64") },
+        });
+
+      const batches: ConnectorSyncBatch[] = [];
+      for await (const batch of connector.sync({
+        config: {
+          ...validConfig,
+          includeRepositoryFiles: true,
+          includePaths: ["/", "", " ", ".", "./"],
+        },
+        credentials,
+        checkpoint: null,
+      })) {
+        batches.push(batch);
+      }
+
+      const fileDocs = batches
+        .flatMap((b) => b.documents)
+        .filter((d) => d.metadata.kind === "repository_file");
+
+      expect(fileDocs.map((d) => d.metadata.filePath)).toEqual([
+        "README.md",
+        "docs/guide.md",
+      ]);
+    });
+
     test("uses configured file types for repository file indexing", async () => {
       mockListForRepo.mockResolvedValueOnce({ data: [] });
       mockListForRepo.mockResolvedValueOnce({ data: [] });

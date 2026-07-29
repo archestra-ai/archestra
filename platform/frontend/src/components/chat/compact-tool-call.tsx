@@ -2,6 +2,7 @@
 
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  extractMcpExecutedAs,
   parseFullToolName,
   TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
@@ -16,6 +17,7 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
   Tooltip,
@@ -23,6 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useSession } from "@/lib/auth/auth.query";
 import {
   getCompactToolState,
   getToolHeaderState,
@@ -553,8 +556,13 @@ function ExpandedToolCard({
   }) => void;
 }) {
   const { part, toolResultPart, toolName, errorText, nestedToolCalls } = tool;
+  const { data: session } = useSession();
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const isApprovalRequested = part.state === "approval-requested";
+  // Whose credential the gateway used against the upstream server.
+  const executedAs = extractMcpExecutedAs(
+    toolResultPart ? toolResultPart.output : part.output,
+  );
 
   const logsButton = errorText ? (
     <ToolErrorLogsButton toolName={toolName} />
@@ -572,6 +580,15 @@ function ExpandedToolCard({
         state={headerState}
         isCollapsible={false}
         actionButton={logsButton}
+        identityBadge={
+          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            Called as
+            <ExecutedAsBadge
+              executedAs={executedAs}
+              meUserId={session?.user?.id}
+            />
+          </span>
+        }
       />
       <ToolContent>
         {hasInput ? <ToolInput input={part.input} defaultOpen /> : null}

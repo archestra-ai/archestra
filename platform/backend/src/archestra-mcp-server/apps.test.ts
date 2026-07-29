@@ -99,12 +99,14 @@ describe("app tool execution", () => {
     // The model hands this link to the user. The scaffolded template is not
     // rendered inline (only the first edit_app is); the standalone page stays
     // reachable via the returned link. It is a name-labeled markdown link to the
-    // absolute /a/<id> path — never a bare path the model turns into a raw-UUID
-    // label or a leading-slash-dropped relative href.
+    // absolute /a/<slug> path — never a bare path the model turns into a
+    // raw-UUID label or a leading-slash-dropped relative href.
     expect(structured(created).id).toMatch(/^[0-9a-f-]{36}$/);
     expect((created.content[0] as any).text).toContain(
-      `[Dashboard](/a/${appId})`,
+      "[Dashboard](/a/dashboard)",
     );
+    // The raw id is never the link target once the app has a slug.
+    expect((created.content[0] as any).text).not.toContain(`/a/${appId}`);
 
     const listed = await executeArchestraTool(
       getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
@@ -1872,7 +1874,7 @@ describe("app data store tools", () => {
     );
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toMatch(
-      /user context|authenticated viewer/i,
+      /acting user|authenticated viewer/i,
     );
   });
 });
@@ -2636,10 +2638,10 @@ describe("publish_app", () => {
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("org");
     // Structured field stays a raw path for machine consumers…
-    expect(structured(result).runUrl).toBe(`/a/${app.id}`);
+    expect(structured(result).runUrl).toBe(`/a/${app.slug}`);
     // …while the model-facing text carries a name-labeled markdown link.
     expect((result.content[0] as any).text).toContain(
-      `[${app.name}](/a/${app.id})`,
+      `[${app.name}](/a/${app.slug})`,
     );
     expect((await AppModel.findById(app.id))?.scope).toBe("org");
   });
@@ -2998,7 +3000,7 @@ describe("scaffoldPartialToolFailureResult", () => {
     expect(structured(result).status).toBe("partial");
     // Even on partial failure the user still gets the working app link.
     expect((result.content[0] as any).text).toContain(
-      `[${app.name}](/a/${app.id})`,
+      `[${app.name}](/a/${app.slug})`,
     );
   });
 });

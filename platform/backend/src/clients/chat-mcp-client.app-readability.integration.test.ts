@@ -156,8 +156,9 @@ test("REAL: drops the UI resource when the upstream returns -32601 on resources/
       },
     });
 
-    // Dropped -> plain text, no MCP App registered.
-    expect(result).toBe("ran");
+    // Dropped -> no MCP App registered; the result still names who it ran for.
+    expect(result).toMatchObject({ content: "ran" });
+    expect((result as { _meta?: { ui?: unknown } })._meta?.ui).toBeUndefined();
   } finally {
     await server.close();
   }

@@ -1,5 +1,8 @@
-import { describe, expect, test } from "vitest";
+import { InvalidToolInputError, NoSuchToolError } from "ai";
+import { MockLanguageModelV3 } from "ai/test";
+import { describe, expect, test, vi } from "vitest";
 import {
+  createToolCallRepair,
   repairHarmonyToolName,
   repairMalformedToolInput,
 } from "./tool-call-repair";
@@ -140,5 +143,172 @@ describe("repairMalformedToolInput", () => {
 
   test("returns null when there is no JSON value at all", () => {
     expect(repairMalformedToolInput("just some text")).toBeNull();
+  });
+});
+
+describe("createToolCallRepair", () => {
+  const INPUT_SCHEMA = {
+    type: "object",
+    properties: { query: { type: "string" } },
+    required: ["query"],
+    additionalProperties: false,
+  } as const;
+
+  /**
+   * A model that answers a `generateObject` re-ask with the given object. The
+   * re-ask runs for real against it, so these tests break if the prompt or the
+   * schema handoff regresses.
+   */
+  function repairModelReturning(object: unknown) {
+    return new MockLanguageModelV3({
+      doGenerate: async () => ({
+        finishReason: { unified: "stop" as const, raw: "stop" },
+        usage: {
+          inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 1, text: 1, reasoning: 0 },
+        },
+        content: [{ type: "text" as const, text: JSON.stringify(object) }],
+        warnings: [],
+      }),
+    });
+  }
+
+  function repair(params: {
+    createRepairModel: () => Promise<never> | Promise<MockLanguageModelV3>;
+  }) {
+    return createToolCallRepair({
+      toolNames: AVAILABLE,
+      logContext: { sessionId: "s1" },
+      createRepairModel: params.createRepairModel,
+    });
+  }
+
+  const inputSchema = async () => INPUT_SCHEMA as unknown as never;
+
+  test("recovers a harmony-marked tool name without consulting a model", async () => {
+    const createRepairModel = vi.fn();
+    const repaired = await repair({ createRepairModel })({
+      toolCall: {
+        type: "tool-call",
+        toolCallId: "c1",
+        toolName: "archestra__run_command<|channel|>commentary",
+        input: "{}",
+      },
+      error: new NoSuchToolError({
+        toolName: "archestra__run_command<|channel|>commentary",
+      }),
+      tools: {},
+      inputSchema,
+      messages: [],
+      system: undefined,
+    } as never);
+
+    expect(repaired?.toolName).toBe("archestra__run_command");
+    expect(createRepairModel).not.toHaveBeenCalled();
+  });
+
+  test("repairs trailing-garbage arguments without paying for a model re-ask", async () => {
+    const createRepairModel = vi.fn();
+    const repaired = await repair({ createRepairModel })({
+      toolCall: {
+        type: "tool-call",
+        toolCallId: "c1",
+        toolName: "archestra__search_tools",
+        input: '{"query":"tickets"}}',
+      },
+      error: new InvalidToolInputError({
+        toolName: "archestra__search_tools",
+        toolInput: '{"query":"tickets"}}',
+        cause: new Error("parse"),
+      }),
+      tools: {},
+      inputSchema,
+      messages: [],
+      system: undefined,
+    } as never);
+
+    expect(JSON.parse(repaired?.input as string)).toEqual({
+      query: "tickets",
+    });
+    // The deterministic pass must short-circuit: a re-ask costs a round-trip.
+    expect(createRepairModel).not.toHaveBeenCalled();
+  });
+
+  test("re-asks the model when the arguments cannot be recovered deterministically", async () => {
+    // A `>` where the `:` belongs. The braces balance, so isolating the first
+    // complete JSON value returns the input unchanged and cannot help.
+    const malformed = '{"query">"volume drop by client"}';
+    expect(repairMalformedToolInput(malformed)).toBeNull();
+
+    const repaired = await repair({
+      createRepairModel: async () =>
+        repairModelReturning({ query: "volume drop by client" }),
+    })({
+      toolCall: {
+        type: "tool-call",
+        toolCallId: "c1",
+        toolName: "archestra__search_tools",
+        input: malformed,
+      },
+      error: new InvalidToolInputError({
+        toolName: "archestra__search_tools",
+        toolInput: malformed,
+        cause: new Error("parse"),
+      }),
+      tools: {},
+      inputSchema,
+      messages: [],
+      system: undefined,
+    } as never);
+
+    expect(JSON.parse(repaired?.input as string)).toEqual({
+      query: "volume drop by client",
+    });
+  });
+
+  test("gives up rather than throwing when the re-ask itself fails", async () => {
+    const repaired = await repair({
+      createRepairModel: async () => {
+        throw new Error("no credential");
+      },
+    })({
+      toolCall: {
+        type: "tool-call",
+        toolCallId: "c1",
+        toolName: "archestra__search_tools",
+        input: '{"query">"x"}',
+      },
+      error: new InvalidToolInputError({
+        toolName: "archestra__search_tools",
+        toolInput: '{"query">"x"}',
+        cause: new Error("parse"),
+      }),
+      tools: {},
+      inputSchema,
+      messages: [],
+      system: undefined,
+    } as never);
+
+    expect(repaired).toBeNull();
+  });
+
+  test("leaves errors it does not understand alone", async () => {
+    const createRepairModel = vi.fn();
+    const repaired = await repair({ createRepairModel })({
+      toolCall: {
+        type: "tool-call",
+        toolCallId: "c1",
+        toolName: "archestra__search_tools",
+        input: "{}",
+      },
+      error: new Error("something else"),
+      tools: {},
+      inputSchema,
+      messages: [],
+      system: undefined,
+    } as never);
+
+    expect(repaired).toBeNull();
+    expect(createRepairModel).not.toHaveBeenCalled();
   });
 });

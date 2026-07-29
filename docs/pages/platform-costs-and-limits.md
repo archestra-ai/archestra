@@ -27,6 +27,18 @@ Archestra stores both raw spend and savings. Savings can come from:
 - TOON compression that reduces tool-result tokens before the result is sent to the model
 - prompt caching that reuses an unchanged request prefix instead of reprocessing it each turn
 
+## Per-User Usage
+
+The People section of the statistics view breaks usage down by person. For each user it shows requests, tokens, the models they use, how many days they were active, and their cost. Use it to see who has adopted AI, and which models they reach for.
+
+A request only appears here when Archestra knows who made it. Identity comes from an authenticated credential — a [passthrough virtual key](platform-llm-proxy-authentication#passthrough-virtual-keys) or your identity provider. A request made with a shared credential and no user context is not attributed to anyone, so per-user totals read lower than org-wide totals when some traffic is unattributed.
+
+Tokens and requests are the honest measure of adoption. Cost is not: a person whose traffic runs on a flat-rate subscription is billed nothing, however much they use. See [Subscription vs Metered Cost](#subscription-vs-metered-cost).
+
+The same data is available from the API at `GET /api/statistics/users`, which returns one row per user with their email, so you can join it to an external roster. The response is paginated. Two options are off by default because each one costs extra work: `includeModels` adds the per-model breakdown, and `includeTimeSeries` adds a cost series per user.
+
+Per-user usage is employee-level data. Seeing other people's usage requires permission to read the member list; without it, both the UI and the API show you only your own.
+
 ## Subscription vs Metered Cost
 
 Some LLM traffic is not billed per token. A flat-rate subscription — Claude Code on a Max or Pro plan, for example — covers usage for a fixed monthly fee. Pricing that traffic at per-token API rates would report a cost that was never charged.

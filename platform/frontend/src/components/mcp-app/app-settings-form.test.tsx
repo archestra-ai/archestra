@@ -34,6 +34,7 @@ vi.mock("@/lib/app.query", () => ({
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/teams/team.query");
+vi.mock("@/lib/organization.query");
 
 // Both children have their own behavior-focused suites (app-tools-editor.test
 // covers the editor; the environment selector fetches environments). The stub
@@ -74,7 +75,8 @@ vi.mock("@/components/environment-selector", () => ({
   EnvironmentSelector: () => null,
 }));
 
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useOrganizationMembers } from "@/lib/organization.query";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { AppSettingsForm } from "./app-settings-form";
 
@@ -85,6 +87,7 @@ const APP = {
   scope: "personal",
   enabled: true,
   teams: [],
+  users: [],
   environmentId: null,
 } as unknown as Parameters<typeof AppSettingsForm>[0]["app"];
 
@@ -123,6 +126,12 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "author-id" } },
+  } as unknown as ReturnType<typeof useSession>);
+  vi.mocked(useOrganizationMembers).mockReturnValue({
+    data: [],
+  } as unknown as ReturnType<typeof useOrganizationMembers>);
   vi.mocked(useAssignableTeams).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useAssignableTeams>);
@@ -147,6 +156,9 @@ describe("AppSettingsForm save", () => {
       body: {
         scope: "personal",
         teamIds: [],
+        // Both share lists are always sent, so switching away from Teams or
+        // Users revokes what it left behind instead of stranding it.
+        userIds: [],
         name: "Budget v2",
         description: "Team budget tracker",
         environmentId: null,
@@ -286,6 +298,86 @@ describe("AppSettingsForm save", () => {
 
     await waitFor(() =>
       expect(screen.getByText("Name is required.")).toBeInTheDocument(),
+    );
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+    expect(onBack).not.toHaveBeenCalled();
+  });
+});
+
+describe("AppSettingsForm URL field", () => {
+  const SLUGGED = {
+    ...(APP as object),
+    slug: "budget",
+  } as Parameters<typeof AppSettingsForm>[0]["app"];
+
+  test("seeds the field from the app's current slug", () => {
+    renderForm({ app: SLUGGED });
+
+    expect(screen.getByLabelText("URL")).toHaveValue("budget");
+  });
+
+  test("sends a changed slug", async () => {
+    const { container, onBack } = renderForm({ app: SLUGGED });
+
+    fireEvent.change(screen.getByLabelText("URL"), {
+      target: { value: "  team-budget  " },
+    });
+    submitForm(container);
+
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ slug: "team-budget" }),
+      }),
+    );
+  });
+
+  test("omits an unchanged slug so a save cannot 409 against its own row", async () => {
+    const { container, onBack } = renderForm({ app: SLUGGED });
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Budget v2" },
+    });
+    submitForm(container);
+
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.not.objectContaining({ slug: expect.anything() }),
+      }),
+    );
+  });
+
+  test("treats a cleared field as leave-alone, not as an empty slug", async () => {
+    // The API has no way to unset a URL, so an empty field must not be sent —
+    // it would come back a 400 rather than clearing anything.
+    const { container, onBack } = renderForm({ app: SLUGGED });
+
+    fireEvent.change(screen.getByLabelText("URL"), { target: { value: "" } });
+    submitForm(container);
+
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.not.objectContaining({ slug: expect.anything() }),
+      }),
+    );
+  });
+
+  test.each([
+    ["uppercase", "Team-Budget"],
+    ["an underscore", "team_budget"],
+    ["a space", "team budget"],
+  ])("blocks the save on %s and never calls the API", async (_label, value) => {
+    const { container, onBack } = renderForm({ app: SLUGGED });
+
+    fireEvent.change(screen.getByLabelText("URL"), { target: { value } });
+    submitForm(container);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/lowercase letters, numbers and single hyphens/i),
+      ).toBeInTheDocument(),
     );
     expect(updateMutateAsync).not.toHaveBeenCalled();
     expect(onBack).not.toHaveBeenCalled();

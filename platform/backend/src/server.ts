@@ -72,7 +72,7 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { initAuditRegistry } from "@/middleware/audit-log-registry";
 import OrganizationModel from "@/models/organization";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
-import { initializeObservabilityMetrics } from "@/observability";
+import { initializeObservabilityMetrics, metrics } from "@/observability";
 import { classifyErrorForTracking } from "@/observability/error-tracking-policy";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
 import { activeChatRunService } from "@/services/active-chat-run";
@@ -1252,6 +1252,12 @@ const startWebServer = async () => {
     // Start metrics server
     await startMetricsServer();
 
+    // Poll the org-wide active-user count for the `llm_active_users` gauge.
+    // Only the API process collects it: the value is derived from the shared
+    // database, so extra replicas would repeat the same query for the same
+    // answer.
+    metrics.activeUsers.activeUsersMetricCollector.start();
+
     // Register sandbox proxy route on the main server (single-port setup).
     // Iframe isolation comes from the sandbox attribute (no allow-same-origin → opaque origin).
     registerSandboxRoute(fastify);
@@ -1547,6 +1553,8 @@ function registerWebServerShutdown(
       mcpToolsRefreshManager.stop();
 
       instanceAnalyticsService.stop();
+
+      metrics.activeUsers.activeUsersMetricCollector.stop();
 
       const completedCleanups = new Set<
         "emailProvider" | "chatOps" | "ngrok"

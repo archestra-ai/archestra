@@ -95,6 +95,76 @@ describe("GET /api/apps/:appId", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("a member granted the app individually can GET another user's personal app", async ({
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const personal = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const other = await makeUser();
+    await makeMember(other.id, organizationId, { role: "member" });
+
+    // Grant through the catalog backing the app — the single source of truth
+    // every access path reads.
+    const { default: McpCatalogUserModel } = await import(
+      "@/models/mcp-catalog-user"
+    );
+    const { McpServerModel } = await import("@/models");
+    const server = await McpServerModel.findById(
+      personal.mcpServerId as string,
+    );
+    await McpCatalogUserModel.syncCatalogUsers(server?.catalogId as string, [
+      other.id,
+    ]);
+
+    user = other;
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/apps/${personal.id}`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ id: personal.id });
+    expect(response.json().users).toEqual([
+      expect.objectContaining({ id: other.id }),
+    ]);
+  });
+
+  test("revoking the grant closes access again", async ({
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const personal = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: user.id,
+    });
+    const other = await makeUser();
+    await makeMember(other.id, organizationId, { role: "member" });
+
+    const { default: McpCatalogUserModel } = await import(
+      "@/models/mcp-catalog-user"
+    );
+    const { McpServerModel } = await import("@/models");
+    const server = await McpServerModel.findById(
+      personal.mcpServerId as string,
+    );
+    const catalogId = server?.catalogId as string;
+    await McpCatalogUserModel.syncCatalogUsers(catalogId, [other.id]);
+    await McpCatalogUserModel.syncCatalogUsers(catalogId, []);
+
+    user = other;
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/apps/${personal.id}`,
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
   test("a member cannot GET another user's personal app (no existence leak)", async ({
     makeUser,
     makeMember,
@@ -114,5 +184,91 @@ describe("GET /api/apps/:appId", () => {
       url: `/api/apps/${personal.id}`,
     });
     expect(response.statusCode).toBe(404);
+  });
+});
+
+describe("GET /api/apps/:appId — addressed by slug", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    const organization = await makeOrganization();
+    organizationId = organization.id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & { organizationId: string; user: User }
+      ).organizationId = organizationId;
+      (request as typeof request & { user: User }).user = user;
+    });
+
+    const { default: appRoutes } = await import("./app.routes");
+    await app.register(appRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("resolves a slug to the same app the id returns", async ({
+    makeApp,
+  }) => {
+    const created = await makeApp({
+      organizationId,
+      scope: "org",
+      name: "Sales Dashboard",
+    });
+    expect(created.slug).toBe("sales-dashboard");
+
+    const bySlug = await app.inject({
+      method: "GET",
+      url: "/api/apps/sales-dashboard",
+    });
+    const byId = await app.inject({
+      method: "GET",
+      url: `/api/apps/${created.id}`,
+    });
+
+    expect(bySlug.statusCode).toBe(200);
+    expect(bySlug.json().id).toBe(created.id);
+    // The slug is a second address for one app, not a second app.
+    expect(bySlug.json()).toEqual(byId.json());
+  });
+
+  test("names the segment the caller sent, never the resolved id", async ({
+    makeApp,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    // A slug that resolves but the caller may not view: echoing the id would
+    // hand them the one identifier the 404 exists to withhold.
+    const author = await makeUser();
+    const hidden = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: author.id,
+      name: "Sales Dashboard",
+    });
+    // Plain reader, so app:admin does not grant sight of a personal app.
+    const role = await makeCustomRole(organizationId, {
+      permission: { app: ["read"] },
+    });
+    const outsider = await makeUser();
+    await makeMember(outsider.id, organizationId, { role: role.role });
+    user = outsider;
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/apps/sales-dashboard",
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain("sales-dashboard");
+    expect(response.json().error.message).not.toContain(hidden.id);
   });
 });

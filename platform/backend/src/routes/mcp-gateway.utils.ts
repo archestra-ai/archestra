@@ -2,17 +2,17 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  extractMcpExecutedAs,
   hasArchestraTokenPrefix,
   isAgentTool,
   isAlwaysExposedArchestraToolShortName,
   isSkillTool,
-  MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
-  MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
+  MCP_EXECUTED_AS_META_KEY,
   MCP_GATEWAY_OAUTH_SCOPE,
-  MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
+  platformExecutedAs,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -102,9 +102,25 @@ import {
   type ToolExposureMode,
 } from "@/types";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
-import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
+import {
+  buildInputRequiredResult,
+  clientSupportsInputRequest,
+  deriveStatePrincipal,
+  encodeRequestState,
+  GATEWAY_INPUT_REQUEST_KEY,
+  InputRequiredSignal,
+  type InputResponses,
+  isInputRequiredSignal,
+  MAX_INPUT_ROUNDS,
+} from "./mcp-gateway.mrtr";
+import {
+  buildGatewayServerCapabilities,
+  buildPrivateListCacheHint,
+  isResourceUnavailableError,
+  withPrivateCacheHint,
+} from "./mcp-gateway.protocol";
 
 export { deriveAuthMethod };
 
@@ -125,6 +141,61 @@ export interface TokenAuthResult {
   isExternalIdp?: boolean;
   /** Raw JWT token for propagation to underlying MCP servers */
   rawToken?: string;
+}
+
+/**
+ * Why gateway authentication failed, so a caller can act on the answer instead
+ * of guessing at a blanket "invalid token".
+ *
+ * What is safe to disclose turns on whether the JWT's signature was verified
+ * first. `no_email_claim`, `unknown_user`, `not_org_member` and
+ * `no_gateway_access` are only ever reached by a caller holding a token this
+ * organization's own IdP signed — already inside the trust boundary — so naming
+ * the configuration problem tells them nothing they could not already learn.
+ * `idp_not_linked` / `idp_misconfigured` are decided before any signature check
+ * but reveal only that a gateway is (not) set up for JWKS, never anything about
+ * a user. Everything decided by the signature check itself — bad signature,
+ * expiry, issuer or audience mismatch — collapses into `invalid_token`, since
+ * distinguishing those would help tune a forgery.
+ */
+export type GatewayAuthFailureReason =
+  | "invalid_token"
+  | "idp_not_linked"
+  | "idp_misconfigured"
+  | "no_email_claim"
+  | "unknown_user"
+  | "not_org_member"
+  | "no_gateway_access";
+
+/** Outcome of gateway authentication: a result, or the reason there isn't one. */
+export type GatewayAuthOutcome =
+  | { result: TokenAuthResult; reason: null }
+  | { result: null; reason: GatewayAuthFailureReason };
+
+/**
+ * Client-facing explanation for a failed gateway authentication. Kept next to
+ * {@link GatewayAuthFailureReason} so the disclosure rules and the wording that
+ * implements them stay in one place.
+ */
+export function describeGatewayAuthFailure(
+  reason: GatewayAuthFailureReason,
+): string {
+  switch (reason) {
+    case "idp_not_linked":
+      return "Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an Archestra token or OAuth.";
+    case "idp_misconfigured":
+      return "Invalid token for this profile. The gateway's Identity Provider cannot be used to validate JWTs: it must be an OIDC provider with a client ID and a discoverable JWKS endpoint.";
+    case "no_email_claim":
+      return "Token validated, but it carries no email claim. Set the Identity Provider's Email Claim attribute mapping to the claim holding the email (IdPs that namespace custom claims do not populate the standard `email` claim).";
+    case "unknown_user":
+      return "Token validated, but its email does not match any Archestra user.";
+    case "not_org_member":
+      return "Token validated, but its user is not a member of this gateway's organization.";
+    case "no_gateway_access":
+      return "Token validated, but its user does not have access to this gateway. Grant access via a shared team.";
+    case "invalid_token":
+      return "Invalid token for this profile";
+  }
 }
 
 export type AgentInfo = {
@@ -166,31 +237,33 @@ const rawArchestraTokenCache =
 /**
  * Creates an MCP server for the given agent.
  */
-export async function createAgentServer(
-  agentId: string,
-  tokenAuth?: TokenAuthContext,
-): Promise<{ server: McpServer; agent: AgentInfo }> {
-  const extensionCapabilities = {
-    ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
-    ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
-    ...MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
-  } as const;
-
+export async function createAgentServer(params: {
+  agentId: string;
+  tokenAuth?: TokenAuthContext;
+  /**
+   * Answers the client supplied on an MRTR retry, keyed as they were issued.
+   * Absent on a first attempt, which is what makes the gateway elicit.
+   */
+  mrtr?: {
+    enabled: boolean;
+    inputResponses?: InputResponses;
+    clientCapabilities?: unknown;
+    /** Rounds already spent, read from a verified requestState. */
+    round?: number;
+  };
+}): Promise<{ server: McpServer; agent: AgentInfo }> {
+  const { agentId, tokenAuth, mrtr } = params;
+  const mrtrEnabled = mrtr?.enabled === true;
   const mcpServer = new McpServer(
     {
       name: `archestra-agent-${agentId}`,
       version: config.api.version,
     },
     {
-      capabilities: {
-        resources: {
-          subscribe: true,
-          listChanged: true,
-        },
-        extensions: extensionCapabilities,
-        prompts: {},
-        tools: { listChanged: false },
-      } as McpServerCapabilitiesWithExtensions,
+      // Shared with the `server/discover` payload so the capabilities a
+      // 2025-11-25 client learns at `initialize` and a 2026-07-28 client learns
+      // on demand cannot drift apart.
+      capabilities: buildGatewayServerCapabilities(),
     },
   );
   const { server } = mcpServer;
@@ -457,7 +530,9 @@ export async function createAgentServer(
       logger.warn({ err: dbError }, "Failed to persist tools/list request:");
     }
 
-    return { tools: toolsList };
+    // SEP-2549 freshness hints. Always private: this list is filtered per
+    // caller, so it must never be shared across users by an intermediary.
+    return { tools: toolsList, ...buildPrivateListCacheHint() };
   });
 
   server.setRequestHandler(
@@ -473,7 +548,7 @@ export async function createAgentServer(
           { agentId, uri, resultType: typeof result },
           "Resource read successful",
         );
-        return result;
+        return withPrivateCacheHint(result);
       } catch (error) {
         // A third-party tool can advertise a `ui://` UI resource whose upstream
         // server does not actually implement `resources/read` (returning -32601
@@ -505,16 +580,25 @@ export async function createAgentServer(
 
   // SEP-1865: resources/list, resources/templates/list, prompts/list
   // Proxy to all upstream MCP servers connected to this agent and aggregate results.
+  // Each carries SEP-2549 cache hints, always private: these aggregate upstream
+  // servers reached with the caller's own credentials, so results differ per
+  // caller and must not be shared by an intermediary.
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return mcpClient.listResources(agentId, tokenAuth);
+    return withPrivateCacheHint(
+      await mcpClient.listResources(agentId, tokenAuth),
+    );
   });
 
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-    return mcpClient.listResourceTemplates(agentId, tokenAuth);
+    return withPrivateCacheHint(
+      await mcpClient.listResourceTemplates(agentId, tokenAuth),
+    );
   });
 
   server.setRequestHandler(ListPromptsRequestSchema, async () => {
-    return mcpClient.listPrompts(agentId, tokenAuth);
+    return withPrivateCacheHint(
+      await mcpClient.listPrompts(agentId, tokenAuth),
+    );
   });
 
   server.setRequestHandler(
@@ -739,6 +823,20 @@ export async function createAgentServer(
               : "Archestra MCP tool call completed",
           );
 
+          // `run_tool` dispatches reach a real server, and that call already
+          // named the connection that served it — keep it. Anything else here
+          // Archestra ran itself, with the caller's permissions, so the log and
+          // the client still learn who it ran for.
+          const archestraResult = {
+            ...response,
+            _meta: {
+              ...(response._meta as Record<string, unknown> | undefined),
+              [MCP_EXECUTED_AS_META_KEY]:
+                extractMcpExecutedAs(response) ??
+                platformExecutedAs(tokenAuth?.userId),
+            },
+          };
+
           // Persist archestra/agent delegation tool call to database
           try {
             await McpToolCallModel.create({
@@ -750,7 +848,7 @@ export async function createAgentServer(
                 name,
                 arguments: args || {},
               },
-              toolResult: response,
+              toolResult: archestraResult,
               userId: tokenAuth?.userId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
             });
@@ -761,7 +859,7 @@ export async function createAgentServer(
             );
           }
 
-          return response;
+          return archestraResult;
         }
 
         logger.info(
@@ -803,6 +901,27 @@ export async function createAgentServer(
               {
                 availableTool,
                 elicitationHandler: async (request) => {
+                  // MRTR: a retry already carries the answer, so consume it
+                  // instead of asking again.
+                  const supplied =
+                    mrtr?.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
+                  if (supplied !== undefined) {
+                    return ElicitResultSchema.parse(supplied);
+                  }
+
+                  // Under 2026-07-28 a server may not open a request mid-call,
+                  // so unwind and let the handler answer with an
+                  // InputRequiredResult carrying this request.
+                  if (mrtrEnabled) {
+                    throw new InputRequiredSignal({
+                      key: GATEWAY_INPUT_REQUEST_KEY,
+                      request: {
+                        method: "elicitation/create",
+                        params: request.params as Record<string, unknown>,
+                      },
+                    });
+                  }
+
                   try {
                     return await extra.sendRequest(request, ElicitResultSchema);
                   } catch (error) {
@@ -870,6 +989,61 @@ export async function createAgentServer(
           structuredContent: result.structuredContent,
         };
       } catch (error) {
+        // MRTR: not a failure. The call needs input the gateway does not have,
+        // so it answers with an InputRequiredResult and the client retries the
+        // whole call with the answer attached. Handled before the metrics below
+        // so it is not counted as an errored tool call.
+        if (isInputRequiredSignal(error)) {
+          if (
+            !clientSupportsInputRequest({
+              clientCapabilities: mrtr?.clientCapabilities,
+              request: error.request,
+            })
+          ) {
+            // Asking a client for something it never declared is forbidden, and
+            // it could not answer anyway — fail with a result the model can act
+            // on rather than eliciting into the void.
+            return structuredToolErrorResult({
+              error: {
+                type: "generic",
+                message: `This tool needs ${error.request.method}, which this client does not support.`,
+              },
+            });
+          }
+
+          const nextRound = (mrtr?.round ?? 0) + 1;
+          if (nextRound > MAX_INPUT_ROUNDS) {
+            // Each round re-runs the tool from the top, so an upstream that
+            // keeps asking would re-execute its side effects once per round
+            // and prompt the user indefinitely. Stop rather than loop.
+            logger.warn(
+              { agentId, toolName: name, rounds: nextRound },
+              "MCP tool exceeded the input-round cap; refusing to elicit again",
+            );
+            return structuredToolErrorResult({
+              error: {
+                type: "generic",
+                message: `This tool asked for input more than ${MAX_INPUT_ROUNDS} times without completing.`,
+              },
+            });
+          }
+
+          return buildInputRequiredResult({
+            inputRequests: { [error.key]: error.request },
+            requestState: encodeRequestState({
+              round: nextRound,
+              principal: deriveStatePrincipal({
+                userId: tokenAuth?.userId,
+                tokenId: tokenAuth?.tokenId,
+                organizationId: tokenAuth?.organizationId,
+              }),
+              method: "tools/call",
+              requestParams: { name, arguments: args ?? {} },
+              keys: [error.key],
+            }),
+          });
+        }
+
         const durationSeconds = (Date.now() - startTime) / 1000;
         metrics.mcp.reportMcpToolCall({
           agentId: agent.id,
@@ -1450,10 +1624,23 @@ export async function validateMCPGatewayToken(
   profileId: string,
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
+  return (await authenticateMCPGatewayRequest(profileId, tokenValue)).result;
+}
+
+/**
+ * Same as {@link validateMCPGatewayToken}, but also reports why authentication
+ * failed so the gateway route can return an actionable 401 instead of a
+ * catch-all. Failures are never cached (see `cacheTokenAuthResult`), so the
+ * reason is always computed against fresh state.
+ */
+export async function authenticateMCPGatewayRequest(
+  profileId: string,
+  tokenValue: string,
+): Promise<GatewayAuthOutcome> {
   const tokenHashes = buildTokenHashes(profileId, tokenValue);
   const cachedResult = getCachedTokenAuthResult(tokenHashes.cacheKey);
-  if (cachedResult !== undefined) {
-    return cachedResult;
+  if (cachedResult) {
+    return { result: cachedResult, reason: null };
   }
 
   let agentAccessContextPromise: Promise<AgentAccessContext | null> | undefined;
@@ -1466,15 +1653,17 @@ export async function validateMCPGatewayToken(
     };
 
   // Try external IdP JWKS validation first (if profile has an IdP configured)
+  let externalIdpReason: GatewayAuthFailureReason | null = null;
   if (!hasArchestraTokenPrefix(tokenValue)) {
-    const externalIdpResult = await validateExternalIdpToken(
+    const externalIdp = await authenticateExternalIdpToken(
       profileId,
       tokenValue,
     );
-    if (externalIdpResult) {
-      cacheTokenAuthResult(tokenHashes.cacheKey, externalIdpResult);
-      return externalIdpResult;
+    if (externalIdp.result) {
+      cacheTokenAuthResult(tokenHashes.cacheKey, externalIdp.result);
+      return externalIdp;
     }
+    externalIdpReason = externalIdp.reason;
   }
 
   if (hasArchestraTokenPrefix(tokenValue)) {
@@ -1492,7 +1681,7 @@ export async function validateMCPGatewayToken(
       });
       if (teamTokenResult) {
         cacheTokenAuthResult(tokenHashes.cacheKey, teamTokenResult);
-        return teamTokenResult;
+        return { result: teamTokenResult, reason: null };
       }
     }
 
@@ -1504,7 +1693,7 @@ export async function validateMCPGatewayToken(
       });
       if (userTokenResult) {
         cacheTokenAuthResult(tokenHashes.cacheKey, userTokenResult);
-        return userTokenResult;
+        return { result: userTokenResult, reason: null };
       }
     }
 
@@ -1513,7 +1702,7 @@ export async function validateMCPGatewayToken(
       "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
     );
     cacheTokenAuthResult(tokenHashes.cacheKey, null);
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 
   // Try OAuth token validation (for MCP clients like Open WebUI)
@@ -1526,7 +1715,7 @@ export async function validateMCPGatewayToken(
     // This cache is intentionally short-lived and process-local. Revocations
     // may take up to TOKEN_AUTH_CACHE_TTL_MS to fully age out across requests.
     cacheTokenAuthResult(tokenHashes.cacheKey, oauthResult);
-    return oauthResult;
+    return { result: oauthResult, reason: null };
   }
 
   logger.warn(
@@ -1534,7 +1723,16 @@ export async function validateMCPGatewayToken(
     "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
   );
   cacheTokenAuthResult(tokenHashes.cacheKey, null);
-  return null;
+
+  // A non-JWT that failed here was never a JWKS candidate, so an IdP-specific
+  // reason would be misleading — it most likely meant to be an OAuth token.
+  return {
+    result: null,
+    reason:
+      externalIdpReason && isJwtShaped(tokenValue)
+        ? externalIdpReason
+        : "invalid_token",
+  };
 }
 
 /**
@@ -1548,11 +1746,30 @@ export async function validateExternalIdpToken(
   tokenValue: string,
   permissionResource: "mcpGateway" | "llmProxy" = "mcpGateway",
 ): Promise<TokenAuthResult | null> {
+  const { result } = await authenticateExternalIdpToken(
+    profileId,
+    tokenValue,
+    permissionResource,
+  );
+  return result;
+}
+
+/**
+ * Same as {@link validateExternalIdpToken}, but reports *why* authentication
+ * failed so the gateway can answer with something more useful than a blanket
+ * "invalid token". See {@link GatewayAuthFailureReason} for what is safe to
+ * hand back to an unauthenticated caller.
+ */
+async function authenticateExternalIdpToken(
+  profileId: string,
+  tokenValue: string,
+  permissionResource: "mcpGateway" | "llmProxy" = "mcpGateway",
+): Promise<GatewayAuthOutcome> {
   try {
     // Look up the agent to check if it has an identity provider configured
     const agent = await AgentModel.findGatewayAgentById(profileId);
     if (!agent?.identityProviderId) {
-      return null;
+      return { result: null, reason: "idp_not_linked" };
     }
 
     // Look up the identity provider to get OIDC config
@@ -1564,7 +1781,7 @@ export async function validateExternalIdpToken(
         { profileId, identityProviderId: agent.identityProviderId },
         "validateExternalIdpToken: Identity provider not found",
       );
-      return null;
+      return { result: null, reason: "idp_misconfigured" };
     }
 
     if (!idpProvider.oidcConfig) {
@@ -1572,7 +1789,7 @@ export async function validateExternalIdpToken(
         { profileId, identityProviderId: agent.identityProviderId },
         "validateExternalIdpToken: identity provider has no OIDC config",
       );
-      return null;
+      return { result: null, reason: "idp_misconfigured" };
     }
 
     const oidcConfig = idpProvider.oidcConfig;
@@ -1582,7 +1799,7 @@ export async function validateExternalIdpToken(
         { profileId, identityProviderId: agent.identityProviderId },
         "validateExternalIdpToken: identity provider OIDC clientId is required for audience validation",
       );
-      return null;
+      return { result: null, reason: "idp_misconfigured" };
     }
 
     // Use the JWKS endpoint from OIDC config if available (avoids OIDC discovery
@@ -1597,19 +1814,22 @@ export async function validateExternalIdpToken(
         { profileId, issuer: idpProvider.issuer },
         "validateExternalIdpToken: could not determine JWKS URL",
       );
-      return null;
+      return { result: null, reason: "idp_misconfigured" };
     }
 
-    // Validate the JWT
+    // Validate the JWT. The IdP's attribute mapping decides which claim holds
+    // the email: an IdP that namespaces custom claims populates something like
+    // `https://example.com/email` and leaves the standard `email` claim unset.
     const result = await jwksValidator.validateJwt({
       token: tokenValue,
       issuerUrl: idpProvider.issuer,
       jwksUrl,
       audience: oidcConfig.clientId,
+      emailClaim: oidcConfig.mapping?.email ?? null,
     });
 
     if (!result) {
-      return null;
+      return { result: null, reason: "invalid_token" };
     }
 
     logger.info(
@@ -1627,10 +1847,14 @@ export async function validateExternalIdpToken(
     const userEmail = result.email ?? getEmailFromSubject(result.sub);
     if (!userEmail) {
       logger.warn(
-        { profileId, sub: result.sub },
+        {
+          profileId,
+          sub: result.sub,
+          configuredEmailClaim: oidcConfig.mapping?.email ?? null,
+        },
         "validateExternalIdpToken: JWT has no email claim, cannot match to Archestra user",
       );
-      return null;
+      return { result: null, reason: "no_email_claim" };
     }
 
     const user = await UserModel.findByEmail(userEmail);
@@ -1639,7 +1863,7 @@ export async function validateExternalIdpToken(
         { profileId, email: userEmail },
         "validateExternalIdpToken: JWT email does not match any Archestra user",
       );
-      return null;
+      return { result: null, reason: "unknown_user" };
     }
 
     const member = await MemberModel.getByUserId(user.id, agent.organizationId);
@@ -1648,7 +1872,7 @@ export async function validateExternalIdpToken(
         { profileId, userId: user.id, email: userEmail },
         "validateExternalIdpToken: user is not a member of the gateway's organization",
       );
-      return null;
+      return { result: null, reason: "not_org_member" };
     }
 
     // Check if user has admin permission for the target resource (MCP Gateway or LLM Proxy)
@@ -1659,29 +1883,7 @@ export async function validateExternalIdpToken(
       "admin",
     );
 
-    if (isAdmin) {
-      return {
-        tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
-        teamId: null,
-        isOrganizationToken: false,
-        organizationId: agent.organizationId,
-        isUserToken: true,
-        userId: user.id,
-        isExternalIdp: true,
-        rawToken: tokenValue,
-      };
-    }
-
-    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
-    if (!(await AgentTeamModel.userHasAgentAccess(user.id, profileId, false))) {
-      logger.warn(
-        { profileId, userId: user.id },
-        "validateExternalIdpToken: profile not accessible via external IdP (no shared teams)",
-      );
-      return null;
-    }
-
-    return {
+    const authenticated: TokenAuthResult = {
       tokenId: `external_idp:${agent.identityProviderId}:${result.sub}`,
       teamId: null,
       isOrganizationToken: false,
@@ -1691,6 +1893,21 @@ export async function validateExternalIdpToken(
       isExternalIdp: true,
       rawToken: tokenValue,
     };
+
+    if (isAdmin) {
+      return { result: authenticated, reason: null };
+    }
+
+    // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
+    if (!(await AgentTeamModel.userHasAgentAccess(user.id, profileId, false))) {
+      logger.warn(
+        { profileId, userId: user.id },
+        "validateExternalIdpToken: profile not accessible via external IdP (no shared teams)",
+      );
+      return { result: null, reason: "no_gateway_access" };
+    }
+
+    return { result: authenticated, reason: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const stack = error instanceof Error ? error.stack : undefined;
@@ -1698,14 +1915,35 @@ export async function validateExternalIdpToken(
       { profileId, error: message, stack },
       "validateExternalIdpToken: unexpected error",
     );
-    return null;
+    return { result: null, reason: "invalid_token" };
   }
 }
 
+/**
+ * Whether a token even looks like a JWT (three base64url segments). Used only
+ * to decide whether a JWKS-specific failure reason is worth reporting.
+ */
+function isJwtShaped(token: string): boolean {
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/.test(token);
+}
+
+/**
+ * Delimiters IdPs use to namespace a composite subject (`google-apps|a@b.com`,
+ * `oidc:a@b.com`). Such a subject satisfies a naive "looks like an email" test
+ * — `|` and `:` are legal in an address local part — but never matches a stored
+ * user, so accepting it turns a missing-email-claim misconfiguration into a
+ * misleading "no matching user".
+ */
+const COMPOSITE_SUBJECT_DELIMITERS = /[|:\\/]/;
+
 function getEmailFromSubject(subject: string | undefined): string | null {
-  // This fallback is intentionally loose: after token validation succeeds,
-  // it only decides whether an email-shaped subject can be used for lookup.
-  if (!subject || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(subject)) {
+  // This fallback exists for IdPs whose subject *is* the user's email. It is
+  // otherwise deliberately loose: after token validation succeeds, it only
+  // decides whether an email-shaped subject can be used for lookup.
+  if (!subject || COMPOSITE_SUBJECT_DELIMITERS.test(subject)) {
+    return null;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(subject)) {
     return null;
   }
   return subject;
@@ -2124,11 +2362,14 @@ function providesUiResource(tool: {
 
 /**
  * Whether a resource-read failure is an expected "the upstream server can't
- * serve this" condition — method not found (-32601) or resource not found
- * (-32002) — rather than a genuine platform fault. A third-party tool can
- * advertise a `ui://` UI resource whose server never implemented
+ * serve this" condition rather than a genuine platform fault. A third-party
+ * tool can advertise a `ui://` UI resource whose server never implemented
  * `resources/read`; the client degrades to the plain tool result, so the
  * gateway logs this quietly instead of at error level.
+ *
+ * Code matching is delegated so the SEP-2164 migration of missing-resource
+ * errors (-32002 to the generic -32602) does not silently reclassify these as
+ * platform faults once upstreams move to the newer revision.
  */
 function isUnavailableResourceError(error: unknown): boolean {
   if (
@@ -2138,8 +2379,11 @@ function isUnavailableResourceError(error: unknown): boolean {
     return true;
   }
   if (typeof error === "object" && error !== null && "code" in error) {
-    const code = (error as { code?: unknown }).code;
-    return code === -32601 || code === -32002;
+    const { code, message } = error as { code?: unknown; message?: unknown };
+    return isResourceUnavailableError({
+      code,
+      message: typeof message === "string" ? message : undefined,
+    });
   }
   return false;
 }

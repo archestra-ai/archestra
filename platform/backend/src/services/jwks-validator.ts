@@ -41,8 +41,15 @@ class JwksValidator {
     issuerUrl: string;
     jwksUrl: string;
     audience: string | null;
+    /**
+     * Claim holding the caller's email, taken from the IdP's attribute mapping.
+     * IdPs that namespace custom claims (`https://example.com/email`) never
+     * populate the standard `email` claim, so the mapped claim is read first
+     * and `email` remains the fallback.
+     */
+    emailClaim?: string | null;
   }): Promise<JwksValidationResult | null> {
-    const { token, issuerUrl, jwksUrl, audience } = params;
+    const { token, issuerUrl, jwksUrl, audience, emailClaim } = params;
 
     try {
       const jwks = this.getOrCreateJwks(jwksUrl);
@@ -61,7 +68,9 @@ class JwksValidator {
 
       return {
         sub,
-        email: extractStringClaim(payload, "email"),
+        email:
+          (emailClaim ? extractStringClaim(payload, emailClaim) : null) ??
+          extractStringClaim(payload, "email"),
         name:
           extractStringClaim(payload, "name") ??
           extractStringClaim(payload, "preferred_username"),

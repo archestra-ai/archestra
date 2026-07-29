@@ -1,6 +1,7 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSession } from "@/lib/auth/auth.query";
@@ -104,6 +105,19 @@ vi.mock("@/components/visibility-selector", () => ({
   ),
 }));
 
+/**
+ * The dialog embeds the app-access notice, which reads the apps cache, so every
+ * render needs a query client even when the test is only about visibility.
+ */
+function renderDialog(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  );
+}
+
 describe("ShareConversationDialog", () => {
   beforeEach(() => {
     vi.mocked(useSession).mockReturnValue({
@@ -145,7 +159,7 @@ describe("ShareConversationDialog", () => {
   it("shares a conversation with selected teams", async () => {
     const user = userEvent.setup();
 
-    render(
+    renderDialog(
       <ShareConversationDialog
         conversationId="conv-1"
         open
@@ -176,7 +190,7 @@ describe("ShareConversationDialog", () => {
       configurable: true,
     });
 
-    render(
+    renderDialog(
       <ShareConversationDialog
         conversationId="conv-1"
         open
@@ -216,7 +230,7 @@ describe("ShareConversationDialog", () => {
       isLoading: false,
     });
 
-    render(
+    renderDialog(
       <ShareConversationDialog
         conversationId="conv-1"
         open

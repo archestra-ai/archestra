@@ -12,8 +12,10 @@ const mockUseTeamStatistics = vi.fn();
 const mockUseProfileStatistics = vi.fn();
 const mockUseModelStatistics = vi.fn();
 const mockUseCostSavingsStatistics = vi.fn();
+const mockUseUserStatistics = vi.fn();
 
 vi.mock("next/navigation");
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/app/llm/(costs)/layout", () => ({
   useSetCostsAction: () => mockSetCostsAction,
@@ -33,6 +35,8 @@ vi.mock("@/lib/statistics.query", () => ({
     mockUseModelStatistics(params),
   useCostSavingsStatistics: (params: StatisticsHookParams) =>
     mockUseCostSavingsStatistics(params),
+  useUserStatistics: (params: StatisticsHookParams) =>
+    mockUseUserStatistics(params),
 }));
 
 vi.mock("recharts", () => ({
@@ -75,6 +79,9 @@ describe("StatisticsPage", () => {
     mockUseModelStatistics.mockReturnValue({ data: [] });
     mockUseCostSavingsStatistics.mockReturnValue({
       data: { timeSeries: [] },
+    });
+    mockUseUserStatistics.mockReturnValue({
+      data: { data: [], pagination: { total: 0 } },
     });
   });
 
@@ -139,6 +146,45 @@ describe("StatisticsPage", () => {
     }
   });
 
+  it("shows each person's usage and model mix, and does not present subscription usage as spend", async () => {
+    mockUseUserStatistics.mockReturnValue({
+      data: {
+        data: [
+          {
+            userId: "user-1",
+            userName: "Dana Reyes",
+            userEmail: "dana@example.com",
+            requests: 42,
+            inputTokens: 900,
+            outputTokens: 100,
+            cacheReadTokens: 0,
+            totalTokens: 1000,
+            // Entirely subscription-fulfilled: heavy usage, nothing billed.
+            billedCost: 0,
+            subscriptionCost: 12.5,
+            activeDays: 4,
+            lastActiveAt: "2026-07-27T10:00:00.000Z",
+            models: [
+              { model: "claude-sonnet-4", requests: 40 },
+              { model: "gpt-5", requests: 2 },
+            ],
+          },
+        ],
+        pagination: { total: 1 },
+      },
+    });
+
+    const { findByText, getByText } = render(<StatisticsPage />);
+
+    expect(await findByText("Dana Reyes")).toBeInTheDocument();
+    // Email is rendered so the row can be reconciled against an external roster.
+    expect(getByText("dana@example.com")).toBeInTheDocument();
+    expect(getByText("1,000")).toBeInTheDocument();
+    expect(getByText("claude-sonnet-4")).toBeInTheDocument();
+    // Usage is visible even though billed spend is $0.
+    expect(getByText("Subscription")).toBeInTheDocument();
+  });
+
   it("renders statistics tables inside capped scroll containers", () => {
     mockUseTeamStatistics.mockReturnValue({
       data: [
@@ -201,7 +247,8 @@ describe("StatisticsPage", () => {
       container.querySelectorAll(".max-h-\\[280px\\]"),
     );
 
-    expect(tablePanels).toHaveLength(4);
+    // Teams, Agents, LLM Proxies, Models, People
+    expect(tablePanels).toHaveLength(5);
     for (const tablePanel of tablePanels) {
       expect(tablePanel.className).toContain("max-h-[280px]");
       expect(tablePanel.className).toContain("overflow-auto");

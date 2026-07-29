@@ -101,6 +101,7 @@ function getSourceIcon({
     "a2a:compaction": <Minimize2 className="h-3 w-3 shrink-0" />,
     "chat:title_generation": <Type className="h-3 w-3 shrink-0" />,
     "chat:tool_call_repair": <Wrench className="h-3 w-3 shrink-0" />,
+    "a2a:tool_call_repair": <Wrench className="h-3 w-3 shrink-0" />,
     "skill:description_generation": <Sparkles className="h-3 w-3 shrink-0" />,
     "chatops:slack": (
       <Image

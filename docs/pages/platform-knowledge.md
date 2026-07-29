@@ -3,7 +3,7 @@ title: Knowledge
 category: Knowledge
 order: 1
 description: Built-in RAG knowledge — Knowledge Bases, connectors, and retrieval architecture
-lastUpdated: 2026-07-23
+lastUpdated: 2026-07-28
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -179,6 +179,7 @@ Sync issues, pull request discussions, and repository files from GitHub.
 | Include Pull Requests | Toggle to sync pull requests and their comments (default: on)                                   |
 | Include Repository Files | Toggle to sync repository files (default: off)                                               |
 | File Types            | Comma-separated file extensions to index when repository files are enabled (defaults to `.md`, `.mdx`, `.yaml`, `.yml`) |
+| Folders               | Comma-separated folders to index, relative to the repository root (optional -- leave blank to index the whole repository) |
 | Labels to Skip        | Comma-separated labels to exclude (optional)                                                    |
 
 ### GitLab

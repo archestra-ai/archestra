@@ -111768,9 +111768,6 @@
                         "hackathonRecorderEnabled": {
                           "type": "boolean"
                         },
-                        "hackathonRecorderOverrideActive": {
-                          "type": "boolean"
-                        },
                         "hackathonVideoDownloadEnabled": {
                           "type": "boolean"
                         },
@@ -111824,7 +111821,6 @@
                         "chatopsTelegramEnabled",
                         "kbAutoSyncPermissionsEnabled",
                         "hackathonRecorderEnabled",
-                        "hackathonRecorderOverrideActive",
                         "hackathonVideoDownloadEnabled",
                         "hackathonMaxFinalCutMs",
                         "hackathonGalleryRepo"

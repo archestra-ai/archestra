@@ -1474,9 +1474,10 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
  * deployment needs no third switch of its own.
  *
  * `enterpriseOverride` is the single escape hatch: it turns the recorder on for
- * Archestra's own licensed staging AND bypasses the date window. It is
- * documented nowhere and named as an enterprise override on purpose, so no
- * customer stumbles onto the enterprise path.
+ * Archestra's own licensed staging. It affects this deployment gate only — the
+ * date window and the organization toggle still apply. It is documented
+ * nowhere and named as an enterprise override on purpose, so no customer
+ * stumbles onto the enterprise path.
  *
  * This is the DEPLOYMENT gate only. Two more gates sit above it at request
  * time — the organization's own toggle, and the hackathon date window —
@@ -2206,14 +2207,6 @@ const config = {
       enterpriseOverride:
         process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
     }),
-    /**
-     * The staging override is active. It forces the recorder on for Archestra's
-     * own licensed staging (see parseHackathonRecorderEnabled) AND bypasses the
-     * hackathon date window, so staging can exercise the feature before it
-     * opens and after it closes. Undocumented, same as the override itself.
-     */
-    overrideActive:
-      process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
     /**
      * Offering the offline VIDEO export (the player's download button and the
      * render endpoints behind it). Off unless a deployment opts in: a render

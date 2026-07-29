@@ -285,6 +285,40 @@ class ProjectShareModel {
     return byProject;
   }
 
+  /**
+   * People (id + name) each project is shared with by name, keyed by project id
+   * (user-shared projects only). One query, so the visibility badge can say who
+   * a project reaches rather than showing it as private.
+   */
+  static async getShareUsersForProjects(
+    projectIds: string[],
+  ): Promise<Map<string, { id: string; name: string }[]>> {
+    if (projectIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        projectId: schema.projectSharesTable.projectId,
+        userId: schema.usersTable.id,
+        userName: schema.usersTable.name,
+      })
+      .from(schema.projectSharesTable)
+      .innerJoin(
+        schema.projectShareUsersTable,
+        eq(schema.projectSharesTable.id, schema.projectShareUsersTable.shareId),
+      )
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.projectShareUsersTable.userId, schema.usersTable.id),
+      )
+      .where(inArray(schema.projectSharesTable.projectId, projectIds));
+    const byProject = new Map<string, { id: string; name: string }[]>();
+    for (const { projectId, userId, userName } of rows) {
+      const list = byProject.get(projectId) ?? [];
+      list.push({ id: userId, name: userName });
+      byProject.set(projectId, list);
+    }
+    return byProject;
+  }
+
   /** Attach each project's share visibility (null = unshared) in one query. */
   private static async attachVisibility(
     projects: Project[],

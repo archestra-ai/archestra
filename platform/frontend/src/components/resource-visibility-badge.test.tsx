@@ -73,12 +73,15 @@ describe("ResourceVisibilityBadge", () => {
  * exactly the question an "Accessible to" column exists to answer.
  */
 describe("ResourceVisibilityBadge per-user shares", () => {
-  it("lists the grantees alongside the owner", () => {
+  it("names the grantees without one pill each", () => {
     render(
       <ResourceVisibilityBadge
         scope="personal"
         teams={[]}
-        users={[{ id: "u1", name: "Ada Lovelace" }]}
+        users={[
+          { id: "u1", name: "Ada Lovelace" },
+          { id: "u2", name: "Grace Hopper" },
+        ]}
         authorId={ME}
         authorName="My Name"
         currentUserId={ME}
@@ -86,8 +89,12 @@ describe("ResourceVisibilityBadge per-user shares", () => {
       />,
     );
 
+    // A share with ten people must not become ten pills in a table cell.
+    expect(
+      screen.getByLabelText("Shared with: Ada Lovelace, Grace Hopper"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Me")).toBeInTheDocument();
-    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("+2")).toBeInTheDocument();
   });
 
   it("still shows a shared resource when the owner's own badge is hidden", () => {
@@ -103,7 +110,9 @@ describe("ResourceVisibilityBadge per-user shares", () => {
     );
 
     // Blank would claim the resource reaches nobody but its author.
-    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Shared with: Ada Lovelace"),
+    ).toBeInTheDocument();
   });
 
   it("leaves an unshared personal resource exactly as it was", () => {

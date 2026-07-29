@@ -79,6 +79,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversationCount: 0,
         visibility: null,
         shareTeamNames: null,
+        shareUserNames: null,
         pinnedAt: null,
         createdAt: project.createdAt,
       };
@@ -128,6 +129,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         conversationCount: 1,
         visibility: null,
         shareTeamNames: null,
+        shareUserNames: null,
         pinnedAt: null,
         createdAt: project.createdAt,
       };

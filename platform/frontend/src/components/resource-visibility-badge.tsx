@@ -73,22 +73,52 @@ export function ResourceVisibilityBadge({
       return <span className="text-muted-foreground">-</span>;
     }
 
-    // Owner first, then everyone it was shared with, because the column asks
-    // who can reach this rather than who owns it.
+    if (sharedWith.length === 0) {
+      return (
+        <Badge
+          variant="outline"
+          className={cn(
+            scopeStyles.personal,
+            "inline-flex max-w-[180px] items-center gap-1 overflow-hidden text-xs",
+          )}
+        >
+          <User className="h-3 w-3 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">
+            {truncateBadgeText(displayName ?? "", MAX_BADGE_TEXT_LENGTH)}
+          </span>
+        </Badge>
+      );
+    }
+
+    // One pill, not one per grantee: a resource shared with ten people would
+    // otherwise flood a table cell. The distinct icon and count say it is
+    // shared; hovering says with whom, as the apps card does.
+    const label = `Shared with: ${sharedWith.map((user) => user.name).join(", ")}`;
     return (
-      <PillRow
-        pills={[
-          ...(displayName
-            ? [{ key: "owner", name: displayName, icon: User }]
-            : []),
-          ...sharedWith.map((user) => ({
-            key: `user:${user.id}`,
-            name: user.name,
-            icon: UserRoundCheck,
-          })),
-        ]}
-        style={scopeStyles.personal}
-      />
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              aria-label={label}
+              className={cn(
+                scopeStyles.personal,
+                "inline-flex max-w-[180px] cursor-help items-center gap-1 overflow-hidden text-xs",
+              )}
+            >
+              <UserRoundCheck className="h-3 w-3 shrink-0" />
+              <span className="min-w-0 truncate">
+                {truncateBadgeText(
+                  displayName ?? sharedWith[0].name,
+                  MAX_BADGE_TEXT_LENGTH,
+                )}
+              </span>
+              <span className="shrink-0 opacity-70">+{sharedWith.length}</span>
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
 

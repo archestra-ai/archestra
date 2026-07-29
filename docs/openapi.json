@@ -273258,6 +273258,13 @@
                         "type": "string"
                       }
                     },
+                    "shareUserNames": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -273278,6 +273285,7 @@
                     "conversationCount",
                     "visibility",
                     "shareTeamNames",
+                    "shareUserNames",
                     "pinnedAt",
                     "createdAt"
                   ],
@@ -273646,6 +273654,13 @@
                           "type": "string"
                         }
                       },
+                      "shareUserNames": {
+                        "nullable": true,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
                       "pinnedAt": {
                         "nullable": true,
                         "type": "string",
@@ -273666,6 +273681,7 @@
                       "conversationCount",
                       "visibility",
                       "shareTeamNames",
+                      "shareUserNames",
                       "pinnedAt",
                       "createdAt"
                     ],
@@ -274011,6 +274027,13 @@
                         "type": "string"
                       }
                     },
+                    "shareUserNames": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -274031,6 +274054,7 @@
                     "conversationCount",
                     "visibility",
                     "shareTeamNames",
+                    "shareUserNames",
                     "pinnedAt",
                     "createdAt"
                   ],
@@ -274352,6 +274376,13 @@
                         "type": "string"
                       }
                     },
+                    "shareUserNames": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -274386,6 +274417,7 @@
                     "conversationCount",
                     "visibility",
                     "shareTeamNames",
+                    "shareUserNames",
                     "pinnedAt",
                     "createdAt",
                     "shareTeamIds",

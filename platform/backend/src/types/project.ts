@@ -78,6 +78,13 @@ export const ProjectListItemSchema = z.object({
    * business), and non-team visibilities have no teams.
    */
   shareTeamNames: z.array(z.string()).nullable(),
+  /**
+   * Names of the people a `user`-shared project is shared with, for the
+   * visibility badge — without them such a project reads as private. Withheld
+   * (null) from anyone who cannot manage the project, on the same reasoning as
+   * `shareTeamNames`: the full recipient list is the owner's business.
+   */
+  shareUserNames: z.array(z.string()).nullable(),
   /** When the requesting user pinned this project; null = not pinned. */
   pinnedAt: z.date().nullable(),
   createdAt: z.date(),

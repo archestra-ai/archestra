@@ -70310,6 +70310,7 @@ export type GetProjectsResponses = {
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
+        shareUserNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
     }>;
@@ -70407,6 +70408,7 @@ export type CreateProjectResponses = {
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
+        shareUserNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
     };
@@ -70505,6 +70507,7 @@ export type CreateProjectFromConversationResponses = {
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
+        shareUserNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
     };
@@ -70685,6 +70688,7 @@ export type GetProjectResponses = {
         conversationCount: number;
         visibility: 'organization' | 'team' | 'user';
         shareTeamNames: Array<string> | null;
+        shareUserNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
         shareTeamIds: Array<string> | null;

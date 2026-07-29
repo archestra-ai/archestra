@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.3.20](https://github.com/archestra-ai/archestra/compare/platform-v1.3.19...platform-v1.3.20) (2026-07-29)
+
+
+### Features
+
+* **apps:** address an app by a custom URL slug ([#6934](https://github.com/archestra-ai/archestra/issues/6934)) ([5bbdd75](https://github.com/archestra-ai/archestra/commit/5bbdd7559c4829af067e4d71c2981c1200c7365c))
+* **apps:** share an app with specific people ([#6918](https://github.com/archestra-ai/archestra/issues/6918)) ([4fbb479](https://github.com/archestra-ai/archestra/commit/4fbb479921ce6a3e1506da83f9fdc055afb57058))
+* **knowledge:** scope GitHub repository file sync to folders ([#6927](https://github.com/archestra-ai/archestra/issues/6927)) ([6b29ac4](https://github.com/archestra-ai/archestra/commit/6b29ac4c6a016393c23378296c1a34bc94101a10))
+* **llm-cost:** price Bedrock models from the AWS Price List ([#6912](https://github.com/archestra-ai/archestra/issues/6912)) ([d45667b](https://github.com/archestra-ai/archestra/commit/d45667b329fa9bf8d83ddf05b7d09c57d27e52b9))
+* **mcp-gateway:** implement Multi Round-Trip Requests (MRTR) ([#6930](https://github.com/archestra-ai/archestra/issues/6930)) ([332fcfd](https://github.com/archestra-ai/archestra/commit/332fcfdf09c050284bc406bb969dd2c5bf0f2df0))
+* **mcp:** show which identity a tool call ran as ([#6914](https://github.com/archestra-ai/archestra/issues/6914)) ([adae9d3](https://github.com/archestra-ai/archestra/commit/adae9d3b42df9c71e96c9305433efadb7e44f78d))
+* **statistics:** per-user usage endpoint, People section, and active-users gauge ([#6911](https://github.com/archestra-ai/archestra/issues/6911)) ([2177e14](https://github.com/archestra-ai/archestra/commit/2177e1462382441de92ae83e957ab1346c6e5171))
+
+
+### Bug Fixes
+
+* **agents:** repair malformed tool calls on headless agent runs ([#6925](https://github.com/archestra-ai/archestra/issues/6925)) ([9564b5a](https://github.com/archestra-ai/archestra/commit/9564b5a6cab43299f1d19ea90d29a5d321943fc3))
+* **apps:** stop reporting unshared apps as deleted, and warn before sharing a chat that renders them ([#6905](https://github.com/archestra-ai/archestra/issues/6905)) ([cf4dce4](https://github.com/archestra-ai/archestra/commit/cf4dce47bb89a397199cc51a436e2cead5783e68))
+* **chat:** store attachments the model can't take instead of rejecting them ([#6917](https://github.com/archestra-ai/archestra/issues/6917)) ([06fd7a7](https://github.com/archestra-ai/archestra/commit/06fd7a72ec65fb6a4c0d85c936d2039c33db0a48))
+* **hackathon:** extend the Apps Hackathon close to 30 July 00:00 UTC ([#6935](https://github.com/archestra-ai/archestra/issues/6935)) ([b1f73cb](https://github.com/archestra-ai/archestra/commit/b1f73cb19c28dffb985e9700a42f5be34e57c03f))
+* **hackathon:** settle only a MID cut's chat, never a head trim's ([#6920](https://github.com/archestra-ai/archestra/issues/6920)) ([e161069](https://github.com/archestra-ai/archestra/commit/e1610696a22718295a65392ba0a873989f21c47c))
+* **hackathon:** the staging override no longer bypasses the date window ([#6936](https://github.com/archestra-ai/archestra/issues/6936)) ([558ee4c](https://github.com/archestra-ai/archestra/commit/558ee4cc9b78c670a9fb3123d4927766925088db))
+* **llm-cost:** price self-hosted providers at zero, not the $50 estimate ([#6906](https://github.com/archestra-ai/archestra/issues/6906)) ([850dfd3](https://github.com/archestra-ai/archestra/commit/850dfd396be979aa2927ce7b5060a6c8953d927e))
+* **llm-pricing:** drop Bedrock AWS price entries matched to a model family ([#6937](https://github.com/archestra-ai/archestra/issues/6937)) ([7e7ccb4](https://github.com/archestra-ai/archestra/commit/7e7ccb4571e78134ff025e53c88f68e091788962))
+* **skills:** keep built-in skill ids out of the repository filter ([#6924](https://github.com/archestra-ai/archestra/issues/6924)) ([65474c0](https://github.com/archestra-ai/archestra/commit/65474c0a065ccc5958ef231ce02a2294d08dc94b))
+* validate team assignments on agent and project write paths ([#6929](https://github.com/archestra-ai/archestra/issues/6929)) ([fd2b791](https://github.com/archestra-ai/archestra/commit/fd2b791b2bc5ca497f96fd631f8f6b83fa22d445))
+
 ## [1.3.19](https://github.com/archestra-ai/archestra/compare/platform-v1.3.18...platform-v1.3.19) (2026-07-28)
 
 

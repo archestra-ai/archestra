@@ -1096,9 +1096,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     messages: preparedMessages,
                   });
                   latestBreakdown = breakdown;
+                  // Transient: this fires before the model stream's `start`
+                  // chunk, and a non-transient pre-start data part makes the
+                  // client mint a phantom assistant message per attach (see
+                  // prepare-model-messages.ts). Consumed via onData state.
                   writer.write({
                     type: CONTEXT_WINDOW_BREAKDOWN_EVENT,
                     data: breakdown,
+                    transient: true,
                   });
                 } catch (error) {
                   // The visualizer is non-essential; never let it break a chat turn.

@@ -231,22 +231,17 @@ export function ConnectCommandPanel({
       ? urlProvider
       : (providers[0] ?? null);
 
-  // GitHub Copilot is per-user: it can only run through a personal virtual key,
-  // never the passthrough device flow, and the user must connect their own
-  // account before a command can be generated.
+  // A per-user provider (GitHub Copilot) has two auth shapes: virtual-key
+  // resolves the user's stored GitHub token server-side, so their account must
+  // be connected before a command can be generated; passthrough embeds the
+  // GitHub device flow in the setup script itself, the token never reaches the
+  // server, and there is nothing to connect up front.
   const providerIsPerUser =
     !!provider && providerRequiresPerUserCredential(provider);
   const needsPerUserConnect =
-    providerIsPerUser && !configuredProviders.has(provider);
-
-  // Per-user providers always use virtual-key auth (no passthrough tab). This
-  // is derived rather than written back into `proxyAuth`: overwriting the
-  // stored choice would flip the panel into virtual-key mode for good, which
-  // filters keyless providers out of the tabs — so picking GitHub Copilot
-  // once would hide the other providers until the next page load.
-  const effectiveProxyAuth: ConnectProxyAuth = providerIsPerUser
-    ? "virtual-key"
-    : proxyAuth;
+    providerIsPerUser &&
+    proxyAuth === "virtual-key" &&
+    !configuredProviders.has(provider);
 
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
   // The selected proxy may exist without a usable provider (e.g. virtual-key
@@ -320,7 +315,7 @@ export function ConnectCommandPanel({
     gatewayId: gateway?.id ?? null,
     proxyId: proxyActive ? proxy.id : null,
     provider: proxyActive ? provider : null,
-    proxyAuth: proxyActive ? effectiveProxyAuth : null,
+    proxyAuth: proxyActive ? proxyAuth : null,
     // Sorted so reorderings of the same selection don't regenerate.
     skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
   });
@@ -475,21 +470,6 @@ export function ConnectCommandPanel({
       ? "Add a provider API key so a virtual key can be minted from it."
       : `Add a provider API key so a virtual key can be minted from it. ${client.label} routes ${formatList(supportedNames)}, so a key for one of those unlocks the virtual-key option for this client.`;
 
-  // A per-user provider (GitHub Copilot) forces virtual-key auth, so switching
-  // the toggle back to passthrough while it's selected would re-force virtual
-  // key and appear to do nothing. Move to the first passthrough-capable provider
-  // as well, so the toggle can never strand the user in the per-user state.
-  const handleProxyAuthChange = (value: string) => {
-    const next = value as ConnectProxyAuth;
-    setProxyAuth(next);
-    if (next === "provider-key" && providerIsPerUser) {
-      const firstPassthrough = supportedProviders.find(
-        (p) => !providerRequiresPerUserCredential(p),
-      );
-      if (firstPassthrough) onProviderSelect(firstPassthrough);
-    }
-  };
-
   const proxyEditor = proxy ? (
     <div className="grid gap-3">
       {llmProxies && llmProxies.length > 1 && (
@@ -508,14 +488,9 @@ export function ConnectCommandPanel({
       )}
       <EditorField label="Auth">
         <div className="grid gap-1.5">
-          {/* The toggle stays visible even for a per-user provider (GitHub
-              Copilot), which forces virtual-key auth. Hiding it there stranded
-              the user in virtual-key mode with no way back;
-              handleProxyAuthChange moves off the per-user provider when
-              switching to passthrough, so the choice sticks. */}
           <Tabs
-            value={effectiveProxyAuth}
-            onValueChange={handleProxyAuthChange}
+            value={proxyAuth}
+            onValueChange={(value) => setProxyAuth(value as ConnectProxyAuth)}
           >
             <TabsList>
               <TabsTrigger value="provider-key">Your provider key</TabsTrigger>
@@ -523,8 +498,10 @@ export function ConnectCommandPanel({
             </TabsList>
           </Tabs>
           <p className="text-xs text-muted-foreground">
-            {effectiveProxyAuth === "provider-key" ? (
-              passthroughAttributes ? (
+            {proxyAuth === "provider-key" ? (
+              provider === "github-copilot" ? (
+                "Passthrough — the setup script runs the GitHub sign-in on your machine, so your GitHub token stays local and never reaches the server. Uses your own Copilot subscription."
+              ) : passthroughAttributes ? (
                 "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan). Your personal auth key is created for you and wired into the command via ANTHROPIC_CUSTOM_HEADERS."
               ) : (
                 "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
@@ -653,7 +630,7 @@ export function ConnectCommandPanel({
             >
               {!provider ? (
                 noVirtualKeyMessage
-              ) : effectiveProxyAuth === "virtual-key" ? (
+              ) : proxyAuth === "virtual-key" ? (
                 <>
                   Route{" "}
                   <span className="font-medium text-foreground">
@@ -676,7 +653,9 @@ export function ConnectCommandPanel({
                   <ResourceLink href="/llm/proxies">{proxy.name}</ResourceLink>{" "}
                   using{" "}
                   <span className="font-medium text-foreground">
-                    your provider key
+                    {provider === "github-copilot"
+                      ? "your GitHub account"
+                      : "your provider key"}
                   </span>{" "}
                   <RecommendationChip>
                     Good for reusing a subscription

@@ -462,6 +462,78 @@ describe("A2AManager full task mode", () => {
     expect((err as A2AError).kind).toBe(A2AErrorKind.UnsupportedOperation);
   });
 
+  test("concurrent decisions on different approvals cannot strand a fully-resolved task", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = fullManager();
+    const approvalMessageId = crypto.randomUUID();
+    executeA2AMessage.mockResolvedValue({
+      responseUiMessage: {
+        id: approvalMessageId,
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-tool-1",
+            state: "approval-requested",
+            approval: { id: "approval-1" },
+            toolCallId: "toolCall-1",
+          },
+          {
+            type: "tool-tool-2",
+            state: "approval-requested",
+            approval: { id: "approval-2" },
+            toolCallId: "toolCall-2",
+          },
+        ],
+      },
+    });
+
+    const interrupted = await sendMessage({
+      manager,
+      agentId: agent.id,
+      taskRun: { createTask: true, detached: false },
+    });
+    if (!interrupted.task) throw new Error("expected task");
+    const taskId = interrupted.task.id;
+
+    // Whichever request lands last resumes and runs the agent.
+    executeA2AMessage.mockResolvedValue({
+      messageId: approvalMessageId,
+      text: "both approved",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: approvalMessageId,
+        role: "assistant",
+        parts: [{ type: "text", text: "both approved" }],
+      },
+    });
+
+    // Two requests, each resolving a DIFFERENT approval, concurrently. The
+    // model serializes them under the task row lock; the one that lands last
+    // must observe the other's decision and resume — a fully-resolved task
+    // can never be stranded in INPUT_REQUIRED.
+    const decide = (approvalId: string) =>
+      manager.sendMessage({
+        actor,
+        agentId: agent.id,
+        request: buildApprovalDecisionSendMessageRequest({
+          taskId,
+          approvalDecisions: [{ approvalId, approved: true }],
+        }),
+      });
+    const results = await Promise.allSettled([
+      decide("approval-1"),
+      decide("approval-2"),
+    ]);
+    // Both requests are legal (they target different approvals) — neither may
+    // fail with an approval conflict.
+    expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
+
+    await waitForState(taskId, A2AProtocolTaskState.Completed);
+    expect(executeA2AMessage).toHaveBeenCalledTimes(2); // interrupt + resume
+  });
+
   test("approval resume completes as a task response with the resumed answer", async ({
     makeAgent,
   }) => {
@@ -518,6 +590,83 @@ describe("A2AManager full task mode", () => {
     expect(resumed.task.id).toBe(interrupted.task.id);
     expect(resumed.task.status.state).toBe(A2AProtocolTaskState.Completed);
     expect(resumed.task.metadata?.approvalRequests).toEqual([]);
+  });
+
+  test("a run interrupted for approval keeps ONE response artifact across the resume", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ name: "agent1", teams: [] });
+    const manager = fullManager();
+    const approvalMessageId = crypto.randomUUID();
+
+    // First run: streams a preamble, then interrupts for approval.
+    executeA2AMessage.mockImplementation(
+      async (args: { onTextDelta?: (d: string) => void }) => {
+        args.onTextDelta?.("Checking that for you. ");
+        return {
+          responseUiMessage: {
+            id: approvalMessageId,
+            role: "assistant",
+            parts: [
+              { type: "text", text: "Checking that for you. " },
+              {
+                type: "tool-tool-1",
+                state: "approval-requested",
+                approval: { id: "approval-1" },
+                toolCallId: "toolCall-1",
+              },
+            ],
+          },
+        };
+      },
+    );
+
+    const interrupted = await sendMessage({
+      manager,
+      agentId: agent.id,
+      taskRun: { createTask: true, detached: false },
+    });
+    if (!interrupted.task) throw new Error("expected task");
+
+    // Resumed run: streams the rest and completes with the full message.
+    executeA2AMessage.mockImplementation(
+      async (args: { onTextDelta?: (d: string) => void }) => {
+        args.onTextDelta?.("Done: 42.");
+        return {
+          messageId: approvalMessageId,
+          text: "Done: 42.",
+          finishReason: "stop",
+          responseUiMessage: {
+            id: approvalMessageId,
+            role: "assistant",
+            parts: [
+              { type: "text", text: "Checking that for you. " },
+              { type: "text", text: "Done: 42." },
+            ],
+          },
+        };
+      },
+    );
+
+    const resumed = await manager.sendMessage({
+      actor,
+      agentId: agent.id,
+      request: buildApprovalDecisionSendMessageRequest({
+        taskId: interrupted.task.id,
+        approvalDecisions: [{ approvalId: "approval-1", approved: true }],
+      }),
+    });
+    if (!resumed.task) throw new Error("expected task response");
+
+    // Exactly one artifact, sealed with the FULL answer spanning the
+    // interrupt — not a second artifact holding only the resumed tail.
+    expect(resumed.task.artifacts).toHaveLength(1);
+    expect(resumed.task.artifacts?.[0]?.parts).toEqual([
+      { text: "Checking that for you. Done: 42." },
+    ]);
+    expect(
+      await A2AArtifactModel.findByTaskId(interrupted.task.id),
+    ).toHaveLength(1);
   });
 
   test("task access is agent-bound; unknown and foreign tasks are indistinguishable", async ({

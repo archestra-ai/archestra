@@ -11,6 +11,7 @@ import {
 import { z } from "zod";
 import logger from "@/logging";
 import {
+  A2AArtifactModel,
   A2AMessageModel,
   A2ATaskModel,
   AgentModel,
@@ -41,6 +42,7 @@ import {
 } from "./a2a-model-manager";
 import {
   type A2AArchestraApprovalRequest,
+  A2AArchestraApprovalRequestSchema,
   type A2AArchestraTaskApprovalDecision,
   type A2AArchestraTaskOps,
   type A2AProtocolCancelTaskRequest,
@@ -637,6 +639,7 @@ export class A2AManager {
             actor,
             state: A2AProtocolTaskState.InputRequired,
             approvalRequests,
+            agentId,
             options: contextAccessOptions,
           });
 
@@ -738,7 +741,19 @@ export class A2AManager {
     const { contextId } = params;
     let task = params.task;
     const taskId = task.id;
-    const artifactId = randomUUID();
+
+    // A resumed run continues the task's existing response artifact instead
+    // of minting a second one — a task carries exactly one `agent-response`
+    // artifact across approval interrupts.
+    const existingArtifact = (await A2AArtifactModel.findByTaskId(taskId)).find(
+      (artifact) => artifact.name === RESPONSE_ARTIFACT_NAME,
+    );
+    const artifactId = existingArtifact?.id ?? randomUUID();
+
+    // Fresh liveness signal before anything else: a task resumed long after
+    // its interrupt still holds the pre-interrupt heartbeat, which would
+    // otherwise make it instantly reapable as an orphan.
+    await A2ATaskModel.touchHeartbeat(taskId);
 
     // Start transition. A freshly created task starts from SUBMITTED; a task
     // being fed new input starts from INPUT_REQUIRED. An approval resume
@@ -848,7 +863,11 @@ export class A2AManager {
         return { task: A2ATaskManager.toProtocolTask(refreshed) };
       }
 
-      const finalParts: { text: string }[] = [{ text: result.text }];
+      // Seal from the authoritative response message (which spans an
+      // approval interrupt), not `result.text` (this run's generation only).
+      const finalParts: { text: string }[] = [
+        { text: parts.map((part) => part.text ?? "").join("") },
+      ];
       await A2ATaskModel.completeRun({
         taskId,
         agentMessage,
@@ -897,13 +916,12 @@ export class A2AManager {
       const refreshed = await A2ATaskManager.loadTaskWithDataById(taskId);
       return { task: A2ATaskManager.toProtocolTask(refreshed) };
     } catch (error) {
-      if (error instanceof A2AError) {
-        throw error;
-      }
-
+      // EVERY escape path settles the task (a CAS no-op when something —
+      // cancellation, the disableApprovalFlow settle above — already did).
       // Outcome decided BEFORE persistence (an abort is a cancellation, not a
       // failure), and the terminal write must never mask the original error.
       const wasAborted = run.signal.aborted;
+      const reason = error instanceof Error ? error.message : String(error);
       try {
         if (wasAborted) {
           await A2ATaskModel.transitionStateWithEvent({
@@ -919,7 +937,14 @@ export class A2AManager {
               statusUpdate: {
                 taskId,
                 contextId,
-                status: { state: A2AProtocolTaskState.Canceled },
+                status: {
+                  state: A2AProtocolTaskState.Canceled,
+                  message: buildStatusReasonMessage({
+                    taskId,
+                    contextId,
+                    reason: "The task run was aborted.",
+                  }),
+                },
               },
             },
           });
@@ -927,8 +952,7 @@ export class A2AManager {
           await this.settleFailedRun({
             taskId,
             contextId,
-            statusReason:
-              error instanceof Error ? error.message : String(error),
+            statusReason: reason,
           });
         }
       } catch (persistError) {
@@ -962,7 +986,15 @@ export class A2AManager {
         statusUpdate: {
           taskId: params.taskId,
           contextId: params.contextId,
-          status: { state: A2AProtocolTaskState.Failed },
+          status: {
+            state: A2AProtocolTaskState.Failed,
+            // Stream followers get the same diagnostics GetTask serves.
+            message: buildStatusReasonMessage({
+              taskId: params.taskId,
+              contextId: params.contextId,
+              reason: params.statusReason,
+            }),
+          },
         },
       },
     });
@@ -983,12 +1015,25 @@ export class A2AManager {
     actor: A2AActor;
     agentId: string;
   }): Promise<A2ATaskWithData> {
-    const { task } = await A2ATaskManager.findAndValidateTaskWithContext(
-      params.taskId,
-      undefined,
-      params.actor,
-      { trustedActorAccess: Boolean(this.config.trustedContextAccess) },
-    );
+    let task: A2ATaskWithData;
+    try {
+      ({ task } = await A2ATaskManager.findAndValidateTaskWithContext(
+        params.taskId,
+        undefined,
+        params.actor,
+        { trustedActorAccess: Boolean(this.config.trustedContextAccess) },
+      ));
+    } catch (error) {
+      // Existence non-disclosure: another actor's task must answer exactly
+      // like an unknown one, not with the distinguishable context error.
+      if (
+        error instanceof A2AError &&
+        error.kind === A2AErrorKind.ContextNotFound
+      ) {
+        throw new A2AError(A2AErrorKind.TaskNotFound);
+      }
+      throw error;
+    }
     if (task.agentId && task.agentId !== params.agentId) {
       throw new A2AError(A2AErrorKind.TaskNotFound);
     }
@@ -1119,79 +1164,70 @@ export class A2AManager {
         );
       }
 
-      // UIMessage content will be mutated
-      applyApprovalDecisionsToUiMessage({
-        message: lastMessageContent,
-        approvalDecisions,
-      });
-
-      const decisionMap = new Map(
-        approvalDecisions.map((d) => [d.approvalId, d]),
-      );
-      const updatedApprovalRequests = task.approvalRequests.map((req) => {
-        const decision = decisionMap.get(req.approvalId);
-        return decision
-          ? { ...req, approved: decision.approved, resolved: true }
-          : req;
-      });
-      const hasPendingApprovalRequests = updatedApprovalRequests.some(
-        (r) => !r.resolved,
-      );
-
-      if (!hasPendingApprovalRequests) {
-        // Final decision: message update, approval-row cleanup, the
-        // INPUT_REQUIRED → WORKING CAS, and the Working event commit
-        // together. A CAS miss means a concurrent duplicate resume or a
-        // cancellation got there first.
-        const resumed = await A2ATaskModel.resumeApprovedTask({
-          taskId: task.id,
-          lastMessage: { id: lastMessage.id, content: lastMessageContent },
-          eventPayload: {
-            statusUpdate: {
-              taskId: task.id,
-              contextId: task.contextId,
-              status: { state: A2AProtocolTaskState.Working },
-            },
+      // The model applies the decisions, re-derives the message content from
+      // its FRESH database state, and resumes the task in the same
+      // transaction when the last pending decision lands. Deciding
+      // partial-vs-resume there (under the task's row lock, not from this
+      // method's snapshot) is what keeps two concurrent decisions on
+      // different approvals from both taking the partial path and stranding
+      // a fully-resolved task in INPUT_REQUIRED.
+      const result = await A2ATaskModel.applyApprovalDecisionsAndMaybeResume({
+        taskId: task.id,
+        lastMessageId: lastMessage.id,
+        approvalDecisions: approvalDecisions.map((d) => ({
+          approvalId: d.approvalId,
+          approved: d.approved,
+        })),
+        applyDecisionsToContent: (freshContent) => {
+          const message = (freshContent ?? lastMessageContent) as UIMessage;
+          applyApprovalDecisionsToUiMessage({ message, approvalDecisions });
+          return message;
+        },
+        resumeEventPayload: {
+          statusUpdate: {
+            taskId: task.id,
+            contextId: task.contextId,
+            status: { state: A2AProtocolTaskState.Working },
           },
-        });
-        if (!resumed) {
+        },
+      });
+
+      if (!("task" in result)) {
+        if (result.outcome === "task_not_input_required") {
           throw new A2AError(
             A2AErrorKind.TaskIsNotInputRequired,
             "the task was resumed or canceled concurrently",
           );
         }
-        task = { ...task, ...resumed, approvalRequests: [] };
-        return {
-          task,
-          switchedToWorkingState: true,
-          approvalDecisionsWasApplied: true,
-        };
-      }
-
-      // Partial decision: some requests still pending — persist the applied
-      // decisions atomically, task state stays INPUT_REQUIRED. The model
-      // re-checks state and resolved-ness inside the transaction, so a
-      // concurrent cancel/resume/duplicate decision surfaces here instead of
-      // silently overwriting.
-      const applied = await A2ATaskModel.applyApprovalDecisions({
-        taskId: task.id,
-        lastMessage: { id: lastMessage.id, content: lastMessageContent },
-        approvalDecisions: approvalDecisions.map((d) => ({
-          approvalId: d.approvalId,
-          approved: d.approved,
-        })),
-      });
-      if (applied === "task_not_input_required") {
-        throw new A2AError(
-          A2AErrorKind.TaskIsNotInputRequired,
-          "the task changed state while the decisions were being applied",
-        );
-      }
-      if (applied === "approval_already_resolved") {
         throw new A2AError(A2AErrorKind.ApprovalIdAlreadyResolved);
       }
-      task = { ...task, approvalRequests: updatedApprovalRequests };
-      return { task, approvalDecisionsWasApplied: true };
+
+      // Mirror the transaction's outcome into the in-memory task: fresh row,
+      // fresh approval rows, and the content the transaction persisted.
+      const refreshedHistory = [
+        ...task.history.slice(0, -1),
+        { ...lastMessage, content: result.content },
+      ];
+      const refreshedApprovals = z
+        .array(A2AArchestraApprovalRequestSchema)
+        .parse(
+          [...result.approvalRows].sort((a, b) =>
+            a.approvalId.localeCompare(b.approvalId),
+          ),
+        );
+      task = {
+        ...task,
+        ...result.task,
+        history: refreshedHistory,
+        approvalRequests:
+          result.outcome === "resumed" ? [] : refreshedApprovals,
+      };
+
+      return {
+        task,
+        switchedToWorkingState: result.outcome === "resumed",
+        approvalDecisionsWasApplied: true,
+      };
     }
 
     return { task };
@@ -1249,7 +1285,14 @@ export class A2AManager {
         statusUpdate: {
           taskId: task.id,
           contextId: task.contextId,
-          status: { state: A2AProtocolTaskState.Canceled },
+          status: {
+            state: A2AProtocolTaskState.Canceled,
+            message: buildStatusReasonMessage({
+              taskId: task.id,
+              contextId: task.contextId,
+              reason: "The task was canceled by the client.",
+            }),
+          },
         },
       },
     });
@@ -1315,11 +1358,11 @@ export class A2AManager {
       snapshot = await A2ATaskManager.loadTaskWithData(after);
     }
 
-    return {
-      task: A2ATaskManager.toProtocolTask(snapshot),
-      taskId: snapshot.id,
-      watermark,
-    };
+    // Never hand out an unstable snapshot/watermark pair — a skipped or
+    // double-applied artifact chunk is worse than asking the client to retry.
+    throw new Error(
+      `A2A task ${task.id} emitted events continuously during snapshot assembly; retry SubscribeToTask`,
+    );
   }
 
   /**
@@ -1473,6 +1516,21 @@ function decodeListTasksPageToken(token: string): {
   } catch {
     throw new A2AError(A2AErrorKind.InvalidPageToken);
   }
+}
+
+/** TaskStatus.message carrying a terminal reason (same shape GetTask serves). */
+function buildStatusReasonMessage(params: {
+  taskId: string;
+  contextId: string;
+  reason: string;
+}): A2AProtocolMessage {
+  return {
+    messageId: `${params.taskId}-status`,
+    contextId: params.contextId,
+    taskId: params.taskId,
+    role: A2AProtocolRole.Agent,
+    parts: [{ text: params.reason }],
+  };
 }
 
 function extractProtocolPartsFromUIMessage(

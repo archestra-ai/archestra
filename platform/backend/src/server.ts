@@ -1349,6 +1349,11 @@ const startWebServer = async () => {
       void activeChatRunService.reapStaleRuns();
     }, ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS);
 
+    // Same safety net for A2A task runs: the service owns its own interval
+    // (it also prunes terminal event logs), started here unconditionally so
+    // orphaned tasks get settled even on pods that never start a run.
+    a2aTaskRunService.startMaintenance();
+
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
      * inside of this server instance. Metrics are actually exposed on a different port

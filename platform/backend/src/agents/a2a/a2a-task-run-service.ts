@@ -1,6 +1,9 @@
 import logger from "@/logging";
 import { A2ATaskModel } from "@/models";
-import type { A2AProtocolStreamResponse } from "./a2a-protocol";
+import {
+  A2AProtocolRole,
+  type A2AProtocolStreamResponse,
+} from "./a2a-protocol";
 
 const DELTA_FLUSH_INTERVAL_MS = 250;
 const HEARTBEAT_INTERVAL_MS = 30 * 1000;
@@ -36,8 +39,13 @@ class A2ATaskRunService {
   private reapTimer: NodeJS.Timeout | null = null;
   private isShuttingDown = false;
 
-  get shuttingDown(): boolean {
-    return this.isShuttingDown;
+  /**
+   * Start the periodic orphan reaper / event-log pruner. Called once at
+   * server boot (like the chat run reaper), so orphaned tasks get settled
+   * even on pods that never start a run themselves.
+   */
+  startMaintenance(): void {
+    this.startReapLoopIfNeeded();
   }
 
   /**
@@ -144,24 +152,19 @@ class A2ATaskRunService {
     }
 
     const ids = Array.from(this.controllers.keys());
-    for (const id of ids) {
-      this.controllers.get(id)?.abort();
-    }
     if (ids.length === 0) {
       return;
     }
 
+    // Settle FIRST, abort second: if the aborts ran first, each run's own
+    // catch would race this write and settle its task CANCELED — but a
+    // shutdown is a failure of the server, not a client cancellation.
     try {
       const failed = await A2ATaskModel.failActiveByIds({
         ids,
         statusReason: SHUTDOWN_TASK_REASON,
-        buildEventPayload: (task) => ({
-          statusUpdate: {
-            taskId: task.id,
-            contextId: task.contextId,
-            status: { state: "TASK_STATE_FAILED" },
-          },
-        }),
+        buildEventPayload: (task) =>
+          buildFailedEventPayload(task, SHUTDOWN_TASK_REASON),
       });
       if (failed > 0) {
         logger.info({ failed }, "Failed in-flight A2A task runs on shutdown");
@@ -169,24 +172,20 @@ class A2ATaskRunService {
     } catch (error) {
       logger.error({ error }, "Failed to fail in-flight A2A task runs");
     }
+
+    for (const id of ids) {
+      this.controllers.get(id)?.abort();
+    }
   }
 
-  /**
-   * Reap orphans + prune terminal event logs. Runs on an interval while this
-   * pod has active runs, and opportunistically from task reads.
-   */
+  /** Reap orphans + prune terminal event logs (one interval tick). */
   async reapStale(): Promise<void> {
     try {
       const reaped = await A2ATaskModel.reapStaleRunning({
         staleMs: STALE_RUN_MS,
         statusReason: ORPHANED_TASK_REASON,
-        buildEventPayload: (task) => ({
-          statusUpdate: {
-            taskId: task.id,
-            contextId: task.contextId,
-            status: { state: "TASK_STATE_FAILED" },
-          },
-        }),
+        buildEventPayload: (task) =>
+          buildFailedEventPayload(task, ORPHANED_TASK_REASON),
       });
       if (reaped > 0) {
         logger.info({ reaped }, "Reaped stale A2A task runs");
@@ -215,6 +214,32 @@ class A2ATaskRunService {
 }
 
 export const a2aTaskRunService = new A2ATaskRunService();
+
+/**
+ * Terminal FAILED event carrying its reason as the status message, so
+ * stream followers see the same diagnostics GetTask serves.
+ */
+function buildFailedEventPayload(
+  task: { id: string; contextId: string },
+  reason: string,
+): A2AProtocolStreamResponse {
+  return {
+    statusUpdate: {
+      taskId: task.id,
+      contextId: task.contextId,
+      status: {
+        state: "TASK_STATE_FAILED",
+        message: {
+          messageId: `${task.id}-status`,
+          contextId: task.contextId,
+          taskId: task.id,
+          role: A2AProtocolRole.Agent,
+          parts: [{ text: reason }],
+        },
+      },
+    },
+  };
+}
 
 /**
  * Coalesces the executor's token-level text deltas into bounded chunks and
@@ -266,15 +291,28 @@ class A2ATaskDeltaBatcher {
       return await this.flushChain;
     }
 
+    // The chain must always settle resolved: a transient append failure only
+    // degrades streaming for that chunk (logged and dropped) — it must never
+    // leave the chain rejected (every later flush would rethrow it, and the
+    // lifecycle's drain would misclassify a successful run as FAILED). Losing
+    // a chunk is safe because the completion transaction seals the artifact
+    // with the authoritative full content.
     this.flushChain = this.flushChain.then(async () => {
-      const appended = await A2ATaskModel.appendRunDelta({
-        taskId: this.params.taskId,
-        eventPayload: this.params.buildDeltaEvent(chunk),
-        artifact: { ...this.params.artifact, appendText: chunk },
-      });
-      if (appended === null) {
-        this.stopped = true;
-        this.params.onTaskNoLongerActive();
+      try {
+        const appended = await A2ATaskModel.appendRunDelta({
+          taskId: this.params.taskId,
+          eventPayload: this.params.buildDeltaEvent(chunk),
+          artifact: { ...this.params.artifact, appendText: chunk },
+        });
+        if (appended === null) {
+          this.stopped = true;
+          this.params.onTaskNoLongerActive();
+        }
+      } catch (error) {
+        logger.warn(
+          { error, taskId: this.params.taskId },
+          "Failed to persist an A2A task delta chunk; dropping it",
+        );
       }
     });
 

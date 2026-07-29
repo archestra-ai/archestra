@@ -299,32 +299,57 @@ class A2ATaskModel {
   }
 
   /**
-   * Apply approval decisions that do NOT yet resume the task (some requests
-   * are still pending): the updated approval UI message and the approval-row
-   * resolutions commit together, guarded against concurrent lifecycle
-   * changes — the task must still be INPUT_REQUIRED (a cancellation or
-   * duplicate resume makes this a no-op returning "task_not_input_required"),
-   * and every decision must land on a still-unresolved row (a concurrent
-   * decision on the same approval returns "approval_already_resolved").
-   * Nothing is written on either conflict.
+   * Apply approval decisions and, when nothing is left pending, resume the
+   * task — all under the task's row lock, working from FRESH database state.
+   * Serializing the whole read-decide-write here (instead of letting the
+   * manager decide from its stale snapshot) closes two races between
+   * concurrent decisions on different approvals: both taking the "partial"
+   * path and stranding a fully-resolved task in INPUT_REQUIRED, and one
+   * message-content update overwriting the other's.
+   *
+   * Conflicts write nothing: a task no longer INPUT_REQUIRED (canceled or
+   * resumed concurrently) returns "task_not_input_required"; a decision on an
+   * already-resolved approval returns "approval_already_resolved".
    */
-  static async applyApprovalDecisions(params: {
+  static async applyApprovalDecisionsAndMaybeResume(params: {
     taskId: string;
-    lastMessage: { id: string; content: unknown };
+    lastMessageId: string;
     approvalDecisions: { approvalId: string; approved: boolean }[];
+    /**
+     * Pure transform applying the decisions to the approval UI message's
+     * CURRENT content (read fresh inside the transaction — never the
+     * caller's snapshot, which may miss a concurrent decision).
+     */
+    applyDecisionsToContent: (freshContent: unknown) => unknown;
+    /** Appended only when the task resumes (last decision landed). */
+    resumeEventPayload: A2AProtocolStreamResponse;
   }): Promise<
-    "applied" | "task_not_input_required" | "approval_already_resolved"
+    | {
+        outcome: "applied" | "resumed";
+        task: A2ATask;
+        /** All approval rows after this application, fresh from the db. */
+        approvalRows: {
+          approvalId: string;
+          toolCallId: string;
+          toolName: string;
+          approved: boolean;
+          resolved: boolean;
+        }[];
+        /** The approval message's content after the transform. */
+        content: unknown;
+      }
+    | { outcome: "task_not_input_required" | "approval_already_resolved" }
   > {
     try {
-      await db.transaction(async (tx) => {
+      return await db.transaction(async (tx) => {
         // Row-lock the task and assert its state inside the transaction; the
         // manager's earlier read is unguarded and may be stale.
-        const [task] = await tx
-          .select({ state: schema.a2aTasksTable.state })
+        const [locked] = await tx
+          .select()
           .from(schema.a2aTasksTable)
           .where(eq(schema.a2aTasksTable.id, params.taskId))
           .for("update");
-        if (task?.state !== "TASK_STATE_INPUT_REQUIRED") {
+        if (locked?.state !== "TASK_STATE_INPUT_REQUIRED") {
           throw new ApprovalConflictError("task_not_input_required");
         }
 
@@ -348,62 +373,74 @@ class A2ATaskModel {
           }
         }
 
+        // Re-apply the decisions onto the message's CURRENT content.
+        const [message] = await tx
+          .select({ content: schema.a2aMessagesTable.content })
+          .from(schema.a2aMessagesTable)
+          .where(eq(schema.a2aMessagesTable.id, params.lastMessageId));
+        const content = params.applyDecisionsToContent(message?.content);
         await tx
           .update(schema.a2aMessagesTable)
-          .set({ content: params.lastMessage.content, updatedAt: new Date() })
-          .where(eq(schema.a2aMessagesTable.id, params.lastMessage.id));
+          .set({ content, updatedAt: new Date() })
+          .where(eq(schema.a2aMessagesTable.id, params.lastMessageId));
+
+        const approvalRows = await tx
+          .select({
+            approvalId: schema.a2aTaskApprovalRequestsTable.approvalId,
+            toolCallId: schema.a2aTaskApprovalRequestsTable.toolCallId,
+            toolName: schema.a2aTaskApprovalRequestsTable.toolName,
+            approved: schema.a2aTaskApprovalRequestsTable.approved,
+            resolved: schema.a2aTaskApprovalRequestsTable.resolved,
+          })
+          .from(schema.a2aTaskApprovalRequestsTable)
+          .where(eq(schema.a2aTaskApprovalRequestsTable.taskId, params.taskId));
+
+        const stillPending = approvalRows.some((row) => !row.resolved);
+        if (stillPending) {
+          return {
+            outcome: "applied" as const,
+            task: locked,
+            approvalRows,
+            content,
+          };
+        }
+
+        // Last pending decision just landed: resume in the same transaction.
+        // The CAS cannot lose — we hold the row lock and asserted the state.
+        const resumed = await A2ATaskModel.transitionInTx(tx, {
+          id: params.taskId,
+          to: "TASK_STATE_WORKING",
+          allowedFrom: ["TASK_STATE_INPUT_REQUIRED"],
+        });
+        if (!resumed) {
+          throw new Error(
+            `A2A task ${params.taskId} resume CAS failed under row lock`,
+          );
+        }
+        // The task is leaving the approval flow; the rows served their
+        // purpose (final values live on in the UI message).
+        await tx
+          .delete(schema.a2aTaskApprovalRequestsTable)
+          .where(eq(schema.a2aTaskApprovalRequestsTable.taskId, params.taskId));
+        await A2ATaskModel.appendEventInTx(
+          tx,
+          params.taskId,
+          params.resumeEventPayload,
+        );
+
+        return {
+          outcome: "resumed" as const,
+          task: resumed,
+          approvalRows,
+          content,
+        };
       });
     } catch (error) {
       if (error instanceof ApprovalConflictError) {
-        return error.conflict;
+        return { outcome: error.conflict };
       }
       throw error;
     }
-    return "applied";
-  }
-
-  /**
-   * Resume an approval task whose last pending decisions just resolved: CAS
-   * INPUT_REQUIRED → WORKING first (a concurrent duplicate resume or
-   * cancellation makes this return null with nothing written), then commit
-   * the decision-bearing message update, approval-row cleanup, and the
-   * Working event together.
-   */
-  static async resumeApprovedTask(params: {
-    taskId: string;
-    /** The approval UI message with every decision already applied to it. */
-    lastMessage: { id: string; content: unknown };
-    eventPayload: A2AProtocolStreamResponse;
-  }): Promise<A2ATask | null> {
-    return await db.transaction(async (tx) => {
-      const task = await A2ATaskModel.transitionInTx(tx, {
-        id: params.taskId,
-        to: "TASK_STATE_WORKING",
-        allowedFrom: ["TASK_STATE_INPUT_REQUIRED"],
-      });
-      if (!task) {
-        return null;
-      }
-
-      await tx
-        .update(schema.a2aMessagesTable)
-        .set({ content: params.lastMessage.content, updatedAt: new Date() })
-        .where(eq(schema.a2aMessagesTable.id, params.lastMessage.id));
-
-      // The task is leaving the approval flow; the rows served their purpose
-      // (their final approved/rejected values live on in the UI message).
-      await tx
-        .delete(schema.a2aTaskApprovalRequestsTable)
-        .where(eq(schema.a2aTaskApprovalRequestsTable.taskId, params.taskId));
-
-      await A2ATaskModel.appendEventInTx(
-        tx,
-        params.taskId,
-        params.eventPayload,
-      );
-
-      return task;
-    });
   }
 
   /**
@@ -435,21 +472,17 @@ class A2ATaskModel {
     buildEventPayload: (task: A2ATask) => A2AProtocolStreamResponse;
   }): Promise<number> {
     const cutoff = new Date(Date.now() - params.staleMs);
+    // Reapability is opt-in via the heartbeat: only full-task-mode runs (and
+    // the migration backfill for pre-existing active rows) ever write
+    // last_heartbeat_at. Approval-only (ChatOps) tasks never heartbeat, so
+    // this can never fail one of their live runs.
     const stale = await db
       .select()
       .from(schema.a2aTasksTable)
       .where(
         and(
           inArray(schema.a2aTasksTable.state, ACTIVE_RUN_STATES),
-          or(
-            isNull(schema.a2aTasksTable.lastHeartbeatAt),
-            lt(schema.a2aTasksTable.lastHeartbeatAt, cutoff),
-          ),
-          // Legacy rows without heartbeats: fall back to row age.
-          or(
-            sql`${schema.a2aTasksTable.lastHeartbeatAt} IS NOT NULL`,
-            lt(schema.a2aTasksTable.createdAt, cutoff),
-          ),
+          lt(schema.a2aTasksTable.lastHeartbeatAt, cutoff),
         ),
       );
 

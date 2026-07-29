@@ -34,10 +34,12 @@ CREATE INDEX "a2a_task_agent_state_changed_idx" ON "a2a_task" USING btree ("agen
 CREATE INDEX "a2a_task_active_heartbeat_idx" ON "a2a_task" USING btree ("last_heartbeat_at") WHERE "a2a_task"."state" IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING');--> statement-breakpoint
 -- Backfill: every code path that writes tasks from this release on also sets
 -- state_changed_at (protocol TaskStatus.timestamp + the ListTasks ordering /
--- cursor key) and, for active runs, last_heartbeat_at (the orphan-reaper
--- signal). Pre-existing rows get their best available approximations so
--- ordering needs no COALESCE and legacy WORKING rows are reapable rather
--- than immortal. a2a_task is small (rows exist only for approval
--- interrupts), so this unbounded UPDATE is a brief, bounded lock in practice.
+-- cursor key), so pre-existing rows get their best approximation and
+-- ordering needs no COALESCE. Reapability is opt-in via last_heartbeat_at:
+-- it is backfilled ONLY for active-state rows that have been quiet for over
+-- an hour — the immortal WORKING rows older releases could strand — never
+-- for recently-updated rows, which may be live approval runs mid-deploy.
+-- a2a_task is small (rows exist only for approval interrupts), so these
+-- unbounded UPDATEs hold their locks only briefly.
 UPDATE "a2a_task" SET "state_changed_at" = "updated_at" WHERE "state_changed_at" IS NULL;--> statement-breakpoint
-UPDATE "a2a_task" SET "last_heartbeat_at" = "updated_at" WHERE "last_heartbeat_at" IS NULL AND "state" IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING');
+UPDATE "a2a_task" SET "last_heartbeat_at" = "updated_at" WHERE "last_heartbeat_at" IS NULL AND "state" IN ('TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING') AND "updated_at" < now() - interval '1 hour';

@@ -553,6 +553,14 @@ const MessageThread = ({
                             if (isBlankReasoningPart(part)) {
                               return null;
                             }
+                            // One accordion per part, deliberately. Chat folds
+                            // adjacent thinking into runs, but that helper
+                            // models chat's visible-part set, which this view
+                            // does not share — it draws blocked-tool, dual-LLM
+                            // and policy-denied blocks the helper would treat
+                            // as invisible and merge across, reordering the
+                            // transcript. Tool cards here separate thinking
+                            // anyway, so the folding has little to do.
                             return (
                               <Reasoning
                                 key={partKey}

@@ -422,40 +422,12 @@ describe("ConnectCommandPanel", () => {
   });
 
   describe("per-user provider (GitHub Copilot)", () => {
-    it("generates a passthrough command by default — no connect gate", async () => {
+    it("shows a connect gate instead of the command when the user has no Copilot key", async () => {
       availableKeysMock.mockReturnValue({ data: [] });
       renderPanel({
         client: findClient("copilot-cli"),
         urlProvider: "github-copilot",
       });
-
-      // Passthrough embeds the GitHub sign-in in the setup script itself, so
-      // there is nothing to connect up front.
-      await waitFor(() =>
-        expect(createSetupMock).toHaveBeenCalledWith(
-          expect.objectContaining({
-            provider: "github-copilot",
-            proxyAuth: "provider-key",
-          }),
-        ),
-      );
-      expect(
-        screen.queryByRole("button", { name: /Sign in with GitHub/i }),
-      ).not.toBeInTheDocument();
-    });
-
-    it("shows a connect gate in virtual-key mode when the user has no Copilot key", async () => {
-      availableKeysMock.mockReturnValue({ data: [] });
-      const user = userEvent.setup();
-      renderPanel({
-        client: findClient("copilot-cli"),
-        urlProvider: "github-copilot",
-      });
-
-      await screen.findByText(COMMAND);
-      createSetupMock.mockClear();
-      await user.click(screen.getByTestId("connect-change-proxy"));
-      await user.click(screen.getByRole("tab", { name: "Virtual key" }));
 
       expect(
         await screen.findByRole("button", { name: /Sign in with GitHub/i }),
@@ -472,9 +444,6 @@ describe("ConnectCommandPanel", () => {
         urlProvider: "github-copilot",
       });
 
-      await screen.findByText(COMMAND);
-      await user.click(screen.getByTestId("connect-change-proxy"));
-      await user.click(screen.getByRole("tab", { name: "Virtual key" }));
       await user.click(
         await screen.findByRole("button", { name: /Sign in with GitHub/i }),
       );
@@ -491,6 +460,9 @@ describe("ConnectCommandPanel", () => {
     });
 
     it("keeps the full provider tab list after picking GitHub Copilot", async () => {
+      // Copilot forces virtual-key auth, but only while it is selected. It
+      // must not overwrite the stored auth mode — that would filter every
+      // keyless provider out of the tabs until the next page load.
       availableKeysMock.mockReturnValue({ data: [] });
       const copilotCli = findClient("copilot-cli");
       const { rerender } = renderPanel({ client: copilotCli });
@@ -503,8 +475,7 @@ describe("ConnectCommandPanel", () => {
         screen.getByRole("button", { name: "GitHub Copilot" }),
       ).toBeVisible();
 
-      // Picking Copilot lands in the URL provider prop and generates a
-      // passthrough command right away.
+      // Picking Copilot lands in the URL provider prop.
       rerender(
         <ConnectCommandPanel
           {...renderPanelProps({
@@ -513,14 +484,7 @@ describe("ConnectCommandPanel", () => {
           })}
         />,
       );
-      await waitFor(() =>
-        expect(createSetupMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({
-            provider: "github-copilot",
-            proxyAuth: "provider-key",
-          }),
-        ),
-      );
+      await screen.findByRole("button", { name: /Sign in with GitHub/i });
       // The other providers stay offered so the user can switch back.
       expect(screen.getByRole("button", { name: "OpenAI" })).toBeVisible();
 
@@ -540,22 +504,17 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
-    it("generates a virtual-key command once a Copilot key exists", async () => {
+    it("generates the command normally once a Copilot key exists", async () => {
       availableKeysMock.mockReturnValue({
         data: [{ provider: "github-copilot" }],
       });
-      const user = userEvent.setup();
       renderPanel({
         client: findClient("copilot-cli"),
         urlProvider: "github-copilot",
       });
 
-      await screen.findByText(COMMAND);
-      await user.click(screen.getByTestId("connect-change-proxy"));
-      await user.click(screen.getByRole("tab", { name: "Virtual key" }));
-
       await waitFor(() =>
-        expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect(createSetupMock).toHaveBeenCalledWith(
           expect.objectContaining({
             provider: "github-copilot",
             proxyAuth: "virtual-key",
@@ -592,33 +551,21 @@ describe("ConnectCommandPanel", () => {
       ).toBeInTheDocument();
     });
 
-    it("keeps GitHub Copilot selected when switching back to passthrough", async () => {
+    it("switches back to passthrough off the per-user provider so the choice sticks", async () => {
       availableKeysMock.mockReturnValue({ data: [] });
       const onProviderSelect = vi.fn();
       const user = userEvent.setup();
-      renderPanel({
-        client: findClient("copilot-cli"),
-        urlProvider: "github-copilot",
-        onProviderSelect,
-      });
+      renderPanel({ client: findClient("copilot-cli"), onProviderSelect });
 
       await screen.findByText(COMMAND);
       await user.click(screen.getByTestId("connect-change-proxy"));
       await user.click(screen.getByRole("tab", { name: "Virtual key" }));
       await screen.findByRole("button", { name: /Sign in with GitHub/i });
 
-      // Passthrough needs no per-user connection, so switching back keeps the
-      // provider and regenerates the passthrough command.
+      // Clicking back to passthrough moves off GitHub Copilot (which forces
+      // virtual-key) to the first passthrough-capable provider.
       await user.click(screen.getByRole("tab", { name: "Your provider key" }));
-      expect(onProviderSelect).not.toHaveBeenCalled();
-      await waitFor(() =>
-        expect(createSetupMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({
-            provider: "github-copilot",
-            proxyAuth: "provider-key",
-          }),
-        ),
-      );
+      expect(onProviderSelect).toHaveBeenCalledWith("openai");
     });
   });
 });

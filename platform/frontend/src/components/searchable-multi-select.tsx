@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { matchesSearchTokens } from "@/lib/search-tokens";
 import { cn } from "@/lib/utils";
 
 interface SearchableMultiSelectProps {
@@ -28,6 +29,11 @@ interface SearchableMultiSelectProps {
   className?: string;
   disabled?: boolean;
   emptyMessage?: string;
+  /**
+   * Lifts the typed query so a caller can search server-side. The list is
+   * still filtered locally, so a caller that ignores this keeps working.
+   */
+  onSearchQueryChange?: (value: string) => void;
   showSearchIcon?: boolean;
   contentClassName?: string;
   contentSide?: PopoverContentProps["side"];
@@ -49,6 +55,7 @@ export function SearchableMultiSelect({
   className,
   disabled = false,
   emptyMessage = "No results found.",
+  onSearchQueryChange,
   showSearchIcon = true,
   contentClassName,
   contentSide,
@@ -66,9 +73,8 @@ export function SearchableMultiSelect({
   const filteredItems = React.useMemo(() => {
     if (!searchQuery) return items;
 
-    const query = searchQuery.toLowerCase();
     return items.filter((item) =>
-      (item.searchText ?? item.label).toLowerCase().includes(query),
+      matchesSearchTokens(searchQuery, [item.searchText ?? item.label]),
     );
   }, [items, searchQuery]);
 
@@ -180,7 +186,10 @@ export function SearchableMultiSelect({
             aria-label={searchPlaceholder || "Search options"}
             placeholder={searchPlaceholder}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              onSearchQueryChange?.(e.target.value);
+            }}
             className="flex w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>

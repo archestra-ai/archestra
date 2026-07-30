@@ -2647,6 +2647,13 @@
       "when": 1785410080767,
       "tag": "0377_right_penance",
       "breakpoints": true
+    },
+    {
+      "idx": 378,
+      "version": "7",
+      "when": 1785435854283,
+      "tag": "0378_user_name_email_trgm_idx",
+      "breakpoints": true
     }
   ]
 }

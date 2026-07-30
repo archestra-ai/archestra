@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import pg from "pg";
 import logger from "@/logging";
 
@@ -47,6 +48,23 @@ export interface PgNotifyHub {
 }
 
 /**
+ * Ceiling applied to a caller's fallback timeout while notification delivery
+ * is unproven.
+ *
+ * Callers pass the timeout they want when notifications work — seconds, since
+ * a notify normally carries the latency. When nothing is being delivered that
+ * same number becomes the *only* wake-up, and a 30-second Stop button is not
+ * acceptable. Rather than making every feature carry two intervals and an
+ * operator switch to choose between them, the hub tightens its own fallback
+ * for exactly as long as it cannot prove delivery works.
+ */
+const UNVERIFIED_DELIVERY_POLL_CEILING_MS = 500;
+
+/** Channel the hub notifies itself on to prove notifications arrive. */
+const DELIVERY_PROBE_CHANNEL = "archestra_notify_probe";
+const DELIVERY_PROBE_TIMEOUT_MS = 2_000;
+
+/**
  * Hub that never talks to Postgres: waiters are woken only by their own
  * timeout. Used when the database endpoint cannot hold a session-stable
  * listener — PgBouncer in transaction-pooling mode, or a managed proxy that
@@ -57,7 +75,40 @@ export function createPollingNotifyHub(): PgNotifyHub {
     channel: () => ({
       async notify() {},
       async wait(params) {
-        await sleepWithAbort(params.timeoutMs, params.abortSignal);
+        await sleepWithAbort(
+          Math.min(params.timeoutMs, UNVERIFIED_DELIVERY_POLL_CEILING_MS),
+          params.abortSignal,
+        );
+      },
+    }),
+    async close() {},
+  };
+}
+
+/**
+ * Hub confined to this process: waiters are woken by publishes from the same
+ * pod, and nothing crosses a replica boundary. Delivery is immediate and
+ * always works, so no fallback tightening applies.
+ */
+export function createInMemoryNotifyHub(): PgNotifyHub {
+  const waitersByChannel = new Map<string, KeyWaiters>();
+  const waiters = (name: string) => {
+    const existing = waitersByChannel.get(name);
+    if (existing) {
+      return existing;
+    }
+    const created = new KeyWaiters();
+    waitersByChannel.set(name, created);
+    return created;
+  };
+
+  return {
+    channel: (name) => ({
+      async notify(key) {
+        waiters(name).notify(key);
+      },
+      async wait(params) {
+        await waiters(name).wait(params);
       },
     }),
     async close() {},
@@ -76,6 +127,12 @@ export class PostgresNotifyHub implements PgNotifyHub {
   private client: PgClient | null = null;
   private connectPromise: Promise<void> | null = null;
   private readonly waitersByChannel = new Map<string, KeyWaiters>();
+  /** Set once a notification has been observed completing the round trip. */
+  private deliveryVerified = false;
+  private pendingProbe: {
+    token: string;
+    resolve: (received: boolean) => void;
+  } | null = null;
 
   constructor(
     private readonly connectionString: string,
@@ -90,10 +147,18 @@ export class PostgresNotifyHub implements PgNotifyHub {
     return {
       notify: (key) => this.publish(name, key),
       wait: async (params) => {
+        // Tighten the fallback until a notification has been observed making
+        // the full round trip. Behind a transaction pooler LISTEN is accepted
+        // and then silently never fires, so "connected" proves nothing — only
+        // a delivered notification does.
+        const timeoutMs = this.deliveryVerified
+          ? params.timeoutMs
+          : Math.min(params.timeoutMs, UNVERIFIED_DELIVERY_POLL_CEILING_MS);
+
         // Register before connecting. `KeyWaiters.wait` enrolls the waiter
         // synchronously, so a notify published during the connect handshake
         // still wakes it instead of being dropped on the floor.
-        const waiting = this.waiters(name).wait(params);
+        const waiting = this.waiters(name).wait({ ...params, timeoutMs });
 
         // Connect lazily on first wait so a pod that never subscribes never
         // opens a listener connection.
@@ -162,9 +227,16 @@ export class PostgresNotifyHub implements PgNotifyHub {
     client.on("notification", (notification) => {
       const { channel, payload } = notification as pg.Notification;
       const key = parseKey(payload);
-      if (key) {
-        this.waiters(channel).notify(key);
+      if (!key) {
+        return;
       }
+      if (channel === DELIVERY_PROBE_CHANNEL) {
+        if (this.pendingProbe?.token === key) {
+          this.pendingProbe.resolve(true);
+        }
+        return;
+      }
+      this.waiters(channel).notify(key);
     });
     client.on("error", (error) => {
       logger.warn({ error }, "Postgres notify connection error");
@@ -185,12 +257,59 @@ export class PostgresNotifyHub implements PgNotifyHub {
       await client.connect();
       // Re-LISTEN every registered channel: after a reconnect the old
       // subscriptions died with the session.
+      await client.query(`LISTEN ${quoteIdentifier(DELIVERY_PROBE_CHANNEL)}`);
       for (const channel of this.waitersByChannel.keys()) {
         await client.query(`LISTEN ${quoteIdentifier(channel)}`);
       }
+      void this.verifyDelivery(client);
     } catch (error) {
       await this.resetClient(client);
       throw error;
+    }
+  }
+
+  /**
+   * Send a notification to ourselves and see whether it comes back.
+   *
+   * The failure this exists to catch is silent: PgBouncer in transaction
+   * pooling accepts `LISTEN`, returns success, and then hands the backend to
+   * another client — so the subscription is real but nothing is ever
+   * delivered. No error surfaces, and asking the operator to know their pooler
+   * topology has been the workaround. Measuring the actual round trip is both
+   * more reliable and one less thing to configure.
+   *
+   * Never throws and never blocks a waiter: until it succeeds the hub simply
+   * keeps its fallback tight, which is the same behavior as not having
+   * notifications at all.
+   */
+  private async verifyDelivery(client: PgClient): Promise<void> {
+    const token = randomUUID();
+    const received = new Promise<boolean>((resolve) => {
+      this.pendingProbe = { token, resolve };
+      setTimeout(() => resolve(false), DELIVERY_PROBE_TIMEOUT_MS).unref?.();
+    });
+
+    try {
+      await client.query("select pg_notify($1, $2)", [
+        DELIVERY_PROBE_CHANNEL,
+        JSON.stringify({ key: token }),
+      ]);
+    } catch {
+      // A publish failure is handled by the normal reconnect path.
+      return;
+    }
+
+    const verified = await received;
+    this.pendingProbe = null;
+    if (this.client !== client) {
+      return;
+    }
+
+    this.deliveryVerified = verified;
+    if (!verified) {
+      logger.warn(
+        "Postgres notifications are not being delivered on this connection (a transaction-pooling endpoint cannot hold a LISTEN). Streams stay correct and fall back to polling; point ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL at a direct or session-pooled endpoint to restore push wake-ups.",
+      );
     }
   }
 
@@ -201,6 +320,8 @@ export class PostgresNotifyHub implements PgNotifyHub {
 
     this.client = null;
     this.connectPromise = null;
+    // A new session has to prove itself again.
+    this.deliveryVerified = false;
     await client.end().catch((error) => {
       logger.warn({ error }, "Failed to close the Postgres notify connection");
     });

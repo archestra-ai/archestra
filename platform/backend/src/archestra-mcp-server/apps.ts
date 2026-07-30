@@ -116,8 +116,37 @@ const toolsField = z
 
 const ScaffoldAppToolSchema = ScaffoldAppSchema.extend({ tools: toolsField });
 
+/**
+ * An app is addressed by id, but a user naming one in chat gives its *name*
+ * ("open the deploy dashboard"). Zod's stock "Invalid UUID" names no way out of
+ * that, and the model's usual recovery — asking the user to paste an id — is
+ * exactly the dead end this steer exists to prevent: it says which tool turns a
+ * name into an id. Built at parse time (not module load) so a white-labeled
+ * deployment names the tool as that org's models actually see it.
+ *
+ * Apps are name-unique per author, not per organization, so two authors can
+ * both own an "Onboarding" app; resolving a bare name inside every tool would
+ * silently pick one. Listing is the honest disambiguation step.
+ */
+function appIdField(description: string) {
+  return z
+    .string()
+    .uuid({
+      error: () =>
+        `Invalid UUID — this must be an app id, not an app name. Call ${archestraMcpBranding.getToolName(
+          TOOL_LIST_APPS_SHORT_NAME,
+        )} with the name to look up its id, then call this tool again with that id. Do not ask the user for the id.`,
+    })
+    .describe(description);
+}
+
 const ListAppsSchema = z.strictObject({
-  name: z.string().optional().describe("Filter by name (substring match)."),
+  name: z
+    .string()
+    .optional()
+    .describe(
+      "Filter by name. Each whitespace-separated word must appear in the name or description, in any order — so a remembered name matches even when its word order or punctuation differs from how the app was saved.",
+    ),
   labels: z
     .array(LabelInputSchema)
     .optional()
@@ -128,11 +157,11 @@ const ListAppsSchema = z.strictObject({
 });
 
 const GetAppSchema = z.strictObject({
-  appId: z.string().uuid().describe("The app id."),
+  appId: appIdField("The app id."),
 });
 
 const ReadAppSchema = z.strictObject({
-  appId: z.string().uuid().describe("The app id."),
+  appId: appIdField("The app id."),
   version: z
     .number()
     .int()
@@ -158,7 +187,7 @@ const ReadAppSchema = z.strictObject({
 });
 
 const EditAppSchema = z.strictObject({
-  appId: z.string().uuid().describe("The app id."),
+  appId: appIdField("The app id."),
   baseVersion: z
     .number()
     .int()
@@ -209,7 +238,7 @@ const EditAppSchema = z.strictObject({
 });
 
 const PreviewAppToolSchema = z.strictObject({
-  appId: z.string().uuid().describe("The app id whose assigned tool to run."),
+  appId: appIdField("The app id whose assigned tool to run."),
   toolName: z
     .string()
     .min(1)
@@ -234,7 +263,7 @@ const PreviewAppToolOutputSchema = z.object({
 });
 
 const GetAppDiagnosticsSchema = z.strictObject({
-  appId: z.string().uuid().describe("The app id."),
+  appId: appIdField("The app id."),
 });
 
 const GetAppDiagnosticsOutputSchema = z.object({
@@ -253,7 +282,7 @@ const GetAppDiagnosticsOutputSchema = z.object({
 });
 
 const DeleteAppSchema = z.strictObject({
-  appId: z.string().uuid().describe("The app id."),
+  appId: appIdField("The app id."),
 });
 
 const AppSummaryOutputSchema = z.object({
@@ -300,11 +329,11 @@ const ReadAppOutputSchema = z.object({
 });
 
 const ValidateAppSchema = z.strictObject({
-  appId: z.string().uuid().describe("The app id to validate."),
+  appId: appIdField("The app id to validate."),
 });
 
 const PublishAppSchema = z.strictObject({
-  appId: z.string().uuid().describe("The app id to publish."),
+  appId: appIdField("The app id to publish."),
   scope: z
     .enum(["team", "org"])
     .describe(
@@ -363,7 +392,7 @@ const AppMutationOutputSchema = AppSummaryOutputSchema.extend({
 });
 
 const SetAppToolsSchema = z.strictObject({
-  appId: z.string().uuid().describe("The app id whose tools to set."),
+  appId: appIdField("The app id whose tools to set."),
   // Required (unlike scaffold_app's optional tools param) so an omitted field is
   // a loud schema error, never a silent wipe; pass [] to deliberately clear.
   tools: z
@@ -784,7 +813,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_RENDER_APP_SHORT_NAME,
     title: "Render App",
     description:
-      "Render an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /a/<slug>, falling back to /a/<id>. This only displays the app — to read its HTML source use read_app, and to check how it rendered (runtime errors / CSP violations) use get_app_diagnostics or validate_app.",
+      "Render an existing app by id, if the caller may view it. Use this when the user asks to open, show, or get back to an app: when called from the chat UI the app is rendered inline in the conversation; its standalone page is /a/<slug>, falling back to /a/<id>. When the user names the app instead of giving an id, call list_apps with that name to look the id up — never ask the user for it. This only displays the app — to read its HTML source use read_app, and to check how it rendered (runtime errors / CSP violations) use get_app_diagnostics or validate_app.",
     schema: GetAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {

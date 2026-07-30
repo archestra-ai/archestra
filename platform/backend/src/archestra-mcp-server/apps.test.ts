@@ -361,6 +361,65 @@ describe("app tool execution", () => {
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("Team-scoped");
   });
+
+  describe("finding an app by name", () => {
+    async function listByName(name: string) {
+      const listed = await executeArchestraTool(
+        getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+        { name },
+        context,
+      );
+      return structured(listed).apps.map((a: any) => a.name) as string[];
+    }
+
+    test("matches each word separately, so word order and punctuation need not be reproduced", async () => {
+      await scaffold({ name: "Merge Queue — Take a Number" });
+
+      // How a user names it in chat: same words, none of the saved
+      // punctuation. A single whole-string LIKE misses every one of these.
+      expect(await listByName("merge queue take a number")).toEqual([
+        "Merge Queue — Take a Number",
+      ]);
+      expect(await listByName("queue merge")).toEqual([
+        "Merge Queue — Take a Number",
+      ]);
+      expect(await listByName("Merge Queue")).toEqual([
+        "Merge Queue — Take a Number",
+      ]);
+    });
+
+    test("extra words still narrow rather than widen", async () => {
+      await scaffold({ name: "Deploy Dashboard" });
+      await scaffold({ name: "Revenue Dashboard" });
+
+      expect(await listByName("dashboard")).toHaveLength(2);
+      expect(await listByName("deploy dashboard")).toEqual([
+        "Deploy Dashboard",
+      ]);
+      // Every token must appear: no app carries both product words.
+      expect(await listByName("deploy revenue")).toEqual([]);
+    });
+
+    test("passing a name where an id belongs steers to list_apps instead of the user", async () => {
+      await scaffold({ name: "Deploy Dashboard" });
+
+      const rendered = await executeArchestraTool(
+        getArchestraToolFullName(TOOL_RENDER_APP_SHORT_NAME),
+        { appId: "Deploy Dashboard" },
+        context,
+      );
+
+      expect(rendered.isError).toBe(true);
+      const text = (rendered.content[0] as any).text as string;
+      // The recovery path has to be in the message: bare "Invalid UUID" is what
+      // sends a model back to the user asking them to paste an id.
+      expect(text).toContain(
+        getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+      );
+      expect(text).toContain("not an app name");
+      expect(text).toContain("Do not ask the user for the id");
+    });
+  });
 });
 
 describe("read_app / edit_app", () => {

@@ -2130,7 +2130,7 @@ Required RBAC permission: `app:read`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | `string` | No | Filter by name (substring match). |
+| `name` | `string` | No | Filter by name. Each whitespace-separated word must appear in the name or description, in any order — so a remembered name matches even when its word order or punctuation differs from how the app was saved. |
 | `labels` | `object[]` | No | Filter by labels. AND across keys, OR within the values given for the same key. |
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |

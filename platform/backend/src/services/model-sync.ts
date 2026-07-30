@@ -26,15 +26,15 @@ import {
 import {
   type CrossProviderMetadata,
   type CrossProviderPrices,
+  registryLookupCandidates,
   resolveCrossProviderMetadata,
   resolveCrossProviderPrices,
   resolveSelfHostedModelMetadata,
-  stripModelDateSuffix,
 } from "@/services/cross-provider-pricing";
 import {
-  type OpenAiPublishedPrices,
-  resolveOpenAiPublishedPrices,
-} from "@/services/openai-published-pricing";
+  resolveVendorPublishedPrices,
+  type VendorPublishedPrices,
+} from "@/services/vendor-published-pricing";
 import type {
   CreateModel,
   ModelInputModality,
@@ -307,9 +307,10 @@ export function buildModelsToUpsert(params: {
       modelId: model.id,
       underlyingModelName: model.underlyingModelName,
     });
-    // Fills the Codex and chat-latest models the registry never backfilled,
-    // which would otherwise reach the same fabricated estimate.
-    const publishedPrices = resolveOpenAiPublishedPrices({
+    // Fills models the registry omits, or lists with an empty cost, from the
+    // rate their own vendor publishes — otherwise they reach the same
+    // fabricated estimate.
+    const publishedPrices = resolveVendorPublishedPrices({
       provider,
       modelId: model.id,
     });
@@ -465,7 +466,7 @@ export function resolveModelCapabilities(params: {
   /** Prices published by AWS for a Bedrock model. Used where the registry has none. */
   awsPrices?: BedrockAwsPrices | null;
   /** Prices published by OpenAI. Used where the registry has none. */
-  publishedPrices?: OpenAiPublishedPrices | null;
+  publishedPrices?: VendorPublishedPrices | null;
   /** Underlying vendor model name, when the fetcher can determine it (Azure). */
   underlyingModelName?: string | null;
 }): ProviderModelCapabilities {
@@ -574,12 +575,13 @@ function lookupModelsDevCapabilities(
   capabilitiesMap: Map<string, ProviderModelCapabilities>,
   modelId: string,
 ): ProviderModelCapabilities | undefined {
-  const exact = capabilitiesMap.get(modelId);
-  if (exact) {
-    return exact;
+  for (const candidate of registryLookupCandidates(modelId)) {
+    const found = capabilitiesMap.get(candidate);
+    if (found) {
+      return found;
+    }
   }
-  const dateless = stripModelDateSuffix(modelId);
-  return dateless === modelId ? undefined : capabilitiesMap.get(dateless);
+  return undefined;
 }
 
 /**

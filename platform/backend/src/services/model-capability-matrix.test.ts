@@ -11,7 +11,7 @@ import type {
 import { resolveDiscoveredModelRegistryEntry } from "./cross-provider-pricing";
 import { enrichDiscoveredModel } from "./discovered-model-enrichment";
 import { buildModelsToUpsert } from "./model-sync";
-import { lookupOpenAiPublishedPrices } from "./openai-published-pricing";
+import { lookupVendorPublishedPrices } from "./vendor-published-pricing";
 
 /**
  * Black-box matrix over model metadata resolution: given a provider, a model id
@@ -185,6 +185,15 @@ const MODELS_DEV: ModelsDevApiResponse = {
           output: ["text"],
         },
         tool_call: true,
+      },
+      // Carried by the registry with an empty cost: Google publishes a rate for
+      // Gemma, models.dev has not recorded it.
+      "gemma-4-26b-a4b-it": {
+        id: "gemma-4-26b-a4b-it",
+        name: "Gemma 4 26B",
+        cost: {},
+        limit: { context: 262144, output: 32768 },
+        modalities: { input: ["text", "image"], output: ["text"] },
       },
     },
   },
@@ -986,6 +995,31 @@ const MATRIX: MatrixRow[] = [
     },
   },
 
+  {
+    name: "gemini/gemma-4-26b-a4b-it-maas — Vertex's serverless id, priced from Google's own list",
+    provider: "gemini",
+    modelId: "gemma-4-26b-a4b-it-maas",
+    expected: {
+      // Limits and modalities come from the registry entry, which resolves once
+      // the `-maas` suffix is off; only its cost was missing.
+      contextLength: 262144,
+      outputLength: 32768,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      // The registry entry states no tool support either way, and unknown is
+      // reported rather than assumed.
+      supportsToolCalling: null,
+      pricePerMillionInput: "0.15",
+      pricePerMillionOutput: "0.6",
+      priceSource: "models_dev",
+      // A tenth of the input price, as Google publishes it. Gemini's fallback
+      // multiplier is a quarter, which would read 0.0375.
+      pricePerMillionCacheRead: "0.015",
+      pricePerMillionCacheWrite: "0",
+      cachePriceSource: "models_dev",
+    },
+  },
+
   // --- vLLM: the operator runs the server, so it reports its own window and
   // bills nothing per token ---
   {
@@ -1311,7 +1345,7 @@ describe("model capability matrix", () => {
             modelId: row.modelId,
             modelsDevData: MODELS_DEV,
           })?.prices?.promptPricePerToken == null &&
-          lookupOpenAiPublishedPrices(row.modelId) == null
+          lookupVendorPublishedPrices(row.modelId) == null
         );
       }
       const [built] = buildModelsToUpsert({

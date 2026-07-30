@@ -198,8 +198,27 @@ export function resolveSelfHostedModelMetadata(params: {
  * as `-2407`/`-2411`, so stripping it would collapse two differently-priced
  * models onto one registry key.
  */
-export function stripModelDateSuffix(modelId: string): string {
+function stripModelDateSuffix(modelId: string): string {
   return modelId.replace(DATE_SUFFIX, "");
+}
+
+/**
+ * Ids to try when matching a stored model id against a registry key, in order
+ * of preference.
+ *
+ * A provider decorates a name in ways the registry does not key it by: a
+ * date-pinned snapshot (`gpt-4o-2024-08-06`), and Vertex's `-maas` marker for
+ * the serverless copy of an open model, which names the same weights the
+ * undecorated entry does.
+ */
+export function registryLookupCandidates(modelId: string): string[] {
+  const withoutMaas = modelId.replace(VERTEX_MAAS_SUFFIX, "");
+  return dedupe([
+    modelId,
+    stripModelDateSuffix(modelId),
+    withoutMaas,
+    stripModelDateSuffix(withoutMaas),
+  ]);
 }
 
 // ============================================================================
@@ -282,6 +301,9 @@ const BEDROCK_VERSION_SUFFIX = /(?:-v\d+)?:\d+$/;
  * Trailing date stamp in either the contiguous Bedrock form (`-20250929`) or
  * the hyphenated OpenAI/Azure form (`-2024-08-06`).
  */
+/** Vertex appends this to the serverless copy of an open model. */
+const VERTEX_MAAS_SUFFIX = /-maas$/;
+
 const DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$|-\d{8}$/;
 
 function resolveBedrockTargets(modelId: string): CrossProviderTarget[] {

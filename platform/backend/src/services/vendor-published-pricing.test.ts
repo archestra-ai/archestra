@@ -1,13 +1,14 @@
+import type { SupportedProvider } from "@archestra/shared";
 import { describe, expect, test } from "vitest";
 import type { ModelsDevApiResponse } from "@/clients/models-dev-client";
 import { buildModelsToUpsert } from "./model-sync";
 import {
-  OPENAI_PUBLISHED_PRICE_IDS,
-  resolveOpenAiPublishedPrices,
-} from "./openai-published-pricing";
+  resolveVendorPublishedPrices,
+  VENDOR_PUBLISHED_PRICE_IDS,
+} from "./vendor-published-pricing";
 
 function resolve(modelId: string) {
-  return resolveOpenAiPublishedPrices({ provider: "openai", modelId });
+  return resolveVendorPublishedPrices({ provider: "openai", modelId });
 }
 
 /** A registry that already carries `gpt-5.1-codex`, at a price of its own. */
@@ -25,16 +26,37 @@ const REGISTRY_WITH_CODEX: ModelsDevApiResponse = {
   },
 };
 
-function sync(modelId: string, modelsDevData: ModelsDevApiResponse) {
+function sync(
+  modelId: string,
+  modelsDevData: ModelsDevApiResponse,
+  provider: SupportedProvider = "openai",
+) {
   const [built] = buildModelsToUpsert({
-    provider: "openai",
+    provider,
     models: [{ id: modelId, underlyingModelName: null }],
     modelsDevData,
   });
   return built;
 }
 
-describe("resolveOpenAiPublishedPrices", () => {
+/** How the registry lists Gemma: the model is there, the cost is empty. */
+const REGISTRY_WITHOUT_A_GEMMA_PRICE: ModelsDevApiResponse = {
+  google: {
+    id: "google",
+    name: "Google",
+    models: {
+      "gemma-4-26b-a4b-it": {
+        id: "gemma-4-26b-a4b-it",
+        name: "Gemma 4 26B",
+        cost: {},
+        limit: { context: 262144, output: 32768 },
+        modalities: { input: ["text", "image"], output: ["text"] },
+      },
+    },
+  },
+};
+
+describe("resolveVendorPublishedPrices", () => {
   test("prices a Codex model the registry does not carry", () => {
     expect(resolve("gpt-5.1-codex")).toEqual({
       promptPricePerToken: "0.00000125",
@@ -62,7 +84,7 @@ describe("resolveOpenAiPublishedPrices", () => {
 
   test("prices nothing for another provider or an unknown model", () => {
     expect(
-      resolveOpenAiPublishedPrices({
+      resolveVendorPublishedPrices({
         provider: "bedrock",
         modelId: "gpt-5.1-codex",
       }),
@@ -71,7 +93,7 @@ describe("resolveOpenAiPublishedPrices", () => {
   });
 
   test("every mapped id resolves to a price", () => {
-    for (const modelId of OPENAI_PUBLISHED_PRICE_IDS) {
+    for (const modelId of VENDOR_PUBLISHED_PRICE_IDS) {
       expect(resolve(modelId), modelId).not.toBeNull();
     }
   });
@@ -108,5 +130,56 @@ describe("the published map as a gap-filler", () => {
       promptPricePerToken: null,
       completionPricePerToken: null,
     });
+  });
+});
+
+describe("a registry entry that carries no price", () => {
+  test("prices Gemma from Google's own rate", () => {
+    // The entry resolves, so context and modalities come from the registry; only
+    // the cost is missing, and an empty cost is a gap rather than a free model.
+    expect(
+      sync("gemma-4-26b-a4b-it", REGISTRY_WITHOUT_A_GEMMA_PRICE, "gemini"),
+    ).toMatchObject({
+      // Below 1e-6 the stored string is exponential; $0.15/M is 1.5e-7.
+      promptPricePerToken: "1.5e-7",
+      completionPricePerToken: "6e-7",
+      cacheReadPricePerToken: "1.5e-8",
+      contextLength: 262144,
+    });
+  });
+
+  test("reaches the same price through Vertex's serverless id", () => {
+    // Vertex appends `-maas` to the serverless copy of an open model, which the
+    // registry does not key, so the id matched nothing at all before.
+    expect(
+      sync("gemma-4-26b-a4b-it-maas", REGISTRY_WITHOUT_A_GEMMA_PRICE, "gemini"),
+    ).toMatchObject({
+      promptPricePerToken: "1.5e-7",
+      completionPricePerToken: "6e-7",
+    });
+  });
+
+  test("asserts a cache rate rather than deriving one", () => {
+    // Google charges a tenth of the input price; the multiplier Gemini models
+    // fall back to is a quarter, which would bill 2.5x the real rate.
+    const built = sync(
+      "gemma-4-26b-a4b-it",
+      REGISTRY_WITHOUT_A_GEMMA_PRICE,
+      "gemini",
+    );
+    expect(Number(built.cacheReadPricePerToken)).toBe(
+      Number(built.promptPricePerToken) * 0.1,
+    );
+  });
+
+  test("prices nothing for a reseller serving the same weights", () => {
+    // An open model is served by many providers at their own margins, and a
+    // reseller's own registry entry already carries the rate that applies.
+    expect(
+      resolveVendorPublishedPrices({
+        provider: "openrouter",
+        modelId: "gemma-4-26b-a4b-it",
+      }),
+    ).toBeNull();
   });
 });

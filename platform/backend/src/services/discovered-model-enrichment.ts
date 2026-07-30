@@ -3,7 +3,7 @@ import type { ModelsDevApiResponse } from "@/clients/models-dev-client";
 import logger from "@/logging";
 import { ModelModel } from "@/models";
 import { resolveDiscoveredModelRegistryEntry } from "@/services/cross-provider-pricing";
-import { lookupOpenAiPublishedPrices } from "@/services/openai-published-pricing";
+import { lookupVendorPublishedPrices } from "@/services/vendor-published-pricing";
 import type { Model } from "@/types";
 
 /**
@@ -35,7 +35,7 @@ export async function enrichDiscoveredModel(params: {
   // the model but publishes no price for it.
   const published = resolved?.prices?.promptPricePerToken
     ? null
-    : lookupOpenAiPublishedPrices(model.modelId);
+    : lookupVendorPublishedPrices(model.modelId);
   if (!resolved && !published) {
     return false;
   }

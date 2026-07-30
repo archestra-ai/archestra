@@ -651,6 +651,7 @@ export const RouteId = {
   GetSkill: "getSkill",
   UpdateSkill: "updateSkill",
   DeleteSkill: "deleteSkill",
+  RestoreSkill: "restoreSkill",
   ResetSkill: "resetSkill",
   UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",

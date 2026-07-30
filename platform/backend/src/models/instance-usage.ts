@@ -35,7 +35,10 @@ class InstanceUsageModel {
       db.select({ total: count() }).from(schema.virtualApiKeysTable),
       db.select({ total: count() }).from(schema.mcpServersTable),
       db.select({ total: count() }).from(schema.conversationsTable),
-      db.select({ total: count() }).from(schema.skillsTable),
+      db
+        .select({ total: count() })
+        .from(schema.skillsTable)
+        .where(notDeleted(schema.skillsTable)),
       db
         .select({ total: count() })
         .from(schema.appsTable)

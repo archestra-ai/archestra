@@ -105,6 +105,7 @@ export const AuditEventNameSchema = z.enum([
   "skill.created",
   "skill.updated",
   "skill.deleted",
+  "skill.restored",
   "skill.imported",
   "team.created",
   "team.updated",

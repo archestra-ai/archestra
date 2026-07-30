@@ -97,4 +97,46 @@ describe("DELETE /api/github-pats/:id", () => {
     });
     expect(deleted.statusCode).toBe(200);
   });
+
+  test("deletable after the synced skill is soft-deleted", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    await makeMember(user.id, organization.id, { role: ADMIN_ROLE_NAME });
+    app = await buildGithubPatTestApp(user, organization.id);
+
+    const created = await createGithubPat({
+      organizationId: organization.id,
+      data: { name: "in-use-deleted", token: "ghp_y" },
+    });
+    const skill = await SkillModel.createWithFiles({
+      skill: {
+        organizationId: organization.id,
+        authorId: null,
+        name: "pat-synced-deleted",
+        description: "synced via stored PAT",
+        content: "# body",
+        metadata: {},
+        sourceType: "github",
+        sourceRef: "acme/skills@main:pat-synced-deleted",
+        sourceCommit: "abc",
+        scope: "org",
+        githubSyncInterval: "1d",
+        githubPatId: created.id,
+      },
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    // a soft-deleted skill no longer syncs, so it must not block the token.
+    await SkillModel.delete(skill.id);
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/github-pats/${created.id}`,
+    });
+    expect(deleted.statusCode).toBe(200);
+  });
 });

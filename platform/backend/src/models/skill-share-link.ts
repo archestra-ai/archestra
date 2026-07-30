@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   SkillShareLink,
@@ -270,7 +271,12 @@ async function loadSkillsForLinks(
     .from(schema.skillShareLinkSkillsTable)
     .innerJoin(
       schema.skillsTable,
-      eq(schema.skillShareLinkSkillsTable.skillId, schema.skillsTable.id),
+      // Soft-deleted skills drop out of link listings (and marketplace
+      // materialization re-resolves through filtered reads too).
+      and(
+        eq(schema.skillShareLinkSkillsTable.skillId, schema.skillsTable.id),
+        notDeleted(schema.skillsTable),
+      ),
     )
     .where(inArray(schema.skillShareLinkSkillsTable.shareLinkId, linkIds))
     .orderBy(schema.skillsTable.name, schema.skillsTable.id);

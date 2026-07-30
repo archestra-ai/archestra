@@ -83,7 +83,10 @@ import {
   SkillWithFilesSchema,
   UuidIdSchema,
 } from "@/types";
-import { isForeignKeyConstraintError } from "@/utils/db";
+import {
+  isForeignKeyConstraintError,
+  isUniqueConstraintError,
+} from "@/utils/db";
 
 /**
  * Shared fields identifying a GitHub skill source. Authentication is optional
@@ -298,6 +301,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Hide personal skills owned by other users. Admin-only; no-op for non-admins.",
             ),
+          status: z
+            .enum(["active", "deleted"])
+            .optional()
+            .default("active")
+            .describe(
+              "Which skills to list: active (default) or the soft-deleted " +
+                "trash. `deleted` is restricted to admins and team-admins.",
+            ),
         }).merge(createSortingQuerySchema(SkillSortBy)),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillListItemSchema),
@@ -317,6 +328,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorIds,
           excludeAuthorIds,
           excludeOtherPersonalSkills,
+          status,
           ...sorting
         },
         organizationId,
@@ -328,6 +340,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
+
+      // Viewing the trash is an admin/team-admin surface. Skills have no
+      // checker-level delete capability (delete is authorized per-skill), so
+      // this gates on the broader manage roles rather than a `skill:delete`.
+      if (status === "deleted" && !(checker.isAdmin || checker.isTeamAdmin)) {
+        throw new ApiError(403, "Forbidden");
+      }
 
       // Skills are environment-scoped; `forAgentId` narrows the list to what
       // that agent can actually see (used by the chat slash-command menu).
@@ -356,6 +375,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         excludeAuthorIds: checker.isAdmin ? excludeAuthorIds : undefined,
         excludeOtherPersonalForUserId:
           checker.isAdmin && excludeOtherPersonalSkills ? user.id : undefined,
+        status,
       };
 
       const [skills, total] = await Promise.all([
@@ -911,6 +931,58 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Skill not found");
       }
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/skills/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreSkill,
+        description: "Restore a soft-deleted skill",
+        tags: ["Skills"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(SkillDetailSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      // The soft-deleted row: findById/findSkillOrThrow filter deleted rows and
+      // would 404 every restore. Authorize this object directly — junction
+      // rows survive soft-delete, so its scope/team lookups still resolve.
+      const skill = await SkillModel.findDeletedById(id, organizationId);
+      if (!skill) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      await authorizeSkillModify({ skill, userId: user.id, organizationId });
+
+      const conflictMessage = await SkillModel.getRestoreConflictMessage(skill);
+      if (conflictMessage) {
+        throw new ApiError(409, conflictMessage);
+      }
+
+      let success: boolean;
+      try {
+        success = await SkillModel.restore(id);
+      } catch (error) {
+        // The pre-check is advisory; the partial unique index is the real
+        // guard. A create can claim the freed name between the check and this
+        // UPDATE — map that violation to a 409 rather than a 500.
+        if (
+          isUniqueConstraintError(error, "skills_org_personal_name_idx") ||
+          isUniqueConstraintError(error, "skills_org_shared_name_idx")
+        ) {
+          throw skillNameConflict(skill.name);
+        }
+        throw error;
+      }
+      if (!success) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      // The row is active again, so the normal detail path is safe.
+      const restored = await findSkillOrThrow(id, organizationId);
+      return reply.send(await loadSkillDetail(restored));
     },
   );
 

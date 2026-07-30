@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
+  ArchiveRestore,
   BookOpen,
   Braces,
   ChartColumn,
@@ -26,6 +27,7 @@ import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   ActiveFilterBadges,
+  ResourceDeletedStatusFilter,
   ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
@@ -58,6 +60,7 @@ import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useDeleteSkill,
   useResetSkill,
+  useRestoreSkill,
   useSkillSourceRepos,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
@@ -99,6 +102,9 @@ function SkillsList() {
   const search = searchParams.get("search") || "";
   const sourceRepo = searchParams.get("sourceRepo") || "";
   const scopeFilter = useScopeFilterParams();
+  // The trash view; the backend restricts `status=deleted` to admins/team-admins
+  // and the status filter itself is only shown to skill admins.
+  const isDeletedView = searchParams.get("status") === "deleted";
 
   type SkillSortBy = NonNullable<
     NonNullable<archestraApiTypes.GetSkillsData["query"]>["sortBy"]
@@ -125,6 +131,7 @@ function SkillsList() {
       authorIds: scopeFilter.authorIds,
       excludeAuthorIds: scopeFilter.excludeAuthorIds,
       excludeOtherPersonalSkills: scopeFilter.excludeOtherPersonal,
+      status: isDeletedView ? "deleted" : undefined,
       sortBy,
       sortDirection,
     },
@@ -132,6 +139,7 @@ function SkillsList() {
   );
   const { data: sourceReposData } = useSkillSourceRepos();
   const sourceRepos = sourceReposData?.repos ?? [];
+  const restoreSkill = useRestoreSkill();
 
   const setSourceRepoFilter = useCallback(
     (value: string) => {
@@ -214,7 +222,10 @@ function SkillsList() {
   const pagination = skills?.pagination;
   const totalSkills = pagination?.total ?? 0;
   const hasActiveFilters =
-    !!search || !!sourceRepo || scopeFilter.hasActiveScopeFilters;
+    !!search ||
+    !!sourceRepo ||
+    scopeFilter.hasActiveScopeFilters ||
+    isDeletedView;
   const showEmptyState = !isPending && totalSkills === 0 && !hasActiveFilters;
 
   const clearFilters = useCallback(() => {
@@ -226,6 +237,7 @@ function SkillsList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
+      "status",
     ]) {
       params.delete(key);
     }
@@ -414,43 +426,54 @@ function SkillsList() {
       cell: ({ row }) => {
         const skill = row.original;
         const isBuiltIn = skill.sourceType === "built_in";
-        const actions: TableRowAction[] = [
-          {
-            icon: <Pencil className="h-4 w-4" />,
-            label: "Edit",
-            permissions: { skill: ["update"] },
-            onClick: () => openEditor(skill),
-          },
-          {
-            icon: <MessageSquare className="h-4 w-4" />,
-            label: "Chat",
-            permissions: { chat: ["read", "create"] },
-            href: `/chat/new?skill_id=${skill.id}`,
-          },
-          {
-            icon: <ChartColumn className="h-4 w-4" />,
-            label: "Usage",
-            permissions: { skill: ["read"] },
-            onClick: () => setUsageSkill(skill),
-          },
-          ...(isBuiltIn
-            ? [
-                {
-                  icon: <RotateCcw className="h-4 w-4" />,
-                  label: "Reset to default",
-                  permissions: { skill: ["update"] },
-                  onClick: () => setResettingSkill(skill),
-                } satisfies TableRowAction,
-              ]
-            : []),
-          {
-            icon: <Trash2 className="h-4 w-4" />,
-            label: "Delete",
-            variant: "destructive",
-            permissions: { skill: ["delete"] },
-            onClick: () => setDeletingSkill(skill),
-          },
-        ];
+        // A soft-deleted skill can only be restored; edit/chat/usage/delete all
+        // act on active rows and would 404.
+        const actions: TableRowAction[] = isDeletedView
+          ? [
+              {
+                icon: <ArchiveRestore className="h-4 w-4" />,
+                label: "Restore",
+                permissions: { skill: ["delete"] },
+                onClick: () => restoreSkill.mutate(skill.id),
+              },
+            ]
+          : [
+              {
+                icon: <Pencil className="h-4 w-4" />,
+                label: "Edit",
+                permissions: { skill: ["update"] },
+                onClick: () => openEditor(skill),
+              },
+              {
+                icon: <MessageSquare className="h-4 w-4" />,
+                label: "Chat",
+                permissions: { chat: ["read", "create"] },
+                href: `/chat/new?skill_id=${skill.id}`,
+              },
+              {
+                icon: <ChartColumn className="h-4 w-4" />,
+                label: "Usage",
+                permissions: { skill: ["read"] },
+                onClick: () => setUsageSkill(skill),
+              },
+              ...(isBuiltIn
+                ? [
+                    {
+                      icon: <RotateCcw className="h-4 w-4" />,
+                      label: "Reset to default",
+                      permissions: { skill: ["update"] },
+                      onClick: () => setResettingSkill(skill),
+                    } satisfies TableRowAction,
+                  ]
+                : []),
+              {
+                icon: <Trash2 className="h-4 w-4" />,
+                label: "Delete",
+                variant: "destructive",
+                permissions: { skill: ["delete"] },
+                onClick: () => setDeletingSkill(skill),
+              },
+            ];
         return (
           <div className="flex justify-end">
             <TableRowActions actions={actions} itemName={skill.name} />
@@ -504,6 +527,12 @@ function SkillsList() {
                   ownerLabelPlural="skills"
                   adminPermission={{ skill: ["admin"] }}
                 />
+                {/* Backend gates status=deleted on isAdmin||isTeamAdmin; the
+                    checker has no `skill:delete` boolean, so this shows the
+                    trash toggle to skill admins to avoid a control that 403s. */}
+                <ResourceDeletedStatusFilter
+                  deletePermission={{ skill: ["admin"] }}
+                />
                 {/* Only imported skills have a repository, so the filter would
                     be a single inert "All repositories" entry until at least
                     one skill is imported. */}
@@ -542,7 +571,11 @@ function SkillsList() {
               getRowId={(row) => row.id}
               emptyMessage="No skills yet."
               hasActiveFilters={hasActiveFilters}
-              filteredEmptyMessage="No skills match the current filters."
+              filteredEmptyMessage={
+                isDeletedView
+                  ? "No deleted skills found."
+                  : "No skills match the current filters."
+              }
               onClearFilters={clearFilters}
               hideSelectedCount
               manualPagination
@@ -562,7 +595,7 @@ function SkillsList() {
                   scroll: false,
                 });
               }}
-              onRowClick={(row) => openEditor(row)}
+              onRowClick={isDeletedView ? undefined : (row) => openEditor(row)}
               isLoading={isFetching}
             />
           </>

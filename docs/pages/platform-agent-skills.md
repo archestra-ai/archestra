@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-07-27
+lastUpdated: 2026-07-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -114,6 +114,16 @@ Every skill carries a visibility **scope**, set in the skill editor or the GitHu
 `skill:read` governs *using* a skill — listing it, loading it, or invoking its slash command in chat. A user only ever sees skills inside their scope (org-wide skills, their own personal skills, and skills in their teams); `list_skills`, `load_skill`, and the `/skill-name` slash commands are all filtered the same way. `skill:admin` bypasses scope and sees every skill.
 
 Creating an org-scoped skill requires `skill:admin`; creating a team-scoped skill requires `skill:team-admin` and membership in the teams it is assigned to. By default the predefined roles grant: **admin** — full control; **editor** — create/update/delete plus team sharing; **member** — create and manage their own personal skills, and read everything in scope.
+
+## Deleting and Restoring Skills
+
+Deleting a skill hides it from every list, activation, slash command, and share link. It also stops the skill's GitHub sync. The skill is not destroyed — it moves to a trash. Its name is free to reuse right away, so you can create a new skill with that name.
+
+Admins and team admins switch the status filter to **Deleted** to open the trash. The one action there is **Restore**, which returns the skill to active. A restore is refused when an active skill already holds the name — rename or delete that one, then restore again.
+
+Deleting a built-in skill is a lasting opt-out — it stays gone across restarts. You can still restore it from the trash.
+
+A synced skill can lose its GitHub token while it sits in the trash. It still restores, but the next pull runs unauthenticated — for a now-private repo that fails with a sync error. Re-attach a token under **Settings → GitHub** to fix it.
 
 ## Environments
 

@@ -2661,6 +2661,13 @@
       "when": 1785439348264,
       "tag": "0379_app_labels",
       "breakpoints": true
+    },
+    {
+      "idx": 380,
+      "version": "7",
+      "when": 1785441710552,
+      "tag": "0380_blushing_proemial_gods",
+      "breakpoints": true
     }
   ]
 }

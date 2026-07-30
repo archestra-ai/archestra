@@ -70788,6 +70788,7 @@
                 "skill.created",
                 "skill.updated",
                 "skill.deleted",
+                "skill.restored",
                 "skill.imported",
                 "team.created",
                 "team.updated",
@@ -71065,6 +71066,7 @@
                                   "skill.created",
                                   "skill.updated",
                                   "skill.deleted",
+                                  "skill.restored",
                                   "skill.imported",
                                   "team.created",
                                   "team.updated",
@@ -71639,6 +71641,7 @@
                             "skill.created",
                             "skill.updated",
                             "skill.deleted",
+                            "skill.restored",
                             "skill.imported",
                             "team.created",
                             "team.updated",
@@ -291935,6 +291938,20 @@
           },
           {
             "schema": {
+              "default": "active",
+              "type": "string",
+              "enum": [
+                "active",
+                "deleted"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "description": "Which skills to list: active (default) or the soft-deleted trash. `deleted` is restricted to admins and team-admins."
+          },
+          {
+            "schema": {
               "type": "string",
               "enum": [
                 "usageCount",
@@ -292111,6 +292128,11 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "deletedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
                           "fileCount": {
                             "type": "number"
                           },
@@ -292211,6 +292233,7 @@
                           "lastUsedAt",
                           "createdAt",
                           "updatedAt",
+                          "deletedAt",
                           "fileCount",
                           "teams",
                           "users",
@@ -292745,6 +292768,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -292888,6 +292916,7 @@
                     "lastUsedAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "files",
                     "teams",
                     "users",
@@ -293322,6 +293351,11 @@
                           "type": "string",
                           "format": "date-time"
                         },
+                        "deletedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "files": {
                           "type": "array",
                           "items": {
@@ -293465,6 +293499,7 @@
                         "lastUsedAt",
                         "createdAt",
                         "updatedAt",
+                        "deletedAt",
                         "files",
                         "teams",
                         "users",
@@ -294212,6 +294247,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -294355,6 +294395,7 @@
                     "lastUsedAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "files",
                     "teams",
                     "users",
@@ -294849,6 +294890,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -294992,6 +295038,7 @@
                     "lastUsedAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "files",
                     "teams",
                     "users",
@@ -296103,6 +296150,564 @@
         }
       }
     },
+    "/api/skills/{id}/restore": {
+      "post": {
+        "operationId": "restoreSkill",
+        "tags": [
+          "Skills"
+        ],
+        "description": "Restore a soft-deleted skill\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:delete`: Delete agent skills",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "license": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "compatibility": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "allowedTools": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "agentName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "templated": {
+                      "type": "boolean"
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "sourceType": {
+                      "type": "string",
+                      "enum": [
+                        "manual",
+                        "github",
+                        "built_in"
+                      ]
+                    },
+                    "sourceRef": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "sourceCommit": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "githubSyncInterval": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "15m",
+                            "1h",
+                            "1d"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "githubSyncRef": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "githubAppConfigId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "lastSyncedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lastSyncError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "usageCount": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "lastUsedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "files": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "skillId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "content": {
+                            "type": "string"
+                          },
+                          "encoding": {
+                            "type": "string",
+                            "enum": [
+                              "utf8",
+                              "base64"
+                            ]
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "reference",
+                              "script",
+                              "asset"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "skillId",
+                          "path",
+                          "content",
+                          "encoding",
+                          "kind",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "environments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "authorId",
+                    "scope",
+                    "name",
+                    "description",
+                    "content",
+                    "latestVersion",
+                    "license",
+                    "compatibility",
+                    "allowedTools",
+                    "agentName",
+                    "templated",
+                    "metadata",
+                    "sourceType",
+                    "sourceRef",
+                    "sourceCommit",
+                    "githubSyncInterval",
+                    "githubSyncRef",
+                    "githubAppConfigId",
+                    "githubPatId",
+                    "lastSyncedAt",
+                    "lastSyncError",
+                    "usageCount",
+                    "lastUsedAt",
+                    "createdAt",
+                    "updatedAt",
+                    "deletedAt",
+                    "files",
+                    "teams",
+                    "users",
+                    "environments"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "skill:delete"
+          ]
+        }
+      }
+    },
     "/api/skills/{id}/reset": {
       "post": {
         "operationId": "resetSkill",
@@ -296265,6 +296870,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -296408,6 +297018,7 @@
                     "lastUsedAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "files",
                     "teams",
                     "users",
@@ -296852,6 +297463,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "files": {
                       "type": "array",
                       "items": {
@@ -296995,6 +297611,7 @@
                     "lastUsedAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "files",
                     "teams",
                     "users",
@@ -298819,6 +299436,11 @@
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "deletedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -298848,7 +299470,8 @@
                           "usageCount",
                           "lastUsedAt",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "deletedAt"
                         ],
                         "additionalProperties": false
                       }

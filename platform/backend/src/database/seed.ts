@@ -303,6 +303,13 @@ export async function syncBuiltInSkillsForOrganization(
       continue;
     }
 
+    // A soft-deleted built-in is a durable opt-out: the org removed it, so
+    // reconciliation must neither resurrect nor update it (findBuiltIn
+    // includes soft-deleted rows precisely so this check can run).
+    if (existing.deletedAt) {
+      continue;
+    }
+
     if (existing.sourceCommit === shipped.skill.sourceCommit) {
       continue;
     }

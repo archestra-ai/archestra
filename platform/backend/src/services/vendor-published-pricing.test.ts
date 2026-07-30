@@ -150,7 +150,7 @@ describe("a registry entry that carries no price", () => {
 
   test("reaches the same price through Vertex's serverless id", () => {
     // Vertex appends `-maas` to the serverless copy of an open model, which the
-    // registry does not key, so the id matched nothing at all before.
+    // registry does not key.
     expect(
       sync("gemma-4-26b-a4b-it-maas", REGISTRY_WITHOUT_A_GEMMA_PRICE, "gemini"),
     ).toMatchObject({
@@ -161,15 +161,13 @@ describe("a registry entry that carries no price", () => {
 
   test("asserts a cache rate rather than deriving one", () => {
     // Google charges a tenth of the input price; the multiplier Gemini models
-    // fall back to is a quarter, which would bill 2.5x the real rate.
-    const built = sync(
-      "gemma-4-26b-a4b-it",
-      REGISTRY_WITHOUT_A_GEMMA_PRICE,
-      "gemini",
-    );
-    expect(Number(built.cacheReadPricePerToken)).toBe(
-      Number(built.promptPricePerToken) * 0.1,
-    );
+    // fall back to is a quarter, which would bill 2.5x the real rate. Pinned as
+    // an absolute value: comparing the two fields to each other also holds when
+    // both are absent.
+    expect(
+      sync("gemma-4-26b-a4b-it", REGISTRY_WITHOUT_A_GEMMA_PRICE, "gemini")
+        .cacheReadPricePerToken,
+    ).toBe("1.5e-8");
   });
 
   test("prices nothing for a reseller serving the same weights", () => {
@@ -181,5 +179,38 @@ describe("a registry entry that carries no price", () => {
         modelId: "gemma-4-26b-a4b-it",
       }),
     ).toBeNull();
+  });
+});
+
+describe("an id the registry keys with its suffix intact", () => {
+  test("takes the entry naming it over the one it strips to", () => {
+    // Vertex prices some `-maas` ids directly, and those rates differ from what
+    // other hosts charge for the same weights. The undecorated form is a
+    // fallback, so it must not displace an entry that names the id as stored.
+    const registry: ModelsDevApiResponse = {
+      google: {
+        id: "google",
+        name: "Google",
+        models: {
+          "llama-3.3-70b-instruct-maas": {
+            id: "llama-3.3-70b-instruct-maas",
+            name: "Llama 3.3 70B (Vertex)",
+            cost: { input: 0.72, output: 0.72 },
+          },
+          "llama-3.3-70b-instruct": {
+            id: "llama-3.3-70b-instruct",
+            name: "Llama 3.3 70B",
+            cost: { input: 0.22, output: 0.5 },
+          },
+        },
+      },
+    };
+
+    expect(
+      sync("llama-3.3-70b-instruct-maas", registry, "gemini"),
+    ).toMatchObject({
+      promptPricePerToken: "7.2e-7",
+      completionPricePerToken: "7.2e-7",
+    });
   });
 });

@@ -465,7 +465,7 @@ export function resolveModelCapabilities(params: {
   crossProviderMetadata?: CrossProviderMetadata | null;
   /** Prices published by AWS for a Bedrock model. Used where the registry has none. */
   awsPrices?: BedrockAwsPrices | null;
-  /** Prices published by OpenAI. Used where the registry has none. */
+  /** Prices from a vendor's own list. Used where the registry has none. */
   publishedPrices?: VendorPublishedPrices | null;
   /** Underlying vendor model name, when the fetcher can determine it (Azure). */
   underlyingModelName?: string | null;
@@ -495,7 +495,7 @@ export function resolveModelCapabilities(params: {
   // deployment emits no output modality even though the OpenAI entry it
   // resolves to lists "text".
   // Price priority: fetcher -> models.dev (same provider) -> cross-provider ->
-  // vendor-published (AWS, OpenAI) -> null. The published tiers rank last so
+  // vendor-published (AWS, then the vendors' own lists) -> null. The published tiers rank last so
   // they only fill what the registry omits.
   return normalizeKnownModelCapabilities({
     provider,

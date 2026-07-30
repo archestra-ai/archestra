@@ -2970,23 +2970,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Generated conversation title",
       );
 
-      // Update conversation with generated title
-      const updatedConversation = await ConversationModel.update(
-        id,
-        user.id,
-        organizationId,
-        { title: generatedTitle },
-      );
+      // Compare-and-set on the title read before generation. The LLM call above
+      // takes seconds, and a rename landing in that window must survive — an
+      // app chat's placeholder title is unhelpful, so renaming while the reply
+      // streams is ordinary behaviour, and the model's guess must not win.
+      const updatedConversation =
+        await ConversationModel.updateTitleIfUnchanged({
+          id,
+          userId: user.id,
+          organizationId,
+          expectedTitle: conversation.title,
+          title: generatedTitle,
+        });
 
       if (!updatedConversation) {
-        // No row matched id + user + org, even though findById succeeded at the
-        // start of this handler — the conversation was deleted during the async
-        // title generation (a slow LLM call). That's a benign race, not a server
-        // fault: title generation is best-effort, so fall through gracefully like
-        // the other skip branches above instead of raising a 500.
+        // Either the conversation was deleted during the async title generation
+        // or its title changed under us. Both are benign races, not server
+        // faults: title generation is best-effort, so fall through gracefully
+        // like the other skip branches above instead of raising a 500.
         logger.info(
           { conversationId: id },
-          "Skipping title update - conversation no longer exists (deleted during generation)",
+          "Skipping title update - conversation deleted or retitled during generation",
         );
         return reply.send(conversation);
       }

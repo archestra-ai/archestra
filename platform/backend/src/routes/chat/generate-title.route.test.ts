@@ -301,27 +301,6 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     expect(mockGenerateText).toHaveBeenCalledTimes(1);
   });
 
-  /** The anthropic default the app-chat cases share. */
-  async function configureTitleLlm(
-    makeSecret: (args: {
-      secret: { apiKey: string };
-    }) => Promise<{ id: string }>,
-    makeLlmProviderApiKey: (
-      orgId: string,
-      secretId: string,
-      opts: { provider: string; scope: string; name: string },
-    ) => Promise<{ id: string }>,
-  ) {
-    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
-    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "anthropic",
-      scope: "org",
-      name: "Anthropic",
-    });
-    const model = await makeModelRow("anthropic", "claude-sonnet-5");
-    await setOrganizationDefaultLlm(model.id, apiKey.id);
-  }
-
   test("titles an app chat still carrying its seeded app name", async ({
     makeAgent,
     makeSecret,
@@ -333,7 +312,14 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
       scope: "personal",
     });
     const conversation = await makeAppChatConversationWithExchange(agent.id);
-    await configureTitleLlm(makeSecret, makeLlmProviderApiKey);
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      scope: "org",
+      name: "Anthropic",
+    });
+    const model = await makeModelRow("anthropic", "claude-sonnet-5");
+    await setOrganizationDefaultLlm(model.id, apiKey.id);
 
     mockGenerateText.mockResolvedValue({
       text: "Monthly budget column",
@@ -375,7 +361,14 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
       scope: "personal",
     });
     const conversation = await makeAppChatConversationWithExchange(agent.id);
-    await configureTitleLlm(makeSecret, makeLlmProviderApiKey);
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      scope: "org",
+      name: "Anthropic",
+    });
+    const model = await makeModelRow("anthropic", "claude-sonnet-5");
+    await setOrganizationDefaultLlm(model.id, apiKey.id);
 
     mockGenerateText.mockResolvedValue({
       text: "Monthly budget column",
@@ -409,7 +402,14 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
       title: "Q3 budget planning",
       titleIsPlaceholder: false,
     });
-    await configureTitleLlm(makeSecret, makeLlmProviderApiKey);
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      scope: "org",
+      name: "Anthropic",
+    });
+    const model = await makeModelRow("anthropic", "claude-sonnet-5");
+    await setOrganizationDefaultLlm(model.id, apiKey.id);
 
     const response = await app.inject({
       method: "POST",
@@ -420,6 +420,57 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().title).toBe("Q3 budget planning");
     expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  test("a rename landing mid-generation survives the generated title", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Generation awaits a multi-second LLM call. An app chat's placeholder
+    // title is unhelpful, so renaming while the reply streams is ordinary —
+    // and the name the user typed has to beat the one the model guessed.
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await makeAppChatConversationWithExchange(agent.id);
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      scope: "org",
+      name: "Anthropic",
+    });
+    const model = await makeModelRow("anthropic", "claude-sonnet-5");
+    await setOrganizationDefaultLlm(model.id, apiKey.id);
+
+    mockGenerateText.mockImplementation(async () => {
+      await ConversationModel.update(
+        conversation.id,
+        currentUser.id,
+        organizationId,
+        { title: "Q3 budget planning" },
+      );
+      return { text: "Monthly budget column" } as Awaited<
+        ReturnType<typeof generateText>
+      >;
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+
+    const [stored] = await db
+      .select()
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, conversation.id));
+    expect(stored.title).toBe("Q3 budget planning");
+    expect(stored.titleIsPlaceholder).toBe(false);
   });
 
   test("does not retitle an app chat a second time", async ({
@@ -435,7 +486,14 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
       scope: "personal",
     });
     const conversation = await makeAppChatConversationWithExchange(agent.id);
-    await configureTitleLlm(makeSecret, makeLlmProviderApiKey);
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      scope: "org",
+      name: "Anthropic",
+    });
+    const model = await makeModelRow("anthropic", "claude-sonnet-5");
+    await setOrganizationDefaultLlm(model.id, apiKey.id);
 
     mockGenerateText.mockResolvedValue({
       text: "Monthly budget column",

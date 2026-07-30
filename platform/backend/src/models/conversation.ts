@@ -6,6 +6,7 @@ import {
   getTableColumns,
   ilike,
   isNotNull,
+  isNull,
   or,
   sql,
 } from "drizzle-orm";
@@ -580,6 +581,47 @@ class ConversationModel {
       chatErrors,
       compactions,
     };
+  }
+
+  /**
+   * Write a generated title only while the conversation still holds the title
+   * that was read before generation started. Generation awaits a slow LLM call,
+   * and a rename landing in that window has to win — the user typed that name,
+   * the model only guessed one. Returns null when the row moved on.
+   */
+  static async updateTitleIfUnchanged(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+    expectedTitle: string | null;
+    title: string;
+  }): Promise<Conversation | null> {
+    const { id, userId, organizationId, expectedTitle, title } = params;
+
+    const [updated] = await db
+      .update(schema.conversationsTable)
+      .set({ title, titleIsPlaceholder: false })
+      .where(
+        and(
+          eq(schema.conversationsTable.id, id),
+          eq(schema.conversationsTable.userId, userId),
+          eq(schema.conversationsTable.organizationId, organizationId),
+          expectedTitle === null
+            ? isNull(schema.conversationsTable.title)
+            : eq(schema.conversationsTable.title, expectedTitle),
+        ),
+      )
+      .returning();
+
+    if (!updated) {
+      return null;
+    }
+
+    return (await ConversationModel.findById({
+      id: updated.id,
+      userId,
+      organizationId,
+    })) as Conversation;
   }
 
   static async update(

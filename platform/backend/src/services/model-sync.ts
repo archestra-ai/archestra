@@ -693,7 +693,32 @@ function inferModelCapabilities(params: {
     return inferOllamaCapabilities(fetched);
   }
 
+  if (provider === "perplexity") {
+    return inferPerplexityCapabilities();
+  }
+
   return emptyCapabilities();
+}
+
+/**
+ * Neither Perplexity's models endpoint nor models.dev declares `tool_call` for
+ * the sonar models, so every row stored `null` for tool support — which reads as
+ * "unknown, send tools anyway" everywhere downstream. Sending them is not
+ * harmless: the chat-completions endpoint answers `invalid request` (verified
+ * against sonar-pro), so the turn fails outright, and the composer's "no tools"
+ * chip stayed hidden because it only shows on an explicit `false`, leaving the
+ * agent's tools looking available while never firing.
+ *
+ * Recording it as a capability rather than gating the provider in the chat route
+ * keeps the decision per model: inference sits below both the fetcher and
+ * models.dev in the resolution order, so the day a Perplexity model declares
+ * tool support it overrides this and tools flow with no code change.
+ */
+function inferPerplexityCapabilities(): ProviderModelCapabilities {
+  return {
+    ...emptyCapabilities(),
+    supportsToolCalling: false,
+  };
 }
 
 /**

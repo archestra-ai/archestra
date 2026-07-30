@@ -1052,8 +1052,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Perplexity's tool calling (2026) exists only on its separate
                 // Agent API (/responses/create, a Responses-style wire format),
                 // not the chat-completions surface we proxy.
+                // Per model, never per provider: a provider-wide gate hides a
+                // tool-capable model behind its siblings, and it disagrees with
+                // the composer's "no tools" chip, which reads this same
+                // capability. Providers whose endpoint takes no tools record it
+                // as `supportsToolCalling: false` on the model row (see
+                // inferPerplexityCapabilities in services/model-sync.ts).
                 const supportsToolCalling =
-                  provider !== "perplexity" &&
                   modelRow?.supportsToolCalling !== false;
 
                 const { modelMessages, preparedMessages } =

@@ -313,6 +313,30 @@ describe("ModelSyncService", () => {
     expect(capabilities.supportsToolCalling).toBe(false);
   });
 
+  test("records perplexity models as tool-less when nothing upstream declares tool support", () => {
+    // Neither the provider's endpoint nor models.dev carries `tool_call` for
+    // sonar, and an undeclared capability reads as "send tools anyway" — which
+    // the chat-completions endpoint rejects outright.
+    const capabilities = resolveModelCapabilities({
+      provider: "perplexity",
+      modelId: "sonar-pro",
+    });
+
+    expect(capabilities.supportsToolCalling).toBe(false);
+  });
+
+  test("lets a perplexity model that declares tool support keep it", () => {
+    // The gate is per model, not per provider: a declared capability outranks
+    // the inferred default, so a tool-capable model needs no code change.
+    const capabilities = resolveModelCapabilities({
+      provider: "perplexity",
+      modelId: "sonar-with-tools",
+      fetched: { supportsToolCalling: true },
+    });
+
+    expect(capabilities.supportsToolCalling).toBe(true);
+  });
+
   test("persists a sanitized outputLength from the models.dev limit.output", () => {
     const [good, bad] = buildModelsToUpsert({
       provider: "openai",

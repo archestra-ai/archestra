@@ -27381,6 +27381,7 @@ export type GetDeletedChatConversationsResponses = {
         artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -28645,6 +28646,7 @@ export type RestoreChatConversationResponses = {
         artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;

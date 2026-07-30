@@ -411,6 +411,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     lastMessageAt: "2026-03-17T00:00:00.000Z",
     createdAt: "2026-03-17T00:00:00.000Z",
     updatedAt: "2026-03-17T00:00:00.000Z",
+    deletedAt: null,
     agent: {
       id: "agent-a",
       name: "Agent A",

@@ -454,65 +454,60 @@ describe("ConversationModel", () => {
     makeUser,
     makeOrganization,
     makeAgent,
-});
-  =>
-  {
+  }) => {
     const user = await makeUser();
     const org = await makeOrganization();
     const agent = await makeAgent({ name: "Delete Agent", teams: [] });
 
     const created = await ConversationModel.create({
-    userId: user.id,
-    organizationId: org.id,
-    agentId: agent.id,
-    title: "To Be Deleted",
-  });
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "To Be Deleted",
+    });
 
     const deleted = await ConversationModel.delete(created.id, user.id, org.id);
     expect(deleted).toBe(1);
 
     // Hidden from every read path...
     const found = await ConversationModel.findById({
-    id: created.id,
-    userId: user.id,
-    organizationId: org.id,
-  });
+      id: created.id,
+      userId: user.id,
+      organizationId: org.id,
+    });
     expect(found).toBeNull();
     const list = await ConversationModel.findAll(user.id, org.id);
     expect(list.map((c) => c.id)).not.toContain(created.id);
 
     // ...but the row is preserved (soft delete), with deletedAt stamped.
     const [row] = await db
-    .select()
-    .from(schema.conversationsTable)
-    .where(eq(schema.conversationsTable.id, created.id));
+      .select()
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, created.id));
     expect(row).toBeDefined();
     expect(row.deletedAt).toBeInstanceOf(Date);
     expect(row.title).toBe("To Be Deleted");
-  }
-  )
+  });
 
-test("delete is idempotent: re-deleting an already-deleted conversation returns 0", async (
-  makeUser,
-  makeOrganization,
-  makeAgent,
-  ) =>
-  {
+  test("delete is idempotent: re-deleting an already-deleted conversation returns 0", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
     const user = await makeUser();
     const org = await makeOrganization();
     const agent = await makeAgent({ name: "Redelete Agent", teams: [] });
 
     const created = await ConversationModel.create({
-    userId: user.id,
-    organizationId: org.id,
-    agentId: agent.id,
-    title: "Delete Twice",
-  });
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Delete Twice",
+    });
 
     expect(await ConversationModel.delete(created.id, user.id, org.id)).toBe(1);
     expect(await ConversationModel.delete(created.id, user.id, org.id)).toBe(0);
-  }
-  )
+  });
 
   test("returns conversations ordered by updatedAt descending", async ({
     makeUser,

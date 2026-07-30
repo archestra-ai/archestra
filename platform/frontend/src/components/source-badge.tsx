@@ -7,6 +7,7 @@ import {
   Database,
   Globe,
   LayoutGrid,
+  Lightbulb,
   Mail,
   Minimize2,
   Route,
@@ -139,6 +140,7 @@ function getSourceIcon({
     "knowledge:query-expansion": <Database className="h-3 w-3 shrink-0" />,
     "app:llm_complete": <LayoutGrid className="h-3 w-3 shrink-0" />,
     "app:recording_enhancement": <Sparkles className="h-3 w-3 shrink-0" />,
+    "advisor:consultation": <Lightbulb className="h-3 w-3 shrink-0" />,
   };
 
   return sourceIcon[source];

@@ -12,13 +12,17 @@ import type { AgentConfigSnapshot } from "@/types/agent-version";
 import agentsTable from "./agent";
 
 /**
- * Append-only immutable snapshot of an agent's configuration (the agents-row
- * scalars plus the config child tables — see AgentConfigSnapshotSchema for the
- * exact surface). Every config write that changes the canonical payload forks
- * a new version (`version` increments per agent from 1); a write producing an
+ * Immutable snapshot of an agent's configuration (the agents-row scalars plus
+ * the config child tables — see AgentConfigSnapshotSchema for the exact
+ * surface). Every config write that changes the canonical payload forks a new
+ * version (`version` increments per agent from 1); a write producing an
  * identical payload reuses the head. `agents.latest_version` points at the
  * head (0 = legacy row that predates versioning and has not been written to
  * since).
+ *
+ * Rows are never updated, only appended and aged out: a fork trims versions
+ * below the retention window (see MAX_VERSIONS_PER_AGENT in the model), so
+ * `version` numbers stay monotonic but the oldest are not kept forever.
  *
  * Unlike `app_versions`/`skill_versions`, `agent_id` is NOT NULL and ON DELETE
  * CASCADE: nothing pins an agent version (no sandbox-mount equivalent), so the

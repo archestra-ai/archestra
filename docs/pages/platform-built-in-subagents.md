@@ -3,7 +3,7 @@ title: Built-in Subagents
 category: Agents
 order: 10
 description: The system subagents Archestra seeds into every organization, and what each one does
-lastUpdated: 2026-07-05
+lastUpdated: 2026-07-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -49,3 +49,13 @@ The Chat Title Generation Subagent generates a concise three-to-six-word title f
 ## App Runtime LLM Agent
 
 The App Runtime LLM Agent backs `archestra.llm.complete()` for [MCP Apps](/docs/platform-apps). An app's completion request runs through it, so the call goes through the limit-enforcing LLM proxy and counts against the viewer's usage limits. The app cannot choose a model — the host resolves the organization's default — and the subagent's system prompt is only a minimal fallback used when the app supplies none.
+
+## Advisor Agent
+
+The Advisor Agent answers the `advisor` tool. An agent calls that tool for a second opinion — before committing to an approach, or before declaring work done.
+
+Set this agent's model to a stronger one than the agents that will consult it. Until you set a model, the tool refuses. With no model of its own it would answer using the caller's model, which is not a second opinion.
+
+The advisor can run on a different provider from the agent asking. Each consultation is billed at the advisor model's rates and recorded on its own, so you can see what the second opinions cost.
+
+The advisor reads only the question and context the calling agent sends. It cannot see the conversation, run tools, or ask a follow-up.

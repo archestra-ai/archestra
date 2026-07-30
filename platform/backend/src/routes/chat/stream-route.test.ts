@@ -2511,6 +2511,51 @@ describe("POST /api/chat handler composition", () => {
     );
   });
 
+  test("marks every context-window data part transient, including the per-step re-emit", async ({
+    expect,
+  }) => {
+    const response = await postMessage();
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    // A tool-call step re-emits the breakdown with the provider's real input
+    // count. onStepFinish only emits once a result is committed, which the
+    // awaited execution above has done.
+    const streamConfig = mockStreamText.mock.calls.at(-1)?.[0] as {
+      onStepFinish?: (step: unknown) => Promise<void> | void;
+    };
+    await streamConfig.onStepFinish?.({
+      usage: { inputTokens: 1200, outputTokens: 10, totalTokens: 1210 },
+      finishReason: "tool-calls",
+      toolCalls: [],
+    });
+
+    const breakdownWrites = writerEvents.filter(
+      (event) =>
+        event.kind === "write" &&
+        (event.value as { type?: string })?.type ===
+          "data-context-window-breakdown",
+    );
+    // Both the pre-stream breakdown and the post-step re-emit.
+    expect(breakdownWrites.length).toBeGreaterThan(1);
+
+    // Every one of these carries UI state the client reads via onData. A
+    // non-transient copy lands in the assistant message instead, where it is
+    // persisted, re-appended on each replay, and — when it arrives before the
+    // stream's `start` chunk — makes the AI SDK open a message of its own to
+    // hold it, which renders the turn twice.
+    const uiStateWrites = writerEvents.filter(
+      (event) =>
+        event.kind === "write" &&
+        /^data-context-(window|compaction)/.test(
+          (event.value as { type?: string })?.type ?? "",
+        ),
+    );
+    for (const write of uiStateWrites) {
+      expect(write.value).toMatchObject({ transient: true });
+    }
+  });
+
   test("emits compaction start/finish and context-window-estimate events in order, before the stream merge", async () => {
     mockCompactMessagesForChat.mockImplementation(
       async ({

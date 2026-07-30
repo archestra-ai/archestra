@@ -1222,6 +1222,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         writer.write({
                           type: CONTEXT_WINDOW_BREAKDOWN_EVENT,
                           data: updatedBreakdown satisfies ContextWindowBreakdown,
+                          // Transient like the pre-stream estimate above: the
+                          // panel reads it from onData state, so keeping it out
+                          // of the message list is what the client expects. A
+                          // non-transient copy would be appended to the
+                          // assistant message once per tool step — persisted,
+                          // re-appended on every replay, and one more chance for
+                          // the SDK to open a message of its own to hold it.
+                          transient: true,
                         });
                       } catch (error) {
                         logger.warn(

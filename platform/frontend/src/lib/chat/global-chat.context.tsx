@@ -54,6 +54,7 @@ import {
 } from "@/lib/chat/chat-retry.utils";
 import {
   pruneEmptyTrailingAssistantMessage,
+  pruneStrandedAssistantMessages,
   restoreRenderableAssistantParts,
   shouldFreezeChatMessages,
 } from "@/lib/chat/chat-session-utils";
@@ -1045,6 +1046,31 @@ function ChatSessionHook({
       recordResponseProgress();
     }
   }, [messages, status, recordResponseProgress]);
+
+  // A content-free assistant message the SDK opened to hold a data part that
+  // arrived before the stream's `start` chunk must not outlive the turn: left in
+  // chat state it becomes what the next request sends as its trailing message
+  // and what a recovery's regenerate() anchors on, and the backend then reuses
+  // its id — streaming the whole turn into a second message beside the first
+  // (see pruneStrandedAssistantMessages). Pruning only once the stream has
+  // settled keeps this off the live stream's back: nothing is writing to the
+  // message list then, so it cannot fight the turn in flight.
+  useEffect(() => {
+    if (status === "submitted" || status === "streaming") {
+      return;
+    }
+    setMessages((current) => {
+      const pruned = pruneStrandedAssistantMessages(current);
+      if (pruned === current) {
+        return current;
+      }
+      // restoreRenderableAssistantParts reads previousMessagesRef to spot a
+      // streaming regression; sync it so this deliberate shrink is not mistaken
+      // for one and resurrected on the next render.
+      previousMessagesRef.current = pruned;
+      return pruned;
+    });
+  }, [status, setMessages]);
 
   const resumeAttemptedRef = useRef(false);
   useEffect(() => {

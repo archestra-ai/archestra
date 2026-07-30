@@ -12,6 +12,7 @@ export const SupportedProvidersSchema = z.enum([
   "cerebras",
   "mistral",
   "perplexity",
+  "perplexity-agent",
   "groq",
   "xai",
   "openrouter",
@@ -45,6 +46,10 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "cerebras:chatCompletions",
   "mistral:chatCompletions",
   "perplexity:chatCompletions",
+  // Perplexity's Agent API, a Responses-shaped surface distinct from the
+  // `sonar*` chat-completions models: it is the only Perplexity endpoint that
+  // accepts tools. See PERPLEXITY_AGENT_MODELS.
+  "perplexity-agent:responses",
   "groq:chatCompletions",
   "xai:chatCompletions",
   "openrouter:chatCompletions",
@@ -87,6 +92,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   cerebras: "Cerebras",
   mistral: "Mistral AI",
   perplexity: "Perplexity AI",
+  "perplexity-agent": "Perplexity Agent",
   groq: "Groq",
   xai: "xAI",
   openrouter: "OpenRouter",
@@ -286,6 +292,43 @@ export function isPerplexityReasoningModel(model: string): boolean {
 }
 
 /**
+ * Perplexity Agent API model definitions — single source of truth.
+ *
+ * The Agent API is a separate surface from the `sonar*` chat-completions models
+ * above: it speaks a Responses-shaped `input`/`output` wire format and is the
+ * only Perplexity endpoint that accepts `tools`, which is why it is modelled as
+ * its own provider rather than another transport on `perplexity` (whose models
+ * are recorded tool-less — see inferPerplexityCapabilities in
+ * services/model-sync.ts). Like Sonar, it publishes no usable /models endpoint,
+ * so the catalog is maintained here.
+ *
+ * Presets (`fast`, `low`, `medium`, `high`, `xhigh`) are deliberately absent.
+ * They are a separate request field rather than a model id — each one bundles a
+ * model with built-in web-search and fetch steps that bill per invocation — so
+ * surfacing them as pseudo-models would misreport both the model in use and the
+ * cost. They belong with built-in tool support, which this transport does not
+ * carry.
+ *
+ * @see https://docs.perplexity.ai/docs/agent-api/models
+ */
+export const PERPLEXITY_AGENT_MODELS = [
+  { id: "perplexity/sonar", displayName: "Sonar" },
+  { id: "perplexity/glm-5.2", displayName: "GLM 5.2" },
+  { id: "perplexity/kimi-k3", displayName: "Kimi K3" },
+  { id: "perplexity/kimi-k2.7-code", displayName: "Kimi K2.7 Code" },
+  { id: "anthropic/claude-opus-5", displayName: "Claude Opus 5" },
+  { id: "anthropic/claude-sonnet-5", displayName: "Claude Sonnet 5" },
+  { id: "anthropic/claude-haiku-4-5", displayName: "Claude Haiku 4.5" },
+  { id: "openai/gpt-5.6-sol", displayName: "GPT-5.6 Sol" },
+  { id: "openai/gpt-5.6-terra", displayName: "GPT-5.6 Terra" },
+  { id: "openai/gpt-5.6-luna", displayName: "GPT-5.6 Luna" },
+  { id: "openai/gpt-5.4-mini", displayName: "GPT-5.4 Mini" },
+  { id: "google/gemini-3.1-pro-preview", displayName: "Gemini 3.1 Pro" },
+  { id: "google/gemini-3.6-flash", displayName: "Gemini 3.6 Flash" },
+  { id: "xai/grok-4.5", displayName: "Grok 4.5" },
+] as const;
+
+/**
  * MiniMax model definitions — single source of truth.
  * MiniMax does not provide a /v1/models endpoint, so models are maintained here.
  * @see https://platform.minimax.io/docs/guides/models-intro
@@ -376,6 +419,10 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   cerebras: "https://api.cerebras.ai/v1",
   mistral: "https://api.mistral.ai/v1",
   perplexity: "https://api.perplexity.ai",
+  // Carries the `/v1` the Sonar entry above omits: the SDK appends `/responses`
+  // to reach the Agent API's OpenAI-compatible alias, while Sonar's paths are
+  // rooted at the bare host.
+  "perplexity-agent": "https://api.perplexity.ai/v1",
   groq: "https://api.groq.com/openai/v1",
   xai: "https://api.x.ai/v1",
   openrouter: "https://openrouter.ai/api/v1",
@@ -517,6 +564,14 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   // The upstream Archestra can front any provider, so match common flagship
   // families across vendors (most- to least-preferred).
   archestra: ["opus", "sonnet", "gpt-5", "gemini-3", "grok-4"],
+  // The Agent API fronts several vendors, so this mirrors the cross-vendor
+  // shape of `archestra` above rather than a single family.
+  "perplexity-agent": [
+    "anthropic/claude-opus-5",
+    "openai/gpt-5.6-sol",
+    "anthropic/claude-sonnet-5",
+    "perplexity/sonar",
+  ],
 };
 
 /**
@@ -537,6 +592,7 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   cerebras: "zai-glm-4.7",
   mistral: "mistral-medium-2604",
   perplexity: "sonar-pro",
+  "perplexity-agent": PERPLEXITY_AGENT_MODELS[0].id,
   zhipuai: "glm-5.1",
   deepseek: "deepseek-v4-pro",
   bedrock: "anthropic.claude-opus-4-8",

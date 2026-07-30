@@ -1424,6 +1424,7 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   cohere: providerErrorHandler(parseCohereError, mapCohereErrorToCode),
   mistral: openAiCompatibleErrorHandler,
   perplexity: openAiCompatibleErrorHandler,
+  "perplexity-agent": openAiCompatibleErrorHandler,
   groq: openAiCompatibleErrorHandler,
   xai: openAiCompatibleErrorHandler,
   openrouter: openAiCompatibleErrorHandler,

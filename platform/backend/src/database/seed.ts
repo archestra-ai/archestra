@@ -710,6 +710,7 @@ function getProviderDisplayName(provider: SupportedProvider): string {
     cohere: "Cohere",
     mistral: "Mistral",
     perplexity: "Perplexity AI",
+    "perplexity-agent": "Perplexity Agent",
     groq: "Groq",
     xai: "xAI",
     ollama: "Ollama (OpenAI-compatible)",

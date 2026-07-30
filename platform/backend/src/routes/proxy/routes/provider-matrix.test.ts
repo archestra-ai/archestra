@@ -49,6 +49,7 @@ import { ollamaNativeAdapterFactory } from "../adapters/ollama-native";
 import { openaiAdapterFactory } from "../adapters/openai";
 import { openrouterAdapterFactory } from "../adapters/openrouter";
 import { perplexityAdapterFactory } from "../adapters/perplexity";
+import { perplexityAgentAdapterFactory } from "../adapters/perplexity-agent";
 import { vllmAdapterFactory } from "../adapters/vllm";
 import { xaiAdapterFactory } from "../adapters/xai";
 import { zhipuaiAdapterFactory } from "../adapters/zhipuai";
@@ -72,6 +73,7 @@ import ollamaNativeProxyRoutes from "./ollama-native";
 import openAiProxyRoutes from "./openai";
 import openrouterProxyRoutes from "./openrouter";
 import perplexityProxyRoutes from "./perplexity";
+import perplexityAgentProxyRoutes from "./perplexity-agent";
 import vllmProxyRoutes from "./vllm";
 import xaiProxyRoutes from "./xai";
 import zhipuaiProxyRoutes from "./zhipuai";
@@ -79,7 +81,9 @@ import zhipuaiProxyRoutes from "./zhipuai";
 type ProviderFamily =
   | "openai"
   | "zhipuai"
-  | "azure-responses"
+  // Transport-shaped, not provider-shaped: shared by every Responses-style
+  // provider (Azure Responses, Perplexity Agent).
+  | "responses"
   | "anthropic"
   | "gemini"
   | "cohere"
@@ -536,7 +540,7 @@ function createOpenAiLikeHarness(options: HarnessOptions = {}) {
   };
 }
 
-function createAzureResponsesHarness(options: HarnessOptions = {}) {
+function createResponsesHarness(options: HarnessOptions = {}) {
   const requests: Record<string, unknown>[] = [];
   const usage = options.usage ?? DEFAULT_USAGE;
   const model = options.model ?? "test-model";
@@ -1399,8 +1403,8 @@ function createHarness(family: ProviderFamily, options: HarnessOptions = {}) {
       return createOpenAiLikeHarness(options);
     case "zhipuai":
       return createZhipuaiHarness(options);
-    case "azure-responses":
-      return createAzureResponsesHarness(options);
+    case "responses":
+      return createResponsesHarness(options);
     case "anthropic":
       return createAnthropicHarness(options);
     case "gemini":
@@ -2036,13 +2040,39 @@ const providerConfigsByProvider = {
     supportsStreamingToolCalls: false,
     supportsCompression: true,
   }),
+  "perplexity-agent": makeConfig({
+    providerName: "Perplexity Agent",
+    providerSlug: "perplexity-agent",
+    provider: "perplexity-agent",
+    family: "responses",
+    routePlugin: perplexityAgentProxyRoutes,
+    adapterFactory: perplexityAgentAdapterFactory,
+    endpoint: (agentId) => `/v1/perplexity-agent/${agentId}/responses`,
+    headers: () => ({
+      Authorization: "Bearer test-key",
+      "Content-Type": "application/json",
+    }),
+    requestBuilder: makeAzureResponsesBuilder("perplexity/sonar"),
+    model: "perplexity/sonar",
+    optimizedModel: "openai/gpt-5.4-mini",
+    supportsDeclaredTools: true,
+    supportsStreamingToolCalls: true,
+    // TOON compression rewrites tool-result message content, which the
+    // Responses transport carries as `function_call_output` items rather than
+    // the tool-role messages the compressor understands.
+    supportsCompression: false,
+    assertStreamingToolCall(body) {
+      expect(body).toContain("response.completed");
+      expect(body).toContain("read_file");
+    },
+  }),
 } satisfies Record<SupportedProvider, ProviderTestConfig>;
 
 const azureResponsesConfig = makeConfig({
   providerName: "Azure Responses",
   providerSlug: "azure-responses",
   provider: "azure",
-  family: "azure-responses",
+  family: "responses",
   routePlugin: azureProxyRoutes,
   adapterFactory: azureResponsesAdapterFactory,
   endpoint: (agentId) => `/v1/azure/${agentId}/responses`,

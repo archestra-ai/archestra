@@ -227,6 +227,7 @@ const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   cerebras: "cerebras:chatCompletions",
   mistral: "mistral:chatCompletions",
   perplexity: "perplexity:chatCompletions",
+  "perplexity-agent": "perplexity-agent:responses",
   groq: "groq:chatCompletions",
   xai: "xai:chatCompletions",
   openrouter: "openrouter:chatCompletions",

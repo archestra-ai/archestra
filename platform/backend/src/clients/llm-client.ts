@@ -600,6 +600,18 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",
   },
 
+  "perplexity-agent": {
+    // The Agent API is OpenAI-Responses-compatible, so the stock Responses
+    // transport reaches it unmodified — the base URL carries the `/v1` and the
+    // SDK appends `/responses`. No reasoning middleware: unlike the `sonar*`
+    // chat models above, this surface has no inline <think> convention.
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
+      createOpenAI({ apiKey, baseURL, headers, fetch }).responses(modelName),
+    defaultBaseUrl: config.llm["perplexity-agent"].baseUrl,
+    apiKeyRequiredMessage:
+      "Perplexity Agent API key is required. Please configure ARCHESTRA_CHAT_PERPLEXITY_AGENT_API_KEY.",
+  },
+
   zhipuai: {
     // GLM thinking mode (on by default; glm-4.7 thinks unconditionally) streams
     // its chain of thought in `reasoning_content`. Z.ai accepts only

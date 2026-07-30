@@ -230,6 +230,11 @@ export const RouteId = {
     "perplexityChatCompletionsWithDefaultAgent",
   PerplexityChatCompletionsWithAgent: "perplexityChatCompletionsWithAgent",
 
+  // Proxy Routes - Perplexity Agent API
+  PerplexityAgentResponsesWithDefaultAgent:
+    "perplexityAgentResponsesWithDefaultAgent",
+  PerplexityAgentResponsesWithAgent: "perplexityAgentResponsesWithAgent",
+
   // Proxy Routes - Groq
   GroqChatCompletionsWithDefaultAgent: "groqChatCompletionsWithDefaultAgent",
   GroqChatCompletionsWithAgent: "groqChatCompletionsWithAgent",

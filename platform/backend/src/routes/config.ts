@@ -196,6 +196,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           cerebras: config.llm.cerebras.baseUrl || null,
           mistral: config.llm.mistral.baseUrl || null,
           perplexity: config.llm.perplexity.baseUrl || null,
+          "perplexity-agent": config.llm["perplexity-agent"].baseUrl || null,
           groq: config.llm.groq.baseUrl || null,
           xai: config.llm.xai.baseUrl || null,
           vllm: config.llm.vllm.baseUrl || null,

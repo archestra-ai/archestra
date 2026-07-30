@@ -1,5 +1,9 @@
 import type { SupportedProvider } from "@archestra/shared";
-import { MINIMAX_MODELS, PERPLEXITY_MODELS } from "@archestra/shared";
+import {
+  MINIMAX_MODELS,
+  PERPLEXITY_AGENT_MODELS,
+  PERPLEXITY_MODELS,
+} from "@archestra/shared";
 import type { OpenAi } from "@/types";
 import { fetchAnthropicModels } from "./anthropic";
 import { fetchArchestraModels } from "./archestra";
@@ -129,6 +133,10 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   openai: fetchOpenAiModels,
   openrouter: fetchOpenrouterModels,
   perplexity: makeStaticFetcher("perplexity", PERPLEXITY_MODELS),
+  "perplexity-agent": makeStaticFetcher(
+    "perplexity-agent",
+    PERPLEXITY_AGENT_MODELS,
+  ),
   vllm: fetchVllmModels,
   xai: fetchXaiModels,
   zhipuai: fetchZhipuaiModels,

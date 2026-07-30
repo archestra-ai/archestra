@@ -43,6 +43,7 @@ const tokenizerCache: Record<SupportedProvider, () => Tokenizer> = {
   cohere: getTiktokenTokenizer,
   mistral: getTiktokenTokenizer,
   perplexity: getTiktokenTokenizer,
+  "perplexity-agent": getTiktokenTokenizer,
   groq: getTiktokenTokenizer,
   xai: getTiktokenTokenizer,
   openrouter: getTiktokenTokenizer,

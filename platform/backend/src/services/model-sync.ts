@@ -697,6 +697,10 @@ function inferModelCapabilities(params: {
     return inferPerplexityCapabilities();
   }
 
+  if (provider === "perplexity-agent") {
+    return inferPerplexityAgentCapabilities();
+  }
+
   return emptyCapabilities();
 }
 
@@ -731,6 +735,31 @@ function inferPerplexityCapabilities(): ProviderModelCapabilities {
   return {
     ...emptyCapabilities(),
     supportsToolCalling: false,
+  };
+}
+
+/**
+ * The counterpart to inferPerplexityCapabilities above, for the transport it
+ * describes: accepting `tools` is the Agent API's defining feature and the
+ * reason this provider exists, so its models are recorded tool-capable.
+ *
+ * Nothing upstream states it for us — the catalog is static (no /models
+ * endpoint) and models.dev has no Agent API entry — and these rows would
+ * otherwise store `null`, which downstream reads as "unknown, send tools
+ * anyway". That happens to behave correctly here, but only by accident; an
+ * explicit `true` is also what keeps the composer from showing the "no tools"
+ * chip and what a future capability lookup can override.
+ *
+ * The modalities are equally deliberate: `null` there makes the model edit
+ * dialog invalid the moment it opens, with every save failing validation
+ * against a message rendered off-screen (see inferOllamaCapabilities).
+ */
+function inferPerplexityAgentCapabilities(): ProviderModelCapabilities {
+  return {
+    ...emptyCapabilities(),
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    supportsToolCalling: true,
   };
 }
 

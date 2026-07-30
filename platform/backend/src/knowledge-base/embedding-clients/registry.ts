@@ -98,6 +98,7 @@ export const EMBEDDING_ADAPTERS: Record<
   deepseek: null,
   groq: null,
   perplexity: null,
+  "perplexity-agent": null,
   xai: null,
   minimax: null,
   kimi: null,

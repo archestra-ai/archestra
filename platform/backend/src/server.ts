@@ -344,6 +344,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.ollamaNativeProxyRoutes);
   fastify.register(routes.openrouterProxyRoutes);
   fastify.register(routes.perplexityProxyRoutes);
+  fastify.register(routes.perplexityAgentProxyRoutes);
   fastify.register(routes.vllmProxyRoutes);
   fastify.register(routes.xaiProxyRoutes);
   fastify.register(routes.zhipuaiProxyRoutes);

@@ -1322,6 +1322,25 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   };
                 }
 
+                // The Agent API stores nothing, so there are no server-side
+                // item ids to point back at. The SDK's Responses converter
+                // defaults `store` to true and then replaces each earlier
+                // assistant text and tool call that carries an item id with
+                // `{ type: "item_reference", id }` — references the second turn
+                // of every conversation would send and Perplexity could not
+                // resolve. `reasoningSummary` stays out of it: that option is
+                // gated on OpenAI's own model-name heuristic, which no
+                // Perplexity id matches, so it would only draw an "unsupported"
+                // warning. The key is literally `openai` because the SDK picks
+                // that namespace from the transport rather than the provider
+                // name.
+                if (provider === "perplexity-agent") {
+                  streamTextConfig.providerOptions = {
+                    ...streamTextConfig.providerOptions,
+                    openai: { store: false },
+                  };
+                }
+
                 // Request the model's real output ceiling (clamped by the
                 // operator ceiling), or a safe fallback when it is unknown.
                 // Without this, providers that inject a small default max

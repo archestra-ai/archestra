@@ -28,6 +28,7 @@ import {
   OpenAi,
   Openrouter,
   Perplexity,
+  PerplexityAgent,
   Vllm,
   Xai,
   Zhipuai,
@@ -513,6 +514,19 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .nullable()
       .optional(),
     response: withErrorResponse(Azure.API.ResponsesResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["perplexity-agent:responses"]),
+    request: withReadFallback(PerplexityAgent.API.ResponsesRequestSchema),
+    processedRequest: withReadFallback(
+      PerplexityAgent.API.ResponsesRequestSchema,
+    )
+      .nullable()
+      .optional(),
+    response: withErrorResponse(PerplexityAgent.API.ResponsesResponseSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

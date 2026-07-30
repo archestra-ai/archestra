@@ -23,6 +23,7 @@ import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapters/gemini
 import { getUsageTokens as getMinimaxUsage } from "@/routes/proxy/adapters/minimax";
 import { getUsageTokens as getOllamaNativeUsage } from "@/routes/proxy/adapters/ollama-native";
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapters/openai";
+import { getUsageTokens as getPerplexityAgentUsage } from "@/routes/proxy/adapters/perplexity-agent";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapters/zhipuai";
 import type { GatewayAgent } from "@/types";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
@@ -54,6 +55,9 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   "ollama-native": null,
   mistral: getOpenAIUsage,
   perplexity: getOpenAIUsage,
+  // Responses bodies count in `input_tokens`/`output_tokens`, which the
+  // chat-completions extractor cannot read.
+  "perplexity-agent": getPerplexityAgentUsage,
   groq: getOpenAIUsage,
   xai: getOpenAIUsage,
   openrouter: getOpenAIUsage,

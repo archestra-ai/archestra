@@ -71,6 +71,7 @@ export { default as ollamaNativeProxyRoutes } from "./proxy/routes/ollama-native
 export { default as openAiProxyRoutes } from "./proxy/routes/openai";
 export { default as openrouterProxyRoutes } from "./proxy/routes/openrouter";
 export { default as perplexityProxyRoutes } from "./proxy/routes/perplexity";
+export { default as perplexityAgentProxyRoutes } from "./proxy/routes/perplexity-agent";
 export { default as vllmProxyRoutes } from "./proxy/routes/vllm";
 export { default as xaiProxyRoutes } from "./proxy/routes/xai";
 export { default as zhipuaiProxyRoutes } from "./proxy/routes/zhipuai";

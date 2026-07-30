@@ -1945,6 +1945,11 @@ const config = {
         process.env.ARCHESTRA_PERPLEXITY_BASE_URL ||
         "https://api.perplexity.ai",
     },
+    "perplexity-agent": {
+      baseUrl:
+        process.env.ARCHESTRA_PERPLEXITY_AGENT_BASE_URL ||
+        "https://api.perplexity.ai/v1",
+    },
     groq: {
       baseUrl:
         process.env.ARCHESTRA_GROQ_BASE_URL || "https://api.groq.com/openai/v1",
@@ -2105,6 +2110,9 @@ const config = {
     },
     perplexity: {
       apiKey: process.env.ARCHESTRA_CHAT_PERPLEXITY_API_KEY || "",
+    },
+    "perplexity-agent": {
+      apiKey: process.env.ARCHESTRA_CHAT_PERPLEXITY_AGENT_API_KEY || "",
     },
     groq: {
       apiKey: process.env.ARCHESTRA_CHAT_GROQ_API_KEY || "",

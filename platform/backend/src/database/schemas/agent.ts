@@ -3,6 +3,7 @@ import { type SQL, sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   jsonb,
   text,
   timestamp,
@@ -164,6 +165,15 @@ const agentsTable = softDeletablePgTable(
     builtIn: boolean("built_in").generatedAlwaysAs(
       (): SQL => sql`${agentsTable.builtInAgentConfig} IS NOT NULL`,
     ),
+
+    /**
+     * Head pointer into `agent_versions`. 0 = legacy row that predates config
+     * versioning; the first config write forks version 1. Bumped by
+     * AgentVersionModel.forkIfChangedBestEffort at a config-mutating operation's
+     * boundary (agent create/update, tool/hook/exclusion/knowledge edits); see
+     * that model for the coverage surface and the lazy-capture caveat.
+     */
+    latestVersion: integer("latest_version").notNull().default(0),
 
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })

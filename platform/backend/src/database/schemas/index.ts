@@ -58,6 +58,7 @@ export { default as agentSuggestedPromptsTable } from "./agent-suggested-prompt"
 export { default as agentTeamsTable } from "./agent-team";
 export { default as agentToolsTable } from "./agent-tool";
 export { default as agentUsersTable } from "./agent-user";
+export { default as agentVersionsTable } from "./agent-version";
 export { default as apikeysTable } from "./api-key";
 export { default as appsTable } from "./app";
 export { default as appDataTable } from "./app-data";

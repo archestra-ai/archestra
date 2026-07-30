@@ -40266,6 +40266,11 @@
                             "nullable": true,
                             "type": "boolean"
                           },
+                          "latestVersion": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -40601,6 +40606,7 @@
                           "accessAllSubagents",
                           "builtInAgentConfig",
                           "builtIn",
+                          "latestVersion",
                           "createdAt",
                           "updatedAt",
                           "deletedAt",
@@ -41451,6 +41457,11 @@
                       "nullable": true,
                       "type": "boolean"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -41786,6 +41797,7 @@
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
+                    "latestVersion",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -42365,6 +42377,11 @@
                         "nullable": true,
                         "type": "boolean"
                       },
+                      "latestVersion": {
+                        "type": "integer",
+                        "minimum": -2147483648,
+                        "maximum": 2147483647
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
@@ -42700,6 +42717,7 @@
                       "accessAllSubagents",
                       "builtInAgentConfig",
                       "builtIn",
+                      "latestVersion",
                       "createdAt",
                       "updatedAt",
                       "deletedAt",
@@ -43197,6 +43215,11 @@
                       "nullable": true,
                       "type": "boolean"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -43532,6 +43555,7 @@
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
+                    "latestVersion",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -44029,6 +44053,11 @@
                       "nullable": true,
                       "type": "boolean"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -44364,6 +44393,7 @@
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
+                    "latestVersion",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -45205,6 +45235,11 @@
                           "nullable": true,
                           "type": "boolean"
                         },
+                        "latestVersion": {
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -45540,6 +45575,7 @@
                         "accessAllSubagents",
                         "builtInAgentConfig",
                         "builtIn",
+                        "latestVersion",
                         "createdAt",
                         "updatedAt",
                         "deletedAt",
@@ -46084,6 +46120,11 @@
                       "nullable": true,
                       "type": "boolean"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -46419,6 +46460,7 @@
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
+                    "latestVersion",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -47225,6 +47267,11 @@
                       "nullable": true,
                       "type": "boolean"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -47560,6 +47607,7 @@
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
+                    "latestVersion",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -48370,6 +48418,11 @@
                       "nullable": true,
                       "type": "boolean"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -48705,6 +48758,7 @@
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
+                    "latestVersion",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -50982,6 +51036,11 @@
                       "nullable": true,
                       "type": "boolean"
                     },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -51317,6 +51376,7 @@
                     "accessAllSubagents",
                     "builtInAgentConfig",
                     "builtIn",
+                    "latestVersion",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",

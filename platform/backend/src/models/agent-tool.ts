@@ -36,6 +36,7 @@ import type {
   UpdateAgentTool,
 } from "@/types";
 import AgentTeamModel from "./agent-team";
+import AgentVersionModel from "./agent-version";
 import McpServerUserModel from "./mcp-server-user";
 
 class AgentToolModel {
@@ -96,6 +97,9 @@ class AgentToolModel {
 
     // Assign the tool to the source agent
     await AgentToolModel.createIfNotExists(agentId, tool.id);
+
+    // Delegation assignment changes the agent's tool surface — fork a version.
+    await AgentVersionModel.forkIfChangedBestEffort(agentId);
   }
 
   /**
@@ -113,7 +117,7 @@ class AgentToolModel {
       return false;
     }
 
-    return AgentToolModel.delete(agentId, tool.id);
+    return AgentToolModel.delete({ agentId, toolId: tool.id });
   }
 
   /**
@@ -384,16 +388,31 @@ class AgentToolModel {
     return rows;
   }
 
-  static async delete(agentId: string, toolId: string): Promise<boolean> {
-    const result = await db
+  static async delete(params: {
+    agentId: string;
+    toolId: string;
+    /** See `AgentToolAssignmentRequest.deferVersionFork`. */
+    deferVersionFork?: boolean;
+  }): Promise<boolean> {
+    const { agentId, toolId } = params;
+    // RETURNING (not rowCount) so the deleted flag is reliable — the fork below
+    // and callers key off it, and rowCount is not dependable under PGlite.
+    const rows = await db
       .delete(schema.agentToolsTable)
       .where(
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           eq(schema.agentToolsTable.toolId, toolId),
         ),
-      );
-    return result.rowCount !== null && result.rowCount > 0;
+      )
+      .returning({ toolId: schema.agentToolsTable.toolId });
+    const deleted = rows.length > 0;
+    if (deleted && !params.deferVersionFork) {
+      // Tool surface changed — fork a version. Covers unassign via REST, the
+      // MCP sync tool, and removeDelegation.
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    }
+    return deleted;
   }
 
   static async deleteAllForAgent(agentId: string): Promise<number> {

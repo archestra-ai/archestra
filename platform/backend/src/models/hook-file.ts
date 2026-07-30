@@ -7,6 +7,7 @@ import type {
   UpdateHookFile,
 } from "@/types/hook";
 import { InsertHookFileSchema, UpdateHookFileSchema } from "@/types/hook";
+import AgentVersionModel from "./agent-version";
 
 class HookFileModel {
   static async create(data: InsertHookFile): Promise<HookFile> {
@@ -15,6 +16,8 @@ class HookFileModel {
       .insert(schema.hookFilesTable)
       .values(parsed)
       .returning();
+    // Hooks are part of the agent config snapshot — fork a version.
+    await AgentVersionModel.forkIfChangedBestEffort(row.agentId);
     return row;
   }
 
@@ -89,6 +92,9 @@ class HookFileModel {
         ),
       )
       .returning();
+    if (row) {
+      await AgentVersionModel.forkIfChangedBestEffort(row.agentId);
+    }
     return row ?? null;
   }
 
@@ -101,7 +107,14 @@ class HookFileModel {
           eq(schema.hookFilesTable.organizationId, organizationId),
         ),
       )
-      .returning({ id: schema.hookFilesTable.id });
+      // agentId is needed to fork the owning agent's config version.
+      .returning({
+        id: schema.hookFilesTable.id,
+        agentId: schema.hookFilesTable.agentId,
+      });
+    if (rows.length > 0) {
+      await AgentVersionModel.forkIfChangedBestEffort(rows[0].agentId);
+    }
     return rows.length > 0;
   }
 }

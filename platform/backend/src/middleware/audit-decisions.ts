@@ -346,6 +346,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "join: agent × team; parent (agent) audited",
   },
+  agentVersionsTable: {
+    audited: false,
+    reason: "child of agent; immutable version snapshot, parent audited",
+  },
   // Apps are a resource-shaped table with admin-facing CRUD via /api/apps.
   appsTable: { audited: true, model: AppModel },
   appVersionsTable: {

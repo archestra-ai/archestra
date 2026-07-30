@@ -10,7 +10,12 @@ import {
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
 import logger from "@/logging";
-import { AgentModel, AgentToolModel, TeamModel } from "@/models";
+import {
+  AgentModel,
+  AgentToolModel,
+  AgentVersionModel,
+  TeamModel,
+} from "@/models";
 import { assignToolToAgent } from "@/services/agent-tool-assignment";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { AgentToolAssignmentInputSchema, UuidIdSchema } from "@/types";
@@ -295,6 +300,8 @@ async function handleBulkAssignTool(params: {
           toolId: assignment.toolId,
           resolveAtCallTime: assignment.resolveAtCallTime,
           mcpServerId: assignment.mcpServerId ?? undefined,
+          // One version for the whole batch, forked below.
+          deferVersionFork: true,
         });
       }),
     );
@@ -328,6 +335,13 @@ async function handleBulkAssignTool(params: {
         failed.push({ [idField]: entityId, toolId, error });
       }
     });
+
+    // One config version per agent whose tool surface actually changed, not one
+    // per assignment — this fans out over `assignments`, so the per-assignment
+    // fork was deferred above.
+    await AgentVersionModel.forkAgentsBestEffort(
+      succeeded.map((entry) => entry[idField]),
+    );
 
     const output = { succeeded, failed, duplicates };
     return structuredSuccessResult(output, JSON.stringify(output, null, 2));
@@ -411,6 +425,8 @@ async function handleBulkRemoveTool(params: {
             agentId: removal.agentId,
             organizationId,
             toolIds: [removal.toolId],
+            // One version for the whole batch, forked below.
+            deferVersionFork: true,
           });
           return "removed" as const;
         }
@@ -423,7 +439,12 @@ async function handleBulkRemoveTool(params: {
         if (!wasAssigned) {
           return "not_assigned" as const;
         }
-        await AgentToolModel.delete(removal.agentId, removal.toolId);
+        await AgentToolModel.delete({
+          agentId: removal.agentId,
+          toolId: removal.toolId,
+          // One version for the whole batch, forked below.
+          deferVersionFork: true,
+        });
         return "removed" as const;
       }),
     );
@@ -448,6 +469,11 @@ async function handleBulkRemoveTool(params: {
         failed.push({ agentId, toolId, error });
       }
     });
+
+    // One config version per agent, not one per removal (see bulk assign).
+    await AgentVersionModel.forkAgentsBestEffort(
+      succeeded.map((entry) => entry.agentId),
+    );
 
     const output = { succeeded, notAssigned, failed };
     return structuredSuccessResult(output, JSON.stringify(output, null, 2));

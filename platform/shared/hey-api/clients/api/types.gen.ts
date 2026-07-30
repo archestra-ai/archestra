@@ -12096,6 +12096,7 @@ export type GetAgentsResponses = {
                 name: 'app-runtime-llm-agent';
             } | null;
             builtIn: boolean | null;
+            latestVersion: number;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -12347,6 +12348,7 @@ export type CreateAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -12561,6 +12563,7 @@ export type GetAllAgentsResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -12750,6 +12753,7 @@ export type GetDefaultMcpGatewayResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -12939,6 +12943,7 @@ export type GetDefaultLlmProxyResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -13207,6 +13212,7 @@ export type ImportAgentResponses = {
                 name: 'app-runtime-llm-agent';
             } | null;
             builtIn: boolean | null;
+            latestVersion: number;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -13489,6 +13495,7 @@ export type GetAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -13733,6 +13740,7 @@ export type UpdateAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -13933,6 +13941,7 @@ export type CloneAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -14647,6 +14656,7 @@ export type RestoreAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;

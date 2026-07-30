@@ -610,6 +610,8 @@ export const TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME}` as const;
 export const TOOL_TODO_WRITE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_TODO_WRITE_SHORT_NAME}` as const;
+export const TOOL_ADVISOR_FULL_NAME =
+  `${ARCHESTRA_TOOL_PREFIX}${TOOL_ADVISOR_SHORT_NAME}` as const;
 export const TOOL_SEARCH_TOOLS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_SEARCH_TOOLS_SHORT_NAME}` as const;
 export const TOOL_RUN_TOOL_FULL_NAME =
@@ -641,14 +643,19 @@ export const TOOL_EDIT_FILE_FULL_NAME =
 export const TOOL_DELETE_FILE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_DELETE_FILE_SHORT_NAME}` as const;
 
+// These two lists are not derived from each other: the docs generator reads the
+// full names and tool assignment reads the short names. A tool added to one and
+// not the other is assigned but documented as not pre-installed, or the reverse.
 export const DEFAULT_ARCHESTRA_TOOL_NAMES: readonly string[] = [
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
+  TOOL_ADVISOR_FULL_NAME,
 ];
 
 export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_TODO_WRITE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_ADVISOR_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
@@ -878,6 +885,8 @@ export const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAMES = [
   // persistent file is part of the everyday file-management flow, not a rare
   // destructive escape hatch.
   ...SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES,
+  // An advisor a model has to go and find is an advisor it does not consult.
+  TOOL_ADVISOR_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 const ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =

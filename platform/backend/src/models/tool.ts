@@ -1857,6 +1857,60 @@ class ToolModel {
   }
 
   /**
+   * Assign newly-created default built-in tools to existing agents.
+   *
+   * New agents pick these up at create time, but agents that predate the tool
+   * would otherwise never see it — there is no migration that can add it,
+   * since the tool row itself is created by the seed that runs after
+   * migrations. Mirrors {@link backfillNewSandboxToolsToAgents}: every agent
+   * kind and both tool modes, skipping built-in system agents (they bypass the
+   * create-time tool hooks, and an advisor must not be handed the advisor
+   * tool). Idempotent via `createManyIfNotExists`.
+   *
+   * Call this BEFORE the All-tools exclusion pre-fill: that pre-fill skips
+   * agents which already hold an assignment row, so backfilling first is what
+   * keeps an Auto-mode agent from having the tool pre-excluded the moment it
+   * appears.
+   *
+   * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
+   */
+  static async backfillNewDefaultToolsToAgents(
+    newlyCreatedToolNames: string[],
+  ): Promise<void> {
+    const createdShortNames = new Set(
+      newlyCreatedToolNames
+        .map(extractArchestraBuiltInShortName)
+        .filter((name): name is string => name !== null),
+    );
+    const newDefaultShortNames = DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.filter(
+      (shortName) => createdShortNames.has(shortName),
+    );
+    if (newDefaultShortNames.length === 0) return;
+
+    const organizationIds = await OrganizationModel.findAllIds();
+    for (const organizationId of organizationIds) {
+      const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
+        organizationId,
+        newDefaultShortNames,
+      );
+      if (toolIds.length === 0) continue;
+      const agentIds =
+        await AgentModel.findNonBuiltInIdsByOrganizationId(organizationId);
+      for (const agentId of agentIds) {
+        await AgentToolModel.createManyIfNotExists(agentId, toolIds);
+      }
+      logger.info(
+        {
+          organizationId,
+          agentCount: agentIds.length,
+          newDefaultShortNames,
+        },
+        "Backfilled new default tools to org agents",
+      );
+    }
+  }
+
+  /**
    * Assign skill tools to a single agent if its org has opted in
    * (`organization.skillToolsEnabled`). No-op otherwise.
    *

@@ -13,7 +13,7 @@ Renaming/deleting this page? Add a redirect in docs/redirects.json.
 
 The Archestra MCP Server is a built-in MCP server that ships with the platform and requires no installation. It exposes tools for managing platform resources such as agents, MCP servers, policies, and limits.
 
-Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: [`todo_write`](#todo_write), [`query_knowledge_sources`](#query_knowledge_sources).
+Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: [`todo_write`](#todo_write), [`query_knowledge_sources`](#query_knowledge_sources), [`advisor`](#advisor).
 
 [`query_knowledge_sources`](#query_knowledge_sources) appears for Agents and MCP Gateways only when at least one [knowledge base or connector](/docs/platform-knowledge) is attached. To use it, the user must have `knowledgeSource:query`.
 

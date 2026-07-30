@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -37,9 +43,18 @@ vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/hooks/use-app-name");
 
-const { availableKeysMock, createKeyMock } = vi.hoisted(() => ({
-  availableKeysMock: vi.fn(),
-  createKeyMock: vi.fn(),
+const { availableKeysMock, createKeyMock, modelsByProviderMock } = vi.hoisted(
+  () => ({
+    availableKeysMock: vi.fn(),
+    createKeyMock: vi.fn(),
+    modelsByProviderMock: vi.fn(),
+  }),
+);
+
+vi.mock("@/lib/llm-models.query", () => ({
+  useLlmModelsByProvider: () => ({
+    modelsByProvider: modelsByProviderMock(),
+  }),
 }));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
@@ -120,6 +135,7 @@ beforeEach(() => {
     data: [{ provider: "anthropic" }, { provider: "bedrock" }],
   });
   createKeyMock.mockResolvedValue({ id: "key-1" });
+  modelsByProviderMock.mockReturnValue({});
   allSkillsMock.mockReturnValue({
     data: [
       { id: "s1", name: "warehouse-postgres" },
@@ -418,6 +434,62 @@ describe("ConnectCommandPanel", () => {
     expect(allSkillsMock).toHaveBeenLastCalledWith({
       enabled: false,
       forAgentId: "p1",
+    });
+  });
+
+  describe("Copilot CLI model choice", () => {
+    it("surfaces the model in the review step and sends it with the setup", async () => {
+      renderPanel({ client: findClient("copilot-cli") });
+
+      // first supported provider (OpenAI) → its default model is preselected
+      expect(await screen.findByText("gpt-5.5")).toBeInTheDocument();
+      expect(screen.getByTestId("connect-change-model")).toBeInTheDocument();
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            clientId: "copilot-cli",
+            copilotModel: "gpt-5.5",
+          }),
+        ),
+      );
+    });
+
+    it("regenerates the command with an edited model", async () => {
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("copilot-cli") });
+      await screen.findByText(COMMAND);
+
+      await user.click(screen.getByTestId("connect-change-model"));
+      const input = screen.getByPlaceholderText("Model id");
+      fireEvent.change(input, { target: { value: "o4-mini" } });
+
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ copilotModel: "o4-mini" }),
+        ),
+      );
+    });
+
+    it("offers the org's synced models for the provider as a dropdown", async () => {
+      modelsByProviderMock.mockReturnValue({
+        openai: [{ id: "gpt-5.5" }, { id: "o4-mini" }],
+      });
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("copilot-cli") });
+      await screen.findByText(COMMAND);
+
+      await user.click(screen.getByTestId("connect-change-model"));
+      // a Select (not the free-text input) backs multi-option providers
+      expect(screen.queryByPlaceholderText("Model id")).not.toBeInTheDocument();
+      expect(screen.getByRole("combobox")).toBeInTheDocument();
+    });
+
+    it("shows no model row for clients without provider env wiring", async () => {
+      renderPanel(); // claude-code
+      await screen.findByText(COMMAND);
+      expect(
+        screen.queryByTestId("connect-change-model"),
+      ).not.toBeInTheDocument();
     });
   });
 

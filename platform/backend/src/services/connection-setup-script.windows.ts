@@ -653,14 +653,23 @@ const PS_COPILOT_APPLIED_OK = `Ok 'Copilot provider settings applied: current se
 /**
  * COPILOT_MODEL companion to the provider apply: with a BYOK provider
  * configured, the Copilot CLI refuses to launch without an explicit model
- * ("BYOK providers require an explicit model"), so an unset COPILOT_MODEL
- * gets the provider's default (session + User scope). An existing value is
- * the user's own choice and is never overwritten.
+ * ("BYOK providers require an explicit model"). A model chosen in the
+ * wizard's review step is the user's reviewed decision and is applied
+ * outright; without one, an unset COPILOT_MODEL gets the provider's default
+ * (session + User scope) and an existing value is never overwritten.
  */
-function psCopilotModelApply(defaultModel: string): string {
+function psCopilotModelApply(params: {
+  chosenModel: string | null;
+  defaultModel: string;
+}): string {
+  if (params.chosenModel) {
+    return `${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.model, psq(params.chosenModel))}
+Ok ${psq(`set ${COPILOT_PROVIDER_ENV_KEYS.model} = ${params.chosenModel} (your selection on the connection page).`)}
+Write-Host 'Restart any open Copilot CLI sessions to pick this up.'`;
+  }
   return `if ([string]::IsNullOrEmpty($env:${COPILOT_PROVIDER_ENV_KEYS.model})) {
-  ${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.model, psq(defaultModel))}
-  Ok ${psq(`set ${COPILOT_PROVIDER_ENV_KEYS.model} = ${defaultModel} — change it anytime ($env:${COPILOT_PROVIDER_ENV_KEYS.model}).`)}
+  ${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.model, psq(params.defaultModel))}
+  Ok ${psq(`set ${COPILOT_PROVIDER_ENV_KEYS.model} = ${params.defaultModel} — change it anytime ($env:${COPILOT_PROVIDER_ENV_KEYS.model}).`)}
 } else {
   Write-Host ('Keeping your existing ${COPILOT_PROVIDER_ENV_KEYS.model} = ' + $env:${COPILOT_PROVIDER_ENV_KEYS.model})
 }
@@ -706,7 +715,10 @@ ${PS_COPILOT_APPLIED_OK}${
     ? ""
     : `\nWrite-Host 'Set your own key the same way: $env:${COPILOT_PROVIDER_ENV_KEYS.apiKey} = "<your-${ctx.proxy.provider}-api-key>"'`
 }
-${psCopilotModelApply(DEFAULT_MODELS[ctx.proxy.provider])}`);
+${psCopilotModelApply({
+  chosenModel: ctx.proxy.copilotModel,
+  defaultModel: DEFAULT_MODELS[ctx.proxy.provider],
+})}`);
     }
   }
 
@@ -869,7 +881,10 @@ if (-not [string]::IsNullOrEmpty($ArchGhcpToken)) {
 } else {
   Write-Host 'No GitHub token was linked — set your own key the same way: $env:${COPILOT_PROVIDER_ENV_KEYS.apiKey} = "<your-github-oauth-token>"'
 }
-${psCopilotModelApply(DEFAULT_MODELS["github-copilot"])}`;
+${psCopilotModelApply({
+  chosenModel: proxy.copilotModel,
+  defaultModel: DEFAULT_MODELS["github-copilot"],
+})}`;
 }
 
 // ===================================================================

@@ -273,6 +273,7 @@ describe("buildStartupGuardContext", () => {
         virtualKey: null,
         virtualKeyName: null,
         passthroughVirtualKey: null,
+        copilotModel: null,
       },
       skills: null,
     };

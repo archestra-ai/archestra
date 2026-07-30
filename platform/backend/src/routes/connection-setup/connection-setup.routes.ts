@@ -95,6 +95,17 @@ const CreateConnectionSetupBodySchema = z.object({
    * silently skipped when the caller lacks llmVirtualKey:create.
    */
   attributePassthrough: z.boolean().default(true),
+  /**
+   * Explicit model for the Copilot CLI's provider wiring — the CLI refuses to
+   * launch a BYOK provider without one, so the wizard's review step picks it.
+   * The script applies it as COPILOT_MODEL. copilot-cli setups only.
+   */
+  copilotModel: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[\x20-\x7E]+$/, "must be printable ASCII")
+    .optional(),
   skills: z
     .object({
       skillIds: z.array(z.string().uuid()).min(1).max(200),
@@ -256,6 +267,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider,
         proxyAuth,
         attributePassthrough,
+        copilotModel,
         skills,
       } = body;
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
@@ -276,6 +288,12 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(
           400,
           `${provider} is not supported for ${clientId} setups`,
+        );
+      }
+      if (copilotModel && clientId !== "copilot-cli") {
+        throw new ApiError(
+          400,
+          "copilotModel is only supported for copilot-cli setups",
         );
       }
 
@@ -389,6 +407,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         llmProxyId: llmProxyId ?? null,
         provider: provider ?? null,
         proxyAuth,
+        copilotModel: copilotModel ?? null,
         virtualApiKeyId,
         includeSkills: Boolean(skills),
         skillLinkTtlDays: skills?.ttlDays ?? null,
@@ -731,6 +750,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       virtualKey: virtualKeyValue,
       virtualKeyName,
       passthroughVirtualKey,
+      copilotModel: setup.copilotModel,
       // Passthrough Copilot setups run the GitHub device flow inside the
       // script; virtual-key setups resolve the stored token server-side.
       githubCopilot:

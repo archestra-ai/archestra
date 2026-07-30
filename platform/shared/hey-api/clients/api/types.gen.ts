@@ -61075,7 +61075,7 @@ export type GetMembersData = {
         limit?: number;
         offset?: number;
         /**
-         * Search by user name or email (case-insensitive partial match)
+         * Search by user name or email. Case-insensitive: every whitespace-separated word must appear in the name or the email, in any order, so "Ada Lovelace" also matches "Lovelace, Ada M."
          */
         name?: string;
         /**

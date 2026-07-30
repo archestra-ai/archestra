@@ -33,7 +33,7 @@ import { useEnvironments } from "@/lib/environment.query";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { useMembersPaginated } from "@/lib/member.query";
+import { useMemberSearch } from "@/lib/member.query";
 import { useRolesPaginated } from "@/lib/role.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -254,9 +254,16 @@ export function AuditLogTable() {
     search: searchFromUrl ?? undefined,
   });
 
-  const { data: membersResponse } = useMembersPaginated({
+  // Server-side search rather than a client filter over the first N members:
+  // an org larger than one page would otherwise silently hide every actor
+  // whose name sorts past the cut-off.
+  const {
+    users: actorUsers,
+    onSearchQueryChange: onActorSearchChange,
+    emptyMessage: actorEmptyMessage,
+  } = useMemberSearch({
     limit: ACTOR_FILTER_LIMIT,
-    offset: 0,
+    selectedUserIds: actorId ? [actorId] : [],
   });
 
   // Two lifecycle buckets: agents are soft-deleted, so a deleted agent's
@@ -297,15 +304,15 @@ export function AuditLogTable() {
   const rows = response?.data ?? [];
   const paginationMeta = response?.pagination;
 
-  const memberOptions = useMemo(() => {
-    const items =
-      membersResponse?.data?.map((m) => ({
-        value: m.userId,
-        label: m.name || m.email || "Unknown",
-        description: m.name ? m.email : undefined,
-      })) ?? [];
-    return [{ value: ALL_VALUE, label: "All actors" }, ...items];
-  }, [membersResponse]);
+  const memberOptions = useMemo(
+    () =>
+      actorUsers.map((user) => ({
+        value: user.userId,
+        label: user.name || user.email || "Unknown",
+        description: user.name ? (user.email ?? undefined) : undefined,
+      })),
+    [actorUsers],
+  );
 
   const entityOptions = useMemo(() => {
     // The type goes into `description`: SearchableSelect renders it as a
@@ -615,6 +622,9 @@ export function AuditLogTable() {
           onValueChange={handleActorChange}
           placeholder="Filter by actor"
           items={memberOptions}
+          pinnedItems={[{ value: ALL_VALUE, label: "All actors" }]}
+          onSearchQueryChange={onActorSearchChange}
+          emptyMessage={actorEmptyMessage}
           className="w-[220px]"
         />
         <DateTimeRangePicker

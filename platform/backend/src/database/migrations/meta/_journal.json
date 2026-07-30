@@ -2651,8 +2651,15 @@
     {
       "idx": 378,
       "version": "7",
-      "when": 1785436760952,
-      "tag": "0378_amazing_praxagora",
+      "when": 1785435854283,
+      "tag": "0378_user_name_email_trgm_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 379,
+      "version": "7",
+      "when": 1785439348264,
+      "tag": "0379_app_labels",
       "breakpoints": true
     }
   ]

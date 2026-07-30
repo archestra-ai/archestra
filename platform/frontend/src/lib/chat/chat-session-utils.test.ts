@@ -2,6 +2,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import { describe, expect, test } from "vitest";
 import {
   pruneEmptyTrailingAssistantMessage,
+  pruneStrandedAssistantMessages,
   restoreRenderableAssistantParts,
   shouldFreezeChatMessages,
 } from "./chat-session-utils";
@@ -381,6 +382,60 @@ describe("pruneEmptyTrailingAssistantMessage", () => {
     ] as UIMessage[];
 
     expect(pruneEmptyTrailingAssistantMessage(messages)).toEqual(messages);
+  });
+});
+
+describe("pruneStrandedAssistantMessages", () => {
+  const userMessage = {
+    id: "user-1",
+    role: "user",
+    parts: [{ type: "text", text: "how much was spent on ads?" }],
+  } as UIMessage;
+  // What the AI SDK opens under a client-generated id to hold a data part that
+  // arrives before the stream's `start` chunk, then abandons when `start` names
+  // the real message.
+  const telemetryOnlyAssistant = {
+    id: "client-generated",
+    role: "assistant",
+    parts: [
+      { type: "data-context-window-estimate", data: { estimatedTokens: 12 } },
+      { type: "data-context-window-breakdown", data: { totalTokens: 12 } },
+    ],
+  } as unknown as UIMessage;
+  const answeredAssistant = {
+    id: "srv-1",
+    role: "assistant",
+    parts: [
+      { type: "reasoning", text: "weighing" },
+      { type: "text", text: "about $4,000" },
+    ],
+  } as UIMessage;
+
+  test("drops a telemetry-only assistant message the turn has moved past", () => {
+    expect(
+      pruneStrandedAssistantMessages([
+        userMessage,
+        telemetryOnlyAssistant,
+        answeredAssistant,
+      ]),
+    ).toEqual([userMessage, answeredAssistant]);
+  });
+
+  test("keeps a content-free assistant message while it is the turn in flight", () => {
+    // The live message legitimately has no renderable content yet: the stream
+    // has only sent `start`/`step-start` so far.
+    const streaming = [
+      userMessage,
+      { id: "srv-1", role: "assistant", parts: [{ type: "step-start" }] },
+    ] as UIMessage[];
+
+    expect(pruneStrandedAssistantMessages(streaming)).toBe(streaming);
+  });
+
+  test("returns the same reference when nothing is stranded", () => {
+    const messages = [userMessage, answeredAssistant];
+
+    expect(pruneStrandedAssistantMessages(messages)).toBe(messages);
   });
 });
 

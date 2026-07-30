@@ -1078,9 +1078,14 @@ describe("ChatProvider retries", () => {
     // regenerate({messageId}) synchronously truncates it up to and including
     // the user anchor before requesting (AbstractChat.regenerate slices
     // state.messages in the same task).
-    mocks.setMessages.mockImplementation((next: UIMessage[]) => {
-      liveMessages.current = next;
-    });
+    mocks.setMessages.mockImplementation(
+      (next: UIMessage[] | ((current: UIMessage[]) => UIMessage[])) => {
+        // Both forms, like the SDK: callers pass a list or an updater run
+        // against the live list.
+        liveMessages.current =
+          typeof next === "function" ? next(liveMessages.current) : next;
+      },
+    );
     mocks.regenerate.mockImplementation(
       async ({ messageId }: { messageId: string }) => {
         const index = liveMessages.current.findIndex((m) => m.id === messageId);

@@ -3,6 +3,7 @@ import type { ModelsDevApiResponse } from "@/clients/models-dev-client";
 import {
   resolveCrossProviderPrices,
   resolveDiscoveredModelRegistryEntry,
+  resolveSelfHostedModelMetadata,
 } from "./cross-provider-pricing";
 
 // Minimal models.dev fixture mirroring real shapes: the canonical `anthropic`
@@ -37,6 +38,20 @@ const MODELS_DEV: ModelsDevApiResponse = {
         id: "gpt-4o",
         name: "GPT-4o",
         cost: { input: 2.5, output: 10, cache_read: 1.25 },
+      },
+    },
+  },
+  meta: {
+    id: "meta",
+    name: "Meta",
+    models: {
+      "llama-4-maverick": {
+        id: "llama-4-maverick",
+        name: "Llama 4 Maverick",
+        cost: { input: 0.22, output: 0.85 },
+        limit: { context: 1048576, output: 16384 },
+        modalities: { input: ["text", "image"], output: ["text"] },
+        tool_call: true,
       },
     },
   },
@@ -353,6 +368,78 @@ describe("resolveDiscoveredModelRegistryEntry", () => {
         provider: "openai",
         modelId: "us.meta.llama3-3-70b-instruct-v1:0",
         modelsDevData: MODELS_DEV,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("resolveSelfHostedModelMetadata", () => {
+  test("matches a HuggingFace path to the vendor that publishes the model", () => {
+    expect(
+      resolveSelfHostedModelMetadata({
+        modelId: "meta-llama/Llama-4-Maverick",
+        modelsDevData: MODELS_DEV,
+      }),
+    ).toMatchObject({
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+    });
+  });
+
+  test("asserts no window or output limit, whatever the vendor publishes", () => {
+    // The entry carries a 1M window; the server that serves it decides its own.
+    const metadata = resolveSelfHostedModelMetadata({
+      modelId: "meta-llama/Llama-4-Maverick",
+      modelsDevData: MODELS_DEV,
+    });
+
+    expect(metadata?.contextLength).toBeNull();
+    expect(metadata?.outputLength).toBeNull();
+  });
+
+  test("reports nothing for a name no vendor publishes", () => {
+    expect(
+      resolveSelfHostedModelMetadata({
+        modelId: "our-finetune-v3",
+        modelsDevData: MODELS_DEV,
+      }),
+    ).toBeNull();
+  });
+
+  test("ignores a reseller listing, matching only the vendor", () => {
+    // `us.meta.llama3-3-70b-instruct-v1:0` exists under amazon-bedrock alone.
+    expect(
+      resolveSelfHostedModelMetadata({
+        modelId: "us.meta.llama3-3-70b-instruct-v1:0",
+        modelsDevData: MODELS_DEV,
+      }),
+    ).toBeNull();
+  });
+
+  test("reports nothing when vendors disagree about what the name means", () => {
+    // An operator alias can collide with an unrelated model. Two vendors
+    // publishing the same bare name with different modalities means the name
+    // does not identify one model, so nothing is asserted.
+    const ambiguous: ModelsDevApiResponse = {
+      ...MODELS_DEV,
+      cohere: {
+        id: "cohere",
+        name: "Cohere",
+        models: {
+          "llama-4-maverick": {
+            id: "llama-4-maverick",
+            name: "Not the same model",
+            modalities: { input: ["text"], output: ["text"] },
+          },
+        },
+      },
+    };
+
+    expect(
+      resolveSelfHostedModelMetadata({
+        modelId: "meta-llama/Llama-4-Maverick",
+        modelsDevData: ambiguous,
       }),
     ).toBeNull();
   });

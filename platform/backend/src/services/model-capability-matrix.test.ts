@@ -179,6 +179,21 @@ const MODELS_DEV: ModelsDevApiResponse = {
       },
     },
   },
+  // A first-party vendor entry for a model vLLM commonly serves.
+  meta: {
+    id: "meta",
+    name: "Meta",
+    models: {
+      "llama-4-maverick": {
+        id: "llama-4-maverick",
+        name: "Llama 4 Maverick",
+        cost: { input: 0.22, output: 0.85 },
+        limit: { context: 1048576, output: 16384 },
+        modalities: { input: ["text", "image"], output: ["text"] },
+        tool_call: true,
+      },
+    },
+  },
   openrouter: {
     id: "openrouter",
     name: "OpenRouter",
@@ -939,6 +954,51 @@ const MATRIX: MatrixRow[] = [
     },
   },
 
+  // --- vLLM: the operator runs the server, so it reports its own window and
+  // bills nothing per token ---
+  {
+    name: "vllm/a vendor model served under its HuggingFace path",
+    provider: "vllm",
+    modelId: "meta-llama/Llama-4-Maverick",
+    // What the vLLM fetcher reads out of `max_model_len`.
+    fetched: { contextLength: 200000 },
+    expected: {
+      // The server's own window, not the vendor's 1M: this deployment was
+      // launched with less, and only it can say so.
+      contextLength: 200000,
+      outputLength: null,
+      // Proves the modalities are read rather than assumed to be text.
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
+      priceSource: "default",
+      pricePerMillionCacheRead: null,
+      pricePerMillionCacheWrite: null,
+      cachePriceSource: null,
+    },
+  },
+  {
+    name: "vllm/an operator alias no vendor publishes",
+    provider: "vllm",
+    modelId: "our-finetune-v3",
+    fetched: { contextLength: 32768 },
+    expected: {
+      contextLength: 32768,
+      outputLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: null,
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
+      priceSource: "default",
+      pricePerMillionCacheRead: null,
+      pricePerMillionCacheWrite: null,
+      cachePriceSource: null,
+    },
+  },
+
   // --- Ollama: local models, absent from models.dev entirely, and billed
   // no per-token rate on either transport (zero, not the generic estimate) ---
   {
@@ -1143,7 +1203,7 @@ const MATRIX: MatrixRow[] = [
  * the guard below fails until someone updates this number, which is the moment
  * to ask whether that model should really be unpriced.
  */
-const EXPECTED_DEFAULT_PRICED_ROWS = 8;
+const EXPECTED_DEFAULT_PRICED_ROWS = 10;
 
 /**
  * Reproduce what the LLM proxy does the first time it sees a model: write the

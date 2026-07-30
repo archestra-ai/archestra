@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DEFAULT_MODELS,
   providerDisplayNames,
   providerRequiresPerUserCredential,
   type SupportedProvider,
@@ -26,6 +27,7 @@ import { GithubCopilotSignIn } from "@/components/github-copilot-sign-in";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -43,6 +45,7 @@ import {
   useCreateConnectionSetup,
 } from "@/lib/connection-setup.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
@@ -67,7 +70,13 @@ import { TerminalBlock } from "./terminal-block";
 
 type ScriptClientId = CreateConnectionSetupBody["clientId"];
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
-type EditableRow = "endpoint" | "gateway" | "proxy" | "skills" | "platform";
+type EditableRow =
+  | "endpoint"
+  | "gateway"
+  | "proxy"
+  | "model"
+  | "skills"
+  | "platform";
 
 const SCRIPT_CLIENT_IDS: readonly string[] = [
   "claude-code",
@@ -239,6 +248,28 @@ export function ConnectCommandPanel({
   const needsPerUserConnect =
     providerIsPerUser && !configuredProviders.has(provider);
 
+  // The Copilot CLI refuses to launch a BYOK provider without an explicit
+  // COPILOT_MODEL, so the review step surfaces the model as a reviewable
+  // choice instead of hard-wiring a default. null = the provider's default;
+  // reset when the provider changes so a model picked for one provider never
+  // leaks onto another. Options come from the org's synced model list; with
+  // none synced for the provider, a free-text field takes any model id.
+  const isCopilotClient = client.id === "copilot-cli";
+  const [modelChoice, setModelChoice] = useState<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: provider is the reset trigger
+  useEffect(() => setModelChoice(null), [provider]);
+  const { modelsByProvider } = useLlmModelsByProvider();
+  const effectiveModel =
+    isCopilotClient && provider
+      ? (modelChoice ?? DEFAULT_MODELS[provider])
+      : null;
+  const modelOptions = useMemo(() => {
+    if (!isCopilotClient || !provider) return [];
+    const ids = (modelsByProvider[provider] ?? []).map((m) => m.id);
+    // the current value stays selectable even when it's not in the synced list
+    return Array.from(new Set(effectiveModel ? [effectiveModel, ...ids] : ids));
+  }, [isCopilotClient, provider, modelsByProvider, effectiveModel]);
+
   // Per-user providers always use virtual-key auth (no passthrough tab). This
   // is derived rather than written back into `proxyAuth`: overwriting the
   // stored choice would flip the panel into virtual-key mode for good, which
@@ -321,6 +352,7 @@ export function ConnectCommandPanel({
     proxyId: proxyActive ? proxy.id : null,
     provider: proxyActive ? provider : null,
     proxyAuth: proxyActive ? effectiveProxyAuth : null,
+    model: proxyActive ? effectiveModel : null,
     // Sorted so reorderings of the same selection don't regenerate.
     skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
   });
@@ -337,6 +369,7 @@ export function ConnectCommandPanel({
         proxyId: string | null;
         provider: SupportedProvider | null;
         proxyAuth: ConnectProxyAuth | null;
+        model: string | null;
         skillIds: string[] | null;
       };
 
@@ -357,6 +390,7 @@ export function ConnectCommandPanel({
         llmProxyId: inputs.proxyId ?? undefined,
         provider: inputs.provider ?? undefined,
         proxyAuth: inputs.proxyAuth ?? undefined,
+        model: inputs.model ?? undefined,
         skills,
       });
       if (latestKeyRef.current !== key) return; // stale response
@@ -557,6 +591,41 @@ export function ConnectCommandPanel({
     </div>
   ) : null;
 
+  const modelEditor =
+    isCopilotClient && provider ? (
+      <div className="grid gap-1.5">
+        <EditorField label="Model">
+          {modelOptions.length > 1 ? (
+            <Select
+              value={effectiveModel ?? undefined}
+              onValueChange={setModelChoice}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select model" />
+              </SelectTrigger>
+              <SelectContent>
+                {modelOptions.map((id) => (
+                  <SelectItem key={id} value={id}>
+                    {id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input
+              value={effectiveModel ?? ""}
+              onChange={(event) => setModelChoice(event.target.value || null)}
+              placeholder="Model id"
+            />
+          )}
+        </EditorField>
+        <p className="text-xs text-muted-foreground">
+          Applied as COPILOT_MODEL by the setup script — pick a model your{" "}
+          {providerDisplayNames[provider]} access serves.
+        </p>
+      </div>
+    ) : null;
+
   const skillsEditor = (
     <div className="grid gap-2">
       <label
@@ -683,6 +752,21 @@ export function ConnectCommandPanel({
                   </RecommendationChip>
                 </>
               )}
+            </SummaryRow>
+          )}
+          {isCopilotClient && proxyActive && provider && (
+            <SummaryRow
+              done
+              editable
+              isEditing={editing === "model"}
+              onToggle={() => toggleEdit("model")}
+              editor={modelEditor}
+              changeTestId="connect-change-model"
+            >
+              Run Copilot with{" "}
+              <span className="font-medium text-foreground">
+                {effectiveModel}
+              </span>
             </SummaryRow>
           )}
           {skillsEligible && (

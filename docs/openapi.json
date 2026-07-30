@@ -113136,6 +113136,12 @@
                     "default": true,
                     "type": "boolean"
                   },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[\\x20-\\x7E]+$"
+                  },
                   "skills": {
                     "type": "object",
                     "properties": {

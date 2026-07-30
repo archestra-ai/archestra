@@ -31345,6 +31345,7 @@ export type CreateConnectionSetupData = {
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         proxyAuth?: 'provider-key' | 'virtual-key';
         attributePassthrough?: boolean;
+        model?: string;
         skills?: {
             skillIds: Array<string>;
             ttlDays: number | null;

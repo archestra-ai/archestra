@@ -2640,6 +2640,13 @@
       "when": 1785405450794,
       "tag": "0376_omniscient_aaron_stack",
       "breakpoints": true
+    },
+    {
+      "idx": 377,
+      "version": "7",
+      "when": 1785410080767,
+      "tag": "0377_right_penance",
+      "breakpoints": true
     }
   ]
 }

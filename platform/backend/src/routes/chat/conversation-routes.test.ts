@@ -1644,6 +1644,49 @@ describe("conversation list projectName", () => {
     );
   });
 
+  test("the restore response carries the conversation's messages, not an empty shell", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "has history",
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "user",
+      content: {
+        id: uuidv7(),
+        role: "user",
+        parts: [{ type: "text", text: "hello from before the delete" }],
+      },
+    });
+
+    await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    const restore = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/restore`,
+    });
+
+    // The route declares the full conversation schema, so a caller seeding its
+    // cache from this response has to get the history — a sidebar-row shape
+    // with messages: [] would render the restored chat empty.
+    expect(restore.statusCode).toBe(200);
+    expect(restore.json().messages).toHaveLength(1);
+    expect(restore.json().messages[0].parts).toMatchObject([
+      { type: "text", text: "hello from before the delete" },
+    ]);
+  });
+
   test("restore is idempotent: restoring an already-active conversation returns it with 200", async ({
     makeAgent,
   }) => {
@@ -1711,7 +1754,7 @@ describe("conversation list projectName", () => {
     expect(row.deletedAt).toBeInstanceOf(Date);
   });
 
-  test("restore re-activates a share link that was hidden by the delete", async ({
+  test("restore does not re-publish a share link the delete revoked", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({
@@ -1744,9 +1787,63 @@ describe("conversation list projectName", () => {
       url: `/api/chat/conversations/${conversation.id}/restore`,
     });
     expect(restore.statusCode).toBe(200);
-    // Auto-resurrection by design: the share row survives the soft delete and
-    // the restore response surfaces it as active again.
+    // The chat comes back private. Deleting a shared chat revokes everyone
+    // else's access, so pulling it out of trash must not silently re-grant it.
+    expect(restore.json().share).toBeNull();
+    expect(
+      await ConversationShareModel.findByConversationId({
+        conversationId: conversation.id,
+        organizationId,
+      }),
+    ).toBeNull();
+
+    // ...and re-sharing afterwards still works, so the revoke is not a wedge.
+    const reshare = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/share`,
+      payload: { visibility: "organization" },
+    });
+    expect(reshare.statusCode).toBe(200);
+  });
+
+  test("restoring an already-active conversation leaves its share and live run alone", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "never deleted",
+    });
+    await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId,
+      createdByUserId: currentUser.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+    const run = await ActiveChatRunModel.create({
+      conversationId: conversation.id,
+      userId: currentUser.id,
+      organizationId,
+    });
+    if (!run) throw new Error("expected the run to be created");
+
+    // The restore transitions nothing, so its side effects must not fire: this
+    // is the call that would otherwise unshare a live chat and kill its stream.
+    const restore = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/restore`,
+    });
+    expect(restore.statusCode).toBe(200);
     expect(restore.json().share).toMatchObject({ visibility: "organization" });
+    expect((await ActiveChatRunModel.findById(run.id))?.status).toBe("running");
   });
 
   test("a new run can start on a restored conversation (the stopped run does not wedge it)", async ({
@@ -1772,16 +1869,15 @@ describe("conversation list projectName", () => {
     });
     if (!run) throw new Error("expected the initial run to be created");
 
-    // DELETE requests a stop (stamps stopRequestedAt, leaves the row running);
-    // the stream then finalizes the aborted run as cancelled.
+    // DELETE only requests a stop: it stamps stopRequestedAt and leaves the row
+    // `running`. Nothing finalizes it here on purpose — that models the run
+    // whose stream died with the process, which is exactly the row that would
+    // otherwise sit `running` until the ten-minute stale reaper.
     await app.inject({
       method: "DELETE",
       url: `/api/chat/conversations/${conversation.id}`,
     });
-    await ActiveChatRunModel.markTerminal({
-      runId: run.id,
-      status: "cancelled",
-    });
+    expect((await ActiveChatRunModel.findById(run.id))?.status).toBe("running");
 
     const restore = await app.inject({
       method: "POST",
@@ -1789,8 +1885,11 @@ describe("conversation list projectName", () => {
     });
     expect(restore.statusCode).toBe(200);
 
-    // The terminal run left behind must not block a fresh run: the running-
-    // conversation unique index only covers status = 'running' rows.
+    // Restore finished the abandoned run, so it no longer blocks a fresh one:
+    // the running-conversation unique index only covers status = 'running'.
+    expect((await ActiveChatRunModel.findById(run.id))?.status).toBe(
+      "cancelled",
+    );
     const newRun = await ActiveChatRunModel.create({
       conversationId: conversation.id,
       userId: currentUser.id,

@@ -137,6 +137,37 @@ export class ActiveChatRunService {
     return run;
   }
 
+  /**
+   * Finalize the run a soft-deleted conversation left behind, at restore time.
+   * Deleting a conversation only stamps `stopRequestedAt` (the row itself
+   * survives, unlike the old hard delete's cascade); a stream that still owns
+   * the row observes that within a poll and marks the run terminal itself, but
+   * when nothing owns it — the backend restarted mid-run, the pod was
+   * rescheduled — the row stays `running` until the stale reaper catches it ten
+   * minutes later, and `running` blocks the next turn on the restored chat via
+   * the one-running-run-per-conversation unique index.
+   *
+   * Restore never resurrects a stream, so the run is finished by definition:
+   * mark it cancelled and wake any straggling stream so it stops promptly.
+   * `markTerminal` only transitions a `running` row, so a run that finished on
+   * its own in the meantime keeps the status it reached.
+   */
+  async cancelRunForRestoredConversation(conversationId: string) {
+    const run =
+      await ActiveChatRunModel.findRunningByConversation(conversationId);
+    if (!run) {
+      return null;
+    }
+
+    const cancelled = await ActiveChatRunModel.markTerminal({
+      runId: run.id,
+      status: "cancelled",
+    });
+    await this.notifyStop(run.id);
+
+    return cancelled;
+  }
+
   drainStreamToEvents(params: {
     runId: string;
     conversationId: string;

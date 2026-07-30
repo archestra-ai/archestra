@@ -2630,22 +2630,57 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, user, organizationId }, reply) => {
       // Idempotent restore: clear deleted_at (no-op / count 0 when the row is
-      // already active), then read the now-active row back. Restore does not
-      // resurrect the aborted stream left by delete — history returns, the run
-      // stays stopped. Share links are re-activated by design (the shares join
-      // filters on the soft-delete predicate), so a formerly-shared chat is
-      // shared again.
+      // already active). Restore does not resurrect the aborted stream left by
+      // delete — history returns, the run stays stopped.
       // No audit record is emitted: conversations are intentionally absent from
       // AUDITABLE_ROUTES (see AUDIT_DECISIONS.conversationsTable — high-volume
       // chat data surfaced via /llm/logs), so restore matches the sibling
       // create/update/delete conversation routes rather than auditing alone.
-      await ConversationModel.restore(id, user.id, organizationId);
+      const restored = await ConversationModel.restore(
+        id,
+        user.id,
+        organizationId,
+      );
 
-      // A lightweight sidebar-row read (no message hydration): restore only
-      // needs to confirm the chat is back. Null means the conversation never
+      // Both side effects below are gated on the deleted -> active transition,
+      // never on the idempotent no-op: a second restore must not reach into a
+      // conversation that is already live (and a caller who does not own the
+      // row transitions nothing, so neither touches someone else's chat).
+      if (restored > 0) {
+        // Delete only asked the run to stop. Finish it here so a row nothing is
+        // streaming into can't wedge the restored chat behind the running-run
+        // unique index until the stale reaper. Best-effort, like the teardown on
+        // delete: a restore must not fail over stream bookkeeping.
+        try {
+          await activeChatRunService.cancelRunForRestoredConversation(id);
+        } catch (error) {
+          logger.warn(
+            { error, conversationId: id },
+            "Failed to finalize the stopped chat run on conversation restore",
+          );
+        }
+
+        // Restore does NOT re-publish. Delete revokes read access for everyone
+        // holding the share link (the shares join filters on the soft-delete
+        // predicate), and deleting a chat is a plausible way to pull a share
+        // back — so silently re-granting org-wide access on the way out of
+        // trash would be a surprise with real disclosure consequences. The chat
+        // comes back private; the owner re-shares deliberately if they still
+        // want to. Not swallowed: a restore that reported success while leaving
+        // the chat shared is the exact failure this prevents.
+        await ConversationShareModel.delete({
+          conversationId: id,
+          organizationId,
+          userId: user.id,
+        });
+      }
+
+      // Full hydration, matching this route's declared conversation schema — a
+      // caller seeding its conversation cache from this response must get the
+      // history back, not an empty shell. Null means the conversation never
       // existed, isn't owned by the caller, or was hard-deleted in a race —
       // nothing to restore, so 404.
-      const conversation = await ConversationModel.findListRowById({
+      const conversation = await ConversationModel.findById({
         id,
         userId: user.id,
         organizationId,

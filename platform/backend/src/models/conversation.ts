@@ -855,16 +855,16 @@ class ConversationModel {
   /**
    * Restore a soft-deleted conversation (owner + org scoped): clears
    * `deleted_at` so it reappears in every read path with its messages, files,
-   * runs, and share links intact. Idempotent — returns the number of rows that
-   * transitioned from deleted to active, so 0 means the conversation was
-   * already active, never existed, or is not owned by the caller.
+   * and runs intact. Idempotent — returns the number of rows that transitioned
+   * from deleted to active, so 0 means the conversation was already active,
+   * never existed, or is not owned by the caller. That count is also what the
+   * route gates its one-shot side effects on (finalizing the stopped run,
+   * revoking the share), since a non-zero count proves both the transition and
+   * the caller's ownership.
    *
    * Restore intentionally does NOT resurrect a live stream: the delete path
    * leaves the run row and stamps `stopRequestedAt`, and a restored
-   * conversation keeps that terminal run — the user starts a fresh one. Share
-   * links are re-activated by design (the `conversation_shares` join filters on
-   * `notDeletedConversation`), so a chat that was shared before deletion is
-   * shared again after restore.
+   * conversation keeps that finished run — the user starts a fresh one.
    */
   static async restore(
     id: string,
@@ -880,30 +880,6 @@ class ConversationModel {
         eq(schema.conversationsTable.organizationId, organizationId),
       ),
     );
-  }
-
-  /**
-   * Sidebar-row shape for a single active conversation (owner + org scoped),
-   * without loading messages — used by the restore endpoint to return the
-   * now-active row cheaply instead of hydrating full history via
-   * {@link findById}. Null when the conversation is missing, not owned, or
-   * still soft-deleted.
-   */
-  static async findListRowById(params: {
-    id: string;
-    userId: string;
-    organizationId: string;
-  }): Promise<Conversation | null> {
-    const [row] = await ConversationModel.selectListRows({
-      conditions: [
-        notDeletedConversation,
-        eq(schema.conversationsTable.id, params.id),
-        eq(schema.conversationsTable.userId, params.userId),
-        eq(schema.conversationsTable.organizationId, params.organizationId),
-      ],
-      orderBy: desc(schema.conversationsTable.lastMessageAt),
-    });
-    return row ?? null;
   }
 
   /**
@@ -953,12 +929,11 @@ class ConversationModel {
   }
 
   /**
-   * Shared SELECT for conversation "list rows" — the sidebar-row shape
-   * (agent/share/project columns joined, no messages/errors/compactions
-   * loaded) used by {@link findAllDeleted} and {@link findListRowById}. The
-   * hot active-list path ({@link findAll}) keeps its own inline copy of this
-   * query on purpose, so this shared helper is not on that path. Callers own
-   * the WHERE conditions and the ordering.
+   * SELECT for conversation "list rows" — the sidebar-row shape (agent/share/
+   * project columns joined, no messages/errors/compactions loaded) backing
+   * {@link findAllDeleted}. The hot active-list path ({@link findAll}) keeps
+   * its own inline copy of this query on purpose, so this helper is not on
+   * that path. Callers own the WHERE conditions and the ordering.
    */
   private static async selectListRows(params: {
     conditions: SQL[];

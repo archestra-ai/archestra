@@ -20,15 +20,14 @@ import {
   dynamicAccessContext,
   getUnassignedDiscoverableTools,
   resolveDynamicTool,
-  resolveRunToolTargetName,
 } from "./dynamic-tools";
 import {
   defineArchestraTool,
   defineArchestraTools,
-  errorResult,
   structuredToolErrorResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
+import { resolveRunToolTargetName } from "./run-tool-target";
 import { placeholderForSchema, safeJsonStringify } from "./tool-args-skeleton";
 import {
   ambiguousShortNameMessage,
@@ -96,9 +95,11 @@ async function runToolHandler({
   const requestedName = args.tool_name;
   const recovery = await resolveShortName({ requestedName, context });
   if (recovery.kind === "ambiguous") {
-    return errorResult(
-      ambiguousShortNameMessage(requestedName, recovery.candidates),
-    );
+    return dispatchRefusalResult({
+      code: "ambiguous_tool",
+      message: ambiguousShortNameMessage(requestedName, recovery.candidates),
+      toolName: requestedName,
+    });
   }
 
   // Built-in recovery keeps the original short name as the effective name:
@@ -287,9 +288,11 @@ async function dispatchTool({
 
   const runToolFullName = getArchestraToolFullName(TOOL_RUN_TOOL_SHORT_NAME);
   if (resolvedName === runToolFullName) {
-    return errorResult(
-      `${TOOL_RUN_TOOL_SHORT_NAME} cannot invoke itself. Call ${TOOL_RUN_TOOL_SHORT_NAME} once, with tool_name set to the target tool's exact name (from search_tools) and the target's arguments in tool_args — never set tool_name to ${TOOL_RUN_TOOL_SHORT_NAME}.`,
-    );
+    return dispatchRefusalResult({
+      code: "invalid_target",
+      message: `${TOOL_RUN_TOOL_SHORT_NAME} cannot invoke itself. Call ${TOOL_RUN_TOOL_SHORT_NAME} once, with tool_name set to the target tool's exact name (from search_tools) and the target's arguments in tool_args — never set tool_name to ${TOOL_RUN_TOOL_SHORT_NAME}.`,
+      toolName: resolvedName,
+    });
   }
 
   // Per-conversation enabled-tool gate: in a chat with a custom tool
@@ -318,7 +321,11 @@ async function dispatchTool({
       { agentId: context.agentId, requestedName, resolvedName: name },
       `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to a tool disabled for this conversation`,
     );
-    return errorResult(toolNotEnabledForConversationMessage(name));
+    return dispatchRefusalResult({
+      code: "tool_disabled",
+      message: toolNotEnabledForConversationMessage(name),
+      toolName: name,
+    });
   };
 
   if (route === "archestra") {
@@ -356,9 +363,11 @@ async function dispatchTool({
   // bogus agent-<id> delegations are handled by the "archestra" route above
   // (executeArchestraTool / checkToolAssignedToAgent), not this check.
   if (!context.agentId) {
-    return errorResult(
-      `${TOOL_RUN_TOOL_SHORT_NAME} requires agent context to dispatch to third-party MCP tools`,
-    );
+    return dispatchRefusalResult({
+      code: "missing_agent_context",
+      message: `${TOOL_RUN_TOOL_SHORT_NAME} requires agent context to dispatch to third-party MCP tools`,
+      toolName: resolvedName,
+    });
   }
 
   // Gate dispatch on the assigned-tool set, then fall back to dynamic
@@ -381,7 +390,11 @@ async function dispatchTool({
     // agent's assigned tools, so an unassigned tool can never be enabled in
     // it — return the same unavailable recovery search_tools shows.
     if (await checkConversationGate(resolvedName)) {
-      return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+      return dispatchRefusalResult({
+        code: "unknown_tool",
+        message: unavailableThirdPartyToolMessage(resolvedName),
+        toolName: resolvedName,
+      });
     }
     availableTool = await resolveDynamicTool({
       toolName: resolvedName,
@@ -400,7 +413,11 @@ async function dispatchTool({
       `${TOOL_RUN_TOOL_SHORT_NAME} dispatched to an unassigned tool`,
     );
     if (!availableTool) {
-      return errorResult(unavailableThirdPartyToolMessage(resolvedName));
+      return dispatchRefusalResult({
+        code: "unknown_tool",
+        message: unavailableThirdPartyToolMessage(resolvedName),
+        toolName: resolvedName,
+      });
     }
   } else {
     // The tool is assigned — enforce the per-conversation selection.
@@ -646,7 +663,33 @@ function checkThirdPartyToolArgs(params: {
   messageLines.push(
     `The tool's full input schema is:\n${safeJsonStringify(schema, 2)}`,
   );
-  return errorResult(messageLines.join("\n"));
+  return dispatchRefusalResult({
+    code: "invalid_arguments",
+    message: messageLines.join("\n"),
+    toolName,
+  });
+}
+
+/**
+ * A dispatch refusal the platform authored before any upstream tool ran.
+ * Same prose an errorResult would carry, plus the `tool_state` envelope in
+ * `_meta`/`structuredContent` so trust evaluation can tell "no upstream data"
+ * apart from a real tool error — a refused dispatch must not flip the session
+ * to sensitive.
+ */
+function dispatchRefusalResult(params: {
+  code: string;
+  message: string;
+  toolName?: string;
+}): CallToolResult {
+  return structuredToolErrorResult({
+    error: {
+      type: "tool_state",
+      code: params.code,
+      message: params.message,
+      toolName: params.toolName,
+    },
+  });
 }
 
 /** Param types the repair may unwrap to — a literal declared `type` only. */

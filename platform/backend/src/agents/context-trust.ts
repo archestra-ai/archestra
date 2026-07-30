@@ -3,6 +3,7 @@ import { evaluateIfContextIsTrusted } from "@/guardrails/trusted-data";
 import { AgentTeamModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
 import type { CommonMessage, UnsafeContextBoundary } from "@/types";
+import { extractCommonToolCallArguments } from "@/types";
 
 // === Exports ===
 
@@ -42,6 +43,7 @@ export async function evaluateToolExecutionContextTrust(params: {
 function toCommonMessages(
   messages: ToolExecutionOptions["messages"],
 ): CommonMessage[] {
+  const argumentsByToolCallId = collectToolCallArguments(messages ?? []);
   return (messages ?? []).map((message) => {
     const commonMessage: CommonMessage = {
       role: normalizeMessageRole(message.role),
@@ -52,7 +54,8 @@ function toCommonMessages(
       commonMessage.content = textContent;
     }
 
-    const toolCalls = extractToolResults(message.content) ?? [];
+    const toolCalls =
+      extractToolResults(message.content, argumentsByToolCallId) ?? [];
     if (toolCalls.length > 0) {
       commonMessage.toolCalls = toolCalls;
     }
@@ -61,7 +64,40 @@ function toCommonMessages(
   });
 }
 
-function extractToolResults(content: unknown): CommonMessage["toolCalls"] {
+/**
+ * Arguments live on the assistant `tool-call` parts while results are separate
+ * `tool-result` parts; pair them by id so a `run_tool` result can be resolved
+ * to the target tool its arguments name (trusted-data evaluation).
+ */
+function collectToolCallArguments(
+  messages: NonNullable<ToolExecutionOptions["messages"]>,
+): Map<string, Record<string, unknown>> {
+  const argumentsByToolCallId = new Map<string, Record<string, unknown>>();
+  for (const message of messages) {
+    const content: unknown = message.content;
+    if (!Array.isArray(content)) {
+      continue;
+    }
+    for (const part of content) {
+      if (
+        isRecord(part) &&
+        part.type === "tool-call" &&
+        typeof part.toolCallId === "string"
+      ) {
+        const input = extractCommonToolCallArguments(part.input);
+        if (input) {
+          argumentsByToolCallId.set(part.toolCallId, input);
+        }
+      }
+    }
+  }
+  return argumentsByToolCallId;
+}
+
+function extractToolResults(
+  content: unknown,
+  argumentsByToolCallId: Map<string, Record<string, unknown>>,
+): CommonMessage["toolCalls"] {
   if (!Array.isArray(content)) {
     return [];
   }
@@ -87,6 +123,11 @@ function extractToolResults(content: unknown): CommonMessage["toolCalls"] {
       {
         id: toolCallId,
         name: toolName,
+        arguments:
+          argumentsByToolCallId.get(toolCallId) ??
+          extractCommonToolCallArguments(
+            "input" in part ? part.input : undefined,
+          ),
         content: output,
         isError,
       },

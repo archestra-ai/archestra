@@ -34,7 +34,10 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { extractCommonMessageText } from "@/types";
+import {
+  extractCommonMessageText,
+  extractCommonToolCallArguments,
+} from "@/types";
 import {
   hasImageContent,
   isImageTooLarge,
@@ -129,6 +132,13 @@ class GeminiRequestAdapter
             toolCalls.push({
               id,
               name: functionResponse.name as string,
+              arguments: this.findFunctionCallArguments(
+                functionResponse.name as string,
+                "id" in functionResponse &&
+                  typeof functionResponse.id === "string"
+                  ? functionResponse.id
+                  : undefined,
+              ),
               content: functionResponse.response,
               isError: false,
             });
@@ -173,6 +183,13 @@ class GeminiRequestAdapter
             results.push({
               id,
               name: functionResponse.name as string,
+              arguments: this.findFunctionCallArguments(
+                functionResponse.name as string,
+                "id" in functionResponse &&
+                  typeof functionResponse.id === "string"
+                  ? functionResponse.id
+                  : undefined,
+              ),
               content: functionResponse.response,
               isError: false,
             });
@@ -182,6 +199,43 @@ class GeminiRequestAdapter
     }
 
     return results;
+  }
+
+  /**
+   * Arguments of the functionCall paired with a functionResponse. Gemini
+   * correlates by `id` when the caller supplies ids, and by function name
+   * otherwise (the wire format's own convention), so the lookup prefers an
+   * exact id match and falls back to the nearest preceding call of that name.
+   */
+  private findFunctionCallArguments(
+    name: string,
+    id: string | undefined,
+  ): Record<string, unknown> | undefined {
+    const contents = this.request.contents || [];
+    let nameMatch: Record<string, unknown> | undefined;
+    for (let i = contents.length - 1; i >= 0; i--) {
+      for (const part of contents[i].parts || []) {
+        if (
+          !("functionCall" in part) ||
+          !part.functionCall ||
+          typeof part.functionCall !== "object"
+        ) {
+          continue;
+        }
+        const functionCall = part.functionCall as {
+          id?: string;
+          name?: string;
+          args?: unknown;
+        };
+        if (id && functionCall.id === id) {
+          return extractCommonToolCallArguments(functionCall.args);
+        }
+        if (functionCall.name === name) {
+          nameMatch ??= extractCommonToolCallArguments(functionCall.args);
+        }
+      }
+    }
+    return id ? undefined : nameMatch;
   }
 
   getTools(): CommonMcpToolDefinition[] {

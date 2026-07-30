@@ -1,8 +1,5 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
-  ARCHESTRA_TOOL_SHORT_NAMES,
-  type ArchestraToolShortName,
-  getArchestraToolFullName,
   isSandboxArchestraToolShortName,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -34,19 +31,6 @@ import { filterToolNamesByPermission } from "./rbac";
 // per-call, so no agent-modify permission is involved. Tool RBAC, invocation
 // policies, and per-conversation tool selections still gate every call. The
 // per-agent "access all tools" setting is the sole gate.
-
-/**
- * Resolve a run_tool target name to its canonical form (Archestra short names
- * like `run_command` → `archestra__run_command`; everything else unchanged),
- * mirroring run_tool's own resolution so dispatch and access checks line up.
- */
-export function resolveRunToolTargetName(requestedName: string): string {
-  const isArchestraPrefixed = archestraMcpBranding.isToolName(requestedName);
-  if (!isArchestraPrefixed && ARCHESTRA_SHORT_NAME_SET.has(requestedName)) {
-    return getArchestraToolFullName(requestedName as ArchestraToolShortName);
-  }
-  return requestedName;
-}
 
 /**
  * Resolve an unassigned third-party tool name to the catalog tool row the user
@@ -308,8 +292,6 @@ export async function dynamicAccessContext(params: {
 }
 
 // === Internal helpers ===
-
-const ARCHESTRA_SHORT_NAME_SET = new Set<string>(ARCHESTRA_TOOL_SHORT_NAMES);
 
 // Whether at least one knowledge connector is queryable by the user (org-wide
 // or auto-sync-permissions visibility, or team-scoped to one of their teams;

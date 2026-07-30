@@ -1,4 +1,9 @@
-import { CONTEXT_EXTERNAL_AGENT_ID, CONTEXT_TEAM_IDS } from "@archestra/shared";
+import {
+  CONTEXT_EXTERNAL_AGENT_ID,
+  CONTEXT_TEAM_IDS,
+  isAgentTool,
+  isSkillTool,
+} from "@archestra/shared";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { get } from "lodash-es";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -12,6 +17,21 @@ import type { AutonomyPolicyOperator, TrustedData } from "@/types";
 /**
  * Check if a policy is a default policy (applies to all results)
  */
+/**
+ * Names that execute through delegation surfaces without a tools-table row:
+ * agent delegations (`agent__<slug>` rows exist, but the `agent-<id>` alias
+ * run_tool accepts does not) and skill delegation tools (synthesized per
+ * accessible skill). Their results are real child-agent output, so an
+ * unknown-name row lookup must not read as "the platform refused this".
+ */
+function isDelegationSurfaceName(toolName: string): boolean {
+  return (
+    isAgentTool(toolName) ||
+    toolName.startsWith("agent-") ||
+    isSkillTool(toolName)
+  );
+}
+
 function isDefaultPolicy(conditions: ResultPolicyCondition[]): boolean {
   return conditions.length === 0;
 }
@@ -379,6 +399,14 @@ class TrustedDataPolicyModel {
       toolName: string;
       // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
       toolOutput: any;
+      /**
+       * True when `toolName` is the target of a `run_tool` dispatch (resolved
+       * from the wrapper call's arguments) rather than a directly-called tool.
+       * Changes the unknown-tool verdict: run_tool refuses dispatches to
+       * names it cannot resolve, so an unknown dispatch target means the
+       * result is the platform's own refusal text, not upstream data.
+       */
+      isRunToolDispatchTarget?: boolean;
     }>,
     context: PolicyEvaluationContext,
   ): Promise<
@@ -528,6 +556,24 @@ class TrustedDataPolicyModel {
 
       // If tool doesn't exist in the database, treat as untrusted
       if (!knownTools.has(toolName)) {
+        // A run_tool dispatch target with no tool row anywhere cannot have
+        // produced upstream data: run_tool refuses dispatches to names it
+        // cannot resolve, so the result is the platform's own refusal text —
+        // it must not poison the session over a hallucinated name. Delegation
+        // surfaces (agent/skill tools) execute without needing a matching row
+        // here, so they stay on the fail-closed path below.
+        if (
+          toolCalls[i].isRunToolDispatchTarget &&
+          !isDelegationSurfaceName(toolName)
+        ) {
+          results.set(i.toString(), {
+            isTrusted: true,
+            isBlocked: false,
+            shouldSanitizeWithDualLlm: false,
+            reason: `Dispatch target ${toolName} is unknown to the platform — run_tool refuses such dispatches, so the result is platform-authored text`,
+          });
+          continue;
+        }
         results.set(i.toString(), {
           isTrusted: false,
           isBlocked: false,

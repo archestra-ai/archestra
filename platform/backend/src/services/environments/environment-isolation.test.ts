@@ -1,6 +1,8 @@
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import EnvironmentModel from "@/models/environment";
+import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
+import McpServerModel from "@/models/mcp-server";
 import ToolModel from "@/models/tool";
 import { expect, test } from "@/test";
 
@@ -280,4 +282,150 @@ test("KnowledgeBaseConnectorModel.findByOrganization: filters connectors by envi
   ).map((connector) => connector.id);
   expect(allIds).toContain(prodConnector.id);
   expect(allIds).toContain(defaultConnector.id);
+});
+
+test("InternalMcpCatalogModel.findAll: filters catalog items by environment", async ({
+  makeOrganization,
+  makeInternalMcpCatalog,
+}) => {
+  const org = await makeOrganization();
+  const prod = await EnvironmentModel.create({
+    organizationId: org.id,
+    name: "production",
+  });
+
+  const prodCatalog = await makeInternalMcpCatalog({
+    organizationId: org.id,
+    environmentId: prod.id,
+  });
+  const defaultCatalog = await makeInternalMcpCatalog({
+    organizationId: org.id,
+    environmentId: null,
+  });
+  // Built-ins are exempt: their tools are callable from every environment, so
+  // hiding the server that owns them would be incoherent.
+  const builtIn = await makeInternalMcpCatalog({
+    id: ARCHESTRA_MCP_CATALOG_ID,
+    organizationId: org.id,
+    environmentId: null,
+  });
+
+  const prodIds = (
+    await InternalMcpCatalogModel.findAll({
+      expandSecrets: false,
+      isAdmin: true,
+      organizationId: org.id,
+      environmentId: prod.id,
+    })
+  ).map((item) => item.id);
+  expect(prodIds).toContain(prodCatalog.id);
+  expect(prodIds).toContain(builtIn.id);
+  expect(prodIds).not.toContain(defaultCatalog.id);
+
+  const defaultIds = (
+    await InternalMcpCatalogModel.findAll({
+      expandSecrets: false,
+      isAdmin: true,
+      organizationId: org.id,
+      environmentId: null,
+    })
+  ).map((item) => item.id);
+  expect(defaultIds).toContain(defaultCatalog.id);
+  expect(defaultIds).not.toContain(prodCatalog.id);
+
+  // No environment filter → both returned (the registry UI, which filters
+  // by environment client-side).
+  const allIds = (
+    await InternalMcpCatalogModel.findAll({
+      expandSecrets: false,
+      isAdmin: true,
+      organizationId: org.id,
+    })
+  ).map((item) => item.id);
+  expect(allIds).toContain(prodCatalog.id);
+  expect(allIds).toContain(defaultCatalog.id);
+});
+
+test("InternalMcpCatalogModel.searchByQuery: filters catalog items by environment", async ({
+  makeOrganization,
+  makeInternalMcpCatalog,
+}) => {
+  const org = await makeOrganization();
+  const prod = await EnvironmentModel.create({
+    organizationId: org.id,
+    name: "production",
+  });
+
+  const prodCatalog = await makeInternalMcpCatalog({
+    name: "shared-name prod",
+    organizationId: org.id,
+    environmentId: prod.id,
+  });
+  const defaultCatalog = await makeInternalMcpCatalog({
+    name: "shared-name default",
+    organizationId: org.id,
+    environmentId: null,
+  });
+
+  const prodIds = (
+    await InternalMcpCatalogModel.searchByQuery("shared-name", {
+      expandSecrets: false,
+      isAdmin: true,
+      organizationId: org.id,
+      environmentId: prod.id,
+    })
+  ).map((item) => item.id);
+  expect(prodIds).toEqual([prodCatalog.id]);
+
+  const unfilteredIds = (
+    await InternalMcpCatalogModel.searchByQuery("shared-name", {
+      expandSecrets: false,
+      isAdmin: true,
+      organizationId: org.id,
+    })
+  ).map((item) => item.id);
+  expect(unfilteredIds).toContain(prodCatalog.id);
+  expect(unfilteredIds).toContain(defaultCatalog.id);
+});
+
+test("McpServerModel.findAll: filters deployments by their catalog's environment", async ({
+  makeOrganization,
+  makeInternalMcpCatalog,
+  makeMcpServer,
+}) => {
+  const org = await makeOrganization();
+  const prod = await EnvironmentModel.create({
+    organizationId: org.id,
+    name: "production",
+  });
+
+  const prodCatalog = await makeInternalMcpCatalog({
+    organizationId: org.id,
+    environmentId: prod.id,
+  });
+  const defaultCatalog = await makeInternalMcpCatalog({
+    organizationId: org.id,
+    environmentId: null,
+  });
+  const prodServer = await makeMcpServer({ catalogId: prodCatalog.id });
+  const defaultServer = await makeMcpServer({ catalogId: defaultCatalog.id });
+
+  const prodIds = (
+    await McpServerModel.findAll(undefined, true, org.id, prod.id)
+  ).map((server) => server.id);
+  expect(prodIds).toContain(prodServer.id);
+  expect(prodIds).not.toContain(defaultServer.id);
+
+  const defaultIds = (
+    await McpServerModel.findAll(undefined, true, org.id, null)
+  ).map((server) => server.id);
+  expect(defaultIds).toContain(defaultServer.id);
+  expect(defaultIds).not.toContain(prodServer.id);
+
+  // No environment filter → both returned (management listing).
+  const allIds = (await McpServerModel.findAll(undefined, true, org.id)).map(
+    (server) => server.id,
+  );
+  expect(allIds).toContain(prodServer.id);
+  expect(allIds).toContain(defaultServer.id);
 });

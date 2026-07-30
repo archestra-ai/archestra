@@ -8,6 +8,7 @@ import {
   isNull,
   ne,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -18,6 +19,7 @@ import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import { computeSecretStorageType } from "@/secrets-manager/utils";
+import { catalogInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type {
   InsertMcpServer,
   McpServer,
@@ -272,10 +274,18 @@ class McpServerModel {
       );
   }
 
+  /**
+   * @param environmentId when set (null = Default environment), restricts
+   * results to deployments whose catalog item is visible from that environment.
+   * An MCP server has no environment column of its own — it inherits one from
+   * `catalogId`, and a catalog-less (custom/legacy) row counts as Default.
+   * Omit for management surfaces that list every environment.
+   */
   static async findAll(
     userId?: string,
     isMcpServerAdmin?: boolean,
     organizationId?: string,
+    environmentId?: string | null,
   ): Promise<McpServer[]> {
     // Single query with LEFT JOINs for all related data including assigned users,
     // eliminating the consecutive DB query for user details.
@@ -318,6 +328,15 @@ class McpServerModel {
       )
       .$dynamic();
 
+    const conditions: SQL[] = [];
+
+    if (environmentId !== undefined) {
+      // A server inherits its environment from the joined catalog row; the LEFT
+      // JOIN leaves that NULL for catalog-less rows, which `is not distinct
+      // from` then matches only for the Default environment.
+      conditions.push(catalogInEnvironmentPredicate(environmentId));
+    }
+
     // Apply access control filtering for non-MCP server admins
     if (userId && !isMcpServerAdmin) {
       // Get MCP servers accessible through:
@@ -347,9 +366,13 @@ class McpServerModel {
         return [];
       }
 
-      query = query.where(
+      conditions.push(
         inArray(schema.mcpServersTable.id, accessibleMcpServerIds),
       );
+    }
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
     }
 
     const results = await query;

@@ -54,11 +54,14 @@ Acme wants engineers to install MCP servers only from its own image registry. An
 An agent, MCP gateway, or LLM proxy assigned to **Production** can only see and use:
 
 - MCP tools whose server (catalog item) is in Production
+- MCP servers in the [private registry](/docs/platform-private-registry) that are in Production, including their deployments
 - knowledge connectors in Production
 - [Agent Skills](/docs/platform-agent-skills#environments) restricted to Production, or restricted to no environment at all
 - [subagent delegation targets](/docs/platform-agents#delegation) in Production
 
 Matching is strict for tools, knowledge, and subagents: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Skills differ — a skill can be restricted to any number of environments, and a skill with none is available everywhere. [MCP Apps](/docs/platform-apps) differ too: an app accepts Default-environment tools alongside its own environment's, so Default acts as a shared baseline for apps. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available.
+
+An agent creates in its own environment. When an agent adds an MCP server to the registry, or builds an [app](/docs/platform-apps), that resource lands in the agent's environment — so the agent can still see it afterwards. You can name a different environment explicitly when adding a server.
 
 This applies to both explicitly assigned resources and the implicit **Auto** access modes — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent dialog's explicit assignment pickers, resources from another environment are shown disabled. Skill filtering covers `list_skills`, `load_skill`, chat slash commands, and the skills offered on the [connect page](/docs/platform-llm-proxy#environment); a [skill that runs in a subagent](/docs/platform-agent-skills#running-a-skill-in-a-subagent) additionally requires its designated agent in the same environment.
 

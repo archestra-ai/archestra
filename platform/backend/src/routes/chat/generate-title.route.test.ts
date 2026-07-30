@@ -478,6 +478,56 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     expect(response.json().titleIsPlaceholder).toBe(false);
   });
 
+  test("keeping the app's name via rename mid-generation still blocks the overwrite", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // The sidebar rename box prefills the current title, so saving it unchanged
+    // is a real flow: the user has claimed "Expense Tracker" as their own name
+    // even though the text never changed. Guarding on text alone would miss it.
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await makeAppChatConversationWithExchange(agent.id);
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      scope: "org",
+      name: "Anthropic",
+    });
+    const model = await makeModelRow("anthropic", "claude-sonnet-5");
+    await setOrganizationDefaultLlm(model.id, apiKey.id);
+
+    mockGenerateText.mockImplementation(async () => {
+      await ConversationModel.update(
+        conversation.id,
+        currentUser.id,
+        organizationId,
+        { title: "Expense Tracker" },
+      );
+      return { text: "Monthly budget column" } as Awaited<
+        ReturnType<typeof generateText>
+      >;
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [stored] = await db
+      .select()
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, conversation.id));
+    expect(stored.title).toBe("Expense Tracker");
+    expect(stored.titleIsPlaceholder).toBe(false);
+  });
+
   test("does not retitle an app chat a second time", async ({
     makeAgent,
     makeSecret,

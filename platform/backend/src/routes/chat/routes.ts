@@ -2980,6 +2980,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
           expectedTitle: conversation.title,
+          expectedTitleIsPlaceholder: conversation.titleIsPlaceholder,
           title: generatedTitle,
         });
 

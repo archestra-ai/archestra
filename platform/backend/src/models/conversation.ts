@@ -584,19 +584,33 @@ class ConversationModel {
   }
 
   /**
-   * Write a generated title only while the conversation still holds the title
-   * that was read before generation started. Generation awaits a slow LLM call,
-   * and a rename landing in that window has to win — the user typed that name,
-   * the model only guessed one. Returns null when the row moved on.
+   * Write a generated title only while the conversation still looks the way it
+   * did before generation started. Generation awaits a slow LLM call, and a
+   * rename landing in that window has to win — the user typed that name, the
+   * model only guessed one. Returns null when the row moved on.
+   *
+   * The placeholder flag is part of the guard, not just the text: the sidebar
+   * rename box prefills the current title, so saving it unchanged claims the
+   * name (clearing the flag) while leaving the text identical. Matching on text
+   * alone would overwrite that. `updatedAt` would be too broad a version to
+   * guard on — marking the conversation read also touches the row.
    */
   static async updateTitleIfUnchanged(params: {
     id: string;
     userId: string;
     organizationId: string;
     expectedTitle: string | null;
+    expectedTitleIsPlaceholder: boolean;
     title: string;
   }): Promise<Conversation | null> {
-    const { id, userId, organizationId, expectedTitle, title } = params;
+    const {
+      id,
+      userId,
+      organizationId,
+      expectedTitle,
+      expectedTitleIsPlaceholder,
+      title,
+    } = params;
 
     const [updated] = await db
       .update(schema.conversationsTable)
@@ -606,6 +620,10 @@ class ConversationModel {
           eq(schema.conversationsTable.id, id),
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),
+          eq(
+            schema.conversationsTable.titleIsPlaceholder,
+            expectedTitleIsPlaceholder,
+          ),
           expectedTitle === null
             ? isNull(schema.conversationsTable.title)
             : eq(schema.conversationsTable.title, expectedTitle),

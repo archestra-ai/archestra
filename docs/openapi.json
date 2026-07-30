@@ -158552,7 +158552,8 @@
               "type": "string",
               "enum": [
                 "claude",
-                "codex"
+                "codex",
+                "copilot-cli"
               ]
             },
             "in": "query",
@@ -305835,7 +305836,8 @@
               "type": "string",
               "enum": [
                 "claude",
-                "codex"
+                "codex",
+                "copilot-cli"
               ]
             },
             "in": "query",
@@ -306354,7 +306356,8 @@
                         "type": "string",
                         "enum": [
                           "claude",
-                          "codex"
+                          "codex",
+                          "copilot-cli"
                         ]
                       }
                     }

@@ -1,6 +1,7 @@
 import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_PROXY_ENV_KEYS,
+  COPILOT_PROVIDER_ENV_KEYS,
   EXTERNAL_AGENT_ID_HEADER,
   STARTUP_GUARD_INSTALL,
   VIRTUAL_KEY_HEADER,
@@ -279,15 +280,22 @@ export const COPILOT_GUARD_CLIENT: StartupGuardClient = {
 };
 
 /**
- * Copilot CLI's proxy disconnect on Windows: connect only *prints* the
- * `COPILOT_PROVIDER_*` env vars for the user to set (session, or persisted via
- * setx / System settings), so the reverse is best-effort — clear those three
- * from the User scope (the setx target) and from this session, leaving the
- * user's own `COPILOT_MODEL` choice untouched.
+ * Copilot CLI's proxy disconnect on Windows: connect applies the
+ * `COPILOT_PROVIDER_*` env vars (current session + User scope), so the
+ * reverse clears those three from both, leaving the user's own
+ * `COPILOT_MODEL` choice untouched.
  */
 function copilotWindowsProxyDisconnect(_ctx: StartupGuardContext): string {
+  const names = [
+    COPILOT_PROVIDER_ENV_KEYS.type,
+    COPILOT_PROVIDER_ENV_KEYS.baseUrl,
+    COPILOT_PROVIDER_ENV_KEYS.apiKey,
+    COPILOT_PROVIDER_ENV_KEYS.headers,
+  ]
+    .map((n) => `'${n}'`)
+    .join(", ");
   return `function Disconnect-ArchProxy {
-  foreach ($n in @('COPILOT_PROVIDER_TYPE', 'COPILOT_PROVIDER_BASE_URL', 'COPILOT_PROVIDER_API_KEY')) {
+  foreach ($n in @(${names})) {
     try { [Environment]::SetEnvironmentVariable($n, $null, 'User') } catch { }
     try { Remove-Item -Path ('Env:' + $n) -ErrorAction SilentlyContinue } catch { }
   }
@@ -298,15 +306,16 @@ function copilotWindowsProxyDisconnect(_ctx: StartupGuardContext): string {
  * Copilot CLI's proxy disconnect: Copilot is configured through
  * `COPILOT_PROVIDER_*` environment exports (connect prints them for the user to
  * paste into a shell profile), so the reverse is best-effort — strip any
- * `export COPILOT_PROVIDER_{TYPE,BASE_URL,API_KEY}=…` lines from the common
- * shell profiles, leaving the user's own `COPILOT_MODEL` choice untouched.
+ * `export COPILOT_PROVIDER_{TYPE,BASE_URL,API_KEY,HEADERS}=…` lines from the
+ * common shell profiles, leaving the user's own `COPILOT_MODEL` choice
+ * untouched.
  */
 function copilotProxyDisconnect(_ctx: StartupGuardContext): string {
   return `disconnect_proxy() {
   for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
     [ -f "$profile" ] || continue
-    grep -Eq '^[[:space:]]*export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY)=' "$profile" 2>/dev/null || continue
-    grep -Ev '^[[:space:]]*export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY)=' "$profile" > "$profile.archestra-tmp" 2>/dev/null && mv "$profile.archestra-tmp" "$profile"
+    grep -Eq '^[[:space:]]*export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)=' "$profile" 2>/dev/null || continue
+    grep -Ev '^[[:space:]]*export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)=' "$profile" > "$profile.archestra-tmp" 2>/dev/null && mv "$profile.archestra-tmp" "$profile"
   done
 }
 

@@ -3,7 +3,10 @@ import {
   CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY,
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CODEX_CLIENT_ID,
+  COPILOT_CLI_CLIENT_ID,
+  COPILOT_PROVIDER_ENV_KEYS,
   DEFAULT_APP_NAME,
+  DEFAULT_MODELS,
   EXTERNAL_AGENT_ID_HEADER,
   isDefaultBrandedAppName,
   type SupportedProvider,
@@ -130,6 +133,26 @@ export function buildSetupCommand(params: {
 /** Strips the /v1 suffix the connection base URLs carry. */
 export function proxyBaseUrlToOrigin(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+}
+
+/**
+ * Value of the COPILOT_PROVIDER_HEADERS env var, shared by the bash and
+ * PowerShell renderers: attribution headers the Copilot CLI sends only to its
+ * BYOK provider endpoint (the LLM proxy), never to GitHub's own services.
+ * Entries are joined with a literal `\n` — the CLI's documented separator —
+ * so the value stays a single line in shell profiles and the Windows
+ * registry. Always carries the client id; in passthrough mode also the
+ * personal passthrough key that attributes the request to the user (the
+ * Copilot analog of Claude Code's ANTHROPIC_CUSTOM_HEADERS injection).
+ */
+export function copilotAttributionHeadersValue(
+  proxy: SetupScriptProxySection,
+): string {
+  const lines = [`${EXTERNAL_AGENT_ID_HEADER}: ${COPILOT_CLI_CLIENT_ID}`];
+  if (proxy.passthroughVirtualKey) {
+    lines.push(`${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`);
+  }
+  return lines.join("\\n");
 }
 
 /**
@@ -821,15 +844,16 @@ cli copilot mcp get ${sh(ctx.mcp.serverName)}`);
       sections.push(`say ${sh(`Copilot provider settings (${ctx.proxy.providerLabel} via OpenAI-compatible protocol)`)}
 cat <<'ARCHESTRA_COPILOT'
 
-Add these lines to your shell profile (e.g. ~/.zshrc), set COPILOT_MODEL to the model you use:
-  export COPILOT_PROVIDER_TYPE="openai"
-  export COPILOT_PROVIDER_BASE_URL=${sh(ctx.proxy.url)}
-  export COPILOT_PROVIDER_API_KEY=${
+Add these lines to your shell profile (e.g. ~/.zshrc); adjust ${COPILOT_PROVIDER_ENV_KEYS.model} if you use a different model:
+  export ${COPILOT_PROVIDER_ENV_KEYS.type}="openai"
+  export ${COPILOT_PROVIDER_ENV_KEYS.baseUrl}=${sh(ctx.proxy.url)}
+  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}=${
     ctx.proxy.virtualKey
       ? sh(ctx.proxy.virtualKey)
       : `"<your-${ctx.proxy.provider}-api-key>"`
   }
-  export COPILOT_MODEL="<model-name>"
+  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${DEFAULT_MODELS[ctx.proxy.provider]}"
+  export ${COPILOT_PROVIDER_ENV_KEYS.headers}="${copilotAttributionHeadersValue(ctx.proxy)}"
 ARCHESTRA_COPILOT`);
     }
   }
@@ -985,15 +1009,16 @@ fi
 
 say 'Copilot provider settings (GitHub Copilot via OpenAI-compatible protocol)'
 echo
-echo 'Add these lines to your shell profile (e.g. ~/.zshrc), set COPILOT_MODEL to the model you use:'
-printf '  export COPILOT_PROVIDER_TYPE="openai"\\n'
-printf '  export COPILOT_PROVIDER_BASE_URL="%s"\\n' ${sh(proxy.url)}
+echo 'Add these lines to your shell profile (e.g. ~/.zshrc); adjust ${COPILOT_PROVIDER_ENV_KEYS.model} if you use a different model:'
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.type}="openai"\\n'
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.baseUrl}="%s"\\n' ${sh(proxy.url)}
 if [ -n "$ARCHESTRA_GHCP_TOKEN" ]; then
-  printf '  export COPILOT_PROVIDER_API_KEY="%s"\\n' "$ARCHESTRA_GHCP_TOKEN"
+  printf '  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}="%s"\\n' "$ARCHESTRA_GHCP_TOKEN"
 else
-  printf '  export COPILOT_PROVIDER_API_KEY="%s"\\n' '<your-github-oauth-token>'
+  printf '  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}="%s"\\n' '<your-github-oauth-token>'
 fi
-printf '  export COPILOT_MODEL="<model-name>"\\n'`;
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${DEFAULT_MODELS["github-copilot"]}"\\n'
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.headers}="%s"\\n' ${sh(copilotAttributionHeadersValue(proxy))}`;
 }
 
 // ===================================================================

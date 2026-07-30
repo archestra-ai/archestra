@@ -843,6 +843,24 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     // export lines come from printf with the runtime token
     expect(script).toContain('"$ARCHESTRA_GHCP_TOKEN"');
     expect(script).toContain('export COPILOT_PROVIDER_TYPE="openai"');
+    // client attribution rides COPILOT_PROVIDER_HEADERS (proxy-only headers)
+    expect(script).toContain("COPILOT_PROVIDER_HEADERS");
+    expect(script).toContain("'X-Archestra-Agent-Id: github_copilot_cli'");
+  });
+
+  test("copilot-cli github-copilot passthrough: attribution key joins the headers export", async () => {
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli"),
+      proxy: {
+        ...GITHUB_COPILOT_PROXY,
+        passthroughVirtualKey: "arch_passthroughcafe",
+      },
+    });
+    await expectValidBash(script);
+    // literal \n separator — the CLI's documented entry delimiter
+    expect(script).toContain(
+      "X-Archestra-Agent-Id: github_copilot_cli\\nX-Archestra-Virtual-Key: arch_passthroughcafe",
+    );
   });
 
   test("copilot-cli github-copilot virtual-key: injects the virtual key, no device flow", async () => {
@@ -860,6 +878,10 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).toContain("'arch_deadbeefcafe'");
     expect(script).not.toContain("login/device/code");
     expect(script).not.toContain("ghcp_validate");
+    // client attribution header suggested alongside the provider exports
+    expect(script).toContain(
+      'export COPILOT_PROVIDER_HEADERS="X-Archestra-Agent-Id: github_copilot_cli"',
+    );
   });
 
   test("github-copilot passthrough without device-flow config throws", () => {
@@ -1059,8 +1081,78 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain("Invoke-RestMethod");
     // never the well-known CI variable name
     expect(script).not.toContain("GITHUB_TOKEN");
-    // token only ever surfaces via a runtime variable in the export lines
-    expect(script).toContain("$ArchGhcpToken");
+    // token is applied as the provider env var (session + User scope) straight
+    // from the runtime variable, and never echoed to the console
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY', $ArchGhcpToken, 'User')",
+    );
+    expect(script).not.toContain("+ $ArchGhcpToken");
+    // BYOK needs an explicit model to launch: default applied when unset
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_MODEL', 'gpt-4o', 'User')",
+    );
+    // client attribution rides COPILOT_PROVIDER_HEADERS (proxy-only headers)
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_HEADERS', 'X-Archestra-Agent-Id: github_copilot_cli', 'User')",
+    );
+  });
+
+  test("copilot-cli github-copilot passthrough: attribution key joins the applied headers", () => {
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli", "windows"),
+      proxy: {
+        ...GITHUB_COPILOT_PROXY,
+        passthroughVirtualKey: "arch_passthroughcafe",
+      },
+    });
+    // literal \n separator — the CLI's documented entry delimiter
+    expect(script).toContain(
+      "$env:COPILOT_PROVIDER_HEADERS = 'X-Archestra-Agent-Id: github_copilot_cli\\nX-Archestra-Virtual-Key: arch_passthroughcafe'",
+    );
+  });
+
+  test("copilot-cli virtual-key: applies COPILOT_* env vars to session and User scope", () => {
+    const script = renderSetupScript(fullContext("copilot-cli", "windows"));
+    expect(script).toContain("$env:COPILOT_PROVIDER_TYPE = 'openai'");
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_TYPE', 'openai', 'User')",
+    );
+    expect(script).toContain(
+      "$env:COPILOT_PROVIDER_BASE_URL = 'https://archestra.example.com/v1/anthropic/profile-123'",
+    );
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY', 'arch_deadbeefcafe', 'User')",
+    );
+    // a BYOK provider without an explicit model refuses to launch, so an
+    // unset COPILOT_MODEL gets the provider default — never overwriting one
+    expect(script).toContain(
+      "if ([string]::IsNullOrEmpty($env:COPILOT_MODEL))",
+    );
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_MODEL', 'gpt-5.5', 'User')",
+    );
+    expect(script).toContain("Keeping your existing COPILOT_MODEL");
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_HEADERS', 'X-Archestra-Agent-Id: github_copilot_cli', 'User')",
+    );
+    // the pre-apply behavior printed instructions instead of acting
+    expect(script).not.toContain("use setx or System settings");
+  });
+
+  test("copilot-cli openai passthrough: applies type/base URL, leaves the key to the user", () => {
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli", "windows"),
+      proxy: OPENAI_PASSTHROUGH_PROXY,
+    });
+    expect(script).toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_BASE_URL', 'https://archestra.example.com/v1/openai/profile-123', 'User')",
+    );
+    expect(script).not.toContain(
+      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY'",
+    );
+    expect(script).toContain(
+      '$env:COPILOT_PROVIDER_API_KEY = "<your-openai-api-key>"',
+    );
   });
 
   test("cursor: merges mcp.json and prints manual model steps", () => {

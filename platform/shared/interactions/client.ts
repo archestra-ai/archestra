@@ -27,6 +27,9 @@ export const CLAUDE_CLIENT_LABEL = "Claude";
 /** Human-readable label for the Codex client id in the UI. */
 export const CODEX_CLIENT_LABEL = "Codex";
 
+/** Human-readable label for the Copilot CLI client id in the UI. */
+export const COPILOT_CLI_CLIENT_LABEL = "Copilot CLI";
+
 /**
  * `external_agent_id` values for Claude clients:
  * - {@link CLAUDE_CLIENT_ID} — generic; recorded by auto-discovery when no
@@ -47,6 +50,14 @@ export const CLAUDE_DESKTOP_CLIENT_ID = "anthropic_claude_desktop";
  * `originator` (see {@link isCodexOriginator}).
  */
 export const CODEX_CLIENT_ID = "openai_codex";
+
+/**
+ * `external_agent_id` value for the GitHub Copilot CLI. Set explicitly by the
+ * connect-page setup scripts via the CLI's COPILOT_PROVIDER_HEADERS env var —
+ * the CLI sends those headers only to its BYOK provider endpoint (the LLM
+ * proxy), never to GitHub's own services.
+ */
+export const COPILOT_CLI_CLIENT_ID = "github_copilot_cli";
 
 /**
  * First-party Codex originators. Codex stamps its client identity on every
@@ -164,16 +175,41 @@ export function isCodexClientAgentId(
 }
 
 /**
+ * `external_agent_id` values for Copilot CLI clients. Only the one explicit
+ * id exists today (set by the connect scripts; there is no auto-discovery
+ * signal), but this stays a set to mirror the Claude/Codex shape.
+ */
+export const COPILOT_CLI_CLIENT_AGENT_IDS = [COPILOT_CLI_CLIENT_ID] as const;
+
+const COPILOT_CLI_CLIENT_AGENT_ID_SET = new Set<string>(
+  COPILOT_CLI_CLIENT_AGENT_IDS,
+);
+
+/** Whether an `external_agent_id` value denotes the Copilot CLI. */
+export function isCopilotCliClientAgentId(
+  externalAgentId: string | null | undefined,
+): boolean {
+  if (!externalAgentId) {
+    return false;
+  }
+  return COPILOT_CLI_CLIENT_AGENT_ID_SET.has(
+    externalAgentId.trim().toLowerCase(),
+  );
+}
+
+/**
  * Values used by the `/llm/logs` "Client" filter (URL/query key). Distinct from
  * the stored ids above: the backend expands each to its client's agent-id set
  * (see {@link clientFilterToAgentIds}).
  */
 export const CLAUDE_CLIENT_FILTER = "claude";
 export const CODEX_CLIENT_FILTER = "codex";
+export const COPILOT_CLI_CLIENT_FILTER = "copilot-cli";
 
 export const ClientFilterSchema = z.enum([
   CLAUDE_CLIENT_FILTER,
   CODEX_CLIENT_FILTER,
+  COPILOT_CLI_CLIENT_FILTER,
 ]);
 
 export type ClientFilter = z.infer<typeof ClientFilterSchema>;
@@ -211,6 +247,13 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
     provider: "openai",
     agentIds: CODEX_CLIENT_AGENT_IDS,
     isClientAgentId: isCodexClientAgentId,
+  },
+  {
+    filter: COPILOT_CLI_CLIENT_FILTER,
+    label: COPILOT_CLI_CLIENT_LABEL,
+    provider: "github-copilot",
+    agentIds: COPILOT_CLI_CLIENT_AGENT_IDS,
+    isClientAgentId: isCopilotCliClientAgentId,
   },
 ];
 

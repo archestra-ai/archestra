@@ -178,6 +178,28 @@ export const CLAUDE_CODE_PROXY_ENV_KEYS = {
 export const CLAUDE_CODE_CUSTOM_HEADERS_ENV_KEY = "ANTHROPIC_CUSTOM_HEADERS";
 
 /**
+ * The env vars the Copilot CLI reads to route inference through a custom
+ * OpenAI-compatible provider. Both connect setup script renderers configure
+ * them: PowerShell applies them directly (`irm | iex` runs in the caller's
+ * session, and User scope persists them), bash prints ready-to-paste export
+ * lines (a piped script cannot export into the caller's shell). One list so
+ * the renderers can't drift.
+ */
+export const COPILOT_PROVIDER_ENV_KEYS = {
+  type: "COPILOT_PROVIDER_TYPE",
+  baseUrl: "COPILOT_PROVIDER_BASE_URL",
+  apiKey: "COPILOT_PROVIDER_API_KEY",
+  model: "COPILOT_MODEL",
+  /**
+   * Custom headers the CLI sends only to the BYOK provider endpoint —
+   * carries the Archestra attribution headers (client id, and in passthrough
+   * mode the personal passthrough key). Newline-separated `Name: Value`
+   * pairs; a literal `\n` also separates entries.
+   */
+  headers: "COPILOT_PROVIDER_HEADERS",
+} as const;
+
+/**
  * Per-client startup-guard ("pre-loader") install locations, one entry per
  * scriptable CLI client that gets a guard. For each client the connect setup
  * script writes the guard to `~/<scriptRelpath>` (PowerShell:

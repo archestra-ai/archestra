@@ -143,7 +143,7 @@ describe("Copilot-specific disconnect", () => {
   test("strips the COPILOT_PROVIDER_* export lines from the shell profiles", () => {
     const script = renderStartupGuardScript(CTX, COPILOT_GUARD_CLIENT);
     expect(script).toContain(
-      "export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY)=",
+      "export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)=",
     );
     expect(script).toContain('"$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"');
     // Copilot's non-interactive one-shot flag

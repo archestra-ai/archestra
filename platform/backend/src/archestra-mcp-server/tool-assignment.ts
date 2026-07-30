@@ -246,13 +246,21 @@ async function handleBulkAssignTool(params: {
         assignments.map((assignment) => getBulkAssignmentTargetId(assignment)),
       ),
     ];
-    const [targetAgents, checker] = await Promise.all([
+    const [targetAgents, checker, callerEnvironmentId] = await Promise.all([
       AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
       getAgentTypePermissionChecker({
         userId,
         organizationId,
       }),
+      AgentModel.findEnvironmentId(contextAgent.id),
     ]);
+    // Environment isolation: writing an assignment is a configuration change,
+    // so the TARGET must be in the calling agent's environment — otherwise an
+    // agent in one environment reconfigures another. The tool end is
+    // deliberately not fenced: a cross-environment tool assigned to an
+    // in-environment agent is inert (the call-time gate drops it), so fencing
+    // it would buy no isolation while refusing catalog-less legacy rows, which
+    // no environment predicate matches.
 
     const requiresTeamIds = [...targetAgents.values()].some(
       (target) => target && !checker.isAdmin(target.agentType),
@@ -265,6 +273,11 @@ async function handleBulkAssignTool(params: {
         const targetId = getBulkAssignmentTargetId(assignment);
         const target = targetAgents.get(targetId);
         if (target) {
+          if (target.environmentId !== callerEnvironmentId) {
+            throw new Error(
+              `${bulkAssignType === "agent" ? "Agent" : "MCP gateway"} ${targetId} is in a different environment; you can only assign tools within your own environment.`,
+            );
+          }
           checker.require(target.agentType, "update");
           requireAgentModifyPermission({
             checker,
@@ -342,9 +355,10 @@ async function handleBulkRemoveTool(params: {
     const { organizationId, userId } = context;
 
     const uniqueAgentIds = [...new Set(removals.map((r) => r.agentId))];
-    const [targetAgents, checker] = await Promise.all([
+    const [targetAgents, checker, callerEnvironmentId] = await Promise.all([
       AgentModel.findByIdsForPermissionCheck(uniqueAgentIds),
       getAgentTypePermissionChecker({ userId, organizationId }),
+      AgentModel.findEnvironmentId(contextAgent.id),
     ]);
 
     // Prefetch Auto-tool mode once per agent so the per-removal loop doesn't
@@ -370,6 +384,13 @@ async function handleBulkRemoveTool(params: {
         const target = targetAgents.get(removal.agentId);
         if (!target) {
           throw new Error(`Agent with ID ${removal.agentId} not found`);
+        }
+        // Environment isolation: removing an assignment is a configuration
+        // change on the target, so it stays inside the caller's environment.
+        if (target.environmentId !== callerEnvironmentId) {
+          throw new Error(
+            `Agent ${removal.agentId} is in a different environment; you can only remove tools within your own environment.`,
+          );
         }
         checker.require(target.agentType, "update");
         requireAgentModifyPermission({

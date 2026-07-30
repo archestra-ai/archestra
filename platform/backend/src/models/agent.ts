@@ -1802,6 +1802,10 @@ class AgentModel {
    * Returns a Map of agentId -> { agentType, scope, authorId, teamIds }.
    * Much lighter than findById (no tool/label/knowledgeBase/connector joins).
    */
+  /**
+   * Includes `environmentId` so callers can apply the environment fence beside
+   * the permission checks, without a second round-trip per target.
+   */
   static async findByIdsForPermissionCheck(ids: string[]): Promise<
     Map<
       string,
@@ -1810,6 +1814,7 @@ class AgentModel {
         scope: AgentScope;
         authorId: string | null;
         teamIds: string[];
+        environmentId: string | null;
       }
     >
   > {
@@ -1824,6 +1829,7 @@ class AgentModel {
           agentType: schema.agentsTable.agentType,
           scope: schema.agentsTable.scope,
           authorId: schema.agentsTable.authorId,
+          environmentId: schema.agentsTable.environmentId,
         })
         .from(schema.agentsTable)
         .where(
@@ -1842,6 +1848,7 @@ class AgentModel {
         scope: AgentScope;
         authorId: string | null;
         teamIds: string[];
+        environmentId: string | null;
       }
     >();
     for (const agent of agents) {
@@ -1851,6 +1858,7 @@ class AgentModel {
         scope: agent.scope,
         authorId: agent.authorId,
         teamIds: teams.map((t) => t.id),
+        environmentId: agent.environmentId,
       });
     }
 

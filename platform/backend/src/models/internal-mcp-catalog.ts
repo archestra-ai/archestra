@@ -19,6 +19,7 @@ import {
 } from "@/k8s/shared";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
+import { catalogInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import {
   type CatalogItemApprovalStatus,
   ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
@@ -34,6 +35,20 @@ import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import SecretModel from "./secret";
 import ToolModel, { toolUiResourceUriSql } from "./tool";
+
+type CatalogListOptions = {
+  expandSecrets?: boolean;
+  userId?: string;
+  isAdmin?: boolean;
+  organizationId?: string;
+  /**
+   * When set (null = Default environment), restricts results to catalog items
+   * visible from that environment: strict match, built-in catalogs exempt.
+   * Omit for management surfaces that list every environment (the registry UI,
+   * which filters by environment client-side).
+   */
+  environmentId?: string | null;
+};
 
 /**
  * Data-access layer for `internal_mcp_catalog` — the org's private registry
@@ -132,12 +147,9 @@ class InternalMcpCatalogModel {
       .where(eq(schema.internalMcpCatalogTable.id, params.id));
   }
 
-  static async findAll(options?: {
-    expandSecrets?: boolean;
-    userId?: string;
-    isAdmin?: boolean;
-    organizationId?: string;
-  }): Promise<ListInternalMcpCatalog[]> {
+  static async findAll(
+    options?: CatalogListOptions,
+  ): Promise<ListInternalMcpCatalog[]> {
     return InternalMcpCatalogModel.listAll(options, false);
   }
 
@@ -148,24 +160,14 @@ class InternalMcpCatalogModel {
    * any other tool. Apps stay hidden from the registry list and the
    * agent-callable {@link InternalMcpCatalogModel.searchByQuery}.
    */
-  static async findAllWithApps(options?: {
-    expandSecrets?: boolean;
-    userId?: string;
-    isAdmin?: boolean;
-    organizationId?: string;
-  }): Promise<ListInternalMcpCatalog[]> {
+  static async findAllWithApps(
+    options?: CatalogListOptions,
+  ): Promise<ListInternalMcpCatalog[]> {
     return InternalMcpCatalogModel.listAll(options, true);
   }
 
   private static async listAll(
-    options:
-      | {
-          expandSecrets?: boolean;
-          userId?: string;
-          isAdmin?: boolean;
-          organizationId?: string;
-        }
-      | undefined,
+    options: CatalogListOptions | undefined,
     includeApps: boolean,
   ): Promise<ListInternalMcpCatalog[]> {
     const {
@@ -173,6 +175,7 @@ class InternalMcpCatalogModel {
       userId,
       isAdmin,
       organizationId,
+      environmentId,
     } = options ?? {};
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
@@ -181,6 +184,9 @@ class InternalMcpCatalogModel {
       // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
       isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
     ];
+    if (environmentId !== undefined) {
+      listConditions.push(catalogInEnvironmentPredicate(environmentId));
+    }
     if (!includeApps) {
       // App backing catalogs are managed on the Apps page, never surfaced in the
       // MCP registry (UI list or the agent-callable registry search).
@@ -267,18 +273,14 @@ class InternalMcpCatalogModel {
 
   static async searchByQuery(
     query: string,
-    options?: {
-      expandSecrets?: boolean;
-      userId?: string;
-      isAdmin?: boolean;
-      organizationId?: string;
-    },
+    options?: CatalogListOptions,
   ): Promise<ListInternalMcpCatalog[]> {
     const {
       expandSecrets = true,
       userId,
       isAdmin,
       organizationId,
+      environmentId,
     } = options ?? {};
 
     let dbItems: Array<typeof schema.internalMcpCatalogTable.$inferSelect>;
@@ -294,6 +296,9 @@ class InternalMcpCatalogModel {
       isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
       // App backing catalogs are never surfaced via registry search.
       ne(schema.internalMcpCatalogTable.serverType, "app"),
+      ...(environmentId !== undefined
+        ? [catalogInEnvironmentPredicate(environmentId)]
+        : []),
     );
 
     if (userId && !isAdmin && !organizationId) {
@@ -426,6 +431,23 @@ class InternalMcpCatalogModel {
     ]);
 
     return catalogItem;
+  }
+
+  /**
+   * The environment a catalog item belongs to (null = Default), without the
+   * secret expansion and metadata joins {@link InternalMcpCatalogModel.findById}
+   * performs. Returns undefined when no such row exists.
+   */
+  static async findEnvironmentIdById(
+    id: string,
+  ): Promise<string | null | undefined> {
+    const [row] = await db
+      .select({ environmentId: schema.internalMcpCatalogTable.environmentId })
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, id))
+      .limit(1);
+
+    return row?.environmentId;
   }
 
   static async findByEnvironmentId(

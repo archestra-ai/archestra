@@ -471,6 +471,11 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
       .where(eq(schema.conversationsTable.id, conversation.id));
     expect(stored.title).toBe("Q3 budget planning");
     expect(stored.titleIsPlaceholder).toBe(false);
+
+    // The client merges this response into its cache, so a stale title here
+    // would put the placeholder back on screen despite the database being right.
+    expect(response.json().title).toBe("Q3 budget planning");
+    expect(response.json().titleIsPlaceholder).toBe(false);
   });
 
   test("does not retitle an app chat a second time", async ({

@@ -2992,7 +2992,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           { conversationId: id },
           "Skipping title update - conversation deleted or retitled during generation",
         );
-        return reply.send(conversation);
+        // Re-read rather than replying with the pre-generation snapshot: the
+        // client merges this response into its conversation cache, so a stale
+        // title here would put the placeholder back on screen even though the
+        // rename survived in the database. Null means deleted, nothing to show.
+        const current = await ConversationModel.findById({
+          id,
+          userId: user.id,
+          organizationId,
+        });
+        return reply.send(current ?? conversation);
       }
 
       return reply.send(updatedConversation);

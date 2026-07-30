@@ -3,7 +3,7 @@ title: Webhook (A2A)
 category: Agents
 order: 9
 description: Invoke agents over HTTP using the A2A protocol
-lastUpdated: 2026-07-29
+lastUpdated: 2026-07-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,10 +14,45 @@ Webhook (A2A) lets external systems invoke an agent by POSTing to a per-agent UR
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| `GET`  | `/v2/a2a/agents` | Every AgentCard your token can reach |
 | `GET`  | `/v2/a2a/{agentId}/.well-known/agent-card.json` | A2A 1.0 AgentCard for capability discovery |
 | `POST` | `/v2/a2a/{agentId}` | JSON-RPC entry point for `SendMessage`, `SendStreamingMessage`, `GetTask`, `CancelTask`, `SubscribeToTask`, and `ListTasks` |
 
 The AgentCard advertises the agent's name, description, and a single skill derived from the agent. A2A clients fetch it first to discover what the agent can do, then send messages to the POST endpoint.
+
+## Discovery
+
+The A2A spec describes three ways for a client to find an agent. Two of them apply here.
+
+### The Agent Card Path
+
+Each agent has its own card, so the path is scoped to an agent:
+
+```
+GET /v2/a2a/{agentId}/.well-known/agent-card.json
+```
+
+This differs from the convention in [RFC 8615](https://datatracker.ietf.org/doc/html/rfc8615), where a `.well-known` path sits at the root of a domain. One deployment hosts many agents, and a card describes exactly one — a card at the domain root could not say which agent it meant. A client that builds the URL by appending `/.well-known/agent-card.json` to a hostname gets a `401`, not a card — and not a `404`, so the failure reads like a credentials problem when it is really a path problem. Give the client the agent-scoped URL instead. You can copy it from the agent's Connect dialog.
+
+### The Registry
+
+A token belongs to a user, a team, or an organization rather than to one agent, so it usually reaches several:
+
+```
+GET /v2/a2a/agents
+```
+
+The response is a list of full AgentCards — the same card each agent serves individually. Only agents your token can reach are listed, so two callers can get different results from the same URL. Built-in agents that the platform runs for itself are left out.
+
+Use this when you do not already know an agent's ID. The alternative is to configure the ID directly, which the spec also allows and which suits a fixed integration.
+
+### Card Access
+
+Cards require a token. That is a departure from the spec's public-card model, and it is deliberate: a card carries the agent's name, description, and system prompt, which the spec itself names as sensitive.
+
+A request with no token gets a `401` with a `WWW-Authenticate` header, so a client that arrives with nothing still learns which scheme to use. Cards are cached with an `ETag`; send `If-None-Match` and you get a `304` when nothing changed.
+
+Only platform tokens work with the registry. An identity provider JWT or an OAuth token is validated against a specific agent, so it has no meaning until you name one — use those with a single agent's card.
 
 ## SDKs
 

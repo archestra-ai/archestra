@@ -59,6 +59,7 @@ import {
   type ModelCapabilities,
   useLlmModelsByProvider,
 } from "@/lib/llm-models.query";
+import { formatPricePerMillion } from "@/lib/model-price-format";
 import { providerToLogoProvider } from "@/lib/provider-logos";
 import { cn, formatContextLength } from "@/lib/utils";
 
@@ -281,10 +282,14 @@ function PricingIndicator({
         <TooltipContent side="top" className="text-xs">
           <div className="flex flex-col gap-0.5">
             {pricePerMillionInput && (
-              <span>Input: ${pricePerMillionInput}/M tokens</span>
+              <span>
+                {`Input: $${formatPricePerMillion(pricePerMillionInput)}/M tokens`}
+              </span>
             )}
             {pricePerMillionOutput && (
-              <span>Output: ${pricePerMillionOutput}/M tokens</span>
+              <span>
+                {`Output: $${formatPricePerMillion(pricePerMillionOutput)}/M tokens`}
+              </span>
             )}
           </div>
         </TooltipContent>

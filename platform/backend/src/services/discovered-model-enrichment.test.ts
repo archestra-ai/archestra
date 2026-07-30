@@ -86,8 +86,8 @@ test("the enriched model no longer reports the fabricated default price", async 
   const model = await ModelModel.findByProviderAndModelId("bedrock", "gpt-4o");
   const pricing = ModelModel.getEffectivePricing(model ?? null, "gpt-4o");
 
-  expect(pricing.pricePerMillionInput).toBe("2.50");
-  expect(pricing.pricePerMillionOutput).toBe("10.00");
+  expect(pricing.pricePerMillionInput).toBe("2.5");
+  expect(pricing.pricePerMillionOutput).toBe("10");
   expect(pricing.source).not.toBe("default");
 });
 

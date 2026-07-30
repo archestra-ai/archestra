@@ -235,6 +235,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "MCP tool call log; surfaced via /mcp/logs",
   },
+  mcpGatewayTasksTable: {
+    audited: false,
+    reason:
+      "Ephemeral task handles for in-flight tool calls; the calls themselves are logged in mcp_tool_calls",
+  },
   mcpHttpSessionsTable: {
     audited: false,
     reason: "MCP session-level transport state",
@@ -253,6 +258,18 @@ export const AUDIT_DECISIONS = {
   },
   a2aMessagesTable: { audited: false, reason: "A2A protocol message log" },
   a2aTasksTable: { audited: false, reason: "A2A protocol task state" },
+  a2aTaskEventsTable: {
+    audited: false,
+    reason: "A2A protocol task stream-event log (runtime state)",
+  },
+  a2aArtifactsTable: {
+    audited: false,
+    reason: "A2A protocol task artifact output (runtime state)",
+  },
+  a2aPushNotificationConfigsTable: {
+    audited: false,
+    reason: "A2A protocol per-task webhook config (runtime state)",
+  },
   a2aTaskApprovalRequestsTable: {
     audited: false,
     reason: "A2A protocol approval state",

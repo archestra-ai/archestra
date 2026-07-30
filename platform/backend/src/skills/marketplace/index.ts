@@ -12,6 +12,7 @@ import { MarketplaceMaterializer } from "./materialize";
  * the moment a new value rolled out.
  */
 const MARKETPLACE_GIT_IDENTITY = {
+  // white-label-ok: names the vendor's own hosted marketplace, not this deployment
   name: "Archestra Marketplace",
   email: "marketplace@archestra.local",
 } as const;

@@ -1,4 +1,5 @@
-ALTER TABLE "conversations" ADD COLUMN "title_is_placeholder" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "conversations" ADD COLUMN "title_is_placeholder" boolean DEFAULT false NOT NULL;
+--> statement-breakpoint
 -- Mark existing app-opened chats whose title is still the seeded app name, so
 -- they pick up a generated title on their next settled exchange like new ones.
 --   1. No user message yet: `ConversationModel.findAll` hides `app_open` chats

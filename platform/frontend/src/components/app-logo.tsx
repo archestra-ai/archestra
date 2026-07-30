@@ -7,6 +7,7 @@ import config from "@/lib/config/config";
 import { DEFAULT_APP_LOGO, useAppName } from "@/lib/hooks/use-app-name";
 import { useOrgTheme } from "@/lib/theme.hook";
 
+// white-label-ok: default brand mark, shown only when no white-label logo is configured
 const APP_DISPLAY_NAME = "Archestra.AI";
 
 export function AppLogo() {

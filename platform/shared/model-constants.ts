@@ -100,6 +100,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   azure: "Azure AI Foundry",
   "github-copilot": "GitHub Copilot",
   "microsoft-365-copilot": "Microsoft 365 Copilot",
+  // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
   archestra: "Archestra",
 };
 
@@ -109,6 +110,21 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
  * Microsoft Entra ID authentication is enabled in the backend environment.
  */
 const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
+  "ollama",
+  "ollama-native",
+  "vllm",
+]);
+
+/**
+ * Providers that charge no per-token rate, so their real price is zero rather
+ * than unknown: the operator runs the server (vLLM, self-hosted Ollama), or the
+ * vendor bills a flat subscription metered on compute time (Ollama's cloud).
+ *
+ * Listed explicitly rather than derived from the self-hosted-provider set it
+ * currently matches, so that adding a keyless provider that does bill per token
+ * cannot silently make its traffic free.
+ */
+export const PROVIDERS_BILLING_NO_TOKEN_RATE = new Set<SupportedProvider>([
   "ollama",
   "ollama-native",
   "vllm",

@@ -380,6 +380,7 @@ export default function AgentSettingsPage() {
           title="Apps Hackathon Recorder"
           description={
             <>
+              {/* white-label-ok: names the real Archestra-run hackathon and its repo; hidden unless that offer is enabled */}
               Show the session recorder control panel in chat composer to
               participate in Archestra Apps Hackathon{" "}
               {APPS_HACKATHON_DATE_RANGE_LABEL}.{" "}

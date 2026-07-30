@@ -1,6 +1,6 @@
 // Route-level auth tests for the A2A endpoints (v1 `/v1/a2a` and v2 `/v2/a2a`)
 // exercising the REAL `validateMCPGatewayToken` path — not a mock of it. The
-// other A2A tests (a2a.test.ts / a2a-v2.stream.test.ts) stub the validator, so
+// other A2A tests (v1.test.ts / v2.stream.test.ts) stub the validator, so
 // real token validation was previously untested.
 //
 // A2A accepts the same inbound auth methods the MCP gateway and LLM proxy do:
@@ -125,8 +125,8 @@ describe("a2a route-level authentication", () => {
     });
 
     app = createFastifyInstance();
-    const { default: a2aRoutes } = await import("./a2a");
-    const { default: a2aV2Routes } = await import("./a2a-v2");
+    const { default: a2aRoutes } = await import("./v1");
+    const { default: a2aV2Routes } = await import("./v2");
     await app.register(a2aRoutes);
     await app.register(a2aV2Routes);
   });

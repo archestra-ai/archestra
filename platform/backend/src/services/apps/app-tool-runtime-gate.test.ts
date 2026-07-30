@@ -116,44 +116,9 @@ test("refuses a tool not assigned to the app", async ({
   if (!decision.allowed) expect(decision.reason).toContain("not assigned");
 });
 
-test("refuses an assigned tool whose catalog is outside the app's bound environment", async ({
-  makeOrganization,
-  makeUser,
-  makeApp,
-  makeInternalMcpCatalog,
-  makeTool,
-  makeAppTool,
-}) => {
-  // The tool has no policy, so the env fence (which runs before policy) is the
-  // only thing that can refuse here.
-  const org = await makeOrganization();
-  const user = await makeUser();
-  const prod = await EnvironmentModel.create({
-    organizationId: org.id,
-    name: "production",
-  });
-  // The app's environment is derived from its backing catalog (FR-30); the
-  // fixture routes environmentId there.
-  const app = await makeApp({ organizationId: org.id, environmentId: prod.id });
-  // The tool's catalog is in the default (null) environment — not prod.
-  const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-  const tool = await makeTool({
-    name: `hf__search_${crypto.randomUUID().slice(0, 8)}`,
-    catalogId: catalog.id,
-  });
-  await makeAppTool(app.id, tool.id);
-
-  const decision = await gateAppToolCall({
-    appId: app.id,
-    organizationId: org.id,
-    userId: user.id,
-    toolName: tool.name,
-    toolInput: {},
-    ...BASE,
-  });
-  expect(decision.allowed).toBe(false);
-  if (!decision.allowed) expect(decision.reason).toContain("environment");
-});
+// A Default-environment tool on an env-bound app is ALLOWED (the org baseline)
+// — see "allows an assigned Default-environment tool on an env-bound app"
+// below; only tools from a different non-default environment are refused.
 
 test("refuses a management Archestra tool, allows the reserved app built-ins", async ({
   makeOrganization,
@@ -470,6 +435,44 @@ test("refuses an assigned tool whose catalog left the app's environment", async 
   expect(decision.allowed === false && decision.reason).toContain(
     "environment",
   );
+});
+
+test("allows an assigned Default-environment tool on an env-bound app", async ({
+  makeOrganization,
+  makeUser,
+  makeApp,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAppTool,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const prod = await EnvironmentModel.create({
+    organizationId: org.id,
+    name: "production",
+  });
+  // App bound to prod; the assigned tool's catalog is in the Default
+  // environment (null) — the org baseline every app may draw from, so the
+  // call-time gate allows it (mirroring the assignment fence).
+  const app = await makeApp({ organizationId: org.id, environmentId: prod.id });
+  const defaultCatalog = await makeInternalMcpCatalog({
+    organizationId: org.id,
+  });
+  const tool = await makeTool({
+    name: `base__y_${crypto.randomUUID().slice(0, 8)}`,
+    catalogId: defaultCatalog.id,
+  });
+  await makeAppTool(app.id, tool.id);
+
+  const decision = await gateAppToolCall({
+    appId: app.id,
+    organizationId: org.id,
+    userId: user.id,
+    toolName: tool.name,
+    toolInput: {},
+    ...BASE,
+  });
+  expect(decision.allowed).toBe(true);
 });
 
 test("allows an assigned tool in the app's bound environment", async ({

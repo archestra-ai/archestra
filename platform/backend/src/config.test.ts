@@ -49,6 +49,7 @@ import config, {
   parseK8sResourceQuantity,
   parseLogFormat,
   parseMetricsPort,
+  parseNonNegativeInt,
   parseOptionalPort,
   parseProcessType,
   parseRefreshTokenReuseGraceSeconds,
@@ -2828,5 +2829,24 @@ describe("parseHackathonRecorderMaxFinalCutMs", () => {
   test("refuses a limit so small nothing could ever be submitted", () => {
     expect(() => parseHackathonRecorderMaxFinalCutMs("10")).toThrow();
     expect(parseHackathonRecorderMaxFinalCutMs("5000")).toBe(5_000);
+  });
+});
+
+describe("parseNonNegativeInt", () => {
+  test("falls back when unset or unparseable", () => {
+    expect(parseNonNegativeInt(undefined, 90)).toBe(90);
+    expect(parseNonNegativeInt("", 90)).toBe(90);
+    expect(parseNonNegativeInt("not-a-number", 90)).toBe(90);
+  });
+
+  test("accepts zero, which parsePositiveInt would reject", () => {
+    // 0 is a real setting here — a retention window of zero means "keep
+    // forever" — so it must not collapse to the default.
+    expect(parseNonNegativeInt("0", 90)).toBe(0);
+  });
+
+  test("accepts positive values and rejects negative ones", () => {
+    expect(parseNonNegativeInt("30", 90)).toBe(30);
+    expect(parseNonNegativeInt("-5", 90)).toBe(90);
   });
 });

@@ -8,6 +8,8 @@ import {
   type ContextWindowEstimate,
   EXTERNAL_AGENT_ID_HEADER,
   getArchestraToolShortName,
+  MCP_TASK_PART_TYPE,
+  type McpTaskPartData,
   stripDanglingToolCalls,
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
@@ -140,6 +142,16 @@ interface ChatSession {
     toolName: string;
   } | null;
   pendingMcpElicitation: ChatMcpElicitationRequest | null;
+  /**
+   * Background MCP tasks for the running turn, keyed by task id.
+   *
+   * Held as state rather than read off message parts because the backend
+   * streams them transiently: a non-transient data part written mid-stream
+   * makes the AI SDK open a second assistant message, which renders the whole
+   * tool group twice for as long as the call runs. History still comes from
+   * the persisted parts the backend splices in at the end of the turn.
+   */
+  mcpTasks: Record<string, McpTaskPartData>;
   /**
    * True while the session is auto-recovering from a transient stream failure
    * (auto-retry scheduled or reattaching to the still-running response).
@@ -431,6 +443,7 @@ function ChatSessionHook({
     useState<{ toolCallId: string; toolName: string } | null>(null);
   const [pendingMcpElicitation, setPendingMcpElicitation] =
     useState<ChatMcpElicitationRequest | null>(null);
+  const [mcpTasks, setMcpTasks] = useState<Record<string, McpTaskPartData>>({});
   const [optimisticToolCalls, setOptimisticToolCalls] = useState<
     Array<{
       toolCallId: string;
@@ -987,6 +1000,13 @@ function ChatSessionHook({
           setPendingMcpElicitation(data);
         }
       }
+
+      if (customData.type === MCP_TASK_PART_TYPE) {
+        const data = customData.data as McpTaskPartData | undefined;
+        if (data?.taskId) {
+          setMcpTasks((current) => ({ ...current, [data.taskId]: data }));
+        }
+      }
     },
     sendAutomaticallyWhen: ({ messages: msgs }) =>
       lastAssistantMessageIsCompleteWithApprovalResponses({
@@ -1251,6 +1271,7 @@ function ChatSessionHook({
     addToolApprovalResponse,
     pendingCustomServerToolCall,
     pendingMcpElicitation,
+    mcpTasks,
     // Computed, not stored: the page paints the SDK error before onError has
     // run (so no flag set inside onError can suppress the first frame), and
     // consumers read the session from a map refreshed an effect-cycle later.
@@ -1302,6 +1323,7 @@ function ChatSessionHook({
     addToolApprovalResponse,
     pendingCustomServerToolCall,
     pendingMcpElicitation,
+    mcpTasks,
     isRecoveringState,
     optimisticToolCalls,
     tokenUsage,

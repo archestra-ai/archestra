@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-07-28
+lastUpdated: 2026-07-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -85,7 +85,7 @@ Each app has its own key-to-document store, exposed to the app's HTML as `arches
 
 ## Tools and auto-auth
 
-Beyond the data store, an app can be assigned upstream MCP-server tools — from the Tools tab of its settings in the MCP registry, or directly from chat via the `tools` parameter of `scaffold_app` (declarative: the list replaces the current assignments). Assignment mirrors the agent model (scope-aligned, dynamic credentials by default). A running app can call only its assigned tools plus its own data-store tools; everything else is refused at the route.
+Beyond the data store, an app can be assigned upstream MCP-server tools — from the Tools tab of its settings in the MCP registry, or directly from chat via the `tools` parameter of `scaffold_app` (declarative: the list replaces the current assignments). Assignment mirrors the agent model (scope-aligned, dynamic credentials by default). A running app can call only its assigned tools plus its own data-store tools; everything else is refused at the route. `scaffold_app` binds the app to the authoring agent's [environment](./platform-environments); assignable tools are that environment's plus the Default environment's.
 
 Tool calls run **as the viewing user**: the platform resolves the MCP server and credentials per viewer at call time (personal install first, then team, then org), so an app reuses whatever MCP servers the viewer has already connected — no tokens in app code, no per-app auth setup. If the viewer hasn't connected the required server yet, `archestra.tools.call` rejects with `{ code: "auth_required", url }`; the user completes authentication in the MCP registry (apps cannot run OAuth flows themselves) and the next call succeeds.
 

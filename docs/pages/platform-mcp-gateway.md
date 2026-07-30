@@ -107,6 +107,7 @@ Older revisions still work too. Anything back to `2024-11-05` is accepted and se
 | `ping` and `logging/setLevel` | Answered | Removed — method-not-found |
 | Change notifications | None | `subscriptions/listen` stream for tool-list changes |
 | `x-mcp-header` params | Ignored | Mirrored to `Mcp-Param-*` headers on upstream calls |
+| Long-running tools | Call blocks until done | Tasks extension — slow calls return a handle to poll |
 
 Both revisions see the same tools, the same access control, and the same policies. The differences are all in how a client talks to the gateway, not in what it can reach.
 
@@ -119,6 +120,14 @@ Tool, prompt, and resource results carry a freshness hint. It is always marked p
 A tool that needs input mid-call returns a request for it instead of prompting inline. Your client gathers the answer and retries the same call with it attached. The retry re-runs the tool, and the gateway caps how many times one call can go around.
 
 To hear about tool-list changes, open a `subscriptions/listen` stream with `toolsListChanged` in the filter. The first event acknowledges which types the gateway honors — tool-list changes only, since prompt and resource lists come from upstream servers. Close the stream to unsubscribe.
+
+### Long-Running Tools
+
+Declare the Tasks extension (`io.modelcontextprotocol/tasks`) in a request's `_meta` capabilities and the gateway may answer a slow tool call with a task handle instead of blocking. Poll `tasks/get` with the handle until the task completes — the result is exactly what the blocking call would have returned. `tasks/cancel` stops a running task.
+
+The gateway decides per call: anything that finishes within the threshold (10 seconds by default) returns normally. A client that never declares the extension always gets the blocking behavior. Tasks belong to the caller that started them — another caller's `tasks/get` finds nothing.
+
+One limit to know: a tool that asks for interactive input after its call became a task fails with an explanatory error, since no one is connected to answer. Re-run the call without task mode to answer interactively.
 
 ## Access Control
 

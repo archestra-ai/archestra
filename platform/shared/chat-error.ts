@@ -396,6 +396,7 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
   [ChatErrorCode.RateLimit]:
     "Too many requests. Please wait a moment and try again.",
   [ChatErrorCode.UsageLimitExceeded]:
+    // white-label-ok: shipped default text; branded by brandBuiltInText where it is seeded
     "Archestra blocked this request because a configured usage limit has been reached. Contact your administrator to raise the limit or wait for it to reset.",
   [ChatErrorCode.Authentication]:
     "Invalid API key. Please check your Chat Settings.",

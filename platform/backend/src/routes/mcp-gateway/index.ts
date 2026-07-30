@@ -34,6 +34,7 @@ import {
   parseSubscriptionFilter,
   runSubscriptionStream,
 } from "./subscriptions";
+import { handleTaskMethod, isTaskMethod } from "./tasks";
 import {
   authenticateMCPGatewayRequest,
   createAgentServer,
@@ -496,6 +497,31 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             code: -32601,
             message: `Method "${bodyMethod}" was removed in protocol version ${resolution.revision}.`,
           },
+          id: (request.body as { id?: string | number })?.id ?? null,
+        };
+      }
+
+      // Tasks extension methods, served from the durable row so any replica
+      // can answer. Stateless clients only — the extension's per-request
+      // capability mechanics do not exist earlier, so a legacy client falls
+      // through to the SDK and gets method-not-found.
+      if (
+        resolution.revision === STATELESS_MCP_PROTOCOL_REVISION &&
+        isTaskMethod(request.body)
+      ) {
+        reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
+        const outcome = await handleTaskMethod({
+          body: request.body,
+          agentId: profileId,
+          principal: deriveStatePrincipal({
+            userId: tokenAuth.userId,
+            tokenId: tokenAuth.tokenId,
+            organizationId: tokenAuth.organizationId,
+          }),
+        });
+        return {
+          jsonrpc: "2.0",
+          ...outcome,
           id: (request.body as { id?: string | number })?.id ?? null,
         };
       }

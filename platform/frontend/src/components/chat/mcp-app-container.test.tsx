@@ -1507,7 +1507,12 @@ describe("McpAppSection owned-app panel chrome", () => {
 describe("McpAppRuntime auth banner recovery", () => {
   const AUTH_URL = "http://localhost:3000/mcp/registry?install=cat_test";
   type CapturedBridge = {
-    oncalltool: ((params: { name: string }) => Promise<unknown>) | null;
+    oncalltool:
+      | ((
+          params: { name: string },
+          extra: { signal: AbortSignal },
+        ) => Promise<unknown>)
+      | null;
   };
   type PendingToolCall = {
     toolName: string;
@@ -1693,7 +1698,12 @@ describe("McpAppRuntime auth banner recovery", () => {
   function callTool(bridge: CapturedBridge, name: string): Promise<unknown> {
     if (!bridge.oncalltool)
       throw new Error("Bridge tool callback not installed");
-    return bridge.oncalltool({ name });
+    // The real AppBridge always passes the per-request handler extra; the
+    // handler threads its abort signal into the gateway fetch.
+    return bridge.oncalltool(
+      { name },
+      { signal: new AbortController().signal },
+    );
   }
 
   async function settleToolCall(

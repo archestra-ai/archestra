@@ -13,6 +13,7 @@
  * 2. Status-quo drift (app-code singular names predating this policy — eligible
  *    to be renamed to plural in future migrations):
  *      a2a_context, a2a_message, a2a_task, a2a_task_approval_request,
+ *      a2a_artifact, a2a_task_event, a2a_push_notification_config,
  *      agent_connector_assignment, agent_knowledge_base, agent_team,
  *      chatops_channel_binding, chatops_processed_message,
  *      chatops_thread_agent_override,
@@ -38,11 +39,14 @@
  *   - messages — a top-level entity named for itself, not a conversation child
  *   - chat_active_runs — ephemeral run state predating this guidance
  */
+export { default as a2aArtifactsTable } from "./a2a-artifact";
 export { default as a2aContextsTable } from "./a2a-context";
 export { default as a2aContextCompactionsTable } from "./a2a-context-compaction";
 export { default as a2aMessagesTable } from "./a2a-message";
+export { default as a2aPushNotificationConfigsTable } from "./a2a-push-notification-config";
 export { default as a2aTasksTable } from "./a2a-task";
 export { default as a2aTaskApprovalRequestsTable } from "./a2a-task-approval-request";
+export { default as a2aTaskEventsTable } from "./a2a-task-event";
 export { default as accountsTable } from "./account";
 export { default as agentsTable } from "./agent";
 export { default as agentConnectorAssignmentsTable } from "./agent-connector-assignment";
@@ -119,6 +123,7 @@ export { default as llmProviderApiKeyModelsTable } from "./llm-provider-api-key-
 export { default as mcpCatalogLabelsTable } from "./mcp-catalog-label";
 export { default as mcpCatalogTeamsTable } from "./mcp-catalog-team";
 export { default as mcpCatalogUsersTable } from "./mcp-catalog-user";
+export { default as mcpGatewayTasksTable } from "./mcp-gateway-task";
 export { default as mcpHttpSessionsTable } from "./mcp-http-session";
 export { default as mcpPresetEntriesTable } from "./mcp-preset-entry";
 export { default as mcpServersTable } from "./mcp-server";

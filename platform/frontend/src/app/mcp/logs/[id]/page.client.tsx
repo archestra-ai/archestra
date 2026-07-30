@@ -27,6 +27,7 @@ import {
   formatCallerIdentity,
   useMcpToolCall,
 } from "@/lib/mcp/mcp-tool-call.query";
+import { resolveMcpToolCallStatus } from "@/lib/mcp-logs/tool-call-status";
 import { formatDate } from "@/lib/utils";
 
 export function McpToolCallDetailPage({
@@ -106,12 +107,12 @@ function McpToolCallDetail({
   // Whose credential served the call upstream, recorded with the result.
   const executedAs = extractMcpExecutedAs(mcpToolCall.toolResult);
 
-  const isError =
-    method === "tools/call" &&
-    toolResult &&
-    typeof toolResult === "object" &&
-    "isError" in toolResult &&
-    toolResult.isError;
+  // Success / error / cancelled — a cancelled call (the user stopped the run
+  // or the background task) is neither a success nor a failure.
+  const status =
+    method === "tools/call" && toolResult
+      ? resolveMcpToolCallStatus(toolResult)
+      : "success";
 
   return (
     <LoadingWrapper isPending={isPending}>
@@ -143,10 +144,20 @@ function McpToolCallDetail({
                 {method}
               </Badge>
               <Badge
-                variant={isError ? "destructive" : "default"}
+                variant={
+                  status === "error"
+                    ? "destructive"
+                    : status === "cancelled"
+                      ? "secondary"
+                      : "default"
+                }
                 className="text-xs"
               >
-                {isError ? "Error" : "Success"}
+                {status === "error"
+                  ? "Error"
+                  : status === "cancelled"
+                    ? "Cancelled"
+                    : "Success"}
               </Badge>
             </>
           }

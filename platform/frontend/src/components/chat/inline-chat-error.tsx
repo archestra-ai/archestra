@@ -22,6 +22,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { copyToClipboard } from "@/lib/clipboard";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   formatOriginalError,
   mapClientError,
@@ -62,7 +63,8 @@ export function InlineChatError({
   const { data: isAdmin } = useHasPermissions({
     organizationSettings: ["read"],
   });
-  const chatError = parseErrorResponse(error) ?? mapClientError(error);
+  const appName = useAppName();
+  const chatError = parseErrorResponse(error) ?? mapClientError(error, appName);
 
   // A per-user provider the user hasn't linked yet → an inline "connect your
   // account" card instead of a generic error.

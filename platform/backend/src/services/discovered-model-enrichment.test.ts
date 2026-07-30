@@ -86,8 +86,8 @@ test("the enriched model no longer reports the fabricated default price", async 
   const model = await ModelModel.findByProviderAndModelId("bedrock", "gpt-4o");
   const pricing = ModelModel.getEffectivePricing(model ?? null, "gpt-4o");
 
-  expect(pricing.pricePerMillionInput).toBe("2.50");
-  expect(pricing.pricePerMillionOutput).toBe("10.00");
+  expect(pricing.pricePerMillionInput).toBe("2.5");
+  expect(pricing.pricePerMillionOutput).toBe("10");
   expect(pricing.source).not.toBe("default");
 });
 
@@ -169,6 +169,39 @@ test("fills a price the registry omits from a model it does carry", async () => 
   expect(Number(model?.completionPricePerToken)).toBe(0.00001);
   // The metadata the priceless entry did carry is still applied.
   expect(model?.contextLength).toBe(400000);
+});
+
+test("asserts no price for a provider that bills no per-token rate", async () => {
+  // A client can name any model on any endpoint, so a vendor model reaches the
+  // self-hosted proxy. The operator runs that server: a registry price would
+  // be charged for tokens nobody bills, and a stored price outranks the
+  // zero-rate rule at read time.
+  const created = await discover("gpt-4o", "vllm");
+
+  await enrichDiscoveredModel({ model: created, modelsDevData: MODELS_DEV });
+
+  const model = await ModelModel.findByProviderAndModelId("vllm", "gpt-4o");
+  expect(model?.promptPricePerToken).toBeNull();
+  expect(model?.completionPricePerToken).toBeNull();
+  expect(ModelModel.getEffectivePricing(model ?? null, "gpt-4o")).toMatchObject(
+    {
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
+    },
+  );
+});
+
+test("asserts no context window for a self-hosted deployment", async () => {
+  // The window is whatever the server was launched with, so the registry's
+  // figure is a guess that either truncates requests or overruns the server.
+  const created = await discover("gpt-4o", "ollama");
+
+  await enrichDiscoveredModel({ model: created, modelsDevData: MODELS_DEV });
+
+  const model = await ModelModel.findByProviderAndModelId("ollama", "gpt-4o");
+  expect(model?.contextLength).toBeNull();
+  // Tool calling describes the model rather than the deployment, so it applies.
+  expect(model?.supportsToolCalling).toBe(true);
 });
 
 test("a second sighting reports no insert, so enrichment does not re-run", async () => {

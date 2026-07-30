@@ -100,8 +100,9 @@ export async function gateAppToolCall(params: {
   // Environment fence: a tool whose catalog left the app's bound environment is
   // refused at call time even though its assignment row remains
   // (re-binding an app does not strip assignments). Reuses the same predicate as
-  // the assignment fence so the two never diverge. Only upstream tools reach
-  // here — app-runtime built-ins returned above are environment-less.
+  // the assignment fence so the two never diverge; Default-environment tools
+  // are the org baseline and pass for any app environment. Only upstream tools
+  // reach here — app-runtime built-ins returned above are environment-less.
   const app = await AppModel.findById(appId);
   if (!app) {
     return {
@@ -110,7 +111,9 @@ export async function gateAppToolCall(params: {
       reason: `App "${appId}" not found.`,
     };
   }
-  if (!(await ToolModel.isToolInEnvironment(tool.id, app.environmentId))) {
+  if (
+    !(await ToolModel.isToolInEnvironmentOrDefault(tool.id, app.environmentId))
+  ) {
     return {
       allowed: false,
       code: -32601,

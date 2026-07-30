@@ -120,7 +120,7 @@ describe("a2a v2 streaming route", () => {
     );
 
     app = createFastifyInstance();
-    const { default: a2aV2Routes } = await import("./a2a-v2");
+    const { default: a2aV2Routes } = await import("./v2");
     await app.register(a2aV2Routes);
   });
 
@@ -166,7 +166,9 @@ describe("a2a v2 streaming route", () => {
     );
     expect(events[0].result?.statusUpdate?.status.message).toBeUndefined();
 
-    // Interim frames carry the incremental text deltas in order.
+    // Interim frames carry the incremental text in order. Deltas are
+    // coalesced into bounded chunks by the task run service, so frame
+    // granularity is not contractual — the concatenation is.
     const deltaTexts = events
       .filter(
         (e) =>
@@ -178,7 +180,8 @@ describe("a2a v2 streaming route", () => {
           (p) => p.text,
         ),
       );
-    expect(deltaTexts).toEqual(["Hello ", "world"]);
+    expect(deltaTexts.length).toBeGreaterThan(0);
+    expect(deltaTexts.join("")).toBe("Hello world");
 
     // Terminal frame: final=true, completed, carrying the authoritative message.
     const finalEvent = events.find(

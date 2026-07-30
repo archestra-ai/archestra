@@ -439,23 +439,29 @@ const registry = defineArchestraTools([
       }
 
       // Resolve the tools list BEFORE creating the app, so a bad list never
-      // leaves a half-built app behind. scaffold_app creates the app at the org
-      // default environment (environment selection is deferred to the REST/UI
-      // path), so tools resolve within the default environment — not the
-      // authoring agent's — keeping assignments consistent with the app's env.
+      // leaves a half-built app behind. scaffold_app binds the app to the
+      // authoring agent's environment — the same environment search_tools
+      // discovers in — so a tool the model just found is assignable and the
+      // runtime gate agrees; an agent without one (or whose row is gone)
+      // falls back to the org Default environment. Resolution additionally
+      // accepts the Default baseline (toolInEnvironmentOrDefaultPredicate).
+      const environmentId = await AgentModel.findEnvironmentId(
+        context.agent.id,
+      );
       const toolsResolution = await resolveToolsParam({
         agentId: context.agent.id,
         userId,
         organizationId,
         tools: args.tools,
-        environmentId: null,
+        environmentId,
       });
       if (!toolsResolution.ok) return errorResult(toolsResolution.error);
       const resolvedTools = toolsResolution.tools;
 
       // Like the REST path: create the app, then its backing; on backing failure
-      // delete the app so it is never left unbacked. scaffold_app defers team +
-      // environment selection to the REST/UI path, so no teams here.
+      // delete the app so it is never left unbacked. scaffold_app defers team
+      // selection to the REST/UI path, so no teams here; the environment is the
+      // authoring agent's (resolved above).
       const appName = args.name;
       let app: App | null;
       // App names are unique per author (apps_org_author_name_uidx); a duplicate
@@ -497,7 +503,7 @@ const registry = defineArchestraTools([
         await createAppBacking({
           app: created,
           scope,
-          environmentId: null,
+          environmentId,
           userId,
           organizationId,
           teamIds: [],
@@ -726,7 +732,7 @@ const registry = defineArchestraTools([
         }
         if (agentType !== "agent") {
           return errorResult(
-            "render_app displays an app only inside Archestra's chat UI — on " +
+            `render_app displays an app only inside ${archestraMcpBranding.appName}'s chat UI — on ` +
               "this connection it renders nothing. To open an app here, call " +
               "the app's own launch tool directly (its name ends in __open); " +
               "it is in your tool list, keyed by the app's name.",
@@ -1037,8 +1043,8 @@ const registry = defineArchestraTools([
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
-      // Fence resolution against the app's bound environment (not the org
-      // default scaffold_app uses), so a tool only valid elsewhere is rejected.
+      // Fence resolution against the app's bound environment (plus the Default
+      // baseline), so a tool only valid in another environment is rejected.
       const resolution = await resolveToolsParam({
         agentId: context.agent.id,
         userId: auth.userId,

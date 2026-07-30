@@ -55,7 +55,11 @@ export const Tool = ({
 export type ToolHeaderProps = {
   title?: string;
   type: ToolUIPart["type"];
-  state: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied";
+  state:
+    | ToolUIPart["state"]
+    | "output-available-dual-llm"
+    | "output-denied"
+    | "output-cancelled";
   className?: string;
   icon?: React.ReactNode;
   isCollapsible?: boolean;
@@ -66,7 +70,11 @@ export type ToolHeaderProps = {
 };
 
 const getStatusBadge = (
-  status: ToolUIPart["state"] | "output-available-dual-llm" | "output-denied",
+  status:
+    | ToolUIPart["state"]
+    | "output-available-dual-llm"
+    | "output-denied"
+    | "output-cancelled",
 ) => {
   const labels = {
     "input-streaming": "Pending",
@@ -77,6 +85,9 @@ const getStatusBadge = (
     "output-available-dual-llm": "Completed (dual LLM)",
     "output-error": "Error",
     "output-denied": "Denied",
+    // A user-stopped call: neither a success nor a failure, so it gets a
+    // neutral label and a muted dot rather than green or red.
+    "output-cancelled": "Cancelled",
   } as const;
 
   const dotClass = {
@@ -88,6 +99,7 @@ const getStatusBadge = (
     "output-available-dual-llm": "bg-emerald-500",
     "output-error": "bg-destructive",
     "output-denied": "bg-orange-500",
+    "output-cancelled": "bg-muted-foreground",
   } as const;
 
   return (

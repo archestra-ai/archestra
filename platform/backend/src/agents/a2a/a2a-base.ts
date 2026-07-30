@@ -13,12 +13,17 @@ export enum A2AErrorKind {
   InputApprovalFlowIsDisabled,
   OutputApprovalFlowIsDisabled,
   TaskNotFound,
+  TaskNotCancelable,
+  UnsupportedOperation,
   TaskContextMismatch,
   TaskIsNotInputRequired,
   ApprovalIdNotFound,
   ApprovalIdAlreadyResolved,
   MessageIdAlreadyExists,
   NothingToExecute,
+  InvalidPageToken,
+  InvalidPushNotificationUrl,
+  PushNotificationConfigNotFound,
 }
 const A2A_ERRORS: Record<A2AErrorKind, { code: number; message: string }> = {
   [A2AErrorKind.InvalidToken]: {
@@ -53,6 +58,14 @@ const A2A_ERRORS: Record<A2AErrorKind, { code: number; message: string }> = {
     code: -32001,
     message: "Task not found",
   },
+  [A2AErrorKind.TaskNotCancelable]: {
+    code: -32002,
+    message: "Task cannot be canceled",
+  },
+  [A2AErrorKind.UnsupportedOperation]: {
+    code: -32004,
+    message: "This operation is not supported",
+  },
   [A2AErrorKind.TaskContextMismatch]: {
     code: -32602,
     message: "Task context mismatch",
@@ -76,6 +89,18 @@ const A2A_ERRORS: Record<A2AErrorKind, { code: number; message: string }> = {
   [A2AErrorKind.NothingToExecute]: {
     code: -32602,
     message: "Nothing to execute",
+  },
+  [A2AErrorKind.InvalidPageToken]: {
+    code: -32602,
+    message: "Invalid page token",
+  },
+  [A2AErrorKind.InvalidPushNotificationUrl]: {
+    code: -32602,
+    message: "Invalid push notification URL",
+  },
+  [A2AErrorKind.PushNotificationConfigNotFound]: {
+    code: -32001,
+    message: "Push notification config not found",
   },
 };
 

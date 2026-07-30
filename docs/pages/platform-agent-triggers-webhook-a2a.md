@@ -3,6 +3,7 @@ title: Webhook (A2A)
 category: Agents
 order: 9
 description: Invoke agents over HTTP using the A2A protocol
+lastUpdated: 2026-07-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,7 +15,7 @@ Webhook (A2A) lets external systems invoke an agent by POSTing to a per-agent UR
 | Method | Path | Purpose |
 |--------|------|---------|
 | `GET`  | `/v2/a2a/{agentId}/.well-known/agent-card.json` | A2A 1.0 AgentCard for capability discovery |
-| `POST` | `/v2/a2a/{agentId}` | JSON-RPC entry point for `SendMessage`, `SendStreamingMessage`, and `GetTask` |
+| `POST` | `/v2/a2a/{agentId}` | JSON-RPC entry point for `SendMessage`, `SendStreamingMessage`, `GetTask`, `CancelTask`, `SubscribeToTask`, and `ListTasks` |
 
 The AgentCard advertises the agent's name, description, and a single skill derived from the agent. A2A clients fetch it first to discover what the agent can do, then send messages to the POST endpoint.
 
@@ -70,7 +71,8 @@ Field notes:
 - `messageId` — required, must be unique per message (UUIDs recommended).
 - `role` — `ROLE_USER` for caller, `ROLE_AGENT` for the agent's reply.
 - `parts[].text` — message body.
-- `contextId` / `taskId` — omit on the first message; copy from the response for follow-up turns.
+- `contextId` — omit on the first message; copy from the response for follow-up turns.
+- `taskId` — only to resume a task waiting for input (see [Approvals](#approvals)). Tasks in any other state reject messages.
 
 The response is one of two shapes inside `result`:
 
@@ -89,18 +91,173 @@ The response is one of two shapes inside `result`:
 }
 ```
 
-If the agent needs human approval before running a tool, `result` contains a `task` with `status.state = "TASK_STATE_INPUT_REQUIRED"` and `metadata.approvalRequests`. See [Approvals](#approvals).
+A plain blocking send answers with a `message`. The response is a `task` instead when the run needs approval, when you request background execution, or when you stream — see [Tasks](#tasks).
+
+## Tasks
+
+A task is a durable unit of work with an id, a state, a message history, and [artifacts](#artifacts). Archestra creates one when a run outlives the simple request/response shape:
+
+- `SendStreamingMessage` — every streamed run is a task.
+- `returnImmediately` — background execution (below).
+- Tool approval — the run pauses for a human decision.
+
+A task moves through the A2A 1.0 states:
+
+| State | Meaning |
+|-------|---------|
+| `TASK_STATE_SUBMITTED` | Created, run not started yet |
+| `TASK_STATE_WORKING` | Run in progress |
+| `TASK_STATE_INPUT_REQUIRED` | Paused for input — a tool approval |
+| `TASK_STATE_COMPLETED` | Finished; the answer is in `artifacts` and `history` |
+| `TASK_STATE_FAILED` | The run errored; `status.message` carries the reason |
+| `TASK_STATE_CANCELED` | Stopped by `CancelTask` |
+
+`COMPLETED`, `FAILED`, and `CANCELED` are terminal. A terminal task rejects further messages — start the next turn with `contextId` only. `status.timestamp` (RFC 3339) records when the state last changed.
+
+## Background Execution
+
+Set `configuration.returnImmediately: true` to get the task handle back at once. The run continues on the server; you poll `GetTask` or open `SubscribeToTask` for the result.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "SendMessage",
+  "params": {
+    "message": {
+      "messageId": "22222222-2222-2222-2222-222222222222",
+      "role": "ROLE_USER",
+      "parts": [{ "text": "Audit every open PR for license headers." }]
+    },
+    "configuration": { "returnImmediately": true }
+  }
+}
+```
+
+The response is the task in `TASK_STATE_SUBMITTED`. A client disconnect never cancels a running task — use `CancelTask` to stop one.
+
+## GetTask
+
+`GetTask` fetches the current state of a task:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "GetTask",
+  "params": { "id": "task-...", "historyLength": 0 }
+}
+```
+
+`historyLength` is optional: omit it for the full history, `0` omits the `history` field, `N` returns the N most recent messages. A completed task carries its answer in `artifacts`.
+
+## CancelTask
+
+`CancelTask` stops a task and returns it in `TASK_STATE_CANCELED`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "method": "CancelTask",
+  "params": { "id": "task-..." }
+}
+```
+
+Cancellation is durable first, cooperative second: the task settles as canceled immediately, and the running model call is aborted best-effort. Canceling a terminal task returns error `-32002`.
+
+## Push Notifications
+
+Push notifications POST a task's status changes to a URL you own, so a client that cannot hold a connection open — a serverless function, a mobile app — still learns when the work finishes. Register a webhook against a task:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "method": "CreateTaskPushNotificationConfig",
+  "params": {
+    "taskId": "task-...",
+    "pushNotificationConfig": {
+      "url": "https://hooks.example.com/a2a",
+      "token": "correlation-123",
+      "authentication": { "scheme": "Bearer", "credentials": "your-endpoint-secret" }
+    }
+  }
+}
+```
+
+Each delivery is a `POST` with `Content-Type: application/a2a+json`. The body is the same event a stream carries — a `statusUpdate` for the new state. Your `credentials` come back as the `Authorization` header and your `token` as `X-A2A-Notification-Token`, so the receiver can authenticate the call and match it to its own request.
+
+Field notes:
+
+- `url` — must be absolute and `https`. URLs pointing at private, loopback, or link-local addresses are rejected.
+- `token` — optional correlation value, echoed on every delivery.
+- `authentication.credentials` — stored encrypted and never returned by a read; `Get` and `List` show only the scheme.
+- `id` — omit to create a config. Pass the id of an existing one to update it in place, so repeated setup calls don't stack up duplicate webhooks.
+
+Deliveries carry state changes, not tokens: use `SendStreamingMessage` for incremental text. Delivery is at-least-once and retried on network and 5xx errors, so make your receiver idempotent. A webhook that stays down never affects the task itself — `GetTask` remains the authoritative record.
+
+Manage configs with `GetTaskPushNotificationConfig` and `DeleteTaskPushNotificationConfig` (both take `taskId` and `id`), and `ListTaskPushNotificationConfigs` (takes `taskId`).
+
+The AgentCard advertises support with `capabilities.pushNotifications: true`.
+
+## SubscribeToTask
+
+`SubscribeToTask` re-joins a running task's event stream — after a dropped `SendStreamingMessage` connection, for example:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "method": "SubscribeToTask",
+  "params": { "id": "task-..." }
+}
+```
+
+The response is a `text/event-stream`. The first frame is the full `task` snapshot (state, history, artifacts so far); then live `statusUpdate` and `artifactUpdate` frames follow until the task settles. Multiple clients can subscribe to one task; all see the same events in the same order. Subscribing to a terminal task returns error `-32004` — use `GetTask` for finished work.
+
+## ListTasks
+
+`ListTasks` pages through your tasks for the agent, newest status change first:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 6,
+  "method": "ListTasks",
+  "params": { "pageSize": 20, "status": "TASK_STATE_WORKING" }
+}
+```
+
+Optional filters: `contextId`, `status`, `statusTimestampAfter` (RFC 3339). `historyLength` and `includeArtifacts` control payload size — both default to omitting. The response is `{ tasks, nextPageToken, pageSize, totalSize }`; pass `nextPageToken` back to fetch the next page.
+
+## Artifacts
+
+Artifacts are a task's outputs, separate from its conversational history. Archestra materializes the agent's final answer as one text artifact named `agent-response`:
+
+```json
+{
+  "artifactId": "...",
+  "name": "agent-response",
+  "parts": [{ "text": "Here is the full audit..." }]
+}
+```
+
+`GetTask` returns artifacts on the task. Streams deliver them incrementally as `artifactUpdate` frames: chunks with `append: true` extend the artifact, and `lastChunk: true` carries the final content.
 
 ## SendStreamingMessage
 
-`SendStreamingMessage` runs a message and streams the reply as [Server-Sent Events](https://developer.mozilla.org/docs/Web/API/Server-sent_events), instead of one buffered response. Use it for long-running agents — the connection stays alive and delivers tokens as the agent produces them, so a slow turn never trips a client or proxy timeout.
+`SendStreamingMessage` runs a message and streams the reply as [Server-Sent Events](https://developer.mozilla.org/docs/Web/API/Server-sent_events), instead of one buffered response. The connection delivers tokens as the agent produces them, so a slow turn never trips a client or proxy timeout. Every streamed run is a [task](#tasks) — if the connection drops, the run keeps going and `SubscribeToTask` re-joins it.
 
 The request is a `SendMessage` body with `method` set to `SendStreamingMessage`. The AgentCard advertises support with `capabilities.streaming: true`.
+
+The stream shape depends on the `A2A-Version` header:
 
 ```bash
 curl -N -X POST https://archestra.example.com/v2/a2a/<agentId> \
   -H "Authorization: Bearer <platform_token>" \
   -H "Content-Type: application/json" \
+  -H "A2A-Version: 1.0" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
@@ -115,15 +272,21 @@ curl -N -X POST https://archestra.example.com/v2/a2a/<agentId> \
   }'
 ```
 
-The response is a `text/event-stream`. Each `data:` frame is a JSON-RPC response carrying one `statusUpdate`. Interim frames hold a text delta with `final: false`; the last frame is `final: true` with `state: "TASK_STATE_COMPLETED"` and the complete message.
+With `A2A-Version: 1.0`, the stream is the spec's lifecycle shape. It opens with the `task` object, then `statusUpdate` and `artifactUpdate` frames, and closes when the task reaches a terminal state:
 
 ```
-data: {"jsonrpc":"2.0","id":1,"result":{"statusUpdate":{"taskId":"...","status":{"state":"TASK_STATE_WORKING","message":{"role":"ROLE_AGENT","parts":[{"text":"Here "}]}},"final":false}}}
+data: {"jsonrpc":"2.0","id":1,"result":{"task":{"id":"...","contextId":"...","status":{"state":"TASK_STATE_SUBMITTED"}}}}
 
-data: {"jsonrpc":"2.0","id":1,"result":{"statusUpdate":{"taskId":"...","status":{"state":"TASK_STATE_COMPLETED","message":{"role":"ROLE_AGENT","parts":[{"text":"Here is the summary..."}]}},"final":true}}}
+data: {"jsonrpc":"2.0","id":1,"result":{"statusUpdate":{"taskId":"...","contextId":"...","status":{"state":"TASK_STATE_WORKING"}}}}
+
+data: {"jsonrpc":"2.0","id":1,"result":{"artifactUpdate":{"taskId":"...","contextId":"...","artifact":{"artifactId":"...","name":"agent-response","parts":[{"text":"Here "}]}}}}
+
+data: {"jsonrpc":"2.0","id":1,"result":{"statusUpdate":{"taskId":"...","contextId":"...","status":{"state":"TASK_STATE_COMPLETED"}}}}
 ```
 
-Read the final `TASK_STATE_COMPLETED` frame for the authoritative answer — the interim deltas are for live display. When an agent needs approval, the stream ends with a `task` frame instead (see [Approvals](#approvals)). Comment lines (`: keep-alive`) hold the connection open during long gaps; skip any line that is not a `data:` frame.
+Without the header, the stream keeps the pre-1.0 shape existing clients were built on: `statusUpdate` frames carrying text deltas with `final: false`, then a terminal `final: true` frame with the complete message. Read that final frame for the authoritative answer. Text arrives in small batches rather than per-token; concatenating the deltas always yields the full text.
+
+Comment lines (`: keep-alive`) hold the connection open during long gaps; skip any line that is not a `data:` frame. When an agent needs approval, the stream ends with the input-required task (see [Approvals](#approvals)).
 
 ## Multi-turn conversations
 
@@ -167,13 +330,13 @@ curl -X POST https://archestra.example.com/v2/a2a/<agentId> \
   }'
 ```
 
-`contextId` is generated by Archestra on the first message. Clients cannot supply their own.
+`contextId` is generated by Archestra on the first message. Clients cannot supply their own. Do not copy `taskId` into follow-up turns — a task is one unit of work, and finished tasks reject messages.
 
 `X-Archestra-Session-Id` and `Mcp-Session-Id` do **not** group conversations — they are observability-only headers. Use `contextId` to continue a conversation.
 
 ## Approvals
 
-When an agent's tool call hits a [tool invocation policy](/docs/platform-ai-tool-guardrails) requiring approval, the response is a `task`, not a `message`:
+When an agent's tool call hits a [tool invocation policy](/docs/platform-ai-tool-guardrails) requiring approval, the response is a `task` in `TASK_STATE_INPUT_REQUIRED`:
 
 ```json
 {
@@ -216,20 +379,9 @@ To approve (or reject), send a follow-up `SendMessage` with `taskId`, `contextId
 }
 ```
 
+Once every request is decided, the run resumes and the response is the settled task. `CancelTask` on an input-required task cancels it and clears the pending requests.
+
 Approvals also work through [Slack](/docs/platform-slack) and [MS Teams](/docs/platform-ms-teams). The same flow handles multi-request and multi-turn approvals.
-
-## GetTask
-
-Use `GetTask` to fetch the current state of a task (useful while polling an approval task):
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 4,
-  "method": "GetTask",
-  "params": { "id": "task-..." }
-}
-```
 
 ## Pass-through payload (v1 only)
 

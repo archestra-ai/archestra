@@ -105,6 +105,11 @@ describe("A2ATaskManager", () => {
         },
       ],
       history: [],
+      agentId: null,
+      statusReason: null,
+      stateChangedAt: null,
+      lastHeartbeatAt: null,
+      nextEventSeq: 1,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies A2ATaskWithData;
@@ -145,6 +150,11 @@ describe("A2ATaskManager", () => {
         },
       ],
       history: [],
+      agentId: null,
+      statusReason: null,
+      stateChangedAt: null,
+      lastHeartbeatAt: null,
+      nextEventSeq: 1,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies A2ATaskWithData;
@@ -348,115 +358,5 @@ describe("A2ATaskManager", () => {
         )
       ).task.state,
     ).toBe(A2AProtocolTaskState.Completed);
-  });
-
-  test("removeTaskApprovalRequests", async () => {
-    const context = await A2AContextManager.createContext(actor);
-    const task = await A2ATaskManager.createTask({
-      context,
-      actor,
-      state: A2AProtocolTaskState.Submitted,
-      approvalRequests: [
-        {
-          approvalId: "approval-1",
-          toolCallId: "tool-call-1",
-          toolName: "Test Tool 1",
-          approved: false,
-          resolved: false,
-        },
-        {
-          approvalId: "approval-2",
-          toolCallId: "tool-call-2",
-          toolName: "Test Tool 2",
-          approved: false,
-          resolved: false,
-        },
-      ],
-    });
-
-    const cleared = await A2ATaskManager.removeTaskApprovalRequests(task);
-    expect(cleared.approvalRequests).toEqual([]);
-    expect(
-      (
-        await A2ATaskManager.findAndValidateTaskWithContext(
-          task.id,
-          context,
-          actor,
-        )
-      ).task.approvalRequests,
-    ).toEqual([]);
-  });
-
-  test("updateTaskApprovalDecisions", async () => {
-    const context = await A2AContextManager.createContext(actor);
-    const task = await A2ATaskManager.createTask({
-      context,
-      actor,
-      state: A2AProtocolTaskState.Unspecified,
-      approvalRequests: [
-        {
-          approvalId: "approval-1",
-          toolCallId: "tool-call-1",
-          toolName: "Test Tool",
-          approved: false,
-          resolved: false,
-        },
-        {
-          approvalId: "approval-2",
-          toolCallId: "tool-call-2",
-          toolName: "Test Tool 2",
-          approved: false,
-          resolved: false,
-        },
-        {
-          approvalId: "approval-3",
-          toolCallId: "tool-call-3",
-          toolName: "Test Tool 3",
-          approved: false,
-          resolved: false,
-        },
-      ],
-    });
-
-    const updatedTask = await A2ATaskManager.updateTaskApprovalDecisions({
-      task,
-      approvalDecisions: [
-        { approvalId: "approval-2", approved: false },
-        { approvalId: "approval-3", approved: true },
-      ],
-    });
-
-    expect(updatedTask.approvalRequests).toEqual([
-      {
-        approvalId: "approval-1",
-        toolCallId: "tool-call-1",
-        toolName: "Test Tool",
-        approved: false,
-        resolved: false,
-      },
-      {
-        approvalId: "approval-2",
-        toolCallId: "tool-call-2",
-        toolName: "Test Tool 2",
-        approved: false,
-        resolved: true,
-      },
-      {
-        approvalId: "approval-3",
-        toolCallId: "tool-call-3",
-        toolName: "Test Tool 3",
-        approved: true,
-        resolved: true,
-      },
-    ]);
-
-    const taskFromDb = await A2ATaskManager.findAndValidateTaskWithContext(
-      task.id,
-      context,
-      actor,
-    );
-    expect(taskFromDb.task.approvalRequests).toEqual(
-      updatedTask.approvalRequests,
-    );
   });
 });

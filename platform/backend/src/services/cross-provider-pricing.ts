@@ -123,6 +123,74 @@ export function resolveDiscoveredModelRegistryEntry(params: {
 }
 
 /**
+ * Describe a model a self-hosted server serves, without asserting anything
+ * about the deployment.
+ *
+ * An operator names a model whatever they like, so the id is a HuggingFace path
+ * (`meta-llama/Llama-3.1-8B-Instruct`) far more often than a registry key
+ * (`meta/llama-3.1-8b-instruct`); matching on the trailing segment is what
+ * bridges the two. Nothing else here does that, deliberately — the shared
+ * first-party lookup backs the proxy-discovery path, where a looser match would
+ * begin asserting prices for models an operator merely named.
+ *
+ * Only modalities and tool support are reported. Prices belong to whoever
+ * serves the model, and the context window is set when the server is launched:
+ * registry entries for one model range over an order of magnitude precisely
+ * because each host chooses its own.
+ *
+ * Returns null unless every match reports identical modalities, so an alias
+ * that collides with an unrelated vendor model reports nothing rather than
+ * something plausible.
+ */
+export function resolveSelfHostedModelMetadata(params: {
+  modelId: string;
+  modelsDevData: ModelsDevApiResponse;
+}): CrossProviderMetadata | null {
+  const { modelId, modelsDevData } = params;
+  const wanted = bareModelName(modelId);
+  if (!wanted) {
+    return null;
+  }
+
+  const matches: ModelsDevModel[] = [];
+  for (const modelsDevProviderId of FIRST_PARTY_REGISTRY_PROVIDERS) {
+    const models = modelsDevData[modelsDevProviderId]?.models ?? {};
+    for (const [key, model] of Object.entries(models)) {
+      if (bareModelName(model.id ?? key) === wanted) {
+        matches.push(model);
+      }
+    }
+  }
+  if (matches.length === 0) {
+    return null;
+  }
+
+  const readings = new Set(
+    matches.map((entry) => JSON.stringify(entry.modalities ?? null)),
+  );
+  if (readings.size > 1) {
+    return null;
+  }
+
+  // Built here rather than through `metadataFromEntries`, which reverses its
+  // input to let a reseller's row outrank the vendor's. These matches are
+  // already in vendor preference order, so reversing would pick the least
+  // preferred of them.
+  const [preferred] = matches;
+  return {
+    contextLength: null,
+    outputLength: null,
+    inputModalities: preferred.modalities?.input?.length
+      ? preferred.modalities.input
+      : null,
+    outputModalities: preferred.modalities?.output?.length
+      ? preferred.modalities.output
+      : null,
+    supportsToolCalling: firstPresent(matches, (entry) => entry.tool_call),
+  };
+}
+
+/**
  * Strip a trailing date stamp from a model id, in either the contiguous Bedrock
  * form (`-20250929`) or the hyphenated OpenAI/Azure form (`-2024-08-06`).
  *
@@ -377,6 +445,11 @@ function findFirstPartyRegistryEntry(
     }
   }
   return null;
+}
+
+/** The model's own name, with any owner prefix and casing removed. */
+function bareModelName(modelId: string): string {
+  return modelId.split("/").at(-1)?.trim().toLowerCase() ?? "";
 }
 
 function toArray<T>(value: T | null): T[] {

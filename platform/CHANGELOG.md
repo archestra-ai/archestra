@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.3.23](https://github.com/archestra-ai/archestra/compare/platform-v1.3.22...platform-v1.3.23) (2026-07-30)
+
+
+### Features
+
+* **chat:** fold adjacent thinking blocks into one accordion ([#6972](https://github.com/archestra-ai/archestra/issues/6972)) ([1997cf7](https://github.com/archestra-ai/archestra/commit/1997cf7bead38513046af286fb7577b0d1df3eeb))
+* **connection:** apply Copilot CLI provider env vars and attribute its requests ([#6979](https://github.com/archestra-ai/archestra/issues/6979)) ([8c7d3d9](https://github.com/archestra-ai/archestra/commit/8c7d3d9fc3ef862a0b22bf1f2e96afa73672465e))
+* **connection:** surface the Copilot CLI model as a review-step choice ([#6980](https://github.com/archestra-ai/archestra/issues/6980)) ([7291308](https://github.com/archestra-ai/archestra/commit/72913085a486bc56f1d7a38ff09f209a8b72f5f9))
+
+
+### Bug Fixes
+
+* **apps:** make a disabled app invisible to chat until re-enabled ([#6990](https://github.com/archestra-ai/archestra/issues/6990)) ([5e8fc4a](https://github.com/archestra-ai/archestra/commit/5e8fc4a4db1d593813a41b4f6fc884d0e7c558a3))
+* **bench:** restore CI with dedicated Dagger engine ([#6955](https://github.com/archestra-ai/archestra/issues/6955)) ([696da0f](https://github.com/archestra-ai/archestra/commit/696da0f9a8aedf8c59073a10a59599a8a35fd8bb))
+* **chat:** generate titles for chats opened from an app ([#6983](https://github.com/archestra-ai/archestra/issues/6983)) ([14e1706](https://github.com/archestra-ai/archestra/commit/14e1706bf505c3dd74c5d42d11ba809fcef403a6))
+* **chat:** handle title generation failures gracefully ([#6951](https://github.com/archestra-ai/archestra/issues/6951)) ([9a2e2cb](https://github.com/archestra-ai/archestra/commit/9a2e2cbb21e4d6e720b0ad5367fba8a27808d5db))
+* **chat:** stop a stranded assistant message from rendering the turn twice ([#6993](https://github.com/archestra-ai/archestra/issues/6993)) ([a66b25d](https://github.com/archestra-ai/archestra/commit/a66b25d8d1b40b27c4c7acf756e2198b4a261b2b))
+* **environments:** scope the agent-facing control-plane MCP tools to the agent's environment ([#6995](https://github.com/archestra-ai/archestra/issues/6995)) ([ab1ba54](https://github.com/archestra-ai/archestra/commit/ab1ba54ef012015abe3d9f354d1fc61cca0ee28c))
+* **guardrails:** apply trusted-data policies to progressive run_tool dispatches ([#6998](https://github.com/archestra-ai/archestra/issues/6998)) ([071cc0a](https://github.com/archestra-ai/archestra/commit/071cc0a92c5dce2657c65d39d55a4a2c9399ab70))
+* **llm-cost:** price Gemma from Google's own rate ([#6987](https://github.com/archestra-ai/archestra/issues/6987)) ([4c053b6](https://github.com/archestra-ai/archestra/commit/4c053b6ff0608fd10c82693855e3b81554538680))
+* **llm-cost:** stop rounding model prices to the cent before costing them ([#6961](https://github.com/archestra-ai/archestra/issues/6961)) ([9b5b23b](https://github.com/archestra-ai/archestra/commit/9b5b23b1c7580c036b180d5044a3ea421985c2a9))
+* **llm-pricing:** read Amazon's global-endpoint price marker for Nova ([#6962](https://github.com/archestra-ai/archestra/issues/6962)) ([ba5256a](https://github.com/archestra-ai/archestra/commit/ba5256aa1a176c456aa4b9c6dfb647f03a736448))
+* **llm-proxy:** restore two Azure Responses behaviours the OpenAI copy already has ([#6997](https://github.com/archestra-ai/archestra/issues/6997)) ([a2c26b5](https://github.com/archestra-ai/archestra/commit/a2c26b56897d581b74a7bbdbd9993f9df1a566ab))
+* **mcp:** honor the configured injection header for enterprise-managed credentials ([#7000](https://github.com/archestra-ai/archestra/issues/7000)) ([84f53cf](https://github.com/archestra-ai/archestra/commit/84f53cf95b107e466712601d5e8dd852c09f0346))
+
+
+### Code Refactoring
+
+* **chat:** fold the active-run notifier onto the shared notify hub ([#6991](https://github.com/archestra-ai/archestra/issues/6991)) ([1ecd233](https://github.com/archestra-ai/archestra/commit/1ecd233b9d826f4449f28daff9e912688ca0b300))
+
 ## [1.3.22](https://github.com/archestra-ai/archestra/compare/platform-v1.3.21...platform-v1.3.22) (2026-07-30)
 
 

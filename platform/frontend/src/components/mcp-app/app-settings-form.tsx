@@ -506,7 +506,7 @@ export function AppSettingsForm({
               value={environmentId}
               onChange={setEnvironmentId}
               resource="app"
-              helpText="The app can only be assigned and call MCP tools in this environment."
+              helpText="The app can be assigned and call MCP tools from this environment plus the Default environment."
             />
 
             <div className="space-y-2">

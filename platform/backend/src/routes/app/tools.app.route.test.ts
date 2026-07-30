@@ -192,6 +192,41 @@ describe("/api/apps/:appId/tools", () => {
     expect(response.statusCode).toBe(400);
   });
 
+  test("assigning a Default-environment tool to an env-bound app succeeds", async ({
+    makeApp,
+    makeTool,
+    makeInternalMcpCatalog,
+  }) => {
+    // Default-environment tools are the org baseline every app may draw from,
+    // so an app bound to a non-default environment still accepts them.
+    const prod = await EnvironmentModel.create({
+      organizationId,
+      name: "production",
+    });
+    const created = await makeApp({
+      organizationId,
+      scope: "org",
+      environmentId: prod.id,
+    });
+    const defaultCatalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "base-srv",
+      serverUrl: "https://example.com/mcp/",
+    });
+    const baseTool = await makeTool({
+      name: "base__do_thing",
+      parameters: {},
+      catalogId: defaultCatalog.id,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/apps/${created.id}/tools/${baseTool.id}`,
+      payload: { credentialResolutionMode: "dynamic" },
+    });
+    expect(response.statusCode).toBe(200);
+  });
+
   test("assigning a tool in the app's environment succeeds", async ({
     makeApp,
     makeTool,

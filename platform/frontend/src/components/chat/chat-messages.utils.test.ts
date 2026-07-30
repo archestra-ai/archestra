@@ -1,6 +1,7 @@
 import type { UIMessage } from "@ai-sdk/react";
 import {
   getArchestraToolShortName,
+  HOOK_RUN_PART_TYPE,
   SUBAGENT_TOOL_CALL_PART_TYPE,
 } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
@@ -14,6 +15,7 @@ import {
   filterOptimisticToolCalls,
   hasTextPart,
   identifyCompactToolGroups,
+  identifyReasoningRuns,
   isBlankAssistantTextPart,
   isBlankReasoningPart,
   mcpToolLabel,
@@ -1114,6 +1116,238 @@ describe("identifyCompactToolGroups", () => {
 
     expect(groupMap.size).toBe(0);
     expect(consumedIndices.size).toBe(0);
+  });
+});
+
+describe("identifyReasoningRuns", () => {
+  const thinking = (text: string) => ({ type: "reasoning", text });
+  const say = (text: string) => ({ type: "text", text });
+  const toolCall = (toolCallId: string) => ({
+    type: "tool-google__search",
+    toolCallId,
+    state: "input-available",
+    input: { q: "weather" },
+  });
+  const toolResult = (toolCallId: string) => ({
+    type: "tool-google__search",
+    toolCallId,
+    state: "output-available",
+    output: "sunny",
+  });
+  /** The backend injects this right after the tool's `tool-input-start`. */
+  const appAnnouncement = (toolCallId: string, toolName: string) => ({
+    type: "data-tool-ui-start",
+    data: { toolCallId, toolName, uiResourceUri: "ui://chart" },
+  });
+  const appCall = (toolCallId: string) => ({
+    type: "tool-charts__render",
+    toolCallId,
+    state: "input-available",
+    input: {},
+  });
+  const appResult = (toolCallId: string) => ({
+    type: "tool-charts__render",
+    toolCallId,
+    state: "output-available",
+    output: { _meta: { ui: { resourceUri: "ui://chart" } } },
+  });
+
+  /** Runs as the message stream computes them: grouping pass first, then runs. */
+  const runsFor = (parts: unknown[]) => {
+    const messageParts = parts as UIMessage["parts"];
+    const { groupMap, consumedIndices } = identifyCompactToolGroups(
+      messageParts,
+      { getToolShortName },
+    );
+    return identifyReasoningRuns({
+      parts: messageParts,
+      role: "assistant",
+      groupMap,
+      consumedIndices,
+    });
+  };
+
+  it("merges thinking blocks the compact tool row leaves touching", () => {
+    // The row renders once, at index 1; every later tool call is swallowed into
+    // it, so the thinking that followed those calls ends up adjacent on screen.
+    const runs = runsFor([
+      thinking("first pass"),
+      toolCall("call_1"),
+      toolResult("call_1"),
+      thinking("second pass"),
+      toolCall("call_2"),
+      toolResult("call_2"),
+      thinking("third pass"),
+    ]);
+
+    expect([...runs.keys()]).toEqual([0, 3]);
+    expect(runs.get(0)?.text).toBe("first pass");
+    expect(runs.get(3)?.text).toBe("second pass\n\nthird pass");
+    expect(runs.get(3)?.lastIndex).toBe(6);
+  });
+
+  it("splits the run at an MCP App announcement the row left behind", () => {
+    // The circle row opens at index 1 and swallows the app's tool-* parts, but
+    // the announcement at index 5 stays put and renders the app panel itself.
+    // Merging across it would lift the thinking that followed the app above it.
+    const runs = runsFor([
+      thinking("first pass"),
+      toolCall("call_1"),
+      toolResult("call_1"),
+      thinking("second pass"),
+      appCall("call_2"),
+      appAnnouncement("call_2", "charts__render"),
+      appResult("call_2"),
+      thinking("third pass"),
+    ]);
+
+    expect([...runs.keys()]).toEqual([0, 3, 7]);
+    expect(runs.get(3)?.text).toBe("second pass");
+    expect(runs.get(7)?.text).toBe("third pass");
+  });
+
+  it("splits the run at a hook-run chip even when it is not grouped", () => {
+    // Grouping normally consumes hook parts; assert the split independently, so
+    // a change there cannot silently reorder thinking around the chip.
+    const parts = [
+      thinking("first pass"),
+      { type: HOOK_RUN_PART_TYPE, data: { hookName: "PreToolUse" } },
+      thinking("second pass"),
+    ] as UIMessage["parts"];
+
+    const runs = identifyReasoningRuns({
+      parts,
+      role: "assistant",
+      groupMap: new Map(),
+      consumedIndices: new Set(),
+    });
+
+    expect([...runs.keys()]).toEqual([0, 2]);
+  });
+
+  it("splits the run at a narration bubble", () => {
+    const runs = runsFor([
+      thinking("first pass"),
+      thinking("second pass"),
+      say("Here are the tasks."),
+      thinking("third pass"),
+    ]);
+
+    expect([...runs.keys()]).toEqual([0, 3]);
+    expect(runs.get(0)?.text).toBe("first pass\n\nsecond pass");
+    expect(runs.get(3)?.text).toBe("third pass");
+  });
+
+  it("splits the run where the compact tool row itself renders", () => {
+    const runs = runsFor([
+      thinking("before the tools"),
+      toolCall("call_1"),
+      toolResult("call_1"),
+      thinking("after the tools"),
+    ]);
+
+    expect([...runs.keys()]).toEqual([0, 3]);
+  });
+
+  it("treats a tool card the row did not swallow as a split", () => {
+    const parts = [
+      thinking("before"),
+      toolCall("call_1"),
+      toolResult("call_1"),
+      thinking("after"),
+    ] as UIMessage["parts"];
+    const { groupMap, consumedIndices } = identifyCompactToolGroups(parts, {
+      getToolShortName,
+      nonCompactToolNames: new Set(["google__search"]),
+    });
+
+    const runs = identifyReasoningRuns({
+      parts,
+      role: "assistant",
+      groupMap,
+      consumedIndices,
+    });
+
+    expect(groupMap.size).toBe(0);
+    expect([...runs.keys()]).toEqual([0, 3]);
+  });
+
+  it("treats redacted thinking as transparent and keeps it out of the text", () => {
+    const runs = runsFor([
+      thinking("first pass"),
+      thinking("   "),
+      thinking("second pass"),
+    ]);
+
+    expect([...runs.keys()]).toEqual([0]);
+    expect(runs.get(0)?.text).toBe("first pass\n\nsecond pass");
+    expect(runs.get(0)?.lastIndex).toBe(2);
+  });
+
+  it("treats whitespace-only assistant text and step-start as transparent", () => {
+    const runs = runsFor([
+      thinking("first pass"),
+      say("\n\n"),
+      { type: "step-start" },
+      thinking("second pass"),
+    ]);
+
+    expect([...runs.keys()]).toEqual([0]);
+    expect(runs.get(0)?.text).toBe("first pass\n\nsecond pass");
+  });
+
+  it("gives a lone thinking block a run of its own", () => {
+    const runs = runsFor([thinking("just the one")]);
+
+    expect([...runs.keys()]).toEqual([0]);
+    expect(runs.get(0)).toMatchObject({
+      startIndex: 0,
+      lastIndex: 0,
+      text: "just the one",
+      isTrailing: true,
+    });
+  });
+
+  it("produces no run for a message whose only thinking is redacted", () => {
+    expect(runsFor([thinking(""), say("done")]).size).toBe(0);
+  });
+
+  it("marks only the run below everything else as still growable", () => {
+    const trailing = runsFor([
+      thinking("first pass"),
+      say("Here are the tasks."),
+      thinking("second pass"),
+    ]);
+
+    expect(trailing.get(0)?.isTrailing).toBe(false);
+    expect(trailing.get(2)?.isTrailing).toBe(true);
+
+    // Swallowed tool calls below the run keep it growable — they render up in
+    // the row, not underneath.
+    const stillGrowable = runsFor([
+      thinking("first pass"),
+      toolCall("call_1"),
+      thinking("second pass"),
+      toolCall("call_2"),
+    ]);
+
+    expect(stillGrowable.get(2)?.isTrailing).toBe(true);
+
+    // A narration bubble below it closes it.
+    const closed = runsFor([thinking("first pass"), say("Here you go.")]);
+
+    expect(closed.get(0)?.isTrailing).toBe(false);
+  });
+
+  it("returns no runs for a message without parts", () => {
+    expect(
+      identifyReasoningRuns({
+        parts: undefined,
+        role: "assistant",
+        groupMap: new Map(),
+        consumedIndices: new Set(),
+      }).size,
+    ).toBe(0);
   });
 });
 

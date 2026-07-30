@@ -106,8 +106,8 @@ import {
   filterOptimisticToolCalls,
   hasTextPart,
   identifyCompactToolGroups,
+  identifyReasoningRuns,
   isBlankAssistantTextPart,
-  isBlankReasoningPart,
   resolveRunToolTargetName,
   type SubagentChildEntry,
 } from "./chat-messages.utils";
@@ -641,6 +641,14 @@ export function ChatMessages({
                           Object.keys(earlyToolUiStarts),
                         ),
                       });
+                    // Thinking blocks left touching once the compact row hoists
+                    // the tools out from between them fold into one accordion.
+                    const reasoningRuns = identifyReasoningRuns({
+                      parts: message.parts,
+                      role: message.role,
+                      groupMap,
+                      consumedIndices,
+                    });
                     const partKeyTracker = new Map<string, number>();
                     return message.parts?.map((part, i) => {
                       const partKey = getMessagePartKey(
@@ -1056,24 +1064,37 @@ export function ChatMessages({
                         }
 
                         case "reasoning": {
-                          // Redacted/signature-only thinking blocks arrive as
-                          // empty reasoning parts (kept for provider replay); they
-                          // must not render as empty "Thinking…" accordions.
-                          if (isBlankReasoningPart(part)) {
+                          const run = reasoningRuns.get(i);
+                          // No run means nothing renders here: either a
+                          // redacted/signature-only block (empty, kept for
+                          // provider replay, never an empty "Thinking…"
+                          // accordion) or a block already folded into a run that
+                          // rendered at an earlier index.
+                          if (!run) {
                             return null;
                           }
+                          const isLastMessage = idx === messages.length - 1;
                           const isStreamingThisReasoning =
                             status === "streaming" &&
-                            idx === messages.length - 1 &&
-                            i === message.parts.length - 1;
+                            isLastMessage &&
+                            run.lastIndex === message.parts.length - 1;
                           return (
                             <Reasoning
                               key={partKey}
                               className="w-full"
                               isStreaming={isStreamingThisReasoning}
+                              // Nothing has rendered below the run yet, so more
+                              // thinking may still join it — hold it open until
+                              // something does, rather than collapsing between
+                              // the tool calls it spans.
+                              keepOpen={
+                                status === "streaming" &&
+                                isLastMessage &&
+                                run.isTrailing
+                              }
                             >
                               <ReasoningTrigger />
-                              <ReasoningContent>{part.text}</ReasoningContent>
+                              <ReasoningContent>{run.text}</ReasoningContent>
                             </Reasoning>
                           );
                         }

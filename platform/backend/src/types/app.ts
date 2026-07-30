@@ -6,6 +6,7 @@ import { isUuid } from "@/utils/uuid";
 import { AppRenderDiagnosticEntrySchema } from "./app-diagnostics";
 import { AppSpecSchema } from "./app-spec";
 import { CredentialResolutionModeSchema } from "./enterprise-managed-credentials";
+import { AgentLabelWithDetailsSchema } from "./label";
 
 /** Apps share the personal/team/org visibility model of agents and skills. */
 export const AppScopeSchema = ResourceVisibilityScopeSchema;
@@ -116,6 +117,12 @@ const AppListItemBaseSchema = z.object({
   cspOrigin: z.enum(["platform-pinned", "author-declared"]),
   /** When the requesting user pinned this app; null = not pinned. */
   pinnedAt: z.date().nullable(),
+  // Key-value labels for organization/categorization, driving the listing's
+  // label filter. Owned apps carry their own (app_labels); an external item
+  // reflects its backing catalog's labels (mcp_catalog_labels), which are
+  // edited in the MCP registry rather than here — so one filter spans both
+  // halves of the mixed listing instead of silently dropping external apps.
+  labels: z.array(AgentLabelWithDetailsSchema),
 });
 
 export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
@@ -231,6 +238,7 @@ export const SelectAppSchema = createSelectSchema(schema.appsTable, {
 }).extend({
   scope: AppScopeSchema,
   environmentId: z.string().uuid().nullable(),
+  labels: z.array(AgentLabelWithDetailsSchema),
 });
 // `latestVersion` is owned by AppModel (set on create, bumped on fork); omit it
 // from external insert payloads alongside the generated/managed columns.
@@ -293,6 +301,8 @@ export const CreateAppSchema = z.object({
   // restricted-env permission are enforced in the route via
   // assertCanAssignEnvironment.
   environmentId: z.string().uuid().nullable().optional(),
+  // Key-value labels for organization/categorization. Omitted = none.
+  labels: z.array(AgentLabelWithDetailsSchema).optional(),
 });
 
 // Input for the `scaffold_app` MCP tool: it always seeds the single default
@@ -367,6 +377,9 @@ export const UpdateAppSchema = z.object({
   // assignments are not stripped on re-bind; out-of-environment ones are refused
   // at call time instead.
   environmentId: z.string().uuid().nullable().optional(),
+  // Replace the app's labels with this set. Omitted leaves them unchanged; an
+  // empty array clears them.
+  labels: z.array(AgentLabelWithDetailsSchema).optional(),
 });
 
 export type { AppSpec } from "./app-spec";

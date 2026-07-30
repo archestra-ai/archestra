@@ -52,6 +52,8 @@ describe("advisor consultation", () => {
       externalId: "anthropic/strong-model",
       provider: "anthropic",
       modelId: "strong-model",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
       supportsToolCalling: true,
       lastSyncedAt: new Date(),
     });
@@ -137,6 +139,30 @@ describe("advisor consultation", () => {
     expect(vi.mocked(generateText)).not.toHaveBeenCalled();
   });
 
+  test("refuses when resolution falls back off the configured model", async ({
+    makeAgent,
+  }) => {
+    await makeAdvisorAgent(makeAgent, { modelId: advisorModelId });
+    // What a deleted credential row produces: resolution abandons the agent's
+    // own model and returns the org default — which is usually the model that
+    // is asking. Answering with it would be self-advising in disguise.
+    vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue({
+      provider: "anthropic",
+      apiKey: "secret",
+      modelName: "the-callers-own-model",
+      baseUrl: null,
+    });
+
+    const result = await executeArchestraTool(
+      advisorTool,
+      { question: "A or B?" },
+      context,
+    );
+
+    expect(archestraError(result as any).type).toBe("advisor_unavailable");
+    expect(vi.mocked(generateText)).not.toHaveBeenCalled();
+  });
+
   test("refuses when the configured model has no usable credential", async ({
     makeAgent,
   }) => {
@@ -171,8 +197,11 @@ describe("advisor consultation", () => {
     );
 
     const call = vi.mocked(generateText).mock.calls[0]?.[0] as any;
-    expect(call.prompt).toContain("A or B?");
-    expect(call.prompt).toContain("I already tried A twice.");
+    // Pinned exactly: the labels are what stop a long context block from
+    // reading as the question itself.
+    expect(call.prompt).toBe(
+      "Question:\nA or B?\n\nContext from the model asking:\nI already tried A twice.",
+    );
     // The advisor's persona comes from the agent an admin can edit.
     expect(call.system).toBe("You are a reviewer.");
     // An advisor that can consult an advisor turns one decision into a

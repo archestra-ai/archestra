@@ -4,7 +4,7 @@ import { APICallError, generateText } from "ai";
 import { z } from "zod";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
-import { AgentModel } from "@/models";
+import { AgentModel, ModelModel } from "@/models";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 import {
   defineArchestraTool,
@@ -121,11 +121,35 @@ async function runAdvisorConsultation(
     );
   }
 
+  const configuredModel = await ModelModel.findById(agent.modelId);
+  if (!configuredModel) {
+    return advisorErrorResult(
+      "advisor_unavailable",
+      "The configured advisor model no longer exists.",
+    );
+  }
+
   const selection = await resolveAgentLlmOrDefault({
     agent,
     organizationId,
     userId,
   });
+
+  // Resolution falls back to the org default whenever the agent's own model
+  // and credential fail to resolve together — a deleted key row is enough. That
+  // default is usually the model already asking, so accepting the fallback here
+  // would answer the caller with itself and call it a second opinion. Only a
+  // selection that actually landed on the configured model is a consultation.
+  if (
+    selection.modelName !== configuredModel.modelId ||
+    selection.provider !== configuredModel.provider
+  ) {
+    return advisorErrorResult(
+      "advisor_unavailable",
+      "The configured advisor model could not be resolved — check that its provider credential is still available.",
+    );
+  }
+
   if (isApiKeyRequired(selection.provider, selection.apiKey)) {
     return advisorErrorResult(
       "advisor_unavailable",
@@ -251,8 +275,18 @@ function advisorFailureMessage(error: unknown): string {
               ? "The advisor model is unavailable right now."
               : UNKNOWN_FAILURE_MESSAGE;
 
-  const reason = error.responseBody
-    ?.trim()
-    .slice(0, UPSTREAM_REASON_MAX_LENGTH);
+  const reason = redactUrls(error.responseBody?.trim())?.slice(
+    0,
+    UPSTREAM_REASON_MAX_LENGTH,
+  );
   return reason ? `${cause} (provider said: ${reason})` : cause;
+}
+
+/**
+ * The body reaches us from the internal proxy, so it can echo the request URL
+ * back — a provider that quotes the endpoint it was called on would otherwise
+ * hand the caller the proxy address through the one field we do pass through.
+ */
+function redactUrls(text: string | undefined): string | undefined {
+  return text?.replace(/\bhttps?:\/\/\S+/gi, "[url]");
 }

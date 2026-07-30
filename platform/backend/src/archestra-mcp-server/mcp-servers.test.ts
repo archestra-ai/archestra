@@ -251,7 +251,7 @@ describe("mcp server tool execution", () => {
   test("create_mcp_server persists environmentId", async () => {
     const env = await EnvironmentModel.create({
       organizationId,
-      name: "Production",
+      name: "production",
     });
 
     const result = await executeArchestraTool(
@@ -1102,8 +1102,8 @@ describe("mcp server tools respect the agent's environment", () => {
     `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${shortName}`;
 
   let orgId: string;
-  let exploreContext: ArchestraContext;
-  let exploreEnvId: string;
+  let stagingContext: ArchestraContext;
+  let stagingEnvId: string;
   let prodEnvId: string;
 
   beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
@@ -1112,24 +1112,24 @@ describe("mcp server tools respect the agent's environment", () => {
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
 
-    const explore = await EnvironmentModel.create({
+    const staging = await EnvironmentModel.create({
       organizationId: org.id,
-      name: "Explore",
+      name: "staging",
     });
     const prod = await EnvironmentModel.create({
       organizationId: org.id,
-      name: "Production",
+      name: "production",
     });
-    exploreEnvId = explore.id;
+    stagingEnvId = staging.id;
     prodEnvId = prod.id;
 
-    const exploreAgent = await makeAgent({
-      name: "Explore Agent",
+    const stagingAgent = await makeAgent({
+      name: "Staging Agent",
       organizationId: org.id,
-      environmentId: explore.id,
+      environmentId: staging.id,
     });
-    exploreContext = {
-      agent: { id: exploreAgent.id, name: exploreAgent.name },
+    stagingContext = {
+      agent: { id: stagingAgent.id, name: stagingAgent.name },
       userId: user.id,
       organizationId: org.id,
     };
@@ -1138,10 +1138,10 @@ describe("mcp server tools respect the agent's environment", () => {
   test("get_mcp_servers lists only the agent's environment", async ({
     makeInternalMcpCatalog,
   }) => {
-    const exploreCatalog = await makeInternalMcpCatalog({
-      name: "Explore Server",
+    const stagingCatalog = await makeInternalMcpCatalog({
+      name: "Staging Server",
       organizationId: orgId,
-      environmentId: exploreEnvId,
+      environmentId: stagingEnvId,
     });
     const prodCatalog = await makeInternalMcpCatalog({
       name: "Production Server",
@@ -1157,14 +1157,14 @@ describe("mcp server tools respect the agent's environment", () => {
     const result = await executeArchestraTool(
       tool(TOOL_GET_MCP_SERVERS_SHORT_NAME),
       {},
-      exploreContext,
+      stagingContext,
     );
 
     expect(result.isError).toBe(false);
     const ids = (
       result.structuredContent as { items: { id: string }[] }
     ).items.map((item) => item.id);
-    expect(ids).toContain(exploreCatalog.id);
+    expect(ids).toContain(stagingCatalog.id);
     expect(ids).not.toContain(prodCatalog.id);
     expect(ids).not.toContain(defaultCatalog.id);
   });
@@ -1172,10 +1172,10 @@ describe("mcp server tools respect the agent's environment", () => {
   test("search_private_mcp_registry does not surface other environments", async ({
     makeInternalMcpCatalog,
   }) => {
-    const exploreCatalog = await makeInternalMcpCatalog({
-      name: "grafana explore",
+    const stagingCatalog = await makeInternalMcpCatalog({
+      name: "grafana staging",
       organizationId: orgId,
-      environmentId: exploreEnvId,
+      environmentId: stagingEnvId,
     });
     const prodCatalog = await makeInternalMcpCatalog({
       name: "grafana prod",
@@ -1186,14 +1186,14 @@ describe("mcp server tools respect the agent's environment", () => {
     const result = await executeArchestraTool(
       tool(TOOL_SEARCH_PRIVATE_MCP_REGISTRY_SHORT_NAME),
       { query: "grafana" },
-      exploreContext,
+      stagingContext,
     );
 
     expect(result.isError).toBe(false);
     const ids = (
       result.structuredContent as { items: { id: string }[] }
     ).items.map((item) => item.id);
-    expect(ids).toEqual([exploreCatalog.id]);
+    expect(ids).toEqual([stagingCatalog.id]);
     expect(ids).not.toContain(prodCatalog.id);
   });
 
@@ -1209,7 +1209,7 @@ describe("mcp server tools respect the agent's environment", () => {
     const result = await executeArchestraTool(
       tool(TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME),
       { mcpServerId: prodCatalog.id },
-      exploreContext,
+      stagingContext,
     );
 
     expect(result.isError).toBe(true);
@@ -1224,13 +1224,13 @@ describe("mcp server tools respect the agent's environment", () => {
         serverType: "remote",
         serverUrl: "https://example.com/mcp",
       },
-      exploreContext,
+      stagingContext,
     );
 
     expect(result.isError).toBe(false);
     const created = await InternalMcpCatalogModel.findByName(
       "Agent Authored Server",
     );
-    expect(created?.environmentId).toBe(exploreEnvId);
+    expect(created?.environmentId).toBe(stagingEnvId);
   });
 });

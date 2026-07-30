@@ -1080,7 +1080,7 @@ function ManualStep(props: {
         1. Download{" "}
         {props.files.map((file, index) => (
           <span key={file.name}>
-            {index > 0 && " and "}
+            {index > 0 && <span> and </span>}
             <button
               type="button"
               className={LINK_CLASS}

@@ -556,7 +556,7 @@ export function AccessLevelSelector({
     >
       {scope === "team" && (
         <div className="space-y-2">
-          <Label>Teams{showTeamRequired && " *"}</Label>
+          <Label>Teams{showTeamRequired && <span> *</span>}</Label>
           <MultiSelectCombobox
             disabled={
               !canShareWithTeams || hasNoAvailableTeams || !canReadTeams
@@ -2217,15 +2217,19 @@ export function AgentDialog({
                                                   {connector.name}
                                                 </div>
                                                 <div className="truncate text-xs text-muted-foreground">
-                                                  {isEnvIncompatible
-                                                    ? "Different environment"
-                                                    : connector.description || (
-                                                        <span className="capitalize">
-                                                          {
-                                                            connector.connectorType
-                                                          }
-                                                        </span>
-                                                      )}
+                                                  {isEnvIncompatible ? (
+                                                    <span>
+                                                      Different environment
+                                                    </span>
+                                                  ) : connector.description ? (
+                                                    <span>
+                                                      {connector.description}
+                                                    </span>
+                                                  ) : (
+                                                    <span className="capitalize">
+                                                      {connector.connectorType}
+                                                    </span>
+                                                  )}
                                                 </div>
                                               </div>
                                               <div className="ml-2 shrink-0">
@@ -2417,9 +2421,12 @@ export function AgentDialog({
                             ) : (
                               <p className="text-sm text-muted-foreground">
                                 {selectedApiKey &&
-                                selectedApiKey.scope !== "org"
-                                  ? "Selected key will be available to everyone who has access to this agent."
-                                  : null}
+                                selectedApiKey.scope !== "org" ? (
+                                  <span>
+                                    Selected key will be available to everyone
+                                    who has access to this agent.
+                                  </span>
+                                ) : null}
                               </p>
                             )}
                             <div className="flex flex-wrap items-center gap-2">

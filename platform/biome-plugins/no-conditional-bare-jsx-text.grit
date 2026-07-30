@@ -1,0 +1,83 @@
+// Project-specific Biome (GritQL) lint plugin — machine-translation crash guard.
+//
+// Chrome's page translate (and similar machine-translation features)
+// re-parents DOM text nodes into injected <font> wrappers. React keeps
+// references to the original text nodes, so a commit that deletes such a
+// text node, or inserts an element before it, throws
+// "NotFoundError: Failed to execute 'removeChild'/'insertBefore' on 'Node'"
+// and crashes the page (facebook/react#11538). React has no upstream fix;
+// the project convention is to never let React add/remove/replace a BARE
+// text node — conditional text must be wrapped in an element (usually a
+// <span>), so React only ever swaps elements, which translation never moves.
+//
+// Real crashes fixed under this convention: the Radix Select value portal
+// (ui/select.tsx), the tab-bar overflow label (page-layout.tsx), and the
+// messaging-channel tab labels (messaging-channels/layout.tsx).
+//
+// This plugin flags the shapes where a bare text node provably appears,
+// disappears, or is replaced by an element, in JSX child position:
+//   1. A ternary with a string branch whose other branch is definitely not
+//      text — a JSX element/fragment, null, undefined, or a boolean —
+//      e.g. {active ? <Icon/> : "More"} or {open ? "shown" : null}.
+//   2. A logical && producing a string, e.g. {saved && "Saved!"}.
+//
+// Deliberately NOT flagged (plugin diagnostics cannot be suppressed with
+// biome-ignore, so false positives would hard-block CI):
+//   - Ternaries whose branches are both text at runtime, including string vs
+//     template/expression (e.g. {a ? "x" : (ip ?? "?")}) — React updates the
+//     existing text node in place, which survives translation.
+//   - A string branch against a variable/call (e.g. {a ? "Hide" : label}) —
+//     unknowable statically; if the variable can be a ReactNode, apply the
+//     span-wrapping convention manually (this was the page-layout.tsx bug).
+//
+// Fix: wrap the string in an element, e.g.
+//   {active ? <Icon/> : <span>More</span>}   {saved && <span>Saved!</span>}
+// If both branches render elements of the same type, key them differently so
+// React swaps the elements instead of reconciling their text children.
+language js
+
+or {
+  `$cond ? $then : $else` as $ternary where {
+    $ternary <: within jsx_expression(),
+    $ternary <: not within jsx_attribute(),
+    or {
+      and {
+        $then <: string(),
+        $else <: or {
+          contains jsx_element(),
+          contains jsx_self_closing_element(),
+          contains `<>$fc1</>`,
+          `null`,
+          `undefined`,
+          `false`,
+          `true`
+        }
+      },
+      and {
+        $else <: string(),
+        $then <: or {
+          contains jsx_element(),
+          contains jsx_self_closing_element(),
+          contains `<>$fc2</>`,
+          `null`,
+          `undefined`,
+          `false`,
+          `true`
+        }
+      }
+    },
+    register_diagnostic(
+      span = $ternary,
+      message = "Conditional bare text in JSX crashes React when the page is machine-translated (Chrome translate re-parents text nodes, facebook/react#11538): wrap the string branch in an element, e.g. <span>text</span>."
+    )
+  },
+  `$cond && $text` as $logical where {
+    $logical <: within jsx_expression(),
+    $logical <: not within jsx_attribute(),
+    $text <: string(),
+    register_diagnostic(
+      span = $logical,
+      message = "Conditional bare text in JSX crashes React when the page is machine-translated (Chrome translate re-parents text nodes, facebook/react#11538): wrap the string in an element, e.g. {cond && <span>text</span>}."
+    )
+  }
+}

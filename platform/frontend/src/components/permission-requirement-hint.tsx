@@ -29,7 +29,7 @@ export function PermissionRequirementHint({
       {message}{" "}
       {permissions.map((permission, index) => (
         <Fragment key={formatPermissionRequirement(permission)}>
-          {index > 0 ? ", " : null}
+          {index > 0 ? <span>, </span> : null}
           <CodeText className="px-1.5 text-[11px] font-mono">
             {formatPermissionRequirement(permission)}
           </CodeText>

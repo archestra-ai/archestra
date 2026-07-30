@@ -2211,7 +2211,7 @@ Required RBAC permission: `app:update`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `appId` | `string` | Yes | The app id. |
-| `baseVersion` | `integer` | No | Optional optimistic-concurrency guard: the version (from read_app) the edits are based on. Defaults to the current head, so a single editor never has to echo it back. When supplied, the edit is rejected if the app's head has moved past it. |
+| `baseVersion` | `integer` | Yes | The version this edit is based on — the one named by read_app or the latest scaffold_app/edit_app result. The edit is rejected when the app's head has moved past it (another conversation edited the app); read the current source with read_app and rebuild the edit on it. |
 | `edits` | `object[]` | No | str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged). Pass exactly one of edits, replacementHtml, or replacementHtmlSource. |
 | `edits[].old_str` | `string` | Yes | Exact text to replace; must occur exactly once in the current HTML (add surrounding context to disambiguate). |
 | `edits[].new_str` | `string` | Yes | Replacement text (may be empty to delete). |

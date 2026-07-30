@@ -350,10 +350,14 @@ describe("app tool execution", () => {
     const second = await scaffold({ name: "Dup", scope: "org" });
     expect(second.isError).toBe(true);
     const text = (second.content[0] as any).text as string;
-    // The duplicate error names the existing app and points at edit_app so the
-    // model stops re-scaffolding.
+    // The duplicate error names the existing app but must NOT command editing
+    // it — the existing app may serve a different purpose, and steering the
+    // model onto it is how a same-name request hijacks another conversation's
+    // app. It steers to confirming with the user or picking a different name.
     expect(text).toContain(firstId);
-    expect(text).toContain("edit_app");
+    expect(text).not.toContain("do not re-scaffold");
+    expect(text).toContain("different name");
+    expect(text).toContain("confirm");
   });
 
   test("scaffold rejects team scope", async () => {
@@ -1218,9 +1222,11 @@ describe("read_app / edit_app", () => {
       expect.arrayContaining(["edits", "replacementHtml"]),
     );
     expect(schema.required).toContain("appId");
-    // baseVersion defaults to the head, so it is an optional concurrency guard,
-    // not a required field; the two edit modes are runtime-exclusive optionals.
-    expect(schema.required).not.toContain("baseVersion");
+    // baseVersion is required (like edit_skill's): every mutation result names
+    // the head to echo back, and requiring it is what arms the CAS against a
+    // concurrent edit from another conversation. The two edit modes stay
+    // runtime-exclusive optionals.
+    expect(schema.required).toContain("baseVersion");
     expect(schema.required).not.toContain("edits");
     expect(schema.required).not.toContain("replacementHtml");
 
@@ -1358,24 +1364,19 @@ describe("read_app / edit_app", () => {
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version + 1);
   });
 
-  test("edit_app without baseVersion applies to the current head", async () => {
+  test("edit_app without baseVersion is rejected without saving", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
-    // Advance the head so a default-to-head edit must target v2, not the v1 the
-    // scaffold produced — proving the default resolves the live head, not 1.
-    await editApp(appId, version, [{ old_str: "v1", new_str: "v2" }]);
-    const head = version + 1;
 
+    // No baseVersion means no freshness proof — refused, never applied to
+    // whatever the head happens to be at call time.
     const result = await executeArchestraTool(
       getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
-      { appId, replacementHtml: "<h1>v3</h1>" },
+      { appId, replacementHtml: "<h1>v2</h1>" },
       context,
     );
 
-    expect(result.isError).toBe(false);
-    expect(structured(result).latestVersion).toBe(head + 1);
-    expect(
-      (await AppVersionModel.findByAppAndVersion(appId, head + 1))?.html,
-    ).toBe("<h1>v3</h1>");
+    expect(result.isError).toBe(true);
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
   test("success text excerpts each applied edit from the final document", async () => {
@@ -3615,7 +3616,8 @@ describe("edit_app replacementHtmlSource", () => {
   function editFromSource(appId: string, fileId: string, ctx = context) {
     return executeArchestraTool(
       getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
-      { appId, replacementHtmlSource: { fileId } },
+      // Apps here are freshly scaffolded, so the scaffolded head is the base.
+      { appId, baseVersion: 1, replacementHtmlSource: { fileId } },
       ctx,
     );
   }
@@ -3820,6 +3822,7 @@ describe("edit_app replacementHtmlSource", () => {
       getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
       {
         appId,
+        baseVersion: 1,
         edits: [{ old_str: "a", new_str: "b" }],
         replacementHtmlSource: { fileId: file.id },
       },

@@ -192,9 +192,8 @@ const EditAppSchema = z.strictObject({
     .number()
     .int()
     .positive()
-    .optional()
     .describe(
-      "Optional optimistic-concurrency guard: the version (from read_app) the edits are based on. Defaults to the current head, so a single editor never has to echo it back. When supplied, the edit is rejected if the app's head has moved past it.",
+      "The version this edit is based on — the one named by read_app or the latest scaffold_app/edit_app result. The edit is rejected when the app's head has moved past it (another conversation edited the app); read the current source with read_app and rebuild the edit on it.",
     ),
   edits: z
     .array(
@@ -563,7 +562,7 @@ const registry = defineArchestraTools([
               );
             }
             return errorResult(
-              `An app named "${safeName}" already exists (id ${existingId}). Edit it with edit_app on that id — do not re-scaffold.`,
+              `An app named "${safeName}" already exists (id ${existingId}); nothing was created. That app may serve a different purpose — do not edit it unless the user explicitly asked to change it (confirm with them first). To build the new app the user asked for, scaffold again under a different name.`,
             );
           }
           return errorResult(`You already have an app named "${safeName}".`);
@@ -919,7 +918,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
-    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to swap in the bytes of a file you already saved without reproducing them here — exactly one of the three. Read the current HTML with read_app first if it is not already in context (see the schema for the str_replace matching and atomicity rules); baseVersion is optional and defaults to the current head. A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
+    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to swap in the bytes of a file you already saved without reproducing them here — exactly one of the three. Read the current HTML with read_app first if it is not already in context (see the schema for the str_replace matching and atomicity rules). baseVersion is required: pass the version named by read_app or the latest scaffold_app/edit_app result — a stale one is rejected, so a concurrent edit from another conversation is never silently overwritten. A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
     schema: EditAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -959,10 +958,12 @@ const registry = defineArchestraTools([
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
-      // baseVersion is an optional concurrency guard; default to the current
-      // head so a single-editor turn never has to read a version and echo it
-      // back. An explicit stale base still fails the CAS below and writes nothing.
-      const baseVersion = args.baseVersion ?? app.latestVersion;
+      // baseVersion is required, like edit_skill's: every result names the head
+      // to echo back, so a single editor pays nothing, while an editor whose
+      // context went stale (another conversation moved the head) names a
+      // superseded version and fails the CAS below instead of silently
+      // overwriting work it never saw.
+      const baseVersion = args.baseVersion;
 
       // Edits apply to the bytes the caller read. Versions are immutable, so
       // this snapshot equals the locked head whenever the CAS below passes;
@@ -1717,11 +1718,11 @@ async function loadApp(params: {
 
 /**
  * Next-edit rider on scaffold_app/edit_app success texts: names the head
- * version so the model knows edit_app defaults to it and that baseVersion is
- * only needed to guard against a concurrent edit.
+ * version so the model can echo it as the next edit_app's required
+ * baseVersion without a read_app round-trip.
  */
 function nextEditBaseVersionHint(latestVersion: number): string {
-  return ` edit_app now defaults to this head (version ${latestVersion}); pass baseVersion only to guard against a concurrent edit.`;
+  return ` Pass baseVersion ${latestVersion} on your next edit_app for this app.`;
 }
 
 // The soft save-time validation-warnings note appended to a mutation's result

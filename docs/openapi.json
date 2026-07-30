@@ -113140,8 +113140,7 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 128,
-                    "pattern": "^[\\x20-\\x7E]+$",
-                    "description": "Model the wizard's review step selected for clients whose setup wires a specific model into the client config. Currently copilot-cli only: the script applies it as COPILOT_MODEL (the CLI refuses to launch a BYOK provider without one)."
+                    "pattern": "^[\\x20-\\x7E]+$"
                   },
                   "skills": {
                     "type": "object",

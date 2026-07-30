@@ -31345,12 +31345,6 @@ export type CreateConnectionSetupData = {
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
         proxyAuth?: 'provider-key' | 'virtual-key';
         attributePassthrough?: boolean;
-        /**
-         * Model the wizard's review step selected for clients whose setup wires a
-         * specific model into the client config. Currently copilot-cli only: the
-         * script applies it as COPILOT_MODEL (the CLI refuses to launch a BYOK
-         * provider without one).
-         */
         model?: string;
         skills?: {
             skillIds: Array<string>;

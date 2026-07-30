@@ -34,6 +34,7 @@ import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-pr
 import {
   buildEnterpriseCredentialHeader,
   exchangeIdJagAtProtectedResource,
+  type ResolvedEnterpriseTransportCredential,
 } from "@/services/identity-providers/enterprise-managed/broker";
 import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
 import {
@@ -51,6 +52,7 @@ import {
   ApiError,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  type EnterpriseManagedCredentialConfig,
   InsertMcpServerSchema,
   type InternalMcpCatalogServerType,
   LocalMcpServerInstallationStatusSchema,
@@ -1650,6 +1652,37 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
+      // The inspector talks to the same upstream as the MCP Gateway, so it has
+      // to present the same credential. Without this it connected with only the
+      // install's static secrets — for an enterprise-managed catalog that means
+      // no auth header at all, and none of the configured injection mode.
+      const enterpriseTransportCredential = buildDiscoveryTransportCredential({
+        enterpriseManagedConfig: catalogItem.enterpriseManagedConfig,
+        accessToken: catalogItem.enterpriseManagedConfig
+          ? await getInstallDiscoveryAccessToken({
+              catalogItem,
+              userId: user.id,
+            })
+          : undefined,
+      });
+      if (
+        catalogItem.enterpriseManagedConfig &&
+        !enterpriseTransportCredential
+      ) {
+        const identityProvider = catalogItem.enterpriseManagedConfig
+          .identityProviderId
+          ? await findExternalIdentityProviderById(
+              catalogItem.enterpriseManagedConfig.identityProviderId,
+            )
+          : null;
+        throw new ApiError(
+          401,
+          identityProvider
+            ? `Connect ${identityProvider.providerId} before inspecting this MCP server.`
+            : "Sign in with SSO to link your identity provider before inspecting this MCP server.",
+        );
+      }
+
       try {
         const result = await mcpClient.inspectServer({
           catalogItem,
@@ -1658,6 +1691,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           method: body.method,
           toolName: body.toolName,
           toolArguments: body.toolArguments,
+          enterpriseTransportCredential,
         });
 
         return reply.send(result as Record<string, unknown>);
@@ -2322,20 +2356,10 @@ async function connectAndGetToolsForInstallation(params: {
           userId: params.userId,
         })
       : undefined;
-  // Route the exchanged credential through the catalog's injection mode rather
-  // than folding it into `access_token`: the static-secret path always emits
-  // `Authorization: Bearer`, which silently ignores a configured custom header
-  // and sends discovery traffic with a credential the upstream never expects.
-  const installDiscoveryCredential =
-    installDiscoveryAccessToken && catalogItem.enterpriseManagedConfig
-      ? {
-          ...buildEnterpriseCredentialHeader({
-            config: catalogItem.enterpriseManagedConfig,
-            value: installDiscoveryAccessToken,
-          }),
-          expiresInSeconds: null,
-        }
-      : undefined;
+  const installDiscoveryCredential = buildDiscoveryTransportCredential({
+    enterpriseManagedConfig: catalogItem.enterpriseManagedConfig,
+    accessToken: installDiscoveryAccessToken,
+  });
 
   if (catalogItem.enterpriseManagedConfig && !installDiscoveryAccessToken) {
     const identityProvider = catalogItem.enterpriseManagedConfig
@@ -2405,6 +2429,32 @@ async function getCurrentIdentityProviderAccessToken(
   const account =
     await AccountModel.getLatestSsoAccountWithAccessTokenByUserId(userId);
   return account ? ensureFreshSsoAccessToken(account) : undefined;
+}
+
+/**
+ * Route an exchanged credential through the catalog's injection mode.
+ *
+ * Handing the value to the transport as a static `access_token` instead always
+ * emits `Authorization: Bearer`, which silently ignores a configured custom
+ * header and sends traffic with a credential the upstream never expects.
+ * Shared by install-time discovery and the inspector so both reach the upstream
+ * with the same header the MCP Gateway uses.
+ */
+function buildDiscoveryTransportCredential(params: {
+  enterpriseManagedConfig: EnterpriseManagedCredentialConfig | null;
+  accessToken: string | undefined;
+}): ResolvedEnterpriseTransportCredential | undefined {
+  if (!params.enterpriseManagedConfig || !params.accessToken) {
+    return undefined;
+  }
+
+  return {
+    ...buildEnterpriseCredentialHeader({
+      config: params.enterpriseManagedConfig,
+      value: params.accessToken,
+    }),
+    expiresInSeconds: null,
+  };
 }
 
 async function getInstallDiscoveryAccessToken(params: {

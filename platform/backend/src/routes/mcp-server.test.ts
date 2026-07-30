@@ -3120,6 +3120,228 @@ describe("mcp server inspect route", () => {
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
   });
 
+  // Regression: the inspector reaches the same upstream as the MCP Gateway, but
+  // connected with only the install's static secrets. For an enterprise-managed
+  // catalog that meant no auth header at all — the configured injection mode
+  // was never consulted, so a custom-header server saw an unauthenticated call.
+  test("inspect sends the enterprise-managed credential under the configured custom header", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Inspect Custom Header",
+      serverType: "remote",
+      serverUrl: "https://internal.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "header",
+        headerName: "x-provider-api-token",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+
+    await makeAccount(user.id, {
+      providerId: "keycloak",
+      accessToken: "session-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: null,
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      value: "exchanged-inspect-token",
+    });
+
+    inspectServerMock.mockResolvedValueOnce({ tools: [] });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/inspect`,
+      payload: { method: "tools/list" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(inspectServerMock).toHaveBeenCalledTimes(1);
+    expect(inspectServerMock.mock.calls[0][0]).toMatchObject({
+      method: "tools/list",
+      enterpriseTransportCredential: {
+        headerName: "x-provider-api-token",
+        headerValue: "exchanged-inspect-token",
+      },
+    });
+  });
+
+  test("inspect sends a bearer Authorization for the default injection mode", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Inspect Bearer",
+      serverType: "remote",
+      serverUrl: "https://internal.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "authorization_bearer",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+
+    await makeAccount(user.id, {
+      providerId: "keycloak",
+      accessToken: "session-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: null,
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      value: "exchanged-inspect-bearer",
+    });
+
+    inspectServerMock.mockResolvedValueOnce({ tools: [] });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/inspect`,
+      payload: { method: "tools/list" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(inspectServerMock.mock.calls[0][0]).toMatchObject({
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer exchanged-inspect-bearer",
+      },
+    });
+  });
+
+  // Fail closed: connecting anyway would reach the upstream with no credential,
+  // which is the unauthenticated call this fix exists to stop.
+  test("inspect returns 401 when the enterprise-managed credential cannot be resolved", async ({
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Inspect Unlinked",
+      serverType: "remote",
+      serverUrl: "https://internal.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "header",
+        headerName: "x-provider-api-token",
+      },
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+
+    // No linked account for the caller, so no assertion to exchange.
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/inspect`,
+      payload: { method: "tools/list" },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.message).toContain("keycloak");
+    expect(inspectServerMock).not.toHaveBeenCalled();
+  });
+
+  // Non-enterprise catalogs must keep inspecting with their static secrets.
+  test("inspect leaves non-enterprise catalogs without an enterprise credential", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+      serverUrl: "https://plain.example.com/mcp",
+    });
+    const mcpServer = await makeMcpServer({
+      ownerId: user.id,
+      catalogId: catalog.id,
+    });
+
+    inspectServerMock.mockResolvedValueOnce({ tools: [] });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/mcp_server/${mcpServer.id}/inspect`,
+      payload: { method: "tools/list" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(
+      inspectServerMock.mock.calls[0][0].enterpriseTransportCredential,
+    ).toBeUndefined();
+  });
+
   test("returns 409 when the MCP server is not running yet", async ({
     makeInternalMcpCatalog,
     makeMcpServer,

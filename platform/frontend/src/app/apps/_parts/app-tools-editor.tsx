@@ -10,7 +10,7 @@ import { Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ToolChecklist } from "@/components/agent-tools-editor";
 import {
-  isCatalogInEnvironment,
+  isCatalogInAppEnvironment,
   sortCatalogItems,
 } from "@/components/agent-tools-editor.utils";
 import { LoadingWrapper } from "@/components/loading";
@@ -150,17 +150,18 @@ export function AppToolsEditor({
     return map;
   }, [assigned]);
 
-  // Candidate servers: every one in the app's environment (Playwright is
-  // environment-agnostic like a builtin), plus any server a current assignment
-  // already references so it can be cleaned up. The Archestra builtin catalog is
-  // never assignable.
+  // Candidate servers: every one in the app's environment or the Default
+  // baseline apps may always draw from (Playwright is environment-agnostic
+  // like a builtin), plus any server a current assignment already references
+  // so it can be cleaned up. The Archestra builtin catalog is never
+  // assignable.
   const candidates = useMemo(
     () =>
       catalogs.filter((c) => {
         if (c.id === ARCHESTRA_MCP_CATALOG_ID) return false;
         const inEnv =
           isPlaywrightCatalogItem(c.id) ||
-          isCatalogInEnvironment(c, appEnvironmentId);
+          isCatalogInAppEnvironment(c, appEnvironmentId);
         return inEnv || assignedIdsByCatalog.has(c.id);
       }),
     [catalogs, appEnvironmentId, assignedIdsByCatalog],
@@ -355,7 +356,7 @@ export function AppToolsEditor({
                   assignedIdsByCatalog.get(catalog.id) ?? new Set<string>();
                 const outOfEnv =
                   !isPlaywrightCatalogItem(catalog.id) &&
-                  !isCatalogInEnvironment(catalog, appEnvironmentId);
+                  !isCatalogInAppEnvironment(catalog, appEnvironmentId);
                 return (
                   <AppMcpServerPill
                     key={catalog.id}

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgEnum,
   pgTable,
@@ -7,18 +8,29 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import { team } from "./team";
 import usersTable from "./user";
 
 /**
  * A project: a named collection of chat conversations that owns its result
- * files directly (`files.project_id`, cascade on delete). Files belong to the
- * project, not to any one member.
+ * files directly (`files.project_id`). Files belong to the project, not to any
+ * one member.
  *
  * Sharing (below) grants project access: browse chats, start your own, and
  * full rights over the project's files (list/download/delete).
+ *
+ * Deleting a project soft-deletes the row (`deleted_at`) and every read here
+ * filters it out, so the project is gone as far as the API is concerned. What
+ * it OWNS is RETAINED, not removed — its files and scheduled tasks keep pointing
+ * at the retained row and are hidden behind the live-project guard, so a
+ * `restore()` recovers them intact along with the share config and pins. The
+ * one exception is chats, which detach (`project_id` → NULL) and survive as
+ * ordinary conversations. A `project:admin` restores via the restore endpoint;
+ * there is no automatic purge, so retained rows and bytes accumulate until a
+ * future hard-delete path reclaims them.
  */
-const projectsTable = pgTable(
+const projectsTable = softDeletablePgTable(
   "projects",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -43,9 +55,15 @@ const projectsTable = pgTable(
   (table) => [
     // display name stays unique per user: one member can't have two same-named
     // projects, but different members may reuse a name (their slugs differ).
-    uniqueIndex("projects_user_name_uidx").on(table.userId, table.name),
+    // Soft-deleted rows are excluded so deleting a project frees its name.
+    uniqueIndex("projects_user_name_uidx")
+      .on(table.userId, table.name)
+      .where(sql`${table.deletedAt} IS NULL`),
     // the slug is the project's folder in the filesystem file store, so it must
-    // be unique across the org's members.
+    // be unique across the org's members. Deliberately TOTAL (soft-deleted rows
+    // included): the retained row must keep its slug for a `restore()` to land
+    // on the same folder, so a recreated same-named project gets a fresh
+    // suffixed slug via `generateUniqueSlug` instead of colliding with it.
     uniqueIndex("projects_org_slug_uidx").on(table.organizationId, table.slug),
   ],
 );

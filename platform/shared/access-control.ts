@@ -1638,6 +1638,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateProject]: { project: ["update"] },
   [RouteId.SetProjectShare]: { project: ["update"] },
   [RouteId.DeleteProject]: { project: ["delete"] },
+  // Restore is the inverse of delete and, like the deleted-projects view, an
+  // oversight action — the handler further narrows it to `project:admin`.
+  [RouteId.RestoreProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
   // Project file surfaces combine project-level access with the files gate:
   // `file:manage` covers the file operations, while project membership is

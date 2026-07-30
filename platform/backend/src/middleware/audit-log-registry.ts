@@ -23,6 +23,7 @@ import ModelModel from "@/models/model";
 import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
+import ProjectModel from "@/models/project";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
@@ -400,6 +401,39 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/optimization-rules/:id": {
     resourceType: "optimizationRule",
     fetchById: (id, orgId) => OptimizationRuleModel.findByIdForAudit(id, orgId),
+  },
+
+  // Projects. Delete soft-deletes and restore is a project:admin action on
+  // another member's project, so both need a trail. The pin and instructions
+  // children are denylisted in audit-log-hook.ts rather than registered: they
+  // would inherit project.updated/project.deleted by walk-up while changing
+  // nothing on the project row (a pin is per-user state; instructions are a
+  // file), producing empty diffs under the wrong action.
+  "/api/projects": {
+    resourceType: "project",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
+  },
+  // Converting a chat into a project creates one; POST walk-ups are dropped, so
+  // it needs its own entry or the create goes unrecorded.
+  "/api/projects/from-conversation": {
+    resourceType: "project",
+    action: "project.created",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
+  },
+  "/api/projects/:id": {
+    resourceType: "project",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
+  },
+  "/api/projects/:id/restore": {
+    resourceType: "project",
+    action: "project.restored",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
+  },
+  // Visibility lives in `project_shares`, captured by the project snapshot.
+  "/api/projects/:id/share": {
+    resourceType: "project",
+    action: "project.updated",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
   },
 
   // Skills

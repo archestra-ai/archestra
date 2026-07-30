@@ -670,6 +670,7 @@ export const RouteId = {
   UpdateProject: "updateProject",
   SetProjectShare: "setProjectShare",
   DeleteProject: "deleteProject",
+  RestoreProject: "restoreProject",
   GetProjectConversations: "getProjectConversations",
   GetProjectFiles: "getProjectFiles",
   UploadProjectFiles: "uploadProjectFiles",

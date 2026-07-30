@@ -39,6 +39,15 @@ export async function resolveProjectFileScope(params: {
     .from(schema.projectsTable)
     .where(eq(schema.projectsTable.id, conversation.projectId));
   if (!project) return null;
+  // Deleting a project detaches its chats (`project_id` → NULL), so this is
+  // normally unreachable — but if a chat still points at a soft-deleted project,
+  // fail CLOSED rather than silently degrading to a personal (no-project) scope,
+  // which would let file tools read/write outside the hidden project.
+  if (project.deletedAt) {
+    throw new SkillSandboxError(
+      `project "${project.name}" was deleted; file operations are disabled in this chat`,
+    );
+  }
 
   const canAccess = await ProjectShareModel.userCanAccessProject({
     project,

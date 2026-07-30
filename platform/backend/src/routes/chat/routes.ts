@@ -2531,32 +2531,28 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Look up the conversation (owner+org-scoped) before deletion so we can
-      // capture its agent and any running active run for post-delete cleanup.
-      // findById now excludes soft-deleted rows, so a missing conversation here
-      // means it does not exist, is not owned by the caller, or was already
-      // deleted — all of which answer 404 (a re-delete is not a no-op success).
+      // Owner+org-scoped lookup; findById excludes soft-deleted rows. A miss
+      // means the conversation never existed, isn't owned by the caller, or is
+      // already deleted — nothing left for this caller to delete, so DELETE
+      // stays idempotent and returns success without touching state.
       const conversation = await ConversationModel.findById({
         id,
         userId: user.id,
         organizationId,
       });
       if (!conversation) {
-        throw new ApiError(404, "Conversation not found");
+        return reply.send({ success: true });
       }
 
       // Soft-delete: stamp deleted_at so the conversation vanishes from every
-      // read path while its rows (messages, files, runs) stay intact — no file
-      // purge. Idempotent: a 0 count means a concurrent request won the delete
-      // race, which is still a 404 for this caller.
-      const deletedCount = await ConversationModel.delete(
-        id,
-        user.id,
-        organizationId,
-      );
-      if (deletedCount === 0) {
-        throw new ApiError(404, "Conversation not found");
-      }
+      // read path while its rows (messages, runs, shares) AND its object-storage
+      // files stay intact — soft delete must be reversible. The old hard-delete
+      // purged conversation files here; that purge is intentionally gone.
+      // Nothing reclaims these files yet — a scheduled retention job (purge
+      // files + hard-delete rows past the window) is planned as a follow-up.
+      // The delete count is ignored: a concurrent winner making it 0 is still
+      // success for an idempotent DELETE.
+      await ConversationModel.delete(id, user.id, organizationId);
 
       // Best-effort teardown of live-only resources; failures here must not fail
       // the already-successful delete. The data stays, but an in-flight run and

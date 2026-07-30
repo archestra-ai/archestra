@@ -1358,13 +1358,13 @@ describe("project chats: read-only access for project members", () => {
     });
     expect([403, 404]).toContain(rename.statusCode);
 
-    // the delete lookup is owner-scoped, so a reader's DELETE finds nothing it
-    // owns and returns 404 — the author's chat is left intact.
+    // the delete lookup is owner-scoped, so a reader's DELETE is a no-op that
+    // returns 200 (idempotent delete semantics); the author's chat is intact.
     const deleteAttempt = await app.inject({
       method: "DELETE",
       url: `/api/chat/conversations/${conversation.id}`,
     });
-    expect(deleteAttempt.statusCode).toBe(404);
+    expect(deleteAttempt.statusCode).toBe(200);
     const stillThere = await ConversationModel.findById({
       id: conversation.id,
       userId: author.id,
@@ -1546,7 +1546,7 @@ describe("conversation list projectName", () => {
     ).toHaveLength(1);
   });
 
-  test("delete soft-deletes the conversation: 200 once, then GET/re-DELETE 404, row kept", async ({
+  test("delete soft-deletes the conversation: 200, then GET 404, re-DELETE 200 (idempotent), row kept", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({
@@ -1575,13 +1575,13 @@ describe("conversation list projectName", () => {
     });
     expect(afterGet.statusCode).toBe(404);
 
-    // A re-delete is a 404, not a silent success: the second delete has no
-    // state transition to audit.
+    // A re-delete is an idempotent no-op: there is nothing left for this caller
+    // to delete, so DELETE returns 200 without touching state.
     const second = await app.inject({
       method: "DELETE",
       url: `/api/chat/conversations/${conversation.id}`,
     });
-    expect(second.statusCode).toBe(404);
+    expect(second.statusCode).toBe(200);
 
     // The row survives with deletedAt stamped — soft delete keeps the data.
     const [row] = await db

@@ -356,6 +356,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "tools attached to an app; parent (app) carries the signal",
   },
+  appLabelsTable: {
+    audited: false,
+    reason: "join: app × label; parent (app) audited",
+  },
   appDataTable: {
     audited: false,
     reason:

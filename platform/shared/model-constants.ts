@@ -154,6 +154,25 @@ export const PROVIDERS_REQUIRING_BASE_URL = new Set<SupportedProvider>([
 ]);
 
 /**
+ * Providers whose every model refuses tool calls, so pairing them with an MCP
+ * gateway can only produce tools the model will never invoke.
+ *
+ * This is provider-shaped on purpose, and only because the connect flow is: a
+ * client is wired to a provider there, with no model chosen yet, so the
+ * provider is the whole of what is known. Anywhere a model *is* known the
+ * decision belongs to that model's `supportsToolCalling` — a provider-wide gate
+ * would hide a tool-capable model behind its siblings.
+ *
+ * Perplexity qualifies because its chat-completions endpoint accepts no `tools`
+ * parameter on any `sonar*` model (see inferPerplexityCapabilities in
+ * services/model-sync.ts). Its Agent API, which does take tools, is the
+ * separate `perplexity-agent` provider and is deliberately absent here.
+ */
+export const PROVIDERS_WITHOUT_TOOL_SUPPORT = new Set<SupportedProvider>([
+  "perplexity",
+]);
+
+/**
  * Providers whose credential is an individual user's token rather than a shared
  * service key (GitHub Copilot: a per-user GitHub OAuth token tied to that
  * account's Copilot seat; Microsoft 365 Copilot: a per-user Entra ID refresh token

@@ -23,6 +23,8 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   cohere: "cohere",
   mistral: "mistral",
   perplexity: "perplexity",
+  // Same vendor, same mark — the Agent API is another Perplexity surface.
+  "perplexity-agent": "perplexity",
   groq: "groq",
   xai: "xai",
   openrouter: "openrouter",

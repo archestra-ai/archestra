@@ -337,6 +337,37 @@ describe("ModelSyncService", () => {
     expect(capabilities.supportsToolCalling).toBe(true);
   });
 
+  test("records perplexity-agent models as tool-capable", () => {
+    // Accepting tools is the Agent API's whole purpose, and nothing upstream
+    // states it: the catalog is static and models.dev has no entry for it.
+    const capabilities = resolveModelCapabilities({
+      provider: "perplexity-agent",
+      modelId: "perplexity/sonar",
+    });
+
+    expect(capabilities.supportsToolCalling).toBe(true);
+    // A null modality list makes the model edit dialog invalid on open.
+    expect(capabilities.inputModalities).toEqual(["text"]);
+    expect(capabilities.outputModalities).toEqual(["text"]);
+  });
+
+  test("keeps the two perplexity providers' tool capabilities independent", () => {
+    // The whole reason the Agent API is its own provider: sharing an id with
+    // `perplexity` would inherit its blanket tool-less default.
+    expect(
+      resolveModelCapabilities({
+        provider: "perplexity",
+        modelId: "sonar",
+      }).supportsToolCalling,
+    ).toBe(false);
+    expect(
+      resolveModelCapabilities({
+        provider: "perplexity-agent",
+        modelId: "perplexity/sonar",
+      }).supportsToolCalling,
+    ).toBe(true);
+  });
+
   test("persists a sanitized outputLength from the models.dev limit.output", () => {
     const [good, bad] = buildModelsToUpsert({
       provider: "openai",

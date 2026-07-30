@@ -230,6 +230,16 @@ const PROVIDER_CONFIG: Record<
     consoleUrl: "https://www.perplexity.ai/settings/api",
     consoleName: "Perplexity Settings",
   },
+  "perplexity-agent": {
+    name: "Perplexity Agent",
+    icon: "/icons/perplexity.png",
+    placeholder: "pplx-...",
+    enabled: true,
+    consoleUrl: "https://www.perplexity.ai/settings/api",
+    consoleName: "Perplexity Settings",
+    description:
+      "Perplexity's Agent API — the surface that supports tool calling, unlike the Sonar chat models.",
+  },
   groq: {
     name: "Groq",
     icon: "/icons/groq.png",

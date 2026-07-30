@@ -1,6 +1,10 @@
 "use client";
 
-import { isSupportedProvider, type SupportedProvider } from "@archestra/shared";
+import {
+  isSupportedProvider,
+  PROVIDERS_WITHOUT_TOOL_SUPPORT,
+  type SupportedProvider,
+} from "@archestra/shared";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
@@ -175,6 +179,14 @@ export function ConnectionFlow({
   const urlProvider: SupportedProvider | null =
     urlProviderId && isSupportedProvider(urlProviderId) ? urlProviderId : null;
 
+  // Wiring an MCP gateway to a provider whose every model refuses tool calls
+  // installs tools that can never fire, so the step is dropped rather than
+  // shown and quietly wasted. Only once a provider is actually chosen: with
+  // none picked yet the step still applies to whatever comes next.
+  const providerRejectsTools =
+    urlProvider !== null && PROVIDERS_WITHOUT_TOOL_SUPPORT.has(urlProvider);
+  const showMcpGateway = canReadMcpGateway && !providerRejectsTools;
+
   const skillsVisible = useSkillsMarketplaceVisible(client);
 
   // Manual flow (n8n / Any client): one wizard-rail entry per instruction
@@ -205,7 +217,7 @@ export function ConnectionFlow({
         ),
       });
     }
-    if (canReadMcpGateway) {
+    if (showMcpGateway) {
       manualSteps.push({
         key: "mcp",
         title: "Connect the MCP Gateway to access tools",
@@ -292,7 +304,7 @@ export function ConnectionFlow({
       {client && isScriptClient(client.id) && (
         <ConnectCommandPanel
           client={client}
-          mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
+          mcpGateways={showMcpGateway ? (mcpGateways ?? []) : null}
           mcpGatewayId={effectiveMcpId}
           onMcpGatewaySelect={handleMcpSelect}
           llmProxies={canReadLlmProxy ? (llmProxies ?? []) : null}
@@ -311,7 +323,7 @@ export function ConnectionFlow({
       {/* Steps 2-4 (Claude Desktop) — review, download a config profile, import */}
       {client && isConfigClient(client.id) && (
         <ConnectConfigPanel
-          mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
+          mcpGateways={showMcpGateway ? (mcpGateways ?? []) : null}
           mcpGatewayId={effectiveMcpId}
           onMcpGatewaySelect={handleMcpSelect}
           gatewaySlug={selectedMcp?.slug ?? effectiveMcpId}

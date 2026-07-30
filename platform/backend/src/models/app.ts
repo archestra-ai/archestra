@@ -61,6 +61,7 @@ function buildOrgFilters(params: {
   organizationId: string;
   search?: string;
   accessibleAppIds?: string[];
+  enabled?: boolean;
 }) {
   const normalizedSearch = params.search?.trim();
   const searchPattern = normalizedSearch
@@ -71,6 +72,9 @@ function buildOrgFilters(params: {
     notDeleted(schema.appsTable),
     ...(params.accessibleAppIds !== undefined
       ? [inArray(schema.appsTable.id, params.accessibleAppIds)]
+      : []),
+    ...(params.enabled !== undefined
+      ? [eq(schema.appsTable.enabled, params.enabled)]
       : []),
     ...(searchPattern
       ? [
@@ -91,13 +95,20 @@ function buildOrgFilters(params: {
  * (accessibility + batch team loaders) lives in `AppAccessModel`.
  */
 class AppModel {
-  /** Active apps in an org, newest first; `accessibleAppIds` applies scope filtering. */
+  /**
+   * Active apps in an org, newest first; `accessibleAppIds` applies scope
+   * filtering. `enabled` filters on the lifecycle state — the chat `list_apps`
+   * tool passes `true` so disabled apps never surface as reusable to a model,
+   * while the REST list omits it so the Apps page still shows the author
+   * their own disabled apps (where re-enabling lives).
+   */
   static async findByOrganization(params: {
     organizationId: string;
     limit?: number;
     offset?: number;
     search?: string;
     accessibleAppIds?: string[];
+    enabled?: boolean;
   }): Promise<App[]> {
     let query = appWithCatalogQuery()
       .where(and(...buildOrgFilters(params)))

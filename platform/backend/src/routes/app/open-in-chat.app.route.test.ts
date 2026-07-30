@@ -1,5 +1,10 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import { ConversationModel, MemberModel, MessageModel } from "@/models";
+import {
+  AppModel,
+  ConversationModel,
+  MemberModel,
+  MessageModel,
+} from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -175,6 +180,19 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
     const res = await app.inject({
       method: "POST",
       url: `/api/apps/${crypto.randomUUID()}/open-in-chat`,
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  test("404s for a disabled app, even for its author", async () => {
+    const id = await createApp("Paused");
+    await AppModel.setEnabled(id, false);
+
+    // Seeding would hand the conversation the very app every chat tool
+    // refuses to acknowledge — a disabled app cannot enter chat at all.
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/apps/${id}/open-in-chat`,
     });
     expect(res.statusCode).toBe(404);
   });

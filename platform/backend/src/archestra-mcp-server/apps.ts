@@ -491,6 +491,16 @@ const registry = defineArchestraTools([
           });
           const safeName = escapeAppNameForModelText(args.name);
           if (existingId) {
+            // The steer must be state-aware: for a live app "edit that id" is
+            // right, but a disabled app must stay invisible to chat (T-980) —
+            // the name being taken is the only fact this may reveal. No id, no
+            // state, no steer toward the app.
+            const existing = await AppModel.findById(existingId);
+            if (existing && !existing.enabled) {
+              return errorResult(
+                `You already have an app named "${safeName}"; that app is not available from chat. Scaffold under a different name — if the user is asking about the existing app, point them to the Apps page.`,
+              );
+            }
             return errorResult(
               `An app named "${safeName}" already exists (id ${existingId}). Edit it with edit_app on that id — do not re-scaffold.`,
             );
@@ -672,7 +682,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_LIST_APPS_SHORT_NAME,
     title: "List Apps",
     description:
-      "List apps visible to the caller, optionally filtered by name — use it to find an app's id. Returns id, name, description, scope, and latest version per app, not the HTML (use read_app) or a render (use render_app).",
+      "List apps visible to the caller, optionally filtered by name — use it to find an app's id. Disabled apps are never listed: an app the user disabled is not available from chat until they re-enable it on the Apps page. Returns id, name, description, scope, and latest version per app, not the HTML (use read_app) or a render (use render_app).",
     schema: ListAppsSchema,
     outputSchema: z.object({ apps: z.array(AppSummaryOutputSchema) }),
     async handler({ args, context }) {
@@ -686,6 +696,10 @@ const registry = defineArchestraTools([
       const apps = await AppModel.findByOrganization({
         organizationId: auth.organizationId,
         accessibleAppIds,
+        // A disabled app is not reusable from chat, so it is not listed at
+        // all — for its author too (T-980). The author manages it on the Apps
+        // page, which lists through REST without this filter.
+        enabled: true,
         ...(args.name ? { search: args.name } : {}),
         limit: Math.min(args.limit ?? 20, 100),
       });
@@ -1214,12 +1228,6 @@ const registry = defineArchestraTools([
       // would expose the app under its old scope.
       await syncAppBacking(updated);
 
-      // publish_app is the agent-facing "make this available" verb, so it flips
-      // the app enabled as well as promoting scope. Without this a scaffolded
-      // disabled app would stay author-only — invisible to the very audience
-      // just granted, and with its launch tool still withheld from the gateway.
-      await AppModel.setEnabled(args.appId, true);
-
       const runUrl = appRunUrl(updated);
       const audience =
         updated.scope === "org"
@@ -1553,7 +1561,12 @@ async function loadApp(params: {
     userId: params.userId,
     isAppAdmin: await callerIsAppAdmin(params.userId, params.organizationId),
   });
-  if (!app) {
+  // A disabled app does not exist as far as chat is concerned (T-980): every
+  // id-scoped tool reports it exactly like a missing id — for its author too,
+  // and for reads as much as writes, so a conversation holding a pre-disable
+  // snapshot learns nothing and can do nothing. The author sees and manages
+  // it on the Apps page (REST), where re-enabling lives.
+  if (!app || !app.enabled) {
     return { error: errorResult(`No app found with id ${params.appId}.`) };
   }
   if (params.modify) {

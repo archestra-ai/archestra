@@ -52,8 +52,16 @@ vi.mock("@/components/ai-elements/model-selector", () => ({
     <div>{children}</div>
   ),
   ModelSelectorEmpty: () => null,
-  ModelSelectorGroup: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
+  ModelSelectorGroup: ({
+    children,
+    heading,
+  }: {
+    children: ReactNode;
+    heading?: string;
+  }) => (
+    <div data-testid="model-group" data-heading={heading}>
+      {children}
+    </div>
   ),
   ModelSelectorItem: ({ children }: { children: ReactNode }) => (
     <div data-testid="model-option">{children}</div>
@@ -229,6 +237,37 @@ describe("ModelSelector coverage matrix", () => {
 
     fireEvent.click(screen.getByTestId("dialog-toggle"));
     expect(screen.queryByTestId("dialog-content")).not.toBeInTheDocument();
+  });
+
+  it("splits Perplexity into a chat-completions section above the Agent API one", () => {
+    // One provider, two backing APIs: the picker must show which API each
+    // model speaks, with the sonar chat-completions family listed first.
+    setQuery({
+      modelsByProvider: {
+        perplexity: [
+          model({ dbId: "p1", id: "anthropic/claude-opus-5", isBest: false }),
+          model({ dbId: "p2", id: "sonar-pro", isBest: true }),
+        ],
+        openai: [model()],
+      },
+    });
+    renderSelector({ selectedModel: "p2", variant: "default" });
+
+    fireEvent.click(screen.getByTestId("dialog-toggle"));
+    const headings = screen
+      .getAllByTestId("model-group")
+      .map((group) => group.getAttribute("data-heading"))
+      .filter((heading) => heading?.includes("Perplexity"));
+    expect(headings).toEqual([
+      "Perplexity AI — Chat Completions",
+      "Perplexity AI — Agent API",
+    ]);
+    // The plain-provider group is untouched by the sectioning.
+    expect(
+      screen
+        .getAllByTestId("model-group")
+        .some((group) => group.getAttribute("data-heading") === "OpenAI"),
+    ).toBe(true);
   });
 
   it("keeps the pinned model and shows the fallback name when auto-select is suppressed", () => {

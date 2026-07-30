@@ -719,7 +719,8 @@ function inferModelCapabilities(params: {
  * `{ type: "function" }` declarations — is that surface's defining feature, so
  * they are recorded `true`. An explicit value rather than the accidental
  * correctness of `null` is also what a future capability lookup can override.
- * Their modalities are equally deliberate: `null` there makes the model edit
+ *
+ * Both branches record text modalities: `null` there makes the model edit
  * dialog invalid the moment it opens, with every save failing validation
  * against a message rendered off-screen (see inferOllamaCapabilities).
  *
@@ -745,6 +746,8 @@ function inferPerplexityCapabilities(
 
   return {
     ...emptyCapabilities(),
+    inputModalities: ["text"],
+    outputModalities: ["text"],
     supportsToolCalling: false,
   };
 }

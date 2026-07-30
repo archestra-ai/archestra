@@ -355,12 +355,15 @@ describe("ModelSyncService", () => {
     // One provider, two surfaces: the bare `sonar*` chat-completions ids stay
     // tool-less while the vendor-prefixed Agent API ids take tools, so the
     // vendor prefix is what must decide.
-    expect(
-      resolveModelCapabilities({
-        provider: "perplexity",
-        modelId: "sonar",
-      }).supportsToolCalling,
-    ).toBe(false);
+    const sonar = resolveModelCapabilities({
+      provider: "perplexity",
+      modelId: "sonar",
+    });
+    expect(sonar.supportsToolCalling).toBe(false);
+    // Text modalities are recorded on this branch too — see the agent-model
+    // test above for what null modalities break.
+    expect(sonar.inputModalities).toEqual(["text"]);
+    expect(sonar.outputModalities).toEqual(["text"]);
     expect(
       resolveModelCapabilities({
         provider: "perplexity",

@@ -1,6 +1,7 @@
 import {
   MODELS_DEV_PROVIDER_MAP,
   OPENROUTER_FREE_MODEL_ID,
+  requiresPerplexityAgentApi,
   SUPPORTED_EMBEDDING_DIMENSIONS,
   type SupportedEmbeddingDimension,
   type SupportedProvider,
@@ -693,7 +694,59 @@ function inferModelCapabilities(params: {
     return inferOllamaCapabilities(fetched);
   }
 
+  if (provider === "perplexity") {
+    return inferPerplexityCapabilities(modelId);
+  }
+
   return emptyCapabilities();
+}
+
+/**
+ * Perplexity capabilities are per model because the provider serves two
+ * surfaces with opposite tool behaviour, and nothing upstream states either —
+ * both catalogs are static (no /models endpoint) and models.dev declares no
+ * `tool_call` for any Perplexity entry, so every row would otherwise store
+ * `null`, which reads as "unknown, send tools anyway" everywhere downstream.
+ *
+ * For the `sonar*` chat-completions models that is not harmless: the endpoint
+ * answers `invalid request` when tools are sent (verified against sonar-pro),
+ * so the turn fails outright, and the composer's "no tools" chip stayed hidden
+ * because it only shows on an explicit `false`, leaving the agent's tools
+ * looking available while never firing. They are recorded `false`.
+ *
+ * The vendor-prefixed Agent API models (see requiresPerplexityAgentApi) are the
+ * opposite: accepting `tools` — built-in search/fetch/sandbox/MCP plus custom
+ * `{ type: "function" }` declarations — is that surface's defining feature, so
+ * they are recorded `true`. An explicit value rather than the accidental
+ * correctness of `null` is also what a future capability lookup can override.
+ * Their modalities are equally deliberate: `null` there makes the model edit
+ * dialog invalid the moment it opens, with every save failing validation
+ * against a message rendered off-screen (see inferOllamaCapabilities).
+ *
+ * Recording all of this as capabilities rather than gating in the chat route
+ * keeps the decision per model: inference sits below both the fetcher and
+ * models.dev in the resolution order, so the day an upstream source declares
+ * tool support it overrides this with no code change.
+ *
+ * @see https://docs.perplexity.ai/docs/agent-api/tools/custom-functions
+ * @see https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview
+ */
+function inferPerplexityCapabilities(
+  modelId: string,
+): ProviderModelCapabilities {
+  if (requiresPerplexityAgentApi(modelId)) {
+    return {
+      ...emptyCapabilities(),
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+    };
+  }
+
+  return {
+    ...emptyCapabilities(),
+    supportsToolCalling: false,
+  };
 }
 
 /**

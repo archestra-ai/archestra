@@ -1326,6 +1326,97 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     });
   });
 
+  // Seeds a synced Perplexity model row; the provider serves two transports
+  // discriminated by the model id's vendor prefix.
+  const makePerplexityModelRow = (perplexityModelId: string) =>
+    ModelModel.create({
+      externalId: `perplexity/${perplexityModelId}`,
+      provider: "perplexity",
+      modelId: perplexityModelId,
+      description: perplexityModelId,
+      contextLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      promptPricePerToken: null,
+      completionPricePerToken: null,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+
+  test("configures the Responses transport for a Perplexity Agent API model", async ({
+    makeConversation,
+  }) => {
+    // The Agent API stores nothing (store:false keeps the SDK from sending
+    // item references it cannot resolve), and the SDK's reasoning request
+    // path is gated on OpenAI's model-name heuristic, which no
+    // vendor-prefixed Perplexity id matches — without forceReasoning the
+    // request carries no `reasoning` block and thinking never streams.
+    const model = await makePerplexityModelRow("anthropic/claude-sonnet-5");
+    const conversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(mockStreamText.mock.calls[0]?.[0].providerOptions?.openai).toEqual({
+      store: false,
+      forceReasoning: true,
+      reasoningSummary: "auto",
+      systemMessageMode: "system",
+    });
+  });
+
+  test("keeps chat-completions Perplexity models off the Responses options", async ({
+    makeConversation,
+  }) => {
+    // A bare `sonar*` id is served over chat completions, where none of the
+    // Responses options exist — the turn must not carry the openai namespace
+    // at all.
+    const model = await makePerplexityModelRow("sonar-pro");
+    const conversation = await makeConversation(agentId, {
+      userId: user.id,
+      organizationId,
+      modelId: model.id,
+    });
+    mockStreamText.mockClear();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversation.id,
+        messages: [
+          { id: "msg-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    await executionPromise;
+
+    expect(mockStreamText).toHaveBeenCalledTimes(1);
+    expect(
+      mockStreamText.mock.calls[0]?.[0].providerOptions?.openai,
+    ).toBeUndefined();
+  });
+
   // T-959: a GitHub Copilot conversation pins a models.id UUID; the turn must
   // dereference it to the catalogued provider model name before dispatch —
   // Copilot 400s ("The requested model is not supported") on anything else.

@@ -325,7 +325,10 @@ You can get an API key from the [Mistral AI Console](https://console.mistral.ai/
 
 ### Supported Perplexity APIs
 
-- **Chat Completions API** (`/chat/completions`)
+- **Chat Completions API** (`/chat/completions`) — the `sonar` model family
+- **Agent API** (`/responses`) — vendor-prefixed models such as `anthropic/claude-opus-5` and `perplexity/glm-5.2`
+
+One API key works for both. The model you pick selects the API.
 
 ### Perplexity Connection Details
 
@@ -345,9 +348,9 @@ You can get an API key from the [Perplexity Settings](https://www.perplexity.ai/
 
 ### Important Notes
 
-- **No tool calling support**: Perplexity does NOT support external tool calling. It performs internal web searches and returns results in the response. Use Perplexity for search-augmented generation, not agentic workflows requiring custom tools.
-- **Search results**: Perplexity responses may include `search_results` and `citations` fields containing web search results used to generate the answer.
-- **Models**: Popular models include `sonar-pro`, `sonar`, and `sonar-deep-research` for different use cases.
+- **Tool calling is per model**: The `sonar` models take no external tools. They perform internal web searches and return the results. The Agent API models accept tools, so agents can run their usual workflows on them.
+- **Search results**: `sonar` responses may include `search_results` and `citations` fields containing web search results used to generate the answer.
+- **Models**: Popular models include `sonar-pro` and `sonar-deep-research` for search, and `anthropic/claude-opus-5` for tool-using agents.
 
 ## vLLM
 

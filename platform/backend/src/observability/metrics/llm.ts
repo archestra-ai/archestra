@@ -23,6 +23,7 @@ import { getUsageTokens as getGeminiUsage } from "@/routes/proxy/adapters/gemini
 import { getUsageTokens as getMinimaxUsage } from "@/routes/proxy/adapters/minimax";
 import { getUsageTokens as getOllamaNativeUsage } from "@/routes/proxy/adapters/ollama-native";
 import { getUsageTokens as getOpenAIUsage } from "@/routes/proxy/adapters/openai";
+import { getUsageTokens as getPerplexityResponsesUsage } from "@/routes/proxy/adapters/perplexity-responses";
 import { getUsageTokens as getZhipuaiUsage } from "@/routes/proxy/adapters/zhipuai";
 import type { GatewayAgent } from "@/types";
 import { getExemplarLabels, sanitizeLabelKey } from "./utils";
@@ -53,7 +54,14 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   // `rootUsageExtractors` below, which handles it before the `data.usage` guard.
   "ollama-native": null,
   mistral: getOpenAIUsage,
-  perplexity: getOpenAIUsage,
+  // The provider serves two wire shapes — chat completions for the `sonar*`
+  // models and Responses for the Agent API models — whose usage objects differ
+  // (`prompt_tokens` vs `input_tokens`), so the extractor sniffs which body
+  // arrived rather than assuming one.
+  perplexity: (usage) =>
+    "input_tokens" in usage
+      ? getPerplexityResponsesUsage(usage)
+      : getOpenAIUsage(usage),
   groq: getOpenAIUsage,
   xai: getOpenAIUsage,
   openrouter: getOpenAIUsage,

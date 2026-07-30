@@ -42070,6 +42070,203 @@ export type GetInteractionsResponses = {
             connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            executionId: string | null;
+            userId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            request: {
+                model: string;
+                input?: string | Array<{
+                    type?: string;
+                    [key: string]: unknown;
+                }>;
+                instructions?: string | null;
+                max_output_tokens?: number | null;
+                metadata?: {
+                    [key: string]: string;
+                } | null;
+                previous_response_id?: string | null;
+                stream?: boolean | null;
+                temperature?: number | null;
+                text?: unknown;
+                tool_choice?: unknown;
+                tools?: Array<{
+                    type: 'function';
+                    name: string;
+                    description?: string | null;
+                    parameters?: {
+                        [key: string]: unknown;
+                    } | null;
+                    strict?: boolean | null;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
+                }>;
+                top_p?: number | null;
+                user?: string;
+                [key: string]: unknown;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                model: string;
+                input?: string | Array<{
+                    type?: string;
+                    [key: string]: unknown;
+                }>;
+                instructions?: string | null;
+                max_output_tokens?: number | null;
+                metadata?: {
+                    [key: string]: string;
+                } | null;
+                previous_response_id?: string | null;
+                stream?: boolean | null;
+                temperature?: number | null;
+                text?: unknown;
+                tool_choice?: unknown;
+                tools?: Array<{
+                    type: 'function';
+                    name: string;
+                    description?: string | null;
+                    parameters?: {
+                        [key: string]: unknown;
+                    } | null;
+                    strict?: boolean | null;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
+                }>;
+                top_p?: number | null;
+                user?: string;
+                [key: string]: unknown;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                id: string;
+                object: 'response';
+                created_at: number;
+                model: string;
+                output: Array<{
+                    id: string;
+                    type: 'message';
+                    role: 'assistant';
+                    status: string;
+                    content: Array<{
+                        type: 'output_text';
+                        text: string;
+                        [key: string]: unknown;
+                    } | {
+                        type: 'refusal';
+                        refusal: string;
+                        [key: string]: unknown;
+                    }>;
+                    [key: string]: unknown;
+                } | {
+                    type: 'function_call';
+                    id?: string;
+                    call_id: string;
+                    name: string;
+                    arguments: string;
+                    status?: string;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
+                }>;
+                status: string;
+                /**
+                 * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+                 */
+                usage?: {
+                    input_tokens: number;
+                    output_tokens: number;
+                    total_tokens: number;
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                error: string;
+            };
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
+            type: 'perplexity:responses';
+            model: string | null;
+            baselineModel: string | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -48042,6 +48239,203 @@ export type GetInteractionResponses = {
             toolName: string;
         } | null;
         type: 'azure:responses';
+        model: string | null;
+        baselineModel: string | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        executionId: string | null;
+        userId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        request: {
+            model: string;
+            input?: string | Array<{
+                type?: string;
+                [key: string]: unknown;
+            }>;
+            instructions?: string | null;
+            max_output_tokens?: number | null;
+            metadata?: {
+                [key: string]: string;
+            } | null;
+            previous_response_id?: string | null;
+            stream?: boolean | null;
+            temperature?: number | null;
+            text?: unknown;
+            tool_choice?: unknown;
+            tools?: Array<{
+                type: 'function';
+                name: string;
+                description?: string | null;
+                parameters?: {
+                    [key: string]: unknown;
+                } | null;
+                strict?: boolean | null;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            top_p?: number | null;
+            user?: string;
+            [key: string]: unknown;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            model: string;
+            input?: string | Array<{
+                type?: string;
+                [key: string]: unknown;
+            }>;
+            instructions?: string | null;
+            max_output_tokens?: number | null;
+            metadata?: {
+                [key: string]: string;
+            } | null;
+            previous_response_id?: string | null;
+            stream?: boolean | null;
+            temperature?: number | null;
+            text?: unknown;
+            tool_choice?: unknown;
+            tools?: Array<{
+                type: 'function';
+                name: string;
+                description?: string | null;
+                parameters?: {
+                    [key: string]: unknown;
+                } | null;
+                strict?: boolean | null;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            top_p?: number | null;
+            user?: string;
+            [key: string]: unknown;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            id: string;
+            object: 'response';
+            created_at: number;
+            model: string;
+            output: Array<{
+                id: string;
+                type: 'message';
+                role: 'assistant';
+                status: string;
+                content: Array<{
+                    type: 'output_text';
+                    text: string;
+                    [key: string]: unknown;
+                } | {
+                    type: 'refusal';
+                    refusal: string;
+                    [key: string]: unknown;
+                }>;
+                [key: string]: unknown;
+            } | {
+                type: 'function_call';
+                id?: string;
+                call_id: string;
+                name: string;
+                arguments: string;
+                status?: string;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            status: string;
+            /**
+             * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+             */
+            usage?: {
+                input_tokens: number;
+                output_tokens: number;
+                total_tokens: number;
+                [key: string]: unknown;
+            };
+            [key: string]: unknown;
+        } | {
+            error: string;
+        };
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
+        type: 'perplexity:responses';
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
@@ -70380,6 +70774,346 @@ export type PerplexityChatCompletionsWithAgentResponses = {
 };
 
 export type PerplexityChatCompletionsWithAgentResponse = PerplexityChatCompletionsWithAgentResponses[keyof PerplexityChatCompletionsWithAgentResponses];
+
+export type PerplexityResponsesWithDefaultAgentData = {
+    /**
+     * https://developers.openai.com/api/reference/resources/responses/methods/create
+     */
+    body: {
+        model: string;
+        input?: string | Array<{
+            type?: string;
+            [key: string]: unknown;
+        }>;
+        instructions?: string | null;
+        max_output_tokens?: number | null;
+        metadata?: {
+            [key: string]: string;
+        } | null;
+        previous_response_id?: string | null;
+        stream?: boolean | null;
+        temperature?: number | null;
+        text?: unknown;
+        tool_choice?: unknown;
+        tools?: Array<{
+            type: 'function';
+            name: string;
+            description?: string | null;
+            parameters?: {
+                [key: string]: unknown;
+            } | null;
+            strict?: boolean | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        top_p?: number | null;
+        user?: string;
+        [key: string]: unknown;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for the Perplexity Agent API
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/perplexity/responses';
+};
+
+export type PerplexityResponsesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PerplexityResponsesWithDefaultAgentError = PerplexityResponsesWithDefaultAgentErrors[keyof PerplexityResponsesWithDefaultAgentErrors];
+
+export type PerplexityResponsesWithDefaultAgentResponses = {
+    /**
+     * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
+     */
+    200: {
+        id: string;
+        object: 'response';
+        created_at: number;
+        model: string;
+        output: Array<{
+            id: string;
+            type: 'message';
+            role: 'assistant';
+            status: string;
+            content: Array<{
+                type: 'output_text';
+                text: string;
+                [key: string]: unknown;
+            } | {
+                type: 'refusal';
+                refusal: string;
+                [key: string]: unknown;
+            }>;
+            [key: string]: unknown;
+        } | {
+            type: 'function_call';
+            id?: string;
+            call_id: string;
+            name: string;
+            arguments: string;
+            status?: string;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        status: string;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+         */
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type PerplexityResponsesWithDefaultAgentResponse = PerplexityResponsesWithDefaultAgentResponses[keyof PerplexityResponsesWithDefaultAgentResponses];
+
+export type PerplexityResponsesWithAgentData = {
+    /**
+     * https://developers.openai.com/api/reference/resources/responses/methods/create
+     */
+    body: {
+        model: string;
+        input?: string | Array<{
+            type?: string;
+            [key: string]: unknown;
+        }>;
+        instructions?: string | null;
+        max_output_tokens?: number | null;
+        metadata?: {
+            [key: string]: string;
+        } | null;
+        previous_response_id?: string | null;
+        stream?: boolean | null;
+        temperature?: number | null;
+        text?: unknown;
+        tool_choice?: unknown;
+        tools?: Array<{
+            type: 'function';
+            name: string;
+            description?: string | null;
+            parameters?: {
+                [key: string]: unknown;
+            } | null;
+            strict?: boolean | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        top_p?: number | null;
+        user?: string;
+        [key: string]: unknown;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for the Perplexity Agent API
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/perplexity/{agentId}/responses';
+};
+
+export type PerplexityResponsesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PerplexityResponsesWithAgentError = PerplexityResponsesWithAgentErrors[keyof PerplexityResponsesWithAgentErrors];
+
+export type PerplexityResponsesWithAgentResponses = {
+    /**
+     * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
+     */
+    200: {
+        id: string;
+        object: 'response';
+        created_at: number;
+        model: string;
+        output: Array<{
+            id: string;
+            type: 'message';
+            role: 'assistant';
+            status: string;
+            content: Array<{
+                type: 'output_text';
+                text: string;
+                [key: string]: unknown;
+            } | {
+                type: 'refusal';
+                refusal: string;
+                [key: string]: unknown;
+            }>;
+            [key: string]: unknown;
+        } | {
+            type: 'function_call';
+            id?: string;
+            call_id: string;
+            name: string;
+            arguments: string;
+            status?: string;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        status: string;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+         */
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type PerplexityResponsesWithAgentResponse = PerplexityResponsesWithAgentResponses[keyof PerplexityResponsesWithAgentResponses];
 
 export type GetProjectsData = {
     body?: never;

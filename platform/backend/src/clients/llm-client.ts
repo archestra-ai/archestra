@@ -15,8 +15,10 @@ import {
   EXTERNAL_AGENT_ID_HEADER,
   isProviderApiKeyOptional,
   PROVIDER_BASE_URL_HEADER,
+  perplexityAgentApiBaseUrl,
   providerRequiresPerUserCredential,
   requiresOpenAiResponsesApi,
+  requiresPerplexityAgentApi,
   SESSION_ID_HEADER,
   SOURCE_HEADER,
   type SupportedProvider,
@@ -144,6 +146,7 @@ export function createDirectLLMModel({
     // Direct OpenRouter models bypass the proxy adapter, so heal the request
     // body here; the wrapper no-ops for non-healable requests.
     fetch: provider === "openrouter" ? createResponseHealingFetch() : undefined,
+    direct: true,
   });
 }
 
@@ -397,6 +400,13 @@ type ProviderModelConfig = {
     baseURL: string | undefined;
     headers?: Record<string, string>;
     fetch?: typeof globalThis.fetch;
+    /**
+     * True when baseURL is the provider's own host (createDirectLLMModel)
+     * rather than the Archestra LLM proxy. Providers whose surfaces sit at
+     * different roots on their host need this to pick the right path — the
+     * proxy flattens both onto the agent-id prefix, the host does not.
+     */
+    direct?: boolean;
   }) => LLMModel;
   /** Default base URL for direct calls (falls back to provider's built-in default when undefined) */
   defaultBaseUrl: string | undefined;
@@ -579,22 +589,39 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
   },
 
   perplexity: {
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch }) =>
-      // Perplexity reasoning models (sonar-reasoning-pro, sonar-deep-research)
-      // stream their chain of thought as inline <think>…</think> text in
-      // `content` — there is no reasoning_content field — so no provider
-      // parser can surface it. The middleware extracts the tags into native
-      // reasoning parts; tagless responses (sonar, sonar-pro) pass through
-      // unchanged, at the accepted cost that literal <think> text in a real
-      // answer is also treated as reasoning. Reasoning parts are dropped from
-      // outgoing messages by the strict openai converter, which is correct
-      // here: Perplexity does not accept reasoning back.
-      wrapLanguageModel({
-        model: createOpenAI({ apiKey, baseURL, headers, fetch }).chat(
-          modelName,
-        ),
-        middleware: extractReasoningMiddleware({ tagName: "think" }),
-      }),
+    // One provider, two transports, discriminated per model: the
+    // vendor-prefixed catalog is served by the Agent API — OpenAI-Responses-
+    // compatible, so the stock Responses transport reaches it unmodified —
+    // while the bare `sonar*` models speak chat completions. On the provider's
+    // own host the Agent API is rooted at `/v1` while chat completions sit at
+    // the bare host, so direct calls append it; through the LLM proxy both
+    // surfaces hang off the agent-id prefix and the SDK's own
+    // `/responses` / `/chat/completions` suffix is the whole path.
+    createModel: ({ apiKey, modelName, baseURL, headers, fetch, direct }) =>
+      requiresPerplexityAgentApi(modelName)
+        ? createOpenAI({
+            apiKey,
+            baseURL: direct ? perplexityAgentApiBaseUrl(baseURL) : baseURL,
+            headers,
+            fetch,
+          }).responses(modelName)
+        : // Perplexity reasoning models (sonar-reasoning-pro, sonar-deep-research)
+          // stream their chain of thought as inline <think>…</think> text in
+          // `content` — there is no reasoning_content field — so no provider
+          // parser can surface it. The middleware extracts the tags into native
+          // reasoning parts; tagless responses (sonar, sonar-pro) pass through
+          // unchanged, at the accepted cost that literal <think> text in a real
+          // answer is also treated as reasoning. Reasoning parts are dropped from
+          // outgoing messages by the strict openai converter, which is correct
+          // here: Perplexity does not accept reasoning back. The Agent API branch
+          // above needs none of this — that surface has no inline <think>
+          // convention.
+          wrapLanguageModel({
+            model: createOpenAI({ apiKey, baseURL, headers, fetch }).chat(
+              modelName,
+            ),
+            middleware: extractReasoningMiddleware({ tagName: "think" }),
+          }),
     defaultBaseUrl: config.llm.perplexity.baseUrl,
     apiKeyRequiredMessage:
       "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",

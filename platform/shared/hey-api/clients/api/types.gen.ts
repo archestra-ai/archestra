@@ -11799,6 +11799,10 @@ export type GetV2A2aByAgentIdWellKnownAgentCardJsonResponses = {
         description: string;
         version: string;
         documentationUrl?: string;
+        provider: {
+            url: string;
+            organization: string;
+        };
         supportedInterfaces: Array<{
             url: string;
             protocolBinding: string;

@@ -39329,6 +39329,22 @@
                     "documentationUrl": {
                       "type": "string"
                     },
+                    "provider": {
+                      "type": "object",
+                      "properties": {
+                        "url": {
+                          "type": "string"
+                        },
+                        "organization": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "url",
+                        "organization"
+                      ],
+                      "additionalProperties": false
+                    },
                     "supportedInterfaces": {
                       "type": "array",
                       "items": {
@@ -39475,6 +39491,7 @@
                     "name",
                     "description",
                     "version",
+                    "provider",
                     "supportedInterfaces",
                     "capabilities",
                     "securitySchemes",

@@ -71,6 +71,10 @@ const A2AAgentCardSchema = z.object({
   description: z.string(),
   version: z.string(),
   documentationUrl: z.string().optional(),
+  provider: z.object({
+    url: z.string(),
+    organization: z.string(),
+  }),
   supportedInterfaces: z.array(A2AAgentCardSupportedInterfaceSchema),
   capabilities: z.object({
     streaming: z.boolean(),
@@ -211,6 +215,14 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // one thing that does.
         version: buildCardVersion(agent.updatedAt),
         documentationUrl: getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a),
+        // Who runs this agent. `url` is the deployment itself rather than the
+        // vendor documentation already carried by `documentationUrl` — for a
+        // self-hosted install that is the part which actually identifies the
+        // provider.
+        provider: {
+          url: baseUrl,
+          organization: archestraMcpBranding.appName,
+        },
         supportedInterfaces: [
           {
             url: `${baseUrl}${endpoint}/${agent.id}`,

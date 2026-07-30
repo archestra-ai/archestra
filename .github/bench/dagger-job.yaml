@@ -68,7 +68,7 @@ spec:
   terminationGracePeriodSeconds: 30
   containers:
     - name: dagger-engine
-      image: registry.dagger.io/engine:v0.21.5@sha256:3dd06d85a150defe5299bf7a4ca000c8cb2bfc8a4121b712aa146f0e7aeb3be1
+      image: registry.dagger.io/engine:v0.21.7@sha256:a0270a092965345d926257f867ff20f2925bb1bc3fb9c9e5a38a26703ea06a96
       command: ["/bin/sh", "-c"]
       args:
         - |

@@ -8,6 +8,11 @@ import { Globe, User, UserRound, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -108,6 +113,10 @@ export function AppSettingsForm({
   );
   const [teamIds, setTeamIds] = useState<string[]>(app.teams.map((t) => t.id));
   const [userIds, setUserIds] = useState<string[]>(app.users.map((u) => u.id));
+  const [labels, setLabels] = useState<ProfileLabel[]>(
+    app.labels.map(({ key, value }) => ({ key, value })),
+  );
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -272,6 +281,10 @@ export function AppSettingsForm({
       body.name = values.name.trim();
       body.description = values.description.trim() || null;
       body.environmentId = environmentId;
+      // Flush a label typed into the picker but not yet committed, so a save
+      // doesn't silently drop it.
+      const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+      body.labels = finalLabels.map(({ key, value }) => ({ key, value }));
       // Sent only when it actually changed, so a save that touches other fields
       // never re-sends the slug and 409s against the app's own row. Blank is
       // "leave it alone", not "clear it" — there is no way to unset a URL.
@@ -424,6 +437,12 @@ export function AppSettingsForm({
                 </p>
               ) : null}
             </div>
+
+            <ProfileLabels
+              ref={labelsRef}
+              labels={labels}
+              onLabelsChange={setLabels}
+            />
           </>
         )}
 

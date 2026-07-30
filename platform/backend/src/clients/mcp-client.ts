@@ -3473,14 +3473,29 @@ class McpClient {
     method: "tools/list" | "tools/call";
     toolName?: string;
     toolArguments?: Record<string, unknown>;
+    /**
+     * Credential resolved from the catalog's enterprise-managed config, already
+     * mapped onto the header its injection mode asks for. The inspector reaches
+     * the same upstream as a tool call, so it must present the same credential.
+     */
+    enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential;
   }): Promise<unknown> {
-    const { catalogItem, mcpServerId, secrets, method } = params;
+    const {
+      catalogItem,
+      mcpServerId,
+      secrets,
+      method,
+      enterpriseTransportCredential,
+    } = params;
 
     const transport = await this.getTransport(
       catalogItem,
       mcpServerId,
       secrets,
       undefined,
+      undefined,
+      undefined,
+      enterpriseTransportCredential,
     );
 
     const client = new Client(buildMcpClientInfo("archestra-inspector"), {

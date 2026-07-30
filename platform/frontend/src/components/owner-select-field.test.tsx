@@ -2,10 +2,11 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const useMembersPaginated = vi.fn();
+const onSearchQueryChange = vi.fn();
+const useMemberSearch = vi.fn();
 
 // Stable reference, like the real TanStack Query session, so the component's
-// accumulator effect doesn't re-run every render.
+// memoised option list doesn't rebuild every render.
 const mockSession = {
   data: { user: { id: "u-self", email: "self@example.com" } },
 };
@@ -15,11 +16,7 @@ vi.mock("@/lib/auth/auth.query");
 import { useSession } from "@/lib/auth/auth.query";
 
 vi.mock("@/lib/member.query", () => ({
-  useMembersPaginated: (...args: unknown[]) => useMembersPaginated(...args),
-}));
-
-vi.mock("@/lib/hooks/use-debounced-value", () => ({
-  useDebouncedValue: (value: unknown) => value,
+  useMemberSearch: (...args: unknown[]) => useMemberSearch(...args),
 }));
 
 import { OwnerSelectField, shouldShowOwnerField } from "./owner-select-field";
@@ -44,10 +41,13 @@ describe("OwnerSelectField", () => {
     vi.mocked(useSession).mockReturnValue(
       mockSession as unknown as ReturnType<typeof useSession>,
     );
-    useMembersPaginated.mockReset();
-    useMembersPaginated.mockReturnValue({
-      data: { data: MEMBERS },
-      isFetching: false,
+    useMemberSearch.mockReset();
+    onSearchQueryChange.mockReset();
+    useMemberSearch.mockReturnValue({
+      users: MEMBERS,
+      isSearching: false,
+      onSearchQueryChange,
+      emptyMessage: "No matching users found.",
     });
   });
 
@@ -125,7 +125,7 @@ describe("OwnerSelectField", () => {
     expect(onChange).toHaveBeenCalledWith("");
   });
 
-  it("drives a server-side member query as the user types", async () => {
+  it("drives a server-side member search as the user types", async () => {
     const user = userEvent.setup();
     render(<OwnerSelectField value="" onChange={vi.fn()} />);
 
@@ -135,8 +135,14 @@ describe("OwnerSelectField", () => {
       "bob",
     );
 
-    expect(useMembersPaginated).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "bob" }),
+    expect(onSearchQueryChange).toHaveBeenCalledWith("bob");
+  });
+
+  it("keeps the selected owner searchable so their name still renders", () => {
+    render(<OwnerSelectField value="u-b" onChange={vi.fn()} />);
+
+    expect(useMemberSearch).toHaveBeenCalledWith(
+      expect.objectContaining({ selectedUserIds: ["u-b"] }),
     );
   });
 });

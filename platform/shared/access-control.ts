@@ -1691,6 +1691,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.AssignToolToApp]: { app: ["update"] },
   [RouteId.UnassignToolFromApp]: { app: ["update"] },
   [RouteId.GetAppTemplates]: { app: ["read"] },
+  [RouteId.GetAppLabelKeys]: { app: ["read"] },
+  [RouteId.GetAppLabelValues]: { app: ["read"] },
   // Opens an app in chat: reads the app and creates a seeded conversation.
   [RouteId.OpenAppInChat]: { app: ["read"], chat: ["create"] },
   [RouteId.OpenExternalAppInChat]: { app: ["read"], chat: ["create"] },

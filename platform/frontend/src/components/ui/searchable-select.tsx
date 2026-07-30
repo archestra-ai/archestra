@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { matchesSearchTokens } from "@/lib/search-tokens";
 import { cn } from "@/lib/utils";
 
 interface SearchableSelectItem {
@@ -75,11 +76,11 @@ export function SearchableSelect({
   const filteredItems = React.useMemo(() => {
     if (!searchQuery) return items;
 
-    const query = searchQuery.toLowerCase();
-    return items.filter(
-      (item) =>
-        (item.searchText ?? item.label).toLowerCase().includes(query) ||
-        item.description?.toLowerCase().includes(query),
+    return items.filter((item) =>
+      matchesSearchTokens(searchQuery, [
+        item.searchText ?? item.label,
+        item.description,
+      ]),
     );
   }, [items, searchQuery]);
 

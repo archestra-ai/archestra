@@ -21,6 +21,7 @@ export function buildAppRenderResult(app: App): CallToolResult {
     description: app.description,
     scope: app.scope,
     latestVersion: app.latestVersion,
+    labels: app.labels.map(({ key, value }) => ({ key, value })),
   };
   return structuredSuccessResult(
     summary,

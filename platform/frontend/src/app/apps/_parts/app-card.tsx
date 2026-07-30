@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { ScopeBadge } from "@/components/scope-badge";
 import { Badge } from "@/components/ui/badge";
@@ -233,6 +234,7 @@ function OwnedAppCard({
           <CardOverflowMenu
             leading={
               <>
+                <LabelTags labels={app.labels} />
                 <ScopeBadge
                   scope={app.scope}
                   teamNames={app.teams?.map((team) => team.name)}
@@ -362,7 +364,14 @@ function ExternalAppCard({ app }: { app: ExternalApp }) {
             {app.name}
           </CardTitle>
         </div>
-        <CardOverflowMenu leading={<ScopeBadge scope={app.scope} />}>
+        <CardOverflowMenu
+          leading={
+            <>
+              <LabelTags labels={app.labels} />
+              <ScopeBadge scope={app.scope} />
+            </>
+          }
+        >
           <PinMenuItem
             pinned={!!app.pinnedAt}
             target={{

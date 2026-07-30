@@ -717,6 +717,8 @@ export const RouteId = {
   AssignToolToApp: "assignToolToApp",
   UnassignToolFromApp: "unassignToolFromApp",
   GetAppTemplates: "getAppTemplates",
+  GetAppLabelKeys: "getAppLabelKeys",
+  GetAppLabelValues: "getAppLabelValues",
   OpenAppInChat: "openAppInChat",
   OpenExternalAppInChat: "openExternalAppInChat",
   PinApp: "pinApp",

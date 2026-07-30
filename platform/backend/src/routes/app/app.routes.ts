@@ -2,6 +2,7 @@ import {
   calculatePaginationMeta,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
+  parseLabelsParam,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -15,12 +16,14 @@ import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
   AppAccessModel,
+  AppLabelModel,
   AppModel,
   AppPinModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
   AppToolModel,
   AppVersionModel,
+  McpCatalogLabelModel,
   McpServerModel,
   UserModel,
 } from "@/models";
@@ -158,6 +161,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // drops them. Used by the "Other users" / user-picker toolbar.
           authorIds: CommaSeparatedIds.optional(),
           excludeAuthorIds: CommaSeparatedIds.optional(),
+          labels: z
+            .string()
+            .optional()
+            .describe(
+              "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
+            ),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(AppListItemSchema),
@@ -236,6 +245,15 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }),
         ]);
 
+      // An external item's labels are its backing catalog's (edited in the MCP
+      // registry), so the one `?labels=` filter spans both halves of the mixed
+      // listing instead of silently dropping every external app.
+      const externalLabels =
+        await McpCatalogLabelModel.getLabelsForCatalogItems([
+          ...new Set(external.map((catalogApp) => catalogApp.catalogId)),
+        ]);
+      const labelFilter = parseLabelsParam(query.labels);
+
       // Each owned app's relationship to the caller: authored by them (owner),
       // reached through its scope (shared), or seen only via app:admin oversight
       // (admin). Drives the "Owned by <name>" badge and the "All"/owner filters.
@@ -280,10 +298,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           executionModel: "viewer-scoped" as const,
           cspOrigin: "platform-pinned" as const,
           pinnedAt: ownedPins.get(app.id) ?? null,
+          labels: app.labels,
         }))
         .filter((item) => {
           if (query.scope !== undefined && item.scope !== query.scope)
             return false;
+          if (!matchesLabelFilter(item.labels, labelFilter)) return false;
           // "All" (no scope) hides oversight-only apps; they surface under
           // Personal → Other users, exactly like the Projects list.
           if (query.scope === undefined && item.viewerRole === "admin")
@@ -329,10 +349,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 toolName: catalogApp.toolName,
               }),
             ) ?? null,
+          labels: externalLabels.get(catalogApp.catalogId) ?? [],
         }))
         .filter((item) => {
           if (query.scope !== undefined && item.scope !== query.scope)
             return false;
+          if (!matchesLabelFilter(item.labels, labelFilter)) return false;
           // The owner sub-filter targets owned personal apps; external installs
           // have no comparable author and none are oversight-only, so drop them
           // whenever an author filter is active rather than mis-attributing them.
@@ -372,6 +394,43 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Not found");
       }
       return reply.send(resolved);
+    },
+  );
+
+  fastify.get(
+    "/api/apps/labels/keys",
+    {
+      schema: {
+        operationId: RouteId.GetAppLabelKeys,
+        description: "Get all label keys used by apps",
+        tags: ["Apps"],
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ organizationId }, reply) => {
+      return reply.send(await AppLabelModel.getAllKeys(organizationId));
+    },
+  );
+
+  fastify.get(
+    "/api/apps/labels/values",
+    {
+      schema: {
+        operationId: RouteId.GetAppLabelValues,
+        description: "Get all label values used by apps",
+        tags: ["Apps"],
+        querystring: z.object({
+          key: z.string().optional().describe("Filter values by label key"),
+        }),
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ query: { key }, organizationId }, reply) => {
+      return reply.send(
+        key
+          ? await AppLabelModel.getValuesByKey({ organizationId, key })
+          : await AppLabelModel.getAllValues(organizationId),
+      );
     },
   );
 
@@ -465,6 +524,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } catch (error) {
         await AppModel.purge(created.id);
         throw error;
+      }
+      if (body.labels?.length) {
+        await AppLabelModel.syncAppLabels(created.id, body.labels);
       }
       const app = await AppModel.findById(created.id);
       if (!app) throw new ApiError(500, "App created but could not be loaded.");
@@ -848,10 +910,16 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!updated) {
         throw new ApiError(404, `No app found with id ${appId}.`);
       }
-      await syncAppBacking(updated);
-      return reply.send(
-        warnings.length > 0 ? { ...updated, warnings } : updated,
-      );
+      // Labels are replaced wholesale: omitted leaves them unchanged, `[]`
+      // clears them. Re-read so the response echoes the persisted set (with its
+      // key/value ids) rather than the pre-sync snapshot.
+      let result = updated;
+      if (body.labels !== undefined) {
+        await AppLabelModel.syncAppLabels(appId, body.labels);
+        result = (await AppModel.findById(appId)) ?? updated;
+      }
+      await syncAppBacking(result);
+      return reply.send(warnings.length > 0 ? { ...result, warnings } : result);
     },
   );
 
@@ -1307,6 +1375,21 @@ function isAssignmentError(
   result: ToolAssignmentError | "duplicate" | "updated" | null,
 ): result is ToolAssignmentError {
   return result !== null && result !== "duplicate" && result !== "updated";
+}
+
+/**
+ * Whether an item's labels satisfy a parsed `?labels=` filter: AND across keys
+ * (every key must match), OR within a key's values. A null/empty filter matches
+ * everything.
+ */
+function matchesLabelFilter(
+  labels: { key: string; value: string }[],
+  filter: Record<string, string[]> | undefined,
+): boolean {
+  if (!filter) return true;
+  return Object.entries(filter).every(([key, values]) =>
+    labels.some((label) => label.key === key && values.includes(label.value)),
+  );
 }
 
 function isCanonicalBase64(value: string): boolean {

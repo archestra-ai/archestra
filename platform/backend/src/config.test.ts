@@ -1328,14 +1328,18 @@ describe("chat active run config", () => {
     expect(cfg.chat.activeRun.pollingCompatibilityEnabled).toBe(false);
   });
 
-  test("uses short stop polling default in polling compatibility mode", async () => {
+  test("keeps one stop polling default regardless of compatibility mode", async () => {
+    // The interval no longer encodes whether notifications work. It is the
+    // fallback a stream wants when they do; the notify hub tightens its own
+    // fallback when they do not, so an operator does not tune this to match
+    // their database endpoint.
     delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS;
     process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED =
       "true";
 
     const { default: cfg } = await import("./config");
 
-    expect(cfg.chat.activeRun.stopPollIntervalMs).toBe(500);
+    expect(cfg.chat.activeRun.stopPollIntervalMs).toBe(30_000);
   });
 });
 

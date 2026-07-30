@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import {
+  createInMemoryNotifyHub,
   createPollingNotifyHub,
   type PgClient,
   PostgresNotifyHub,
@@ -26,13 +27,19 @@ class FakePgClient implements PgClient {
     this.emit("end");
   }
 
+  /** When false, published notifications are accepted but never delivered. */
+  deliversNotifications = true;
+
   async query(text: string, values?: unknown[]) {
     this.queries.push(text);
     if (values) {
-      this.notifies.push({
-        channel: String(values[0]),
-        payload: String(values[1]),
-      });
+      const channel = String(values[0]);
+      const payload = String(values[1]);
+      this.notifies.push({ channel, payload });
+      if (this.deliversNotifications) {
+        // A real server echoes to every listener on the channel, including us.
+        queueMicrotask(() => this.emit("notification", { channel, payload }));
+      }
     }
     return undefined;
   }
@@ -59,6 +66,16 @@ class FakePgClient implements PgClient {
     return this.queries
       .filter((q) => q.startsWith("LISTEN"))
       .map((q) => q.replace(/^LISTEN "?|"?$/g, ""));
+  }
+
+  /** Listened channels excluding the hub's own delivery probe. */
+  get featureChannels(): string[] {
+    return this.listenedChannels.filter((c) => c !== "archestra_notify_probe");
+  }
+
+  /** Published notifications excluding the hub's own delivery probe. */
+  get featureNotifies(): { channel: string; payload: string }[] {
+    return this.notifies.filter((n) => n.channel !== "archestra_notify_probe");
   }
 }
 
@@ -126,7 +143,7 @@ describe("PostgresNotifyHub", () => {
 
     await hub.channel("a2a_task_events").wait({ key: "k", timeoutMs: 1 });
 
-    expect(client.listenedChannels.sort()).toEqual([
+    expect(client.featureChannels.sort()).toEqual([
       "a2a_task_events",
       "chat_active_run_events",
     ]);
@@ -146,7 +163,7 @@ describe("PostgresNotifyHub", () => {
     const { hub, client } = hubWithFakeClient();
     await hub.channel("a2a_task_events").notify("task-1");
 
-    expect(client.notifies).toEqual([
+    expect(client.featureNotifies).toEqual([
       {
         channel: "a2a_task_events",
         payload: JSON.stringify({ key: "task-1" }),
@@ -197,7 +214,7 @@ describe("PostgresNotifyHub", () => {
     await hub.channel("a2a_task_events").wait({ key: "k", timeoutMs: 1 });
 
     expect(clients).toHaveLength(2);
-    expect(clients[1].listenedChannels.sort()).toEqual([
+    expect(clients[1].featureChannels.sort()).toEqual([
       "a2a_task_events",
       "chat_active_run_events",
     ]);
@@ -228,5 +245,99 @@ describe("polling notify hub", () => {
     await expect(
       channel.wait({ key: "task-1", timeoutMs: 10 }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("delivery verification", () => {
+  test("keeps the fallback tight until a notification round-trips", async () => {
+    const { hub, client } = hubWithFakeClient();
+    // A transaction pooler accepts LISTEN and then delivers nothing.
+    client.deliversNotifications = false;
+    const channel = hub.channel("a2a_task_events");
+
+    const started = Date.now();
+    // The caller asks for a lazy 30s fallback, which behind a pooler would be
+    // the only wake-up — a 30-second Stop button.
+    await channel.wait({ key: "task-1", timeoutMs: 30_000 });
+
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
+  test("probes by notifying itself on a dedicated channel", async () => {
+    const { hub, client } = hubWithFakeClient();
+    await hub.channel("a2a_task_events").wait({ key: "k", timeoutMs: 1 });
+
+    expect(client.listenedChannels).toContain("archestra_notify_probe");
+    expect(client.notifies.map((n) => n.channel)).toContain(
+      "archestra_notify_probe",
+    );
+  });
+
+  test("honors the caller's full timeout once delivery is proven", async () => {
+    const { hub, client } = hubWithFakeClient();
+    const channel = hub.channel("a2a_task_events");
+
+    // First wait triggers the probe, which the fake client echoes back.
+    await channel.wait({ key: "task-1", timeoutMs: 1 });
+    await vi.waitFor(() => expect(client.notifies.length).toBeGreaterThan(0));
+
+    // Now a long wait must not be clamped — it should still be pending well
+    // past the unverified ceiling, and only end when notified.
+    let settled = false;
+    const waiting = channel
+      .wait({ key: "task-1", timeoutMs: 30_000 })
+      .then(() => {
+        settled = true;
+      });
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    expect(settled).toBe(false);
+
+    client.deliver("a2a_task_events", "task-1");
+    await waiting;
+  });
+
+  test("the probe never delivers a key to real waiters", async () => {
+    const { hub, client } = hubWithFakeClient();
+    const channel = hub.channel("archestra_notify_probe");
+
+    let woken = false;
+    const waiting = channel
+      .wait({ key: "anything", timeoutMs: 400 })
+      .then(() => {
+        woken = true;
+      });
+    await vi.waitFor(() => expect(client.connected).toBe(true));
+    await waiting;
+
+    // It resolved on its timeout, not because a probe notification leaked into
+    // the waiter map.
+    expect(woken).toBe(true);
+  });
+});
+
+describe("in-memory notify hub", () => {
+  test("wakes a waiter without any database", async () => {
+    const hub = createInMemoryNotifyHub();
+    const channel = hub.channel("chat_active_run_events");
+
+    const waiting = channel.wait({ key: "run-1", timeoutMs: 60_000 });
+    await channel.notify("run-1");
+
+    await expect(waiting).resolves.toBeUndefined();
+  });
+
+  test("keeps keys and channels separate", async () => {
+    const hub = createInMemoryNotifyHub();
+    let otherWoken = false;
+    const other = hub
+      .channel("chat_active_run_stops")
+      .wait({ key: "run-1", timeoutMs: 150 })
+      .then(() => {
+        otherWoken = true;
+      });
+
+    await hub.channel("chat_active_run_events").notify("run-1");
+    expect(otherWoken).toBe(false);
+    await other;
   });
 });

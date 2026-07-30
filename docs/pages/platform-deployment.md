@@ -1185,22 +1185,23 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 Active chat run wake-ups use Postgres `LISTEN/NOTIFY` by default. This gives fast reconnect replay and Stop handling without waiting for the fallback poll interval. Poll intervals still exist in this mode as a safety net, so missed notifications or broken listener connections do not block progress forever.
 
-Enable polling compatibility only when your database endpoint cannot keep session-stable listener connections, such as PgBouncer transaction pooling or some managed/serverless database proxies. In that mode, active run replay and Stop handling rely on periodic database reads. Lower intervals react faster but create more reads; higher intervals reduce database load but make replay and Stop slower.
+Chat streams and A2A task streams are woken by Postgres `LISTEN/NOTIFY`, which works across replicas. You do not have to tell the platform whether your database endpoint supports it: on connect, it sends itself a notification and checks whether it arrives. Until one does, it polls more often so Stop and replay stay responsive. Streams read from the database either way, so a missed notification costs latency, never correctness.
+
+Set the variables below only to tune load or to skip the listener entirely.
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - Fallback/poll interval for replaying active chat runs after reconnect.
   - Default: `500`
   - Load model: roughly one replay-check read per reconnecting client per interval while waiting for new events
 
-- **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Interval for checking whether a running chat stream has been explicitly stopped.
-  - With Postgres `LISTEN/NOTIFY`, Stop requests normally wake streams immediately; this interval is only a safety fallback if notification wake-up is missed
-  - With polling compatibility enabled, this is the primary polling interval
-  - Default: `30000` with Postgres `LISTEN/NOTIFY`, `500` when polling compatibility is enabled
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Fallback interval for checking whether a running chat stream has been stopped.
+  - Default: `30000`
+  - Stop requests normally wake streams immediately, so this is the safety net for a missed notification. When notifications are not arriving, the platform ignores this value and checks every 500ms instead
   - Load model: roughly one stop-check read per running chat stream per interval
 
-- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Uses polling only instead of the default Postgres `LISTEN/NOTIFY` wake-ups for active chat run replay and stop detection.
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Skips the listener connection entirely and relies on polling.
   - Default: `false`
-  - Keep disabled when direct Postgres or session pooling is available
-  - This also covers A2A task streams, which use the same wake-up mechanism. The setting describes the database endpoint, not the feature
+  - You rarely need this. The platform detects an endpoint that cannot deliver notifications and adjusts on its own; set it only to avoid holding a listener connection you know will never work
+  - Also covers A2A task streams, which share the same wake-up mechanism
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL`** - Optional Postgres connection string for active chat run `LISTEN/NOTIFY`.
   - Default: Uses `ARCHESTRA_DATABASE_URL`

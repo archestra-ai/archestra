@@ -2171,13 +2171,13 @@ const config = {
         defaultValue: 500,
         envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
       }),
+      // One value, not one per mode: this is the fallback a stream wants when
+      // notifications are being delivered. When they are not, the notify hub
+      // tightens its own fallback, so nothing here has to know whether the
+      // database endpoint can hold a listener.
       stopPollIntervalMs: parseActiveChatRunPollIntervalMs({
         value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS,
-        defaultValue:
-          process.env
-            .ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED === "true"
-            ? 500
-            : 30_000,
+        defaultValue: 30_000,
         envName: "ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS",
       }),
       pollingCompatibilityEnabled:

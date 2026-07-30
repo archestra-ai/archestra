@@ -22,6 +22,7 @@ import ModelModel from "@/models/model";
 import OptimizationRuleModel from "@/models/optimization-rule";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
+import ProjectModel from "@/models/project";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
@@ -184,17 +185,17 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "chat share metadata; surfaced via /llm/logs",
   },
-  projectsTable: {
-    audited: false,
-    reason: "user's chat-project grouping; same family as conversations",
-  },
+  // Soft-deleted rather than removed, and restorable org-wide by a project
+  // admin — so delete and restore are cross-user administrative actions on
+  // someone else's data, not the personal grouping this table started as.
+  projectsTable: { audited: true, model: ProjectModel },
   projectSharesTable: {
     audited: false,
-    reason: "project share metadata; same family as conversation shares",
+    reason: "project share metadata; parent (project) audited",
   },
   projectShareTeamsTable: {
     audited: false,
-    reason: "join: project share × team",
+    reason: "join: project share × team; parent (project) audited",
   },
   projectPinsTable: {
     audited: false,

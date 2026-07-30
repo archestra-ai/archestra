@@ -22,6 +22,7 @@ import type {
   Project,
   ProjectConversationItem,
   ProjectDetail,
+  ProjectLifecycle,
   ProjectListItem,
   ProjectListScope,
   ProjectShareVisibility,
@@ -153,8 +154,20 @@ class ProjectService {
     authorIds?: string[];
     excludeAuthorIds?: string[];
     search?: string;
+    status?: ProjectLifecycle;
   }): Promise<ProjectListItem[]> {
     const { organizationId, userId, scope } = params;
+
+    // The deleted slice is a separate, project:admin-only oversight path; the
+    // active browse pipeline below (scope/author/search/team filters, the
+    // "All" branch that drops admin-oversight rows) does not apply to it.
+    if (params.status === "deleted") {
+      return this.listDeleted({
+        organizationId,
+        userId,
+        isProjectAdmin: params.isProjectAdmin,
+      });
+    }
 
     // What the caller can actually reach (owner ∪ org/team-shared-to-them): the
     // non-admin base, and how admins tell "shared" from "oversight" access.
@@ -281,6 +294,62 @@ class ProjectService {
           : null,
       pinnedAt: pins.get(project.id) ?? null,
       createdAt: project.createdAt,
+      // Active slice: soft-deleted rows are filtered out upstream, so this is
+      // always null here. Non-null rows only surface via listDeleted.
+      deletedAt: project.deletedAt,
+    }));
+  }
+
+  /**
+   * Org-wide list of soft-deleted projects for a `project:admin` — the oversight
+   * companion to {@link restore}. Non-admins get nothing. Every row is
+   * `viewerRole: "admin"` (a soft-deleted project is never in anyone's
+   * accessible set) and carries `deletedAt` for the "deleted N ago" label.
+   * `conversationCount` is typically 0: chats detached on delete.
+   */
+  private async listDeleted(params: {
+    organizationId: string;
+    userId: string;
+    isProjectAdmin?: boolean;
+  }): Promise<ProjectListItem[]> {
+    if (!params.isProjectAdmin) return [];
+    const deleted = await ProjectShareModel.listAllOrgProjects({
+      organizationId: params.organizationId,
+      lifecycle: "deleted",
+    });
+    const projectIds = deleted.map((p) => p.id);
+    const ownerIds = [...new Set(deleted.map((p) => p.userId))];
+    const [counts, pins, ownerNames, shareTeams, shareUsers] =
+      await Promise.all([
+        ProjectModel.countConversations(projectIds),
+        ProjectPinModel.getPinnedAtForProjects({
+          userId: params.userId,
+          projectIds,
+        }),
+        UserModel.getNamesByIds(ownerIds),
+        ProjectShareModel.getShareTeamsForProjects(projectIds),
+        ProjectShareModel.getShareUsersForProjects(projectIds),
+      ]);
+    return deleted.map((project) => ({
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      icon: project.icon,
+      viewerRole: "admin" as ProjectViewerRole,
+      ownerName: ownerNames.get(project.userId) ?? null,
+      conversationCount: counts.get(project.id) ?? 0,
+      visibility: project.visibility,
+      shareTeamNames:
+        project.visibility === "team"
+          ? (shareTeams.get(project.id) ?? []).map((t) => t.name)
+          : null,
+      shareUserNames:
+        project.visibility === "user"
+          ? (shareUsers.get(project.id) ?? []).map((u) => u.name)
+          : null,
+      pinnedAt: pins.get(project.id) ?? null,
+      createdAt: project.createdAt,
+      deletedAt: project.deletedAt,
     }));
   }
 
@@ -337,6 +406,7 @@ class ProjectService {
           : null,
       pinnedAt: pins.get(project.id) ?? null,
       createdAt: project.createdAt,
+      deletedAt: project.deletedAt,
     };
   }
 
@@ -466,9 +536,12 @@ class ProjectService {
   }
 
   /**
-   * Chats SET NULL and survive; the project's file rows are deleted with it (FK
-   * cascade). Externally-stored bytes (filesystem provider) live outside Postgres,
-   * so purge them first — the cascade would otherwise orphan them on disk.
+   * Soft delete via {@link ProjectModel.delete}: the project row is stamped
+   * `deleted_at` and its files + scheduled tasks are RETAINED but hidden, so a
+   * restore recovers them intact. Only chats detach (SET NULL) and survive as
+   * ordinary conversations. Nothing is purged — externally-stored bytes are
+   * kept in place (the object folder is the project's slug, which the retained
+   * row keeps), reclaimed only by a future hard-delete/purge path.
    */
   async delete(params: {
     id: string;
@@ -490,11 +563,89 @@ class ProjectService {
         "You don't have permission to delete an organization-wide project",
       );
     }
-    await fileStore.purgeProjectBytes({
-      organizationId: params.organizationId,
-      projectId: params.id,
-    });
     await ProjectModel.delete(params.id);
+  }
+
+  /**
+   * Restore a soft-deleted project — an admin-only oversight action, the inverse
+   * of {@link delete}. Its retained files and scheduled tasks come back with it;
+   * chats do NOT (they detached on delete), so a restored project reports zero
+   * chats.
+   *
+   * Admin-only by design: restore and the deleted-projects view are one
+   * `project:admin` capability. The owner branch is deliberately absent — an
+   * owner who cannot even see their deleted projects should not restore one by
+   * id. Unknown / already-active / wrong-org ids read as 404; an org-wide share
+   * needs `project:share-org` (as delete does).
+   *
+   * Deleting frees the display name (the `(user_id, name)` index is partial on
+   * `deleted_at IS NULL`), so the owner may hold an active project under that
+   * name by the time anyone restores. `name` is the way out: it renames the
+   * project on the way back, in the same transaction, so the collision is
+   * recoverable without touching whichever project took the name. Restoring
+   * into a name that is still taken — with or without `name` — is a 409 that
+   * says so.
+   */
+  async restore(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+    /** Rename on restore; the remedy when the original name was re-taken. */
+    name?: string;
+  }): Promise<ProjectDetail> {
+    if (!(await this.callerIsProjectAdmin(params))) {
+      throw new ApiError(404, "Project not found");
+    }
+    const project = await ProjectModel.findDeletedByIdForOrganization({
+      id: params.id,
+      organizationId: params.organizationId,
+    });
+    if (!project) {
+      throw new ApiError(404, "Project not found");
+    }
+    const share = await ProjectShareModel.findByProjectId(params.id);
+    if (
+      share?.visibility === "organization" &&
+      !(await this.callerCanShareOrg(params))
+    ) {
+      throw new ApiError(
+        403,
+        "You don't have permission to restore an organization-wide project",
+      );
+    }
+    let newName: string | undefined;
+    if (params.name !== undefined) {
+      newName = params.name.trim();
+      const invalid = validateProjectName(newName);
+      if (invalid) {
+        throw new ApiError(400, `project name is invalid: ${invalid}`);
+      }
+    }
+    let restored: boolean;
+    try {
+      restored = await ProjectModel.restore({
+        id: params.id,
+        organizationId: params.organizationId,
+        name: project.name,
+        newName,
+      });
+    } catch (error) {
+      if (error instanceof ProjectNameExistsError) {
+        throw new ApiError(
+          409,
+          `cannot restore: its owner already has an active project named "${newName ?? project.name}". ` +
+            "Restore it under a different name by passing `name`.",
+        );
+      }
+      throw error;
+    }
+    // Lost a race: another request restored or hard-deleted it first.
+    if (!restored) {
+      throw new ApiError(404, "Project not found");
+    }
+    // Now active again; the caller is a project:admin (checked above) but not
+    // necessarily an owner/share recipient, so read it back via admin oversight.
+    return this.get({ ...params, allowAdminOversight: true });
   }
 
   /**

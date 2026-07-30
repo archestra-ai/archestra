@@ -202,6 +202,49 @@ describe("schedule trigger routes", () => {
     expect(response.json().projectId).toBe(project.id);
   });
 
+  test("run-now and by-id reads 404 once the trigger's project is soft-deleted", async ({
+    makeInternalAgent,
+    makeScheduleTrigger,
+  }) => {
+    const agent = await makeInternalAgent({
+      organizationId,
+      authorId: adminUser.id,
+      scope: "org",
+    });
+    const project = await projectService.create({
+      organizationId,
+      userId: adminUser.id,
+      name: "doomed-scheduled",
+      description: null,
+    });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      // The actor normally always has access; the soft-deleted project overrides
+      // even that, so run-now can't execute into a hidden project.
+      actorUserId: adminUser.id,
+      agentId: agent.id,
+      projectId: project.id,
+    });
+
+    await projectService.delete({
+      id: project.id,
+      organizationId,
+      userId: adminUser.id,
+    });
+
+    const runNow = await app.inject({
+      method: "POST",
+      url: `/api/schedule-triggers/${trigger.id}/run-now`,
+    });
+    expect(runNow.statusCode).toBe(404);
+
+    const byId = await app.inject({
+      method: "GET",
+      url: `/api/schedule-triggers/${trigger.id}`,
+    });
+    expect(byId.statusCode).toBe(404);
+  });
+
   test("POST create without an agentId falls back to the org default agent", async ({
     makeInternalAgent,
   }) => {

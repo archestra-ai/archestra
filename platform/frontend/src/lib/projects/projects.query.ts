@@ -13,6 +13,7 @@ import {
   type UploadOutcome,
   validateUploadFile,
 } from "@/lib/files/file-upload";
+import { scheduleTriggerKeys } from "@/lib/schedule-trigger.query";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -320,6 +321,10 @@ export function useDeleteProject() {
       // queries (`["projects", id, …]`), which are still mounted for the instant
       // before we navigate away and would 404 on the now-gone id.
       queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
+      // The project's scheduled tasks are retained but hidden (paused) with it,
+      // so drop them from any open scheduled-tasks list. Chats detach rather
+      // than hide, so the conversations list needs no invalidation here.
+      queryClient.invalidateQueries({ queryKey: scheduleTriggerKeys.all });
     },
   });
 }

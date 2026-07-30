@@ -1,13 +1,31 @@
 import { randomUUID } from "node:crypto";
 import { urlSlugify } from "@archestra/shared";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  type SQL,
+  sql,
+} from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { restore as restoreRows, softDelete } from "@/database/soft-delete";
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
+import ProjectShareModel from "./project-share";
 
 /**
  * CRUD for `projects`. Share/visibility queries live in
- * {@link ProjectShareModel} (models/project-share.ts); the project's files
- * (`files.project_id`) are deleted with the project via the FK cascade.
+ * {@link ProjectShareModel} (models/project-share.ts).
+ *
+ * {@link ProjectModel.delete} soft-deletes: the row is stamped `deleted_at`
+ * and every read here excludes it, so the project is gone from the API. Its
+ * files and scheduled tasks are RETAINED, hidden behind {@link belongsToLiveProject}
+ * (and the transitive project resolution every file path performs), so a
+ * restore brings them back; only the chats detach. See that method.
  */
 class ProjectModel {
   static async create(project: InsertProject): Promise<Project> {
@@ -50,7 +68,7 @@ class ProjectModel {
     icon: string | null;
   }): Promise<{ project: Project; filesMoved: number }> {
     // Computed outside the tx: `generateUniqueSlug` reads the module-level `db`,
-    // and the partial unique index is the real guard against a slug race.
+    // and the unique index is the real guard against a slug race.
     const slug = await ProjectModel.generateUniqueSlug({
       name: params.name,
       organizationId: params.organizationId,
@@ -139,7 +157,9 @@ class ProjectModel {
     const [row] = await db
       .select()
       .from(schema.projectsTable)
-      .where(eq(schema.projectsTable.id, id));
+      .where(
+        and(eq(schema.projectsTable.id, id), notDeleted(schema.projectsTable)),
+      );
     return row ?? null;
   }
 
@@ -157,6 +177,7 @@ class ProjectModel {
           eq(schema.projectsTable.id, params.id),
           eq(schema.projectsTable.userId, params.userId),
           eq(schema.projectsTable.organizationId, params.organizationId),
+          notDeleted(schema.projectsTable),
         ),
       );
     return row ?? null;
@@ -179,7 +200,12 @@ class ProjectModel {
       await db
         .update(schema.projectsTable)
         .set({ ...params.fields, updatedAt: new Date() })
-        .where(eq(schema.projectsTable.id, params.id));
+        .where(
+          and(
+            eq(schema.projectsTable.id, params.id),
+            notDeleted(schema.projectsTable),
+          ),
+        );
     } catch (error) {
       if (isUniqueViolation(error) && params.fields.name !== undefined) {
         throw new ProjectNameExistsError(params.fields.name);
@@ -188,10 +214,168 @@ class ProjectModel {
     }
   }
 
+  /**
+   * Soft delete: the project row is stamped `deleted_at` (hidden from every
+   * read here, its display name freed by the partial unique index) so an
+   * operator can {@link restore} it later — bringing back the share config,
+   * pins, files, and scheduled tasks that all stay attached to the retained
+   * row.
+   *
+   * What the project OWNED is RETAINED, not removed. Its files and schedules
+   * keep pointing at the retained row and are hidden behind the live-project
+   * guard (file access resolves the project via {@link findById}, which excludes
+   * soft-deleted rows; schedules pause via {@link belongsToLiveProject}). Nothing
+   * is purged, so a restore recovers them intact.
+   *
+   * The one exception is CHATS, which DETACH (`project_id` → NULL) and survive
+   * as ordinary conversations, matching the old `ON DELETE SET NULL`. Left
+   * attached they would keep rendering the deleted project's name and icon in
+   * the sidebar (`ConversationModel.findAll` joins `projects`). Detach is
+   * one-way: a restore does not re-adopt them, so a restored project reports
+   * zero chats. Done in one transaction with the soft-delete so the two never
+   * diverge.
+   */
   static async delete(id: string): Promise<void> {
-    await db
-      .delete(schema.projectsTable)
-      .where(eq(schema.projectsTable.id, id));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(schema.conversationsTable)
+        .set({ projectId: null })
+        .where(eq(schema.conversationsTable.projectId, id));
+      await softDelete(
+        tx,
+        schema.projectsTable,
+        eq(schema.projectsTable.id, id),
+      );
+    });
+  }
+
+  /**
+   * Restore a soft-deleted project: clears `deleted_at` so the row (and its
+   * retained files and schedules) is visible again. Org-scoped so an admin can
+   * never restore across tenants. Returns false if no soft-deleted row with
+   * that id exists in the org (already active, wrong org, or absent).
+   *
+   * Three things ride the same transaction:
+   *   - The optional rename. The `(user_id, name)` index is partial on
+   *     `deleted_at IS NULL`, so while the row is deleted it holds NO entry in
+   *     that index and `newName` cannot collide — which is exactly why the
+   *     rename must land BEFORE `deleted_at` is cleared. It is the caller's
+   *     remedy when the display name was re-taken during the deleted window.
+   *   - The name-collision guard. Clearing `deleted_at` re-enters the row into
+   *     that index under its effective name, so the UPDATE itself can raise a
+   *     unique violation — mapped to {@link ProjectNameExistsError} here,
+   *     inside the tx, which is TOCTOU-safe where a pre-check `SELECT` would
+   *     not be.
+   *   - The forward-only schedule bump. While deleted, each trigger's
+   *     `last_executed_at` froze, so `nextRun()` would resolve to a slot that
+   *     passed during the deleted window and fire once on restore. Bumping every
+   *     restored trigger's baseline to `now` lands the next run in the future —
+   *     no catch-up burst.
+   *
+   * The slug is deliberately untouched by `newName`, matching {@link update}:
+   * a rename never re-slugs, so the restored project keeps its own folder.
+   */
+  static async restore(params: {
+    id: string;
+    organizationId: string;
+    /** The retained row's name, only for the {@link ProjectNameExistsError}. */
+    name: string;
+    /** Rename on the way back, to clear a name taken while it was deleted. */
+    newName?: string;
+  }): Promise<boolean> {
+    try {
+      return await db.transaction(async (tx) => {
+        if (params.newName !== undefined) {
+          await tx
+            .update(schema.projectsTable)
+            .set({ name: params.newName, updatedAt: new Date() })
+            .where(
+              and(
+                eq(schema.projectsTable.id, params.id),
+                eq(schema.projectsTable.organizationId, params.organizationId),
+                isNotNull(schema.projectsTable.deletedAt),
+              ),
+            );
+        }
+        const count = await restoreRows(
+          tx,
+          schema.projectsTable,
+          and(
+            eq(schema.projectsTable.id, params.id),
+            eq(schema.projectsTable.organizationId, params.organizationId),
+          ),
+        );
+        if (count === 0) return false;
+        await tx
+          .update(schema.scheduleTriggersTable)
+          .set({ lastExecutedAt: new Date() })
+          .where(eq(schema.scheduleTriggersTable.projectId, params.id));
+        return true;
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ProjectNameExistsError(params.newName ?? params.name);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch a SOFT-DELETED project by id, scoped to its org. The oversight/restore
+   * counterpart to {@link findById} (which excludes soft-deleted rows). Always
+   * org-scoped — never accept an id alone, or an admin could reach another
+   * tenant's deleted project.
+   */
+  static async findDeletedByIdForOrganization(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<Project | null> {
+    const [row] = await db
+      .select()
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.id, params.id),
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          isNotNull(schema.projectsTable.deletedAt),
+        ),
+      );
+    return row ?? null;
+  }
+
+  /**
+   * Audit snapshot: the project row plus its share configuration, org-scoped.
+   *
+   * Deliberately NOT filtered by `deleted_at` — delete and restore are the two
+   * lifecycle events that most need an audit trail, and both would diff against
+   * an empty snapshot on one side if soft-deleted rows were excluded. The share
+   * config rides along so a visibility change (which writes `project_shares`,
+   * not `projects`) still produces a non-empty diff; its id lists are sorted so
+   * an unchanged audience never reads as a change.
+   */
+  static async findByIdForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select()
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.id, id),
+          eq(schema.projectsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    if (!row) return null;
+
+    const share = await ProjectShareModel.findByProjectId(id);
+    return {
+      ...row,
+      visibility: share?.visibility ?? null,
+      shareTeamIds: [...(share?.teamIds ?? [])].sort(),
+      shareUserIds: [...(share?.userIds ?? [])].sort(),
+    };
   }
 
   /** Conversation counts for a set of projects, in one grouped query. */
@@ -292,6 +476,9 @@ class ProjectModel {
    * A URL-safe slug for the project's filesystem folder, unique within the org.
    * Derived from the name; on a base-slug collision a short random suffix keeps
    * it distinct (the unique index is the final guard against a create race).
+   * Soft-deleted rows deliberately count as collisions: the retained row keeps
+   * its slug so a `restore()` lands on the same folder, which means a recreated
+   * same-named project must get a fresh folder of its own.
    */
   private static async generateUniqueSlug(params: {
     name: string;
@@ -313,6 +500,24 @@ class ProjectModel {
 }
 
 export default ProjectModel;
+
+/**
+ * SQL predicate for tables with a `project_id` FK: the row is project-less, or
+ * its project is live (not soft-deleted). The single guard that pauses/hides
+ * what a soft-deleted project owns while the rows stay attached for a restore.
+ * Push it into the SQL `WHERE` (never a post-fetch JS filter), so retained rows
+ * are excluded at the database and never accumulate in an in-process scan.
+ */
+export function belongsToLiveProject(projectIdColumn: AnyPgColumn): SQL {
+  return sql`(
+    ${projectIdColumn} IS NULL
+    OR EXISTS (
+      SELECT 1 FROM ${schema.projectsTable}
+      WHERE ${schema.projectsTable.id} = ${projectIdColumn}
+        AND ${schema.projectsTable.deletedAt} IS NULL
+    )
+  )`;
+}
 
 /** The user already has a project with this name. */
 export class ProjectNameExistsError extends Error {

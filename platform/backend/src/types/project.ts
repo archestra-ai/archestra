@@ -37,6 +37,14 @@ export type ProjectViewerRole = z.infer<typeof ProjectViewerRoleSchema>;
 export const ProjectListScopeSchema = z.enum(["personal", "team", "org"]);
 export type ProjectListScope = z.infer<typeof ProjectListScopeSchema>;
 
+/**
+ * Which lifecycle slice `GET /api/projects` returns: `active` (default) hides
+ * soft-deleted projects; `deleted` returns ONLY them — a project:admin-only,
+ * org-wide oversight view backing the restore flow.
+ */
+export const ProjectLifecycleSchema = z.enum(["active", "deleted"]);
+export type ProjectLifecycle = z.infer<typeof ProjectLifecycleSchema>;
+
 export const SelectProjectSchema = createSelectSchema(schema.projectsTable);
 export const InsertProjectSchema = createInsertSchema(
   schema.projectsTable,
@@ -46,6 +54,8 @@ export const InsertProjectSchema = createInsertSchema(
   slug: true,
   createdAt: true,
   updatedAt: true,
+  // soft-delete is ProjectModel.delete's business, never an insert payload.
+  deletedAt: true,
 });
 export type Project = z.infer<typeof SelectProjectSchema>;
 export type InsertProject = z.infer<typeof InsertProjectSchema>;
@@ -88,6 +98,12 @@ export const ProjectListItemSchema = z.object({
   /** When the requesting user pinned this project; null = not pinned. */
   pinnedAt: z.date().nullable(),
   createdAt: z.date(),
+  /**
+   * When this project was soft-deleted; null for an active project. Non-null
+   * only in the project:admin deleted-projects view (`GET /api/projects?status=
+   * deleted`), where it drives the "deleted N ago" label.
+   */
+  deletedAt: z.date().nullable(),
 });
 export type ProjectListItem = z.infer<typeof ProjectListItemSchema>;
 

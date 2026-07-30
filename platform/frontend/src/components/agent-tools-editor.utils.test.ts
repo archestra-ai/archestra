@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeMcpEnvConflicts,
   computeSharedPersonalPins,
+  filterDefaultArchestraToolIds,
   getCatalogAssignmentGate,
   getDefaultArchestraToolIds,
   isCatalogInAppEnvironment,
@@ -162,6 +163,60 @@ function makeCatalog(id: string, name: string) {
 function makeTool(id: string, name: string) {
   return { id, name };
 }
+
+describe("filterDefaultArchestraToolIds", () => {
+  const defaultTools = DEFAULT_ARCHESTRA_TOOL_NAMES.map((name, i) =>
+    makeTool(`tool-${i}`, name),
+  );
+
+  it("returns only the default-short-named tool IDs from a mixed list", () => {
+    const tools = [...defaultTools, makeTool("extra", "archestra__some_tool")];
+
+    const result = filterDefaultArchestraToolIds(tools);
+
+    expect(result).toEqual(new Set(defaultTools.map((t) => t.id)));
+    expect(result.has("extra")).toBe(false);
+  });
+
+  // The child pill's selectDefaults backstop keys off an EMPTY set (not null)
+  // to decide whether to fall back to all tools, so this contract matters.
+  it("returns an empty set when nothing matches", () => {
+    const tools = [
+      makeTool("a", "archestra__unrelated_tool"),
+      makeTool("b", "archestra__another_tool"),
+    ];
+
+    expect(filterDefaultArchestraToolIds(tools)).toEqual(new Set());
+  });
+
+  it("returns an empty set for an empty tool list", () => {
+    expect(filterDefaultArchestraToolIds([])).toEqual(new Set());
+  });
+
+  it("composes the set from the feature flags", () => {
+    const groupShortNames = [
+      ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+    ];
+    const tools = groupShortNames.map((shortName) =>
+      makeTool(`tool-${shortName}`, `archestra__${shortName}`),
+    );
+    const flags = { skillsEnabled: true, sandboxEnabled: true };
+
+    const result = filterDefaultArchestraToolIds(tools, flags);
+
+    expect(result).toEqual(
+      new Set(
+        getCreationDefaultArchestraToolShortNames(flags).map(
+          (shortName) => `tool-${shortName}`,
+        ),
+      ),
+    );
+  });
+});
 
 describe("getDefaultArchestraToolIds", () => {
   const defaultTools = DEFAULT_ARCHESTRA_TOOL_NAMES.map((name, i) =>

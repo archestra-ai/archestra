@@ -282,8 +282,8 @@ describe("ModelSelector coverage matrix", () => {
         .some((group) => group.getAttribute("data-heading") === "OpenAI"),
     ).toBe(true);
     // A recorded supportsToolCalling: false is known data — the row carries
-    // the explicit "no tools" marker, not the unknown-capabilities badge.
-    expect(screen.getByText("no tools")).toBeInTheDocument();
+    // the explicit tool-less marker, not the unknown-capabilities badge.
+    expect(screen.getByText("Tool calling not supported")).toBeInTheDocument();
   });
 
   it("keeps the pinned model and shows the fallback name when auto-select is suppressed", () => {

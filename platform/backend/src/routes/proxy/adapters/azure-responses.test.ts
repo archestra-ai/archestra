@@ -105,6 +105,7 @@ describe("azureResponsesAdapterFactory", () => {
       {
         id: "call_123",
         name: "read_file",
+        arguments: { file_path: "/tmp/test" },
         content: '{"value":1}',
         isError: false,
       },

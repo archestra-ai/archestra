@@ -33,7 +33,10 @@ import {
   executeArchestraTool,
 } from "@/archestra-mcp-server";
 import { resolveDynamicTool } from "@/archestra-mcp-server/dynamic-tools";
-import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
+import {
+  resolveRunToolDispatch,
+  resolveRunToolTarget,
+} from "@/archestra-mcp-server/run-tool-target";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
@@ -297,6 +300,26 @@ export function buildMcpGatewayTool(params: {
                 userId: ctx.userId,
               }),
             });
+
+            // A run_tool dispatch result is the target tool's output, so its
+            // trusted-data boundary must be evaluated exactly like the direct
+            // path (executeMcpTool) does — otherwise a "sensitive" result
+            // policy never flips the session (and the divider never shows)
+            // under progressive tool loading. Built-in targets auto-trust
+            // inside the evaluation, so only real external data attaches one.
+            const dispatch = resolveRunToolDispatch(
+              mcpTool.name,
+              toolArguments,
+            );
+            if (dispatch.kind === "target") {
+              toolResult = await attachDispatchUnsafeContextBoundary({
+                toolResult,
+                toolCallId: options.toolCallId,
+                targetToolName: dispatch.toolName,
+                agentId: ctx.agentId,
+                considerContextUntrusted: ctx.considerContextUntrusted,
+              });
+            }
           } else {
             // Execute non-Archestra tools via shared helper with browser sync
             toolResult = await executeMcpTool({
@@ -1474,10 +1497,49 @@ function toolProvidesUiResource(tool: CatalogTool): boolean {
   return metaProvidesUiResource(meta);
 }
 
+/**
+ * Evaluate and attach the unsafe-context boundary for a `run_tool` dispatch
+ * result, against the dispatched *target* tool. Mirrors what the direct path
+ * (executeMcpTool) does for ordinary tool calls: the boundary lands both
+ * top-level on the result (the chat stream/persisted part the divider reads)
+ * and inside `_meta`. A result that stays trusted is returned unchanged.
+ */
+async function attachDispatchUnsafeContextBoundary(params: {
+  toolResult: string | { content: string; [key: string]: unknown };
+  toolCallId: string;
+  targetToolName: string;
+  agentId: string;
+  considerContextUntrusted: boolean;
+}): Promise<string | { content: string; [key: string]: unknown }> {
+  const result =
+    typeof params.toolResult === "string"
+      ? { content: params.toolResult }
+      : params.toolResult;
+
+  const boundaryResult = await buildUnsafeContextBoundaryResult({
+    resultMeta: result._meta as Record<string, unknown> | undefined,
+    toolCallId: params.toolCallId,
+    toolName: params.targetToolName,
+    isRunToolDispatchTarget: true,
+    toolOutput:
+      (result.structuredContent as Record<string, unknown> | undefined) ??
+      result.content,
+    agentId: params.agentId,
+    considerContextUntrusted: params.considerContextUntrusted,
+  });
+
+  if (!boundaryResult.unsafeContextBoundary) {
+    return params.toolResult;
+  }
+  return { ...result, ...boundaryResult };
+}
+
 async function buildUnsafeContextBoundaryResult(params: {
   resultMeta?: Record<string, unknown>;
   toolCallId: string;
   toolName: string;
+  /** True when toolName is a run_tool dispatch target (see evaluateBulk). */
+  isRunToolDispatchTarget?: boolean;
   toolOutput: unknown;
   agentId: string;
   considerContextUntrusted: boolean;
@@ -1521,6 +1583,7 @@ async function buildUnsafeContextBoundaryResult(params: {
 async function evaluateUnsafeContextBoundaryForToolResult(params: {
   toolCallId: string;
   toolName: string;
+  isRunToolDispatchTarget?: boolean;
   toolOutput: unknown;
   agentId: string;
   considerContextUntrusted: boolean;
@@ -1536,6 +1599,7 @@ async function evaluateUnsafeContextBoundaryForToolResult(params: {
       {
         toolName: params.toolName,
         toolOutput: params.toolOutput,
+        isRunToolDispatchTarget: params.isRunToolDispatchTarget,
       },
     ],
     {

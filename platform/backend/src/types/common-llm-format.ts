@@ -28,6 +28,13 @@ export type CommonToolCall = z.infer<typeof CommonToolCallSchema>;
 export type CommonToolResult = {
   id: string;
   name: string;
+  /**
+   * The arguments of the paired tool call, when the source format carries
+   * them. Required to resolve a `run_tool` dispatch to its target tool so
+   * trusted-data policies evaluate the tool that actually produced the
+   * result instead of the built-in wrapper.
+   */
+  arguments?: Record<string, unknown>;
   content: unknown;
   isError: boolean;
   error?: string;
@@ -48,6 +55,30 @@ export interface CommonMessage {
   content?: string;
   /** Tool calls if this message contains them */
   toolCalls?: CommonToolResult[];
+}
+
+/**
+ * Normalize a provider-format tool-call arguments value to the record shape
+ * `CommonToolResult.arguments` carries. Providers carry arguments either as an
+ * object (Anthropic `input`, Gemini `args`) or as a JSON string (OpenAI-family
+ * `function.arguments`); anything unparsable yields undefined so a malformed
+ * value is indistinguishable from an uncaptured one (both fail closed where it
+ * matters — run_tool dispatch resolution).
+ */
+export function extractCommonToolCallArguments(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (typeof value === "string") {
+    try {
+      return extractCommonToolCallArguments(JSON.parse(value));
+    } catch {
+      return undefined;
+    }
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return undefined;
 }
 
 export function extractCommonMessageText(message: unknown): string | undefined {

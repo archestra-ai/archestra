@@ -120,6 +120,7 @@ describe("request adapter", () => {
       {
         id: "call_1",
         name: "read_file",
+        arguments: { path: "a" },
         content: { ok: true },
         isError: false,
       },

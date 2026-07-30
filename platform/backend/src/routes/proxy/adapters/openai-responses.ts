@@ -32,7 +32,11 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { ApiError, createStreamAccumulatorState } from "@/types";
+import {
+  ApiError,
+  createStreamAccumulatorState,
+  extractCommonToolCallArguments,
+} from "@/types";
 import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-client";
 
 type OpenAiResponsesRequest = OpenAi.Types.ResponsesRequest;
@@ -208,17 +212,19 @@ class OpenAiResponsesRequestAdapter
       return [];
     }
 
-    const toolNamesByCallId = getToolNamesByCallId(this.request.input);
+    const toolCallsByCallId = getToolCallsByCallId(this.request.input);
 
     return this.request.input.flatMap((item) => {
       if (!isFunctionCallOutputItem(item)) {
         return [];
       }
 
+      const toolCall = toolCallsByCallId.get(item.call_id);
       return [
         {
           id: item.call_id,
-          name: toolNamesByCallId.get(item.call_id) ?? "unknown",
+          name: toolCall?.name ?? "unknown",
+          arguments: toolCall?.arguments,
           content: item.output,
           isError: false,
         },
@@ -914,14 +920,24 @@ function toSse(event: unknown): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
 
-function getToolNamesByCallId(input: ResponseInputItem[]): Map<string, string> {
+function getToolCallsByCallId(
+  input: ResponseInputItem[],
+): Map<string, { name: string; arguments?: Record<string, unknown> }> {
   return new Map(
     input.flatMap((item) => {
       if (!isResponseInputFunctionCall(item)) {
         return [];
       }
 
-      return [[item.call_id, item.name] as const];
+      return [
+        [
+          item.call_id,
+          {
+            name: item.name,
+            arguments: extractCommonToolCallArguments(item.arguments),
+          },
+        ] as const,
+      ];
     }),
   );
 }

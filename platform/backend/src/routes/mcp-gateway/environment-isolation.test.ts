@@ -1,6 +1,7 @@
 import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_SHORT_NAME,
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_GET_MCP_SERVERS_SHORT_NAME,
@@ -14,6 +15,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import {
+  AgentToolModel,
   AppModel,
   EnvironmentModel,
   InternalMcpCatalogModel,
@@ -339,4 +341,61 @@ test("gateway: scaffold_app binds the app to the calling agent's environment", a
   // table — `AppModel.findById` joins it back in.
   const scaffolded = await AppModel.findById(appId as string);
   expect(scaffolded?.environmentId).toBe(production.id);
+});
+
+test("gateway: bulk tool assignment cannot reconfigure another environment's agent", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  seedAndAssignArchestraTools,
+  makeTool,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, org.id, { role: "admin" });
+  const production = await EnvironmentModel.create({
+    organizationId: org.id,
+    name: PRODUCTION,
+  });
+  const staging = await EnvironmentModel.create({
+    organizationId: org.id,
+    name: STAGING,
+  });
+  const agent = await makeAgent({
+    name: "Production Agent",
+    organizationId: org.id,
+    environmentId: production.id,
+  });
+  await seedAndAssignArchestraTools(agent.id);
+  const token = await UserTokenModel.create(user.id, org.id);
+
+  const stagingAgent = await makeAgent({
+    name: "Staging Agent",
+    organizationId: org.id,
+    environmentId: staging.id,
+  });
+  const tool = await makeTool({ name: "cross_env_assignment_tool" });
+
+  const body = await callTool({
+    agentId: agent.id,
+    token: token.value,
+    name: toolName(TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME),
+    arguments: {
+      assignments: [{ agentId: stagingAgent.id, toolId: tool.id }],
+    },
+  });
+
+  // Bulk assignment reports per-item outcomes rather than failing the call.
+  expect(body.result.isError).toBeFalsy();
+  const parsed = JSON.parse(resultText(body)) as {
+    succeeded: unknown[];
+    failed: { error: string }[];
+  };
+  expect(parsed.succeeded).toEqual([]);
+  expect(parsed.failed[0].error).toContain("different environment");
+
+  // The other environment's agent must be untouched.
+  const assigned = await AgentToolModel.exists(stagingAgent.id, tool.id);
+  expect(assigned).toBe(false);
 });

@@ -63,6 +63,8 @@ Matching is strict for tools, knowledge, and subagents: a Production resource ma
 
 An agent creates in its own environment. When an agent adds an MCP server to the registry, or builds an [app](/docs/platform-apps), that resource lands in the agent's environment — so the agent can still see it afterwards. You can name a different environment explicitly when adding a server.
 
+An agent also configures only its own environment. It can assign and remove tools on agents and gateways in that environment, and nowhere else.
+
 This applies to both explicitly assigned resources and the implicit **Auto** access modes — in both cases cross-environment resources are filtered out before they are listed or executed. In the agent dialog's explicit assignment pickers, resources from another environment are shown disabled. Skill filtering covers `list_skills`, `load_skill`, chat slash commands, and the skills offered on the [connect page](/docs/platform-llm-proxy#environment); a [skill that runs in a subagent](/docs/platform-agent-skills#running-a-skill-in-a-subagent) additionally requires its designated agent in the same environment.
 
 ## Network egress policies

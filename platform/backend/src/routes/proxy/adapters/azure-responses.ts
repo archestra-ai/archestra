@@ -673,10 +673,6 @@ class AzureResponsesStreamAdapter
   }
 
   toProviderResponse(): AzureResponsesResponse {
-    if (this.replacedText === null && this.completedResponse) {
-      return this.completedResponse;
-    }
-
     const outputItems: AzureResponsesResponse["output"] = [];
 
     const messageText = this.replacedText ?? this.state.text;
@@ -707,6 +703,24 @@ class AzureResponsesStreamAdapter
           status: "completed" as const,
         })),
       );
+    }
+
+    // The upstream `response.completed` envelope is the richest record (it
+    // echoes tools, reasoning config and the real ids), so it wins — but only
+    // when it actually carries the turn. Reasoning turns finish with an empty
+    // `output` even though the text arrived in `response.output_text.delta`
+    // chunks; persisting that verbatim lost the whole assistant side of the
+    // interaction, leaving LLM Logs with nothing to render. Keep the envelope
+    // and restore the items we accumulated.
+    if (this.replacedText === null && this.completedResponse) {
+      const upstreamOutput = this.completedResponse.output;
+      if (
+        (Array.isArray(upstreamOutput) && upstreamOutput.length > 0) ||
+        outputItems.length === 0
+      ) {
+        return this.completedResponse;
+      }
+      return { ...this.completedResponse, output: outputItems };
     }
 
     return {
@@ -795,7 +809,11 @@ function createEmptyToolCompressionStats(): ToolCompressionStats {
 }
 
 function toCommonMessages(item: ResponseInputItem): CommonMessage[] {
-  if (item.type === "message") {
+  // "easy input message" items carry role/content and omit `type` (it defaults
+  // to "message"); the AI SDK emits this shape. Without handling it here,
+  // getMessages() drops the user's prompt and trusted-data / Dual LLM policy
+  // evaluation (llm-proxy-handler) silently sees an empty conversation.
+  if ((item.type === "message" || item.type === undefined) && "role" in item) {
     return [
       {
         role: normalizeResponseMessageRole(item.role),

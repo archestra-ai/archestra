@@ -354,10 +354,9 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // changed. This bulk path uses AgentToolModel directly (not the
       // assignToolToAgent service), so it forks here rather than inheriting the
       // service's fork; duplicates changed nothing and are skipped.
-      const forkedAgentIds = new Set(succeeded.map((s) => s.agentId));
-      for (const agentId of forkedAgentIds) {
-        await AgentVersionModel.forkIfChangedBestEffort(agentId);
-      }
+      await AgentVersionModel.forkAgentsBestEffort(
+        succeeded.map((s) => s.agentId),
+      );
 
       return reply.send({ succeeded, failed, duplicates });
     },
@@ -490,7 +489,7 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      const success = await AgentToolModel.delete(agentId, toolId);
+      const success = await AgentToolModel.delete({ agentId, toolId });
 
       if (!success) {
         throw new ApiError(404, "Agent tool not found");

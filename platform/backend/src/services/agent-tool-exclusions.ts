@@ -146,6 +146,8 @@ class AgentToolExclusionsService {
     agentId: string;
     organizationId: string;
     toolIds: string[];
+    /** See `AgentToolAssignmentRequest.deferVersionFork`. */
+    deferVersionFork?: boolean;
   }): Promise<AgentToolExclusions> {
     const { agentId, organizationId } = params;
     const toAdd = [...new Set(params.toolIds)];
@@ -180,7 +182,9 @@ class AgentToolExclusionsService {
     clearChatMcpClient(agentId);
 
     // After commit / lock release (see replaceExclusions).
-    await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    if (!params.deferVersionFork) {
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    }
 
     logger.info(
       {

@@ -5,6 +5,7 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentToolModel,
+  AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
 } from "@/models";
@@ -247,6 +248,9 @@ async function resolveAndAssignTools(
         agentId,
         toolId: tool.id,
         credentialResolutionMode: ref.credentialResolutionMode,
+        // An import is one action; it forks once after the whole tool set
+        // lands rather than once per tool.
+        deferVersionFork: true,
       });
 
       if (result && result !== "duplicate" && result !== "updated") {
@@ -268,6 +272,8 @@ async function resolveAndAssignTools(
       });
     }
   }
+
+  await AgentVersionModel.forkIfChangedBestEffort(agentId);
 }
 
 /**

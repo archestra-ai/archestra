@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq } from "drizzle-orm";
+import type { PaginationQuery } from "@archestra/shared";
+import { and, asc, count, desc, eq, lt } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
 import logger from "@/logging";
 import type { AgentConfigSnapshot, AgentVersion } from "@/types/agent-version";
 
@@ -202,22 +207,22 @@ class AgentVersionModel {
   /**
    * Fork a new version iff the agent's current config differs from the head
    * snapshot, bumping `agents.latest_version` in the same transaction. Call
-   * AFTER all config writes of the mutation. Callers whose writes span
-   * multiple transactions call this without `tx` once at the end: the fork is
-   * a self-contained read-compare-insert, so at worst a crash between the
-   * config commit and the fork loses one snapshot, which the next config
-   * write captures.
+   * AFTER all config writes of the mutation. It always runs in its own
+   * transaction: the fork is a self-contained read-compare-insert, so at worst
+   * a crash between the config commit and the fork loses one snapshot, which
+   * the next config write captures.
    *
    * Locks the agent row (FOR UPDATE) so concurrent forks serialize instead of
-   * racing on the `(agent_id, version)` unique index. Legacy rows
-   * (`latestVersion` 0, predating versioning) fork version 1 on their first
-   * config write. Returns null when the agent does not exist.
+   * racing on the `(agent_id, version)` unique index. For the same reason it
+   * must never be called from inside a transaction that already holds that
+   * lock — the fork's own FOR UPDATE would block on it from another connection.
+   * Legacy rows (`latestVersion` 0, predating versioning) fork version 1 on
+   * their first config write. Returns null when the agent does not exist.
    */
   static async forkIfChanged(
     agentId: string,
-    tx?: Transaction,
   ): Promise<{ version: number; forked: boolean } | null> {
-    const run = async (tx: Transaction) => {
+    return await withDbTransaction(async (tx) => {
       const [agent] = await tx
         .select()
         .from(schema.agentsTable)
@@ -230,11 +235,7 @@ class AgentVersionModel {
 
       const head =
         agent.latestVersion > 0
-          ? await AgentVersionModel.findByAgentAndVersion(
-              agentId,
-              agent.latestVersion,
-              tx,
-            )
+          ? await findVersionRow(tx, agentId, agent.latestVersion)
           : null;
       if (head && head.contentHash === contentHash) {
         return { version: agent.latestVersion, forked: false };
@@ -251,10 +252,9 @@ class AgentVersionModel {
         .update(schema.agentsTable)
         .set({ latestVersion: nextVersion })
         .where(eq(schema.agentsTable.id, agentId));
+      await pruneOldVersions(tx, agentId, nextVersion);
       return { version: nextVersion, forked: true };
-    };
-
-    return tx ? await run(tx) : await withDbTransaction(run);
+    });
   }
 
   /**
@@ -282,38 +282,151 @@ class AgentVersionModel {
     }
   }
 
-  /** Resolve a specific `(agent, version)` pair, e.g. the agent's head version. */
-  static async findByAgentAndVersion(
-    agentId: string,
-    version: number,
-    tx?: Transaction,
-  ): Promise<AgentVersion | null> {
-    const conn = tx ?? db;
-    const [row] = await conn
-      .select()
+  /**
+   * Fork once for each distinct agent in `agentIds`. Bulk operations pass
+   * `deferVersionFork` to their per-item writes and call this at the end, so
+   * one user action yields one version per agent instead of one per item.
+   * Sequential on purpose: concurrent forks of the same agent contend on its
+   * FOR UPDATE lock for no benefit.
+   */
+  static async forkAgentsBestEffort(agentIds: Iterable<string>): Promise<void> {
+    for (const agentId of new Set(agentIds)) {
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    }
+  }
+
+  /**
+   * Resolve a specific `(agent, version)` pair. `agent_versions` carries no
+   * organization of its own, so both read methods join `agents` and filter on
+   * the caller's organization — an agent id alone must never reach another
+   * tenant's history.
+   */
+  static async findByAgentAndVersion(params: {
+    agentId: string;
+    version: number;
+    organizationId: string;
+  }): Promise<AgentVersion | null> {
+    const [row] = await db
+      .select(agentVersionColumns)
       .from(schema.agentVersionsTable)
+      .innerJoin(
+        schema.agentsTable,
+        eq(schema.agentVersionsTable.agentId, schema.agentsTable.id),
+      )
       .where(
         and(
-          eq(schema.agentVersionsTable.agentId, agentId),
-          eq(schema.agentVersionsTable.version, version),
+          eq(schema.agentVersionsTable.agentId, params.agentId),
+          eq(schema.agentVersionsTable.version, params.version),
+          eq(schema.agentsTable.organizationId, params.organizationId),
         ),
       );
     return row ?? null;
   }
 
-  /** All versions of an agent, newest first. */
-  static async listForAgent(agentId: string): Promise<AgentVersion[]> {
-    return await db
-      .select()
-      .from(schema.agentVersionsTable)
-      .where(eq(schema.agentVersionsTable.agentId, agentId))
-      .orderBy(desc(schema.agentVersionsTable.version));
+  /**
+   * An agent's versions, newest first. Paginated: snapshots are full config
+   * payloads, so an unbounded read of an append-only table would return
+   * megabytes for a heavily-edited agent.
+   */
+  static async listForAgent(params: {
+    agentId: string;
+    organizationId: string;
+    pagination: PaginationQuery;
+  }): Promise<PaginatedResult<AgentVersion>> {
+    const scope = and(
+      eq(schema.agentVersionsTable.agentId, params.agentId),
+      eq(schema.agentsTable.organizationId, params.organizationId),
+    );
+    const [rows, [totals]] = await Promise.all([
+      db
+        .select(agentVersionColumns)
+        .from(schema.agentVersionsTable)
+        .innerJoin(
+          schema.agentsTable,
+          eq(schema.agentVersionsTable.agentId, schema.agentsTable.id),
+        )
+        .where(scope)
+        .orderBy(desc(schema.agentVersionsTable.version))
+        .limit(params.pagination.limit)
+        .offset(params.pagination.offset),
+      db
+        .select({ total: count() })
+        .from(schema.agentVersionsTable)
+        .innerJoin(
+          schema.agentsTable,
+          eq(schema.agentVersionsTable.agentId, schema.agentsTable.id),
+        )
+        .where(scope),
+    ]);
+    return createPaginatedResult(rows, totals?.total ?? 0, params.pagination);
   }
 }
 
 export default AgentVersionModel;
 
 // === Internal helpers ===
+
+/**
+ * Versions retained per agent. Snapshots embed the agent's full config —
+ * including hook-file contents — so an agent with large hooks pays a complete
+ * copy on every unrelated config edit; without a ceiling the table grows with
+ * edit count and never shrinks. Trimming the tail is safe for exactly the
+ * reason `agent_id` is ON DELETE CASCADE: nothing pins an agent version.
+ */
+const MAX_VERSIONS_PER_AGENT = 100;
+
+/** Column list for reads that join `agents` (which would otherwise nest rows). */
+const agentVersionColumns = {
+  id: schema.agentVersionsTable.id,
+  agentId: schema.agentVersionsTable.agentId,
+  version: schema.agentVersionsTable.version,
+  snapshot: schema.agentVersionsTable.snapshot,
+  contentHash: schema.agentVersionsTable.contentHash,
+  createdAt: schema.agentVersionsTable.createdAt,
+};
+
+/**
+ * Unscoped `(agent, version)` lookup for the fork's own head comparison, which
+ * runs inside the fork transaction and has already resolved the agent row.
+ * Tenant-facing reads go through `findByAgentAndVersion`.
+ */
+async function findVersionRow(
+  tx: Transaction,
+  agentId: string,
+  version: number,
+): Promise<AgentVersion | null> {
+  const [row] = await tx
+    .select()
+    .from(schema.agentVersionsTable)
+    .where(
+      and(
+        eq(schema.agentVersionsTable.agentId, agentId),
+        eq(schema.agentVersionsTable.version, version),
+      ),
+    );
+  return row ?? null;
+}
+
+/**
+ * Drop versions below the retention window. Runs in the fork's transaction,
+ * under the agent's row lock, so it cannot race a concurrent fork.
+ */
+async function pruneOldVersions(
+  tx: Transaction,
+  agentId: string,
+  headVersion: number,
+): Promise<void> {
+  const oldestKept = headVersion - MAX_VERSIONS_PER_AGENT + 1;
+  if (oldestKept <= 1) return;
+  await tx
+    .delete(schema.agentVersionsTable)
+    .where(
+      and(
+        eq(schema.agentVersionsTable.agentId, agentId),
+        lt(schema.agentVersionsTable.version, oldestKept),
+      ),
+    );
+}
 
 /**
  * Deterministic JSON for hashing: object keys sorted recursively so two

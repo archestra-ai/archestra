@@ -57,6 +57,13 @@ interface AgentToolAssignmentRequest {
   mcpServerId?: string | null;
   /** Optional prefetched lookup data used to avoid N+1 validation queries. */
   preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;
+  /**
+   * Skip this assignment's config version fork. Set by bulk callers, which
+   * fork once per agent for the whole batch via
+   * `AgentVersionModel.forkAgentsBestEffort` — one user action should produce
+   * one version, not one per tool.
+   */
+  deferVersionFork?: boolean;
 }
 
 export async function assignToolToAgent(
@@ -90,7 +97,9 @@ export async function assignToolToAgent(
   // The tool surface changed — snapshot a new agent config version. Shared
   // choke point for every single-tool assign (REST, MCP tools, agent import),
   // so those paths need no fork of their own.
-  await AgentVersionModel.forkIfChangedBestEffort(params.agentId);
+  if (!params.deferVersionFork) {
+    await AgentVersionModel.forkIfChangedBestEffort(params.agentId);
+  }
 
   if (result.status === "updated") {
     return "updated";

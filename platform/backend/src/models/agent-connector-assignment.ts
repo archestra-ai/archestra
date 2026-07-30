@@ -134,12 +134,17 @@ class AgentConnectorAssignmentModel {
         .onConflictDoNothing();
     }
 
-    for (const agentId of new Set([
+    const touched = new Set([
       ...removed.map((r) => r.agentId),
       ...params.agentIds,
-    ])) {
+    ]);
+    for (const agentId of touched) {
       agentKnowledgeSourcesCache.invalidate(agentId);
     }
+    // Connectors are part of the config snapshot, and this path writes the
+    // junction directly rather than through AgentModel.update — fork every
+    // agent that gained or lost the connector.
+    await AgentVersionModel.forkAgentsBestEffort(touched);
   }
 
   /**

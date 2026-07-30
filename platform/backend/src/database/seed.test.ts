@@ -20,6 +20,7 @@ import {
   SkillModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
+import AgentVersionModel from "@/models/agent-version";
 import { DEFAULT_APPS } from "@/services/apps/default-apps";
 import {
   BUILT_IN_SKILLS,
@@ -164,6 +165,63 @@ describe("syncBuiltInAgents", () => {
     );
 
     expect(builtInAgent?.systemPrompt).toBe(customPrompt);
+  });
+
+  test("seeded built-in agents get a config version", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
+    await syncBuiltInAgents();
+
+    const builtInAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      organization.id,
+    );
+
+    // This path inserts into agentsTable directly rather than through
+    // AgentModel, so without an explicit fork built-ins would stay at version
+    // 0 and their seeded config would land in whichever user edits them first.
+    expect(builtInAgent?.latestVersion).toBe(1);
+    const head = await AgentVersionModel.findByAgentAndVersion({
+      agentId: builtInAgent?.id ?? "",
+      version: 1,
+      organizationId: organization.id,
+    });
+    expect(head?.snapshot.systemPrompt).toBe(POLICY_CONFIG_SYSTEM_PROMPT);
+  });
+
+  test("a deploy rewriting a legacy prompt forks its own version", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
+    const [existing] = await db
+      .insert(schema.agentsTable)
+      .values({
+        organizationId: organization.id,
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        agentType: "agent",
+        scope: "org",
+        systemPrompt: LEGACY_POLICY_CONFIG_SYSTEM_PROMPT,
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: false,
+        },
+      })
+      .returning();
+    expect(existing.latestVersion).toBe(0);
+
+    await syncBuiltInAgents();
+
+    // The prompt rewrite is attributed to the deploy that made it, instead of
+    // being folded into the next user edit's version.
+    const head = await AgentVersionModel.findByAgentAndVersion({
+      agentId: existing.id,
+      version: 1,
+      organizationId: organization.id,
+    });
+    expect(head?.snapshot.systemPrompt).toBe(POLICY_CONFIG_SYSTEM_PROMPT);
   });
 });
 

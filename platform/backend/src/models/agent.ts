@@ -3232,6 +3232,14 @@ class AgentModel {
         );
       }
 
+      // Fork last, once the copied assignments and exclusions are in place.
+      // create() already forked a version 1 that predates them, and neither
+      // cloneAssignments nor replaceForAgent forks; without this a clone of a
+      // Custom-mode agent (which skips the update above) would leave version 1
+      // — a snapshot with no tools — as the permanent head of a fully
+      // configured agent.
+      await AgentVersionModel.forkIfChangedBestEffort(created.id);
+
       const clonedAgent = await AgentModel.findById(created.id, userId, true);
       if (!clonedAgent) {
         throw new Error("Failed to load cloned agent");

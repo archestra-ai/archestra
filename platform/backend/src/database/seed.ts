@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  ADVISOR_SYSTEM_PROMPT,
   APP_RUNTIME_SYSTEM_PROMPT,
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
@@ -160,6 +161,20 @@ export async function syncBuiltInAgents(): Promise<void> {
       ),
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
+      } as const,
+    },
+    {
+      builtInAgentId: BUILT_IN_AGENT_IDS.ADVISOR,
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      description:
+        "Answers the advisor tool — the model a working agent consults for a second opinion. Set its model to a stronger one than the agents that will consult it; until a model is set, the advisor tool refuses rather than advising with the caller's own model.",
+      // Shipped platform text: branded here, at seed time, for the same reason
+      // built-in skills are — the model should see the org's brand, not ours.
+      systemPrompt: archestraMcpBranding.brandBuiltInText(
+        ADVISOR_SYSTEM_PROMPT,
+      ),
+      builtInAgentConfig: {
+        name: BUILT_IN_AGENT_IDS.ADVISOR,
       } as const,
     },
   ];

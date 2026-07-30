@@ -145,6 +145,9 @@ export const OwnedAppListItemSchema = AppListItemBaseSchema.extend({
   // Whether the app is live. Disabled (false) is author-only and appears in
   // the listing only for its author, who sees a "Disabled" badge on the card.
   enabled: z.boolean(),
+  // Whether the app is locked against modification (chat authoring refuses;
+  // REST refuses html replacement and deletion). Drives the "Locked" badge.
+  locked: z.boolean(),
   // Teams the app is shared with (via its backing catalog), for the card's
   // visibility pill. Empty unless the app is team-scoped.
   teams: z.array(z.object({ id: z.string(), name: z.string() })),

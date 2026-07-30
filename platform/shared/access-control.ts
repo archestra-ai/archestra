@@ -1688,6 +1688,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // an update (the handler further requires scope-modify at the app's scope).
   [RouteId.EnableApp]: { app: ["update"] },
   [RouteId.DisableApp]: { app: ["update"] },
+  [RouteId.LockApp]: { app: ["update"] },
+  [RouteId.UnlockApp]: { app: ["update"] },
   [RouteId.DeleteApp]: { app: ["delete"] },
   [RouteId.GetAppVersions]: { app: ["read"] },
   [RouteId.GetAppVersion]: { app: ["read"] },

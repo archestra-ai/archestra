@@ -293,6 +293,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           viewerRole: viewerRoleOf(app),
           latestVersion: app.latestVersion,
           enabled: app.enabled,
+          locked: app.locked,
           teams: teamsByApp.get(app.id) ?? [],
           users: usersByApp.get(app.id) ?? [],
           executionModel: "viewer-scoped" as const,
@@ -814,6 +815,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // to the stricter chat-authoring gate so an admin who only sees the app
       // through oversight can retitle/re-scope it but not rewrite its content.
       if (body.html !== undefined) {
+        if (app.locked) {
+          throw new ApiError(
+            409,
+            `App "${app.name}" is locked; its content cannot be replaced. Unlock it first.`,
+          );
+        }
         await assertCallerMayAuthorApp({
           userId: user.id,
           organizationId,
@@ -947,6 +954,12 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorId: app.authorId,
         resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
       });
+      if (app.locked) {
+        throw new ApiError(
+          409,
+          `App "${app.name}" is locked and cannot be deleted. Unlock it first.`,
+        );
+      }
       const success = await AppModel.delete(appId);
       if (!success) {
         throw new ApiError(404, `No app found with id ${appId}.`);
@@ -997,6 +1010,58 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         logger.info(
           { appId, userId: user.id, enabled: enable },
           enable ? "App enabled via REST" : "App disabled via REST",
+        );
+        return reply.send(
+          await buildAppDetail({
+            app: updated,
+            userId: user.id,
+            organizationId,
+          }),
+        );
+      },
+    );
+  }
+
+  // Lock/unlock an app. The lock freezes the app against modification from
+  // chat (every authoring MCP tool refuses, and agents may unlock only on the
+  // user's direct request); on REST it additionally refuses the destructive
+  // paths — replacing the html and deleting the app — while settings-level
+  // metadata edits remain available to authorized users, who hold this toggle.
+  for (const action of ["lock", "unlock"] as const) {
+    const lock = action === "lock";
+    fastify.post(
+      `/api/apps/:appId/${action}`,
+      {
+        schema: {
+          operationId: lock ? RouteId.LockApp : RouteId.UnlockApp,
+          description: lock
+            ? "Lock an app, refusing all chat-driven modification (and REST html replacement/deletion) until unlocked."
+            : "Unlock a locked app, making it editable again.",
+          tags: ["Apps"],
+          params: z.object({ appId: UuidIdSchema }),
+          response: constructResponseSchema(AppWithTeamsSchema),
+        },
+      },
+      async ({ params: { appId }, user, organizationId }, reply) => {
+        const app = await loadViewableApp({
+          appId,
+          userId: user.id,
+          organizationId,
+        });
+        await assertCallerMayModifyApp({
+          userId: user.id,
+          organizationId,
+          scope: app.scope,
+          authorId: app.authorId,
+          resourceTeamIds: await AppAccessModel.getTeamsForApp(app.id),
+        });
+        const updated = await AppModel.setLocked(appId, lock);
+        if (!updated) {
+          throw new ApiError(404, `No app found with id ${appId}.`);
+        }
+        logger.info(
+          { appId, userId: user.id, locked: lock },
+          lock ? "App locked via REST" : "App unlocked via REST",
         );
         return reply.send(
           await buildAppDetail({

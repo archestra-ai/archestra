@@ -1,4 +1,4 @@
-import { E2eTestId } from "@archestra/shared";
+import { E2eTestId, requiresPerplexityAgentApi } from "@archestra/shared";
 import type { Page } from "@playwright/test";
 import { WIREMOCK_BASE_URL } from "../consts";
 import {
@@ -31,6 +31,12 @@ interface ChatProviderTestConfig {
   wiremockStubId: string;
   /** Expected response text from the mocked LLM */
   expectedResponse: string;
+  /**
+   * Narrows which catalogued model the test drives. Only needed for providers
+   * that serve several upstream APIs, where the default (first model by id)
+   * could pick a model whose transport this test's WireMock stub doesn't mock.
+   */
+  matchModel?: (model: { id: string }) => boolean;
 }
 
 // =============================================================================
@@ -86,12 +92,15 @@ const mistralConfig: ChatProviderTestConfig = {
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
 };
 
-// Perplexity - Uses OpenAI-compatible streaming format
+// Perplexity - Uses OpenAI-compatible streaming format.
+// Pinned to the chat-completions half of the catalogue: the vendor-prefixed
+// models go to Perplexity's Agent API instead, which this stub doesn't mock.
 const perplexityConfig: ChatProviderTestConfig = {
   providerName: "perplexity",
   providerDisplayName: "Perplexity",
   wiremockStubId: "chat-ui-e2e-test",
   expectedResponse: "This is a mocked response for the chat UI e2e test.",
+  matchModel: ({ id }) => !requiresPerplexityAgentApi(id),
 };
 
 // Ollama - Uses OpenAI-compatible streaming format
@@ -211,6 +220,7 @@ for (const config of testConfigs) {
         makeApiRequest,
         request,
         config.providerName,
+        config.matchModel,
       );
       test.skip(
         !runtimeModel,

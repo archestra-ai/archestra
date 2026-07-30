@@ -4,7 +4,8 @@
  * Perplexity uses an OpenAI-compatible API at https://api.perplexity.ai
  *
  * Key differences from OpenAI:
- * - No external tool calling support
+ * - No external tool calling on this endpoint (tool calling is Agent-API-only;
+ *   see inferPerplexityCapabilities in services/model-sync.ts)
  * - Returns search_results field with web search citations
  * - Has Perplexity-specific usage metrics
  *

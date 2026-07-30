@@ -2,7 +2,9 @@
  * Perplexity API schemas
  *
  * Perplexity uses an OpenAI-compatible API with some differences:
- * - No tool calling support
+ * - This endpoint takes no `tools`/`tool_choice` — it answers `invalid request`
+ *   when they are sent. Perplexity's tool calling lives on its separate Agent
+ *   API instead (see inferPerplexityCapabilities in services/model-sync.ts)
  * - Has search_results field in responses (citations from web search)
  * - Has Perplexity-specific usage fields (search_context_size, citation_tokens, etc.)
  *

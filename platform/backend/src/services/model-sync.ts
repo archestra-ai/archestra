@@ -713,6 +713,19 @@ function inferModelCapabilities(params: {
  * keeps the decision per model: inference sits below both the fetcher and
  * models.dev in the resolution order, so the day a Perplexity model declares
  * tool support it overrides this and tools flow with no code change.
+ *
+ * Perplexity does offer tool calling, but on a different API than the one this
+ * provider speaks: the Agent API (`POST /v1/agent`, aliased as the
+ * OpenAI-Responses-compatible `POST /v1/responses`) takes `tools` — built-in
+ * search/fetch/sandbox/MCP plus custom `{ type: "function" }` declarations — and
+ * answers with a typed `output` array. It is a distinct wire format with its own
+ * catalog (`perplexity/sonar`, `anthropic/*`, `openai/*`, … and the
+ * `fast|low|medium|high|xhigh` presets that replace the `sonar*` ids), so
+ * reaching it means a new transport, not a capability flag. The `sonar*` models
+ * served over chat-completions stay tool-less however they are asked.
+ *
+ * @see https://docs.perplexity.ai/docs/agent-api/tools/custom-functions
+ * @see https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview
  */
 function inferPerplexityCapabilities(): ProviderModelCapabilities {
   return {

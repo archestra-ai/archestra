@@ -1045,19 +1045,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                 // Omit tools for models that can't take them (e.g. Microsoft
                 // 365 Copilot) instead of letting the provider reject the
-                // turn; an unknown capability is assumed supported. Perplexity
-                // stays hardcoded — its models don't declare capabilities and
-                // it has built-in web search instead of tool calling
-                // (https://docs.perplexity.ai/api-reference/chat-completions-post).
-                // Perplexity's tool calling (2026) exists only on its separate
-                // Agent API (/responses/create, a Responses-style wire format),
-                // not the chat-completions surface we proxy.
-                // Per model, never per provider: a provider-wide gate hides a
-                // tool-capable model behind its siblings, and it disagrees with
-                // the composer's "no tools" chip, which reads this same
-                // capability. Providers whose endpoint takes no tools record it
-                // as `supportsToolCalling: false` on the model row (see
-                // inferPerplexityCapabilities in services/model-sync.ts).
+                // turn; an unknown capability is assumed supported. Decided
+                // per model, never per provider: a provider-wide gate hides a
+                // tool-capable model behind its siblings, and it disagrees
+                // with the composer's "no tools" chip, which reads this same
+                // capability. Providers whose endpoint takes no tools record
+                // it as `supportsToolCalling: false` on the model row — see
+                // inferPerplexityCapabilities in services/model-sync.ts for
+                // why every `sonar*` row carries that flag.
                 const supportsToolCalling =
                   modelRow?.supportsToolCalling !== false;
 

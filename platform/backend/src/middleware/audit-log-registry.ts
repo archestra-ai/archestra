@@ -411,6 +411,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skill",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
   },
+  // Restore is a POST carrying :id; register it directly so the hook captures
+  // the target id and the before/after (deletedAt) snapshots. findByIdForAudit
+  // returns soft-deleted rows, so the "before" is the still-deleted skill.
+  "/api/skills/:id/restore": {
+    resourceType: "skill",
+    action: "skill.restored",
+    fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+  },
   // Reset is a POST carrying :id, so the hook suppresses the parent walk-up.
   // Register it directly to capture the target id and before/after snapshots of
   // this destructive overwrite.

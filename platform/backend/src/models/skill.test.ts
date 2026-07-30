@@ -673,3 +673,157 @@ describe("SkillModel soft delete", () => {
     expect(audit?.name).toBe("audited");
   });
 });
+
+describe("SkillModel restore + status filter", () => {
+  test("restore() clears deletedAt and is idempotent", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "revivable" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+    await SkillModel.delete(skill.id);
+    expect(await SkillModel.findById(skill.id)).toBeNull();
+
+    expect(await SkillModel.restore(skill.id)).toBe(true);
+    expect((await SkillModel.findById(skill.id))?.id).toBe(skill.id);
+    // already active → a second restore reports no transition
+    expect(await SkillModel.restore(skill.id)).toBe(false);
+  });
+
+  test("findDeletedById returns only soft-deleted rows, scoped to the org", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "trashed" }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    // an active row is invisible to the deleted lookup
+    expect(await SkillModel.findDeletedById(skill.id, org.id)).toBeNull();
+
+    await SkillModel.delete(skill.id);
+    expect((await SkillModel.findDeletedById(skill.id, org.id))?.id).toBe(
+      skill.id,
+    );
+    // wrong org does not see it
+    expect(await SkillModel.findDeletedById(skill.id, "other-org")).toBeNull();
+  });
+
+  test("getRestoreConflictMessage flags a reclaimed name for shared and personal scopes", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+
+    // shared (org/team) name reclaimed by another active shared skill
+    const shared = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "dup", scope: "org" }),
+      files: [],
+    });
+    if (!shared) throw new Error("seed failed");
+    await SkillModel.delete(shared.id);
+    const sharedDeleted = await SkillModel.findDeletedById(shared.id, org.id);
+    if (!sharedDeleted) throw new Error("deleted lookup failed");
+    // nothing has taken the name yet
+    expect(
+      await SkillModel.getRestoreConflictMessage(sharedDeleted),
+    ).toBeNull();
+    await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id, name: "dup", scope: "team" }),
+      files: [],
+    });
+    expect(await SkillModel.getRestoreConflictMessage(sharedDeleted)).toContain(
+      "shared skill",
+    );
+
+    // personal name reclaimed by the same author
+    const personal = await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "mine",
+        scope: "personal",
+        authorId: author.id,
+      }),
+      files: [],
+    });
+    if (!personal) throw new Error("seed failed");
+    await SkillModel.delete(personal.id);
+    const personalDeleted = await SkillModel.findDeletedById(
+      personal.id,
+      org.id,
+    );
+    if (!personalDeleted) throw new Error("deleted lookup failed");
+    await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "mine",
+        scope: "personal",
+        authorId: author.id,
+      }),
+      files: [],
+    });
+    expect(
+      await SkillModel.getRestoreConflictMessage(personalDeleted),
+    ).toContain("personal skill");
+  });
+
+  test("status=deleted lists only the trash and never leaks into source repos", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const active = await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "kept",
+        scope: "org",
+        sourceRef: "acme/kept@main:SKILL.md",
+      }),
+      files: [],
+    });
+    const trashed = await SkillModel.createWithFiles({
+      skill: skillInput({
+        organizationId: org.id,
+        name: "gone",
+        scope: "org",
+        sourceRef: "acme/gone@main:SKILL.md",
+      }),
+      files: [],
+    });
+    if (!active || !trashed) throw new Error("seed failed");
+    await SkillModel.delete(trashed.id);
+
+    // trash view: only the deleted skill
+    expect(
+      (
+        await SkillModel.findByOrganization({
+          organizationId: org.id,
+          status: "deleted",
+        })
+      ).map((s) => s.id),
+    ).toEqual([trashed.id]);
+    expect(
+      await SkillModel.countByOrganization({
+        organizationId: org.id,
+        status: "deleted",
+      }),
+    ).toBe(1);
+
+    // default (active) view: only the surviving skill
+    expect(
+      (await SkillModel.findByOrganization({ organizationId: org.id })).map(
+        (s) => s.id,
+      ),
+    ).toEqual([active.id]);
+
+    // the source-repo filter must never enumerate a deleted skill's repo (C1)
+    expect(
+      await SkillModel.findDistinctSourceRepos({ organizationId: org.id }),
+    ).toEqual(["acme/kept"]);
+  });
+});

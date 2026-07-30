@@ -12,11 +12,12 @@ import {
   ne,
   notInArray,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { softDelete } from "@/database/soft-delete";
+import { restore, softDelete } from "@/database/soft-delete";
 import logger from "@/logging";
 import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
@@ -65,6 +66,8 @@ class SkillModel {
      * default view; mirrors the agents list).
      */
     excludeOtherPersonalForUserId?: string;
+    /** Active rows (default) or the soft-deleted trash. */
+    status?: SkillRecordStatus;
     sorting?: { sortBy?: SkillSortBy; sortDirection?: SortDirection };
   }): Promise<Skill[]> {
     let query = db
@@ -96,6 +99,8 @@ class SkillModel {
     authorIds?: string[];
     excludeAuthorIds?: string[];
     excludeOtherPersonalForUserId?: string;
+    /** Active rows (default) or the soft-deleted trash. */
+    status?: SkillRecordStatus;
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -628,6 +633,96 @@ class SkillModel {
     return count > 0;
   }
 
+  /**
+   * Restore a soft-deleted skill by clearing `deletedAt`. A pure un-delete:
+   * no other column is touched. The GitHub sync config and credentials are
+   * left as-is — if the skill's credential was nulled (FK `ON DELETE SET
+   * NULL`) while it was deleted, the sync handler simply falls back to an
+   * unauthenticated (public) pull and, for a now-private repo, records a
+   * `lastSyncError` without crashing. Returns whether a soft-deleted row
+   * transitioned back to active.
+   */
+  static async restore(id: string, tx?: Transaction): Promise<boolean> {
+    const count = await restore(
+      tx ?? db,
+      schema.skillsTable,
+      eq(schema.skillsTable.id, id),
+    );
+    return count > 0;
+  }
+
+  /**
+   * The soft-deleted row scoped to its org — the restore route's lookup, used
+   * to authorize and conflict-check before un-deleting. `findById`/`findByIds`
+   * filter deleted rows, so they cannot serve this path.
+   */
+  static async findDeletedById(
+    id: string,
+    organizationId: string,
+  ): Promise<Skill | null> {
+    const [row] = await db
+      .select()
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.id, id),
+          eq(schema.skillsTable.organizationId, organizationId),
+          isNotNull(schema.skillsTable.deletedAt),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
+  /**
+   * Whether restoring `skill` would collide with an active skill on either
+   * partial name-uniqueness index. Returns a 409 message, or null when clear.
+   * Advisory only: the partial unique index is the real guard, so the restore
+   * route also maps its violation to a 409 in case a create races this check.
+   */
+  static async getRestoreConflictMessage(skill: Skill): Promise<string | null> {
+    if (skill.scope === "personal") {
+      // The personal index is (org, authorId, name); NULLs are distinct in a
+      // unique index, so an authorless row can never collide — skip the check.
+      if (!skill.authorId) return null;
+      const [conflict] = await db
+        .select({ id: schema.skillsTable.id })
+        .from(schema.skillsTable)
+        .where(
+          and(
+            eq(schema.skillsTable.organizationId, skill.organizationId),
+            eq(schema.skillsTable.authorId, skill.authorId),
+            eq(schema.skillsTable.name, skill.name),
+            eq(schema.skillsTable.scope, "personal"),
+            ne(schema.skillsTable.id, skill.id),
+            notDeleted(schema.skillsTable),
+          ),
+        )
+        .limit(1);
+      return conflict
+        ? `Cannot restore: a personal skill named "${skill.name}" already exists.`
+        : null;
+    }
+
+    // team + org share the (org, name) partial index over scope in team/org.
+    const [conflict] = await db
+      .select({ id: schema.skillsTable.id })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, skill.organizationId),
+          eq(schema.skillsTable.name, skill.name),
+          inArray(schema.skillsTable.scope, ["team", "org"]),
+          ne(schema.skillsTable.id, skill.id),
+          notDeleted(schema.skillsTable),
+        ),
+      )
+      .limit(1);
+    return conflict
+      ? `Cannot restore: a shared skill named "${skill.name}" already exists.`
+      : null;
+  }
+
   /** Audit lookup: the raw row scoped to an org, including soft-deleted. */
   static async findByIdForAudit(
     id: string,
@@ -708,12 +803,15 @@ function buildOrgFilters(params: {
   authorIds?: string[];
   excludeAuthorIds?: string[];
   excludeOtherPersonalForUserId?: string;
+  status?: SkillRecordStatus;
 }) {
   const normalizedSearch = params.search?.trim();
   const normalizedSourceRepo = params.sourceRepo?.trim();
   return [
     eq(schema.skillsTable.organizationId, params.organizationId),
-    notDeleted(schema.skillsTable),
+    // Only the org list/count methods pass `status`; every other caller
+    // (source-repo scan, name lookups, etc.) omits it and stays active-only.
+    getSkillStatusCondition(params.status ?? "active"),
     ...(params.accessibleSkillIds !== undefined
       ? [inArray(schema.skillsTable.id, params.accessibleSkillIds)]
       : []),
@@ -766,6 +864,15 @@ function buildOrgFilters(params: {
       ? [like(schema.skillsTable.sourceRef, `${normalizedSourceRepo}@%`)]
       : []),
   ];
+}
+
+type SkillRecordStatus = "active" | "deleted";
+
+/** Active rows vs the soft-deleted trash, for the list `status` filter. */
+function getSkillStatusCondition(status: SkillRecordStatus): SQL {
+  return status === "deleted"
+    ? isNotNull(schema.skillsTable.deletedAt)
+    : notDeleted(schema.skillsTable);
 }
 
 export default SkillModel;

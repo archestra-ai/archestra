@@ -16,7 +16,9 @@ cleanup_dagger() {
   trap - EXIT
   if [ -n "${DAGGER_ENGINE_POD:-}" ]; then
     service_account_dir=/var/run/secrets/kubernetes.io/serviceaccount
-    namespace=$(cat "${service_account_dir}/namespace")
+    # Never let cleanup decide the exit code: under `set -e` a failed read here would replace the
+    # publish status, and that status is the run-health signal CI reads off the pod's terminal phase.
+    namespace=$(cat "${service_account_dir}/namespace" 2>/dev/null) || namespace=archestra
     if ! curl -fsS --max-time 10 --request DELETE \
       --cacert "${service_account_dir}/ca.crt" \
       --header "Authorization: Bearer $(cat "${service_account_dir}/token")" \
@@ -74,5 +76,9 @@ else
 fi
 
 # Final step: uploads to GCS, posts Slack, and exits non-zero on a broken harness so the pod's terminal
-# phase reflects run health. The EXIT trap removes the separate Dagger pod after publishing.
+# phase reflects run health. Not `exec`ed, so the EXIT trap runs after publishing and removes the
+# separate Dagger pod. That covers a normal exit only: a SIGTERM (pod deleted, activeDeadlineSeconds)
+# reaches this shell, but sh defers the handler until the foreground command returns, so the bench
+# outlives the grace period and is SIGKILLed with the trap still pending. CI's label sweep on the next
+# run is what actually reaps an engine orphaned that way.
 python3 /bench/scripts/publish_run.py --tb /work/tb --run-dir /work/run --tarball /work/run.tgz

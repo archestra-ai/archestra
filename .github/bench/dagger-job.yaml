@@ -35,13 +35,18 @@ spec:
       ports:
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }
+    # Public IPv4 only, mirroring the platform's FLOOR_DENIED_IPV4_CIDRS
+    # (backend/src/k8s/mcp-server-runtime/network-policy.ts). No `::/0` rule, so IPv6 egress is denied
+    # outright — deliberate on an IPv4-only cluster; add one here if staging ever goes dual-stack.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
             except:
+              - 0.0.0.0/8
               - 10.0.0.0/8
               - 100.64.0.0/10
               - 127.0.0.0/8
+              - 168.63.129.16/32
               - 169.254.0.0/16
               - 172.16.0.0/12
               - 192.168.0.0/16
@@ -122,6 +127,8 @@ spec:
           mountPath: /etc/dagger/engine.json
           subPath: engine.json
   volumes:
+    # Sized for one run, not for a warm cache: this engine is created per run and the claim dies with
+    # it, so it never carries layers forward the way the platform's retained 50Gi engine PVC does.
     - name: varlib
       ephemeral:
         volumeClaimTemplate:
@@ -129,7 +136,7 @@ spec:
             accessModes: [ReadWriteOnce]
             resources:
               requests:
-                storage: 50Gi
+                storage: 20Gi
     - name: run
       emptyDir:
         medium: Memory

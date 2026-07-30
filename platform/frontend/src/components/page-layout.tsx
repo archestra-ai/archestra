@@ -151,7 +151,19 @@ export function PageLayout({
                               : "text-muted-foreground",
                           )}
                         >
-                          {activeOverflowTab ? activeOverflowTab.label : "More"}
+                          {/* Distinct keyed spans so switching between the
+                              label (an element) and "More" (a string) swaps
+                              elements instead of deleting a bare text node —
+                              Chrome page-translate re-parents text nodes into
+                              <font> wrappers and React crashes removing a
+                              re-parented text node (facebook/react#11538). */}
+                          {activeOverflowTab ? (
+                            <span key="active-tab">
+                              {activeOverflowTab.label}
+                            </span>
+                          ) : (
+                            <span key="more">More</span>
+                          )}
                           <ChevronDown className="h-3.5 w-3.5" />
                           {activeOverflowTab && (
                             <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />

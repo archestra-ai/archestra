@@ -17629,6 +17629,10 @@ export type GetAppsData = {
         scope?: 'personal' | 'team' | 'org';
         authorIds?: Array<string>;
         excludeAuthorIds?: Array<string>;
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
     };
     url: '/api/apps';
 };
@@ -17709,6 +17713,12 @@ export type GetAppsResponses = {
             executionModel: 'viewer-scoped' | 'server-scoped';
             cspOrigin: 'platform-pinned' | 'author-declared';
             pinnedAt: string | null;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
             source: 'owned';
             id: string;
             slug: string | null;
@@ -17732,6 +17742,12 @@ export type GetAppsResponses = {
             executionModel: 'viewer-scoped' | 'server-scoped';
             cspOrigin: 'platform-pinned' | 'author-declared';
             pinnedAt: string | null;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
             source: 'external';
             catalogId: string;
             mcpServerId: string;
@@ -17776,6 +17792,12 @@ export type CreateAppData = {
             };
         };
         environmentId?: string | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         teamIds?: Array<string>;
         openInChat?: boolean;
     };
@@ -17891,6 +17913,12 @@ export type CreateAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         warnings?: Array<string>;
         conversationId?: string;
     };
@@ -18000,6 +18028,173 @@ export type GetExternalAppResponses = {
 };
 
 export type GetExternalAppResponse = GetExternalAppResponses[keyof GetExternalAppResponses];
+
+export type GetAppLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/apps/labels/keys';
+};
+
+export type GetAppLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppLabelKeysError = GetAppLabelKeysErrors[keyof GetAppLabelKeysErrors];
+
+export type GetAppLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetAppLabelKeysResponse = GetAppLabelKeysResponses[keyof GetAppLabelKeysResponses];
+
+export type GetAppLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/apps/labels/values';
+};
+
+export type GetAppLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppLabelValuesError = GetAppLabelValuesErrors[keyof GetAppLabelValuesErrors];
+
+export type GetAppLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetAppLabelValuesResponse = GetAppLabelValuesResponses[keyof GetAppLabelValuesResponses];
 
 export type GetAppTemplatesData = {
     body?: never;
@@ -18808,6 +19003,12 @@ export type GetAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         teams: Array<{
             id: string;
             name: string;
@@ -18846,6 +19047,12 @@ export type UpdateAppData = {
             };
         };
         environmentId?: string | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         teamIds?: Array<string>;
         userIds?: Array<string>;
     };
@@ -18963,6 +19170,12 @@ export type UpdateAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         warnings?: Array<string>;
     };
 };
@@ -19085,6 +19298,12 @@ export type EnableAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         teams: Array<{
             id: string;
             name: string;
@@ -19217,6 +19436,12 @@ export type DisableAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         teams: Array<{
             id: string;
             name: string;

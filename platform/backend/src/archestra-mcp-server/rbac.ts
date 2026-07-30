@@ -197,6 +197,7 @@ export const TOOL_PERMISSIONS: Record<
   // set_app_tools replaces an app's assigned tool set; assertCallerMayModifyApp
   // is the real authority, app:update is the floor (mirrors edit_app).
   set_app_tools: { resource: "app", action: "update" },
+  set_app_labels: { resource: "app", action: "update" },
   // validate_app only reads the head html and reports static findings.
   validate_app: { resource: "app", action: "read" },
   // publish_app changes the app's visibility scope; the scope-promotion gate

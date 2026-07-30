@@ -9,6 +9,7 @@ import {
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_SET_APP_LABELS_SHORT_NAME,
   TOOL_SET_APP_TOOLS_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
@@ -21,6 +22,7 @@ import logger from "@/logging";
 import {
   AgentModel,
   AppAccessModel,
+  AppLabelModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
@@ -83,9 +85,14 @@ import {
   BUILD_APP_SKILL_POINTER,
   NO_RENDER_PROCEED,
 } from "./app-authoring-guidance";
+import {
+  AgentLabelOutputSchema,
+  LabelInputSchema,
+} from "./agent-resources";
 import { archestraMcpBranding } from "./branding";
 import {
   decodeUtf8Text,
+  deduplicateLabels,
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
@@ -114,6 +121,12 @@ const ScaffoldAppToolSchema = ScaffoldAppSchema.extend({ tools: toolsField });
 
 const ListAppsSchema = z.strictObject({
   name: z.string().optional().describe("Filter by name (substring match)."),
+  labels: z
+    .array(LabelInputSchema)
+    .optional()
+    .describe(
+      "Filter by labels. AND across keys, OR within the values given for the same key.",
+    ),
   limit: z.number().int().positive().max(100).optional(),
 });
 
@@ -252,6 +265,9 @@ const AppSummaryOutputSchema = z.object({
   description: z.string().nullable(),
   scope: AppScopeSchema,
   latestVersion: z.number(),
+  labels: z
+    .array(AgentLabelOutputSchema)
+    .describe("Key-value labels for organization/categorization."),
   warnings: z
     .array(z.string())
     .optional()
@@ -366,6 +382,25 @@ const SetAppToolsOutputSchema = z.object({
   tools: z
     .array(z.string())
     .describe("The app's assigned tool names after this call."),
+});
+
+const SetAppLabelsSchema = z.strictObject({
+  appId: z.string().uuid().describe("The app id whose labels to set."),
+  // Required for the same reason as set_app_tools' `tools`: an omitted field is
+  // a loud schema error rather than a silent wipe; pass [] to clear.
+  labels: z
+    .array(LabelInputSchema)
+    .max(50)
+    .describe(
+      "Key-value labels to assign to the app, replacing its current set exactly — pass the full desired list, or [] to clear all. One value per key; a repeated key keeps the last one.",
+    ),
+});
+
+const SetAppLabelsOutputSchema = z.object({
+  id: z.string(),
+  labels: z
+    .array(AgentLabelOutputSchema)
+    .describe("The app's labels after this call."),
 });
 
 const RefineAppOutputSchema = z.object({
@@ -518,6 +553,12 @@ const registry = defineArchestraTools([
           organizationId,
           teamIds: [],
         });
+        if (args.labels?.length) {
+          await AppLabelModel.syncAppLabels(
+            created.id,
+            deduplicateLabels(args.labels),
+          );
+        }
         app = await AppModel.findById(created.id);
       } catch (error) {
         await AppModel.purge(created.id);
@@ -556,6 +597,7 @@ const registry = defineArchestraTools([
           description: app.description,
           scope: app.scope,
           latestVersion: app.latestVersion,
+          labels: appLabelParts(app.labels),
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
@@ -682,7 +724,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_LIST_APPS_SHORT_NAME,
     title: "List Apps",
     description:
-      "List apps visible to the caller, optionally filtered by name — use it to find an app's id. Disabled apps are never listed: an app the user disabled is not available from chat until they re-enable it on the Apps page. Returns id, name, description, scope, and latest version per app, not the HTML (use read_app) or a render (use render_app).",
+      "List apps visible to the caller, optionally filtered by name or labels — use it to find an app's id. Disabled apps are never listed: an app the user disabled is not available from chat until they re-enable it on the Apps page. Returns id, name, description, scope, labels, and latest version per app, not the HTML (use read_app) or a render (use render_app).",
     schema: ListAppsSchema,
     outputSchema: z.object({ apps: z.array(AppSummaryOutputSchema) }),
     async handler({ args, context }) {
@@ -703,13 +745,34 @@ const registry = defineArchestraTools([
         ...(args.name ? { search: args.name } : {}),
         limit: Math.min(args.limit ?? 20, 100),
       });
+      // AND across keys, OR within the values given for one key — the same
+      // semantics as the REST `?labels=` filter.
+      const labelFilter = args.labels?.length
+        ? args.labels.reduce<Record<string, string[]>>((acc, label) => {
+            (acc[label.key] ??= []).push(label.value);
+            return acc;
+          }, {})
+        : undefined;
+      const filtered = labelFilter
+        ? apps.filter((app) =>
+            Object.entries(labelFilter).every(([key, values]) =>
+              app.labels.some(
+                (label) => label.key === key && values.includes(label.value),
+              ),
+            ),
+          )
+        : apps;
       const structured = {
-        apps: apps.map((app) => ({
+        apps: filtered.map((app) => ({
           id: app.id,
           name: app.name,
           description: app.description,
           scope: app.scope,
           latestVersion: app.latestVersion,
+          labels: app.labels.map((label) => ({
+            key: label.key,
+            value: label.value,
+          })),
         })),
       };
       return structuredSuccessResult(
@@ -1037,6 +1100,7 @@ const registry = defineArchestraTools([
           description: updated.description,
           scope: updated.scope,
           latestVersion: updated.latestVersion,
+          labels: appLabelParts(updated.labels),
           ...(warnings.length > 0 ? { warnings } : {}),
         },
         `${summary}${nextEditBaseVersionHint(updated.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(updated.name, updated)}${replacementNote}${skippedNote}${warningsNote}${excerptsNote}`,
@@ -1084,6 +1148,35 @@ const registry = defineArchestraTools([
       return structuredSuccessResult(
         { id: app.id, tools: toolsParts.structured.tools ?? [] },
         `Set assigned tools for app "${escapeAppNameForModelText(app.name)}" (${app.id}).${toolsParts.note}`,
+      );
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_SET_APP_LABELS_SHORT_NAME,
+    title: "Set App Labels",
+    description:
+      "Replace an app's labels with exactly the set you pass ([] clears them). Labels are key-value tags used to organize and categorize apps; they are filterable on the Apps page and via list_apps. Labels are otherwise set only at scaffold_app time, so use this to add, change, or remove them afterward — edit_app and refine_app never touch them.",
+    schema: SetAppLabelsSchema,
+    outputSchema: SetAppLabelsOutputSchema,
+    async handler({ args, context }) {
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
+      const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
+      if ("error" in gate) return gate.error;
+      const { app } = gate;
+
+      // One value per key is a table invariant (PK is (app_id, key_id)), so
+      // collapse repeats before the write rather than failing the call.
+      const labels = deduplicateLabels(args.labels);
+      await AppLabelModel.syncAppLabels(app.id, labels);
+
+      return structuredSuccessResult(
+        { id: app.id, labels },
+        labels.length > 0
+          ? `Set labels for app "${escapeAppNameForModelText(app.name)}" (${app.id}): ${labels
+              .map((label) => `${label.key}=${label.value}`)
+              .join(", ")}.`
+          : `Cleared all labels for app "${escapeAppNameForModelText(app.name)}" (${app.id}).`,
       );
     },
   }),
@@ -1966,10 +2059,21 @@ export function scaffoldPartialToolFailureResult(
       description: app.description,
       scope: app.scope,
       latestVersion: app.latestVersion,
+      labels: appLabelParts(app.labels),
       status: "partial" as const,
     },
     `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}, but assigning its tools failed. The app exists — assign its tools with set_app_tools (no need to re-scaffold), then build it up with edit_app.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app)}\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${fencedBlock(seededHtml, "html")}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
   );
+}
+
+/**
+ * The `labels` fragment of an app summary: {key, value} only, dropping the
+ * internal key/value ids that the taxonomy tables use.
+ */
+function appLabelParts(
+  labels: { key: string; value: string }[],
+): { key: string; value: string }[] {
+  return labels.map(({ key, value }) => ({ key, value }));
 }
 
 /** Result-text note + structured-output fragment echoing the assignment set. */

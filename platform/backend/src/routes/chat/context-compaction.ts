@@ -345,6 +345,7 @@ export async function invalidateConversationCompactions(
 
 export function __testEstimateChatMessagesTokens(params: {
   provider: SupportedProvider;
+  model?: string;
   systemPrompt?: string;
   messages: ChatMessage[];
 }): number {
@@ -524,7 +525,10 @@ async function shouldAutoCompact(params: {
   systemPrompt?: string;
   messages: ChatMessage[];
 }): Promise<{ shouldCompact: boolean; estimatedTokens: number }> {
-  const estimatedTokens = estimateChatMessagesTokens(params);
+  const estimatedTokens = estimateChatMessagesTokens({
+    ...params,
+    model: params.selectedModel,
+  });
   const model = await ModelModel.findByProviderAndModelId(
     params.provider,
     params.selectedModel,
@@ -865,6 +869,7 @@ async function hasContextHeadroomForRetry(params: {
 
   const estimate = estimateChatMessagesTokens({
     provider: params.provider,
+    model: params.selectedModel,
     systemPrompt: params.systemPrompt,
     messages: params.compactionMessages,
   });
@@ -886,12 +891,14 @@ async function createCompactionRecord(params: {
 }): Promise<ConversationCompaction | null> {
   const originalTokenEstimate = estimateChatMessagesTokens({
     provider: params.tokenEstimateProvider,
+    model: params.model,
     messages: params.originalMessages,
   });
   // mirrors the message list the caller will send to the model next turn:
   // summary + the same "recent" slice that was kept verbatim
   const compactedTokenEstimate = estimateChatMessagesTokens({
     provider: params.tokenEstimateProvider,
+    model: params.model,
     messages: [buildSummaryMessage(params.summary), ...params.recentMessages],
   });
 
@@ -1216,10 +1223,18 @@ async function serializeMessagesForSummary(
 
 function estimateChatMessagesTokens(params: {
   provider: SupportedProvider;
+  /**
+   * The model the estimate is for. Optional because a few call sites only ever
+   * compare two estimates against each other (where a consistent yardstick is
+   * all that matters), but pass it wherever the number is compared against the
+   * context window — a reseller's provider id alone picks the wrong tokenizer
+   * for Claude on Bedrock.
+   */
+  model?: string;
   systemPrompt?: string;
   messages: ChatMessage[];
 }): number {
-  const tokenizer = getTokenizer(params.provider);
+  const tokenizer = getTokenizer(params.provider, params.model);
   let extraTokens = 0;
   const providerMessages = params.messages.map((message) => {
     const estimate = getMessageTextForTokenEstimate(message);

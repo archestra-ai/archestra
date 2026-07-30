@@ -1,0 +1,1 @@
+ALTER TABLE "apps" ADD COLUMN "locked" boolean DEFAULT false NOT NULL;

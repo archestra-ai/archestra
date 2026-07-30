@@ -82,6 +82,13 @@ const appsTable = softDeletablePgTable(
      * the backing catalog and answers *who* the audience is once enabled).
      */
     enabled: boolean("enabled").notNull().default(true),
+    /**
+     * Whether the app is locked against modification. A locked app refuses
+     * every agent-driven mutation (html edits, spec, tools, delete) until
+     * unlocked; viewing and running are unaffected. Orthogonal to `enabled`
+     * (which controls who can consume the app at all).
+     */
+    locked: boolean("locked").notNull().default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

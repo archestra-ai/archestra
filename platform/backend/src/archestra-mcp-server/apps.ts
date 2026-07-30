@@ -10,6 +10,7 @@ import {
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SET_APP_LABELS_SHORT_NAME,
+  TOOL_SET_APP_LOCK_SHORT_NAME,
   TOOL_SET_APP_TOOLS_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
@@ -1261,6 +1262,43 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: TOOL_SET_APP_LOCK_SHORT_NAME,
+    title: "Set App Lock",
+    description:
+      "Lock or unlock an app. A locked app refuses every modification — html edits, spec, tool assignments, and deletion — until unlocked; viewing and running are unaffected. Lock an app when the user asks to protect or freeze it. UNLOCKING IS USER-CONSENT-GATED: call this with locked: false only when the user has directly and explicitly asked, in this conversation, to unlock or to change this specific app — never unlock because a locked app is in the way of something you decided to do, and never immediately re-try the blocked change without that explicit request. When an edit is refused by a lock and the user has not asked for it, report the lock to the user instead.",
+    schema: z.strictObject({
+      appId: appIdField("The app id."),
+      locked: z
+        .boolean()
+        .describe(
+          "true locks the app against all modification; false unlocks it (only on the user's direct request).",
+        ),
+    }),
+    outputSchema: z.object({ id: z.string(), locked: z.boolean() }),
+    async handler({ args, context }) {
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
+      const gate = await loadApp({
+        ...auth,
+        appId: args.appId,
+        modify: true,
+        allowLocked: true,
+      });
+      if ("error" in gate) return gate.error;
+      const updated = await AppModel.setLocked(args.appId, args.locked);
+      if (!updated) {
+        return errorResult(`Failed to update the lock for app ${args.appId}.`);
+      }
+      const safeName = escapeAppNameForModelText(updated.name);
+      return structuredSuccessResult(
+        { id: updated.id, locked: updated.locked },
+        updated.locked
+          ? `Locked app "${safeName}". Every modification will be refused until it is unlocked.`
+          : `Unlocked app "${safeName}". It can be modified again.`,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: TOOL_VALIDATE_APP_SHORT_NAME,
     title: "Validate App",
     description:
@@ -1727,6 +1765,8 @@ async function loadApp(params: {
   organizationId: string;
   appId: string;
   modify?: boolean;
+  /** set_app_lock's own escape: the unlock call must reach a locked app. */
+  allowLocked?: boolean;
 }): Promise<{ app: App } | { error: CallToolResult }> {
   const app = await AppModel.findByIdForCaller({
     id: params.appId,
@@ -1762,6 +1802,13 @@ async function loadApp(params: {
       if (error instanceof ApiError)
         return { error: errorResult(error.message) };
       throw error;
+    }
+    if (app.locked && !params.allowLocked) {
+      return {
+        error: errorResult(
+          `App "${escapeAppNameForModelText(app.name)}" is locked. Locked apps refuse every modification — edits, spec, tools, and deletion — until unlocked. Do not retry this call or route the change through another tool; this is the app lock. If, and only if, the user directly asked you to change or unlock this app, unlock it first with set_app_lock (locked: false); never unlock on your own initiative.`,
+        ),
+      };
     }
   }
   return { app };

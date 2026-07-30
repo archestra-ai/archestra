@@ -2682,6 +2682,13 @@
       "when": 1785449060953,
       "tag": "0382_loose_multiple_man",
       "breakpoints": true
+    },
+    {
+      "idx": 383,
+      "version": "7",
+      "when": 1785450487138,
+      "tag": "0383_app_lock",
+      "breakpoints": true
     }
   ]
 }

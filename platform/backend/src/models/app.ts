@@ -447,6 +447,20 @@ class AppModel {
   }
 
   /**
+   * Flip an app's locked state. A pure boolean on the app row, like
+   * `setEnabled`: locked refuses every agent-driven mutation until unlocked,
+   * while viewing and running stay unaffected.
+   */
+  static async setLocked(id: string, locked: boolean): Promise<App | null> {
+    const [row] = await db
+      .update(schema.appsTable)
+      .set({ locked })
+      .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)))
+      .returning({ id: schema.appsTable.id });
+    return row ? await AppModel.findById(id) : null;
+  }
+
+  /**
    * Update an app atomically. `patch` updates catalog columns; `teamIds`
    * (when supplied) replaces the team set; `version` (when supplied) forks a new
    * immutable version iff its canonical payload differs from the head, bumping

@@ -458,6 +458,12 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
     idFromArgs: (a) => str(a.appId),
     fetchById: appFetch,
   },
+  set_app_lock: {
+    resourceType: "app",
+    action: "app.updated",
+    idFromArgs: (a) => str(a.appId),
+    fetchById: appFetch,
+  },
   publish_app: {
     resourceType: "app",
     action: "app.updated",

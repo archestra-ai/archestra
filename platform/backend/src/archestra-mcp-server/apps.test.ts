@@ -20,6 +20,7 @@ import {
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SET_APP_LABELS_SHORT_NAME,
+  TOOL_SET_APP_LOCK_SHORT_NAME,
   TOOL_SET_APP_TOOLS_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
@@ -802,7 +803,11 @@ describe("read_app / edit_app", () => {
         [TOOL_RENDER_APP_SHORT_NAME, { appId }],
         [
           TOOL_EDIT_APP_SHORT_NAME,
-          { appId, edits: [{ old_str: "Paused", new_str: "Reworked" }] },
+          {
+            appId,
+            baseVersion: version,
+            edits: [{ old_str: "Paused", new_str: "Reworked" }],
+          },
         ],
         [
           TOOL_REFINE_APP_SHORT_NAME,
@@ -1772,6 +1777,90 @@ describe("cross-conversation concurrent app editing (T-979)", () => {
     expect(
       (await AppVersionModel.findByAppAndVersion(appId, headAfterB))?.html,
     ).toBe(chatBHtml);
+  });
+});
+
+describe("app lock (set_app_lock)", () => {
+  let context: ArchestraContext;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({ name: "Lock Agent" });
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+  });
+
+  test("a locked app refuses every mutation until unlocked; viewing still works", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Guarded" },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+
+    const locked = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SET_APP_LOCK_SHORT_NAME),
+      { appId, locked: true },
+      context,
+    );
+    expect(locked.isError).toBe(false);
+    expect(structured(locked).locked).toBe(true);
+
+    // Every mutating verb is refused with the lock named — including delete.
+    const mutations: Array<[string, Record<string, unknown>]> = [
+      [
+        TOOL_EDIT_APP_SHORT_NAME,
+        { appId, baseVersion: 1, replacementHtml: "<h1>nope</h1>" },
+      ],
+      [TOOL_SET_APP_TOOLS_SHORT_NAME, { appId, tools: [] }],
+      [
+        TOOL_REFINE_APP_SHORT_NAME,
+        { appId, spec: { summary: "s", features: [], tools: [] } },
+      ],
+      [TOOL_DELETE_APP_SHORT_NAME, { appId }],
+    ];
+    for (const [tool, args] of mutations) {
+      const result = await executeArchestraTool(
+        getArchestraToolFullName(
+          tool as Parameters<typeof getArchestraToolFullName>[0],
+        ),
+        args,
+        context,
+      );
+      expect(result.isError, tool).toBe(true);
+      expect((result.content[0] as any).text, tool).toContain("locked");
+    }
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(1);
+
+    // Viewing is unaffected.
+    const read = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
+      { appId },
+      context,
+    );
+    expect(read.isError).toBe(false);
+
+    // Unlock (the tool must reach the locked app), then edits work again.
+    const unlocked = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SET_APP_LOCK_SHORT_NAME),
+      { appId, locked: false },
+      context,
+    );
+    expect(unlocked.isError).toBe(false);
+    const edit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 1, replacementHtml: "<h1>again</h1>" },
+      context,
+    );
+    expect(edit.isError).toBe(false);
+    expect(structured(edit).latestVersion).toBe(2);
   });
 });
 

@@ -7,6 +7,7 @@ import {
   ChatMessageMetadataSchema,
   CONTEXT_WINDOW_BREAKDOWN_EVENT,
   type ContextWindowBreakdown,
+  collapseWhitespace,
   getModelReadableMimeTypes,
   isModelSelectionComplete,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
@@ -15,7 +16,11 @@ import {
   type SupportedProvider,
   supportsGeminiThoughtSummaries,
   TimeInMs,
+  type TitleRejectionReason,
   type TokenUsage,
+  toConversationTitle,
+  toPlaceholderTitle,
+  truncateChars,
 } from "@archestra/shared";
 import {
   createUIMessageStream,
@@ -3009,24 +3014,41 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         firstAssistantMessage,
       });
 
-      if (!generatedTitle) {
-        logger.warn(
-          { conversationId: id, provider: titleLlm.provider },
-          "Title generation: returned null (generation failed)",
+      // The model can decline to name the conversation — it answers with a
+      // paragraph, or a reasoning model spends the whole ceiling thinking and
+      // writes nothing. Settle on the opening words of the first message rather
+      // than leaving the chat untitled; the client shows the same shape while
+      // generation is in flight, so this only makes that state permanent.
+      // `generateConversationTitle` has already logged which of those happened.
+      const title = generatedTitle ?? toPlaceholderTitle(titleUserInput);
+      const titleSource = generatedTitle !== null ? "model" : "fallback";
+
+      if (title === conversation.title && !conversation.titleIsPlaceholder) {
+        // Most often the fallback matched the placeholder the client stored
+        // when it opened the chat. Writing it again would touch the row — and
+        // reorder the sidebar — to leave the title exactly as it was.
+        //
+        // Only when the row isn't flagged a placeholder, though: the write
+        // below is also what clears that flag, and skipping it would leave an
+        // app chat asking to be retitled on every open.
+        logger.info(
+          { conversationId: id, title, titleSource },
+          "Skipping title update - the new title is identical to the stored one",
         );
-        // Return the conversation without title update on error
         return reply.send(conversation);
       }
 
       logger.info(
-        { conversationId: id, generatedTitle },
-        "Generated conversation title",
+        { conversationId: id, title, titleSource },
+        "Updating conversation title",
       );
 
       // Compare-and-set on the title read before generation. The LLM call above
       // takes seconds, and a rename landing in that window must survive — an
       // app chat's placeholder title is unhelpful, so renaming while the reply
-      // streams is ordinary behaviour, and the model's guess must not win.
+      // streams is ordinary behaviour, and the model's guess must not win. The
+      // fallback is written through the same guard: a rename outranks the
+      // opening words just as it outranks a generated title.
       const updatedConversation =
         await ConversationModel.updateTitleIfUnchanged({
           id,
@@ -3034,7 +3056,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           expectedTitle: conversation.title,
           expectedTitleIsPlaceholder: conversation.titleIsPlaceholder,
-          title: generatedTitle,
+          title,
         });
 
       if (!updatedConversation) {
@@ -3395,10 +3417,13 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
       sawFirstUser = true;
       // Collapse whitespace (incl. newlines) so a forged metadata value cannot
       // break out of the title prompt's "User: ..." line, then cap the length.
-      const skillName = ChatMessageMetadataSchema.safeParse(msgContent.metadata)
-        .data?.skill?.name?.replace(/\s+/g, " ")
-        .trim()
-        .slice(0, MAX_SKILL_NAME_LENGTH);
+      const rawSkillName = ChatMessageMetadataSchema.safeParse(
+        msgContent.metadata,
+      ).data?.skill?.name;
+      const skillName = truncateChars(
+        collapseWhitespace(rawSkillName ?? ""),
+        MAX_SKILL_NAME_LENGTH,
+      );
       if (skillName) {
         firstUserSkillName = skillName;
       }
@@ -3465,9 +3490,17 @@ export function buildTitlePrompt(
   firstUserMessage: string,
   firstAssistantMessage: string,
 ): string {
-  const contextMessages = firstAssistantMessage
-    ? `User: ${firstUserMessage}\n\nAssistant: ${firstAssistantMessage}`
-    : `User: ${firstUserMessage}`;
+  // By code point, so the cut cannot split a surrogate pair and send an
+  // unpaired surrogate to the provider.
+  const user = truncateChars(firstUserMessage, TITLE_PROMPT_EXCERPT_MAX_CHARS);
+  const assistant = truncateChars(
+    firstAssistantMessage,
+    TITLE_PROMPT_EXCERPT_MAX_CHARS,
+  );
+
+  const contextMessages = assistant
+    ? `User: ${user}\n\nAssistant: ${assistant}`
+    : `User: ${user}`;
 
   return `Chat conversation messages:
 
@@ -3491,8 +3524,38 @@ export interface GenerateTitleParams {
 }
 
 /**
+ * Reasoning models spend this budget on hidden thinking before writing anything
+ * visible, so a tight cap is exhausted mid-thought and the call returns empty
+ * text. Generous on purpose — it is a ceiling, not a reservation.
+ */
+const TITLE_MAX_OUTPUT_TOKENS = 4096;
+
+/**
+ * Enough of a message to name its topic. The opening turn can be a pasted log
+ * or a long answer, and forwarding it whole makes the call slow and expensive
+ * while giving the model more to answer rather than title.
+ */
+const TITLE_PROMPT_EXCERPT_MAX_CHARS = 1000;
+
+/**
+ * What each rejected title generation response means, said in full so an
+ * operator reading the log does not have to know how title generation is
+ * prompted to understand why a conversation kept its opening words.
+ */
+const TITLE_REJECTION_MESSAGES: Record<TitleRejectionReason, string> = {
+  empty_response:
+    "Title generation: the model wrote no visible text. A reasoning model can spend the entire output ceiling on hidden thinking and finish before writing a title. Falling back to the conversation's opening words.",
+  not_a_title:
+    "Title generation: the model answered the conversation instead of naming it — the response is far longer than a title can be. Discarding it and falling back to the conversation's opening words.",
+};
+
+/**
  * Generates a conversation title using the specified provider.
- * Returns the generated title or null if generation fails.
+ *
+ * Returns null when no title came back — the provider call failed, or it
+ * answered with something {@link toConversationTitle} won't accept as a title.
+ * Each case is logged with its cause here; the caller only needs to know it has
+ * to fall back.
  */
 export async function generateConversationTitle(
   params: GenerateTitleParams,
@@ -3537,18 +3600,38 @@ export async function generateConversationTitle(
       model,
       system: systemPrompt,
       prompt: titlePrompt,
-      maxOutputTokens: 64,
+      maxOutputTokens: TITLE_MAX_OUTPUT_TOKENS,
     });
 
+    const outcome = toConversationTitle(result.text);
+
+    if (outcome.title === null) {
+      // Warn, not error: the provider answered, we just can't use what it said.
+      // `finishReason: "length"` alongside an empty response is the reasoning
+      // model case — it ran out of ceiling before writing anything visible.
+      logger.warn(
+        {
+          provider,
+          modelName,
+          conversationId,
+          rejectionReason: outcome.reason,
+          finishReason: result.finishReason,
+          responseChars: result.text.length,
+        },
+        TITLE_REJECTION_MESSAGES[outcome.reason],
+      );
+      return null;
+    }
+
     logger.debug(
-      { provider, modelName, generatedTitle: result.text.trim() },
-      "Title generation: generateText succeeded",
+      { provider, modelName, conversationId, generatedTitle: outcome.title },
+      "Title generation: the model returned a usable title",
     );
-    return result.text.trim();
+    return outcome.title;
   } catch (error) {
     logger.error(
-      { error, provider, modelName, baseUrl },
-      "Failed to generate conversation title",
+      { error, provider, modelName, baseUrl, conversationId },
+      "Title generation: the provider call failed. Falling back to the conversation's opening words.",
     );
     return null;
   }

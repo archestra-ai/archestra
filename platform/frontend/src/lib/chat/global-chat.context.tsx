@@ -59,7 +59,7 @@ import {
 } from "@/lib/chat/chat-session-utils";
 import {
   getChatExternalAgentId,
-  getConversationDisplayTitle,
+  isPlaceholderTitle,
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
 import appConfig from "@/lib/config/config";
@@ -699,23 +699,33 @@ function ChatSessionHook({
         titleIsPlaceholder?: boolean;
       }>(["conversation", conversationId]);
       const cachedTitle = cachedConversation?.title;
-      const firstUserText = getConversationDisplayTitle(null, stableMessages);
+      // Two kinds of stand-in title, and neither is proof the server ever
+      // titled this chat. An app chat carries the durable flag, set when the
+      // row was seeded with the app's name. An ordinary chat carries none — the
+      // client wrote the opening prompt as its title — so that one is only
+      // recognisable by shape, and only here: the server's "already titled"
+      // gate sees an ordinary non-empty title and would skip, which is why
+      // this kind alone has to ask for a regeneration.
+      const hasInferredPlaceholderTitle = isPlaceholderTitle(
+        cachedTitle,
+        stableMessages,
+      );
+      const hasPlaceholderTitle =
+        cachedConversation?.titleIsPlaceholder === true ||
+        hasInferredPlaceholderTitle;
 
-      // A placeholder title is an app's name, seeded so an app chat isn't blank
-      // before its first exchange — it counts as untitled. The server re-reads
-      // the flag and skips if it's stale, so this only decides whether to ask.
+      // A placeholder title counts as untitled. The server re-reads the flag
+      // and skips if it's stale, so this only decides whether to ask.
       const shouldGenerateTitle =
         !titleGenerationAttemptedRef.current &&
-        (!cachedTitle ||
-          cachedConversation?.titleIsPlaceholder === true ||
-          cachedTitle === firstUserText);
+        (!cachedTitle || hasPlaceholderTitle);
 
       if (shouldGenerateTitle) {
         titleGenerationAttemptedRef.current = true;
         generateTitleMutation.mutate(
           {
             id: conversationId,
-            regenerate: cachedTitle === firstUserText,
+            regenerate: hasInferredPlaceholderTitle,
           },
           {
             onSuccess: (data) => {

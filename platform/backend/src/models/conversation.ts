@@ -12,7 +12,7 @@ import {
 } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
-import { softDelete } from "@/database/soft-delete";
+import { hardDelete, softDelete } from "@/database/soft-delete";
 import type {
   Conversation,
   ConversationOrigin,
@@ -785,6 +785,29 @@ class ConversationModel {
     organizationId: string,
   ): Promise<number> {
     return softDelete(
+      db,
+      schema.conversationsTable,
+      and(
+        eq(schema.conversationsTable.id, id),
+        eq(schema.conversationsTable.userId, userId),
+        eq(schema.conversationsTable.organizationId, organizationId),
+      ),
+    );
+  }
+
+  /**
+   * Physically remove a conversation (owner + org scoped). Reserved for rows
+   * that were never real user data and must leave no trace — e.g. an orphan
+   * conversation created then abandoned when a scheduled-run race is lost.
+   * Ordinary user deletes must use `delete` (soft) so the data stays
+   * recoverable. Returns the number of rows removed.
+   */
+  static async hardDelete(
+    id: string,
+    userId: string,
+    organizationId: string,
+  ): Promise<number> {
+    return hardDelete(
       db,
       schema.conversationsTable,
       and(

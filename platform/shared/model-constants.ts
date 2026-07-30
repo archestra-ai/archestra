@@ -688,8 +688,14 @@ export function requiresPerplexityAgentApi(modelId: string): boolean {
  * appends `/responses` to reach its OpenAI-compatible alias.
  */
 export function perplexityAgentApiBaseUrl(chatBaseUrl?: string | null): string {
-  const base = chatBaseUrl || DEFAULT_PROVIDER_BASE_URLS.perplexity;
-  return `${base.replace(/\/+$/, "")}/v1`;
+  let base = chatBaseUrl || DEFAULT_PROVIDER_BASE_URLS.perplexity;
+  // Trimmed by slicing rather than a `/\/+$/` replace: the base URL is
+  // operator-supplied per key, and a backtracking anchored match on it is a
+  // denial-of-service vector for a string of many slashes.
+  while (base.endsWith("/")) {
+    base = base.slice(0, -1);
+  }
+  return `${base}/v1`;
 }
 
 /**

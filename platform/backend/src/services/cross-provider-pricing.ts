@@ -191,15 +191,22 @@ export function resolveSelfHostedModelMetadata(params: {
 }
 
 /**
- * Strip a trailing date stamp from a model id, in either the contiguous Bedrock
- * form (`-20250929`) or the hyphenated OpenAI/Azure form (`-2024-08-06`).
+ * Ids to try when matching a stored model id against a registry key, in order
+ * of preference.
  *
- * A bare four-digit suffix is deliberately left alone: Mistral versions models
- * as `-2407`/`-2411`, so stripping it would collapse two differently-priced
- * models onto one registry key.
+ * A provider decorates a name in ways the registry does not key it by: a
+ * date-pinned snapshot (`gpt-4o-2024-08-06`), and Vertex's `-maas` marker for
+ * the serverless copy of an open model, which names the same weights the
+ * undecorated entry does.
  */
-export function stripModelDateSuffix(modelId: string): string {
-  return modelId.replace(DATE_SUFFIX, "");
+export function registryLookupCandidates(modelId: string): string[] {
+  const withoutMaas = modelId.replace(VERTEX_MAAS_SUFFIX, "");
+  return dedupe([
+    modelId,
+    stripModelDateSuffix(modelId),
+    withoutMaas,
+    stripModelDateSuffix(withoutMaas),
+  ]);
 }
 
 // ============================================================================
@@ -278,11 +285,21 @@ const BEDROCK_VENDOR_TO_MODELS_DEV_PROVIDER: Record<string, string> = {
 const BEDROCK_REGION_PREFIX = /^(us-gov|us|eu|apac|ap|sa|ca|global)\./;
 /** Trailing Bedrock model version, e.g. `-v1:0` or `:0`. */
 const BEDROCK_VERSION_SUFFIX = /(?:-v\d+)?:\d+$/;
+/** Vertex appends this to the serverless copy of an open model. */
+const VERTEX_MAAS_SUFFIX = /-maas$/;
 /**
  * Trailing date stamp in either the contiguous Bedrock form (`-20250929`) or
  * the hyphenated OpenAI/Azure form (`-2024-08-06`).
+ *
+ * A bare four-digit suffix is deliberately left alone: Mistral versions models
+ * as `-2407`/`-2411`, so stripping it would collapse two differently-priced
+ * models onto one registry key.
  */
 const DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$|-\d{8}$/;
+
+function stripModelDateSuffix(modelId: string): string {
+  return modelId.replace(DATE_SUFFIX, "");
+}
 
 function resolveBedrockTargets(modelId: string): CrossProviderTarget[] {
   const withoutRegion = modelId.replace(BEDROCK_REGION_PREFIX, "");

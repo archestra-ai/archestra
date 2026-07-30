@@ -1,4 +1,5 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { AppModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { resolveOpenedApp } from "./opened-app-context";
 
@@ -21,6 +22,39 @@ describe("resolveOpenedApp", () => {
         organizationId: org.id,
       }),
     ).toBeUndefined();
+  });
+
+  test("stops resolving a disabled app, even for its author", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const org = await makeOrganization();
+    const author = await makeUser();
+    await makeMember(author.id, org.id, { role: ADMIN_ROLE_NAME });
+    const app = await makeApp({
+      organizationId: org.id,
+      authorId: author.id,
+      name: "Expense Tracker",
+      scope: "personal",
+    });
+    const openedApp = { ...noApp, appId: app.id };
+    const resolve = () =>
+      resolveOpenedApp({
+        openedApp,
+        userId: author.id,
+        organizationId: org.id,
+      });
+
+    // Resolvable while enabled — so the negative below is about the lifecycle
+    // state, not a fixture that never resolves at all.
+    expect(await resolve()).toMatchObject({ name: "Expense Tracker" });
+
+    // A disabled app must not reach the model at all: no injection, matching
+    // the chat tools, which report it as not found.
+    await AppModel.setEnabled(app.id, false);
+    expect(await resolve()).toBeUndefined();
   });
 
   test("resolves an owned app to its name and description", async ({

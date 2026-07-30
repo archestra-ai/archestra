@@ -50,7 +50,11 @@ export async function createSeededAppConversation(params: {
     userId,
     isAppAdmin: await callerIsAppAdmin(userId, organizationId),
   });
-  if (!app) {
+  // A disabled app does not exist for chat (T-980) — deep-link seeding
+  // included, or the seeded render would hand the model the very app every
+  // chat tool refuses to acknowledge. Its author previews it from the Apps
+  // page instead.
+  if (!app || !app.enabled) {
     throw new ApiError(404, `No app found with id ${appId}.`);
   }
 

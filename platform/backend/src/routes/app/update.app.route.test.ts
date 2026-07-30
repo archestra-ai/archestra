@@ -1,4 +1,5 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import AppModel from "@/models/app";
 import EnvironmentModel from "@/models/environment";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -91,6 +92,36 @@ describe("PATCH /api/apps/:appId", () => {
       scope: "org",
       authorId: otherAuthor.id,
     });
+  });
+
+  test("html cannot be rewritten while the app is disabled, settings changes still can", async ({
+    makeApp,
+  }) => {
+    const created = await makeApp({
+      organizationId,
+      scope: "org",
+      authorId: user.id,
+    });
+    await AppModel.setEnabled(created.id, false);
+
+    // Rewriting content is authoring; a disabled app is frozen for it — for
+    // its author too (T-980), until it is re-enabled.
+    const htmlPatch = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { html: "<h1>rewrite while disabled</h1>" },
+    });
+    expect(htmlPatch.statusCode).toBe(403);
+    expect(htmlPatch.json().error.message).toContain("disabled");
+
+    // Managing the disabled app's settings stays possible — that is where
+    // renaming/re-scoping ahead of a re-enable happens.
+    const namePatch = await app.inject({
+      method: "PATCH",
+      url: `/api/apps/${created.id}`,
+      payload: { name: "Renamed While Disabled" },
+    });
+    expect(namePatch.statusCode).toBe(200);
   });
 
   test("an admin cannot rewrite another user's personal app's html (that is chat-authoring, not settings)", async ({

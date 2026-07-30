@@ -635,41 +635,223 @@ describe("read_app / edit_app", () => {
     expect(edit.isError).toBe(true);
   });
 
-  test("publish_app enables a disabled app so its new audience can see it", async ({
-    makeUser,
-    makeMember,
-  }) => {
+  test("publish_app cannot reach a disabled app; re-enabling first restores it", async () => {
     const created = await executeArchestraTool(
       getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
       { name: "Shareable", scope: "personal" },
       context,
     );
     const appId = structured(created).id as string;
-    // Disable it so this test genuinely exercises publish_app's enable step.
     await AppModel.setEnabled(appId, false);
 
-    // A disabled personal app: another member cannot see it yet.
-    const member = await makeUser();
-    await makeMember(member.id, organizationId, { role: "member" });
-    const memberCtx: ArchestraContext = { ...context, userId: member.id };
-    const readAppAs = (ctx: ArchestraContext) =>
-      executeArchestraTool(
-        getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
-        { appId },
-        ctx,
-      );
-    expect((await readAppAs(memberCtx)).isError).toBe(true);
-
-    const result = await executeArchestraTool(
+    // A disabled app does not exist for chat — publish_app included, so a
+    // model refused an edit cannot re-enable (and widen!) the app instead.
+    const whileDisabled = await executeArchestraTool(
       getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
       { appId, scope: "org" },
       context,
     );
-    expect(result.isError).toBe(false);
-    // publish_app flips the app enabled, not just its scope...
-    expect((await AppModel.findById(appId))?.enabled).toBe(true);
-    // ...so the org audience can now see it.
-    expect((await readAppAs(memberCtx)).isError).toBe(false);
+    expect(whileDisabled.isError).toBe(true);
+    expect((whileDisabled.content[0] as any).text).toContain("No app found");
+    expect((await AppModel.findById(appId))?.enabled).toBe(false);
+
+    // The user re-enables on the Apps page (REST); publishing then works.
+    await AppModel.setEnabled(appId, true);
+    const afterEnable = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
+      { appId, scope: "org" },
+      context,
+    );
+    expect(afterEnable.isError).toBe(false);
+  });
+
+  // A parallel chat of the same author rediscovered a just-disabled app and
+  // edited it ("better use that App instead of creating a new one"). The
+  // contract these tests pin: from chat, a disabled app is indistinguishable
+  // from one that does not exist — for its author too. list_apps omits it,
+  // and every id-scoped tool (reads, writes, publish_app, delete_app alike)
+  // reports "No app found", so a conversation holding a pre-disable snapshot
+  // learns nothing and cannot re-enable the app itself. The one irreducible
+  // trace is the reserved name: a same-name scaffold is told the name is
+  // taken and nothing else. The author sees and re-enables the app on the
+  // Apps page (REST), which is deliberately unaffected.
+  describe("disabled apps in chat tools", () => {
+    function scaffold(args: Record<string, unknown>, ctx = context) {
+      return executeArchestraTool(
+        getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+        args,
+        ctx,
+      );
+    }
+
+    test("list_apps hides the author's own disabled app", async () => {
+      const live = await scaffold({ name: "Live App" });
+      const liveId = structured(live).id as string;
+      const paused = await scaffold({ name: "Paused App" });
+      const pausedId = structured(paused).id as string;
+      await AppModel.setEnabled(pausedId, false);
+
+      const listed = await executeArchestraTool(
+        getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+        {},
+        context,
+      );
+      const rows = structured(listed).apps as Array<{ id: string }>;
+      // Not listed even for the author: a disabled app must never be offered
+      // as something to reuse from chat. The author finds it on the Apps page.
+      expect(rows.find((a) => a.id === pausedId)).toBeUndefined();
+      expect(rows.find((a) => a.id === liveId)).toBeDefined();
+    });
+
+    test("scaffold_app's name-conflict steer names the disabled state instead of commanding reuse", async () => {
+      const created = await scaffold({ name: "Trip Planner" });
+      const appId = structured(created).id as string;
+
+      // Live app: the plain "edit that id" steer is right.
+      const liveConflict = await scaffold({ name: "Trip Planner" });
+      expect(liveConflict.isError).toBe(true);
+      expect((liveConflict.content[0] as any).text).toContain(appId);
+      expect((liveConflict.content[0] as any).text).not.toContain("disabled");
+
+      await AppModel.setEnabled(appId, false);
+
+      // Disabled app: "name taken" is the only fact the conflict may reveal —
+      // no id, no state, no steer toward the app (the steer is what made a
+      // parallel chat rebuild a pulled-back app in the incident).
+      const disabledConflict = await scaffold({ name: "Trip Planner" });
+      expect(disabledConflict.isError).toBe(true);
+      const text = (disabledConflict.content[0] as any).text as string;
+      expect(text).toContain("Trip Planner");
+      expect(text).not.toContain(appId);
+      expect(text).not.toContain("disabled");
+      expect(text).toContain("not available from chat");
+      expect(text).toContain("different name");
+    });
+
+    test("every id-scoped tool reports a disabled app as not found — its author included", async () => {
+      const { appId, version } = await scaffoldWithHtml("<h1>Paused</h1>");
+      await AppModel.setEnabled(appId, false);
+
+      const attempts: Array<[string, Record<string, unknown>]> = [
+        [TOOL_READ_APP_SHORT_NAME, { appId }],
+        [TOOL_RENDER_APP_SHORT_NAME, { appId }],
+        [
+          TOOL_EDIT_APP_SHORT_NAME,
+          { appId, edits: [{ old_str: "Paused", new_str: "Reworked" }] },
+        ],
+        [
+          TOOL_REFINE_APP_SHORT_NAME,
+          {
+            appId,
+            spec: {
+              summary: "A paused app being reworked.",
+              features: ["one feature"],
+              tools: [],
+            },
+          },
+        ],
+        [TOOL_SET_APP_TOOLS_SHORT_NAME, { appId, tools: [] }],
+        // The lifecycle verbs too: a model refused an edit must not be able
+        // to delete the app or re-enable it (publish widens the audience!).
+        [TOOL_DELETE_APP_SHORT_NAME, { appId }],
+        [TOOL_PUBLISH_APP_SHORT_NAME, { appId, scope: "org" }],
+      ];
+      for (const [tool, args] of attempts) {
+        const result = await executeArchestraTool(
+          getArchestraToolFullName(
+            tool as Parameters<typeof getArchestraToolFullName>[0],
+          ),
+          args,
+          context,
+        );
+        expect(result.isError, tool).toBe(true);
+        expect((result.content[0] as any).text, tool).toContain(
+          `No app found with id ${appId}.`,
+        );
+      }
+      // Nothing was written, deleted, or re-enabled.
+      const after = await AppModel.findById(appId);
+      expect(after?.latestVersion).toBe(version);
+      expect(after?.enabled).toBe(false);
+    });
+
+    test("list_apps hides a disabled org app from everyone, its author included", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await scaffold({ name: "Org Wide", scope: "org" });
+      const appId = structured(created).id as string;
+
+      const member = await makeUser();
+      await makeMember(member.id, organizationId, { role: "member" });
+      const otherAdmin = await makeUser();
+      await makeMember(otherAdmin.id, organizationId, {
+        role: ADMIN_ROLE_NAME,
+      });
+      const listAs = async (userId: string) => {
+        const listed = await executeArchestraTool(
+          getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+          {},
+          { ...context, userId },
+        );
+        return structured(listed).apps.map((a: any) => a.id) as string[];
+      };
+
+      // Enabled: the org scope reaches both of them.
+      expect(await listAs(member.id)).toContain(appId);
+      expect(await listAs(otherAdmin.id)).toContain(appId);
+
+      await AppModel.setEnabled(appId, false);
+
+      // Disabled: gone from chat listings for everyone — scope, the app:admin
+      // bypass, and authorship all lose to the lifecycle state.
+      expect(await listAs(member.id)).not.toContain(appId);
+      expect(await listAs(otherAdmin.id)).not.toContain(appId);
+      expect(await listAs(context.userId as string)).not.toContain(appId);
+    });
+
+    test("edit_app on a disabled org app is refused for everyone, its author included", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await scaffold({ name: "Org Editable", scope: "org" });
+      const appId = structured(created).id as string;
+      const otherAdmin = await makeUser();
+      await makeMember(otherAdmin.id, organizationId, {
+        role: ADMIN_ROLE_NAME,
+      });
+      const adminCtx: ArchestraContext = { ...context, userId: otherAdmin.id };
+
+      // Enabled: an org app is modifiable by any app admin.
+      const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
+      const preDisable = await editApp(
+        appId,
+        1,
+        // biome-ignore lint/style/noNonNullAssertion: seeded head exists
+        [{ old_str: seeded!.html, new_str: "<h1>v2</h1>" }],
+        adminCtx,
+      );
+      expect(preDisable.isError).toBe(false);
+
+      await AppModel.setEnabled(appId, false);
+
+      // Disabled: not found for chat authoring, no matter the caller's
+      // standing — admin and author get the identical answer.
+      const asAdmin = await editApp(
+        appId,
+        2,
+        [{ old_str: "v2", new_str: "v3" }],
+        adminCtx,
+      );
+      expect(asAdmin.isError).toBe(true);
+
+      const asAuthor = await editApp(appId, 2, [
+        { old_str: "v2", new_str: "v3" },
+      ]);
+      expect(asAuthor.isError).toBe(true);
+      expect((asAuthor.content[0] as any).text).toContain("No app found");
+      expect((await AppModel.findById(appId))?.latestVersion).toBe(2);
+    });
   });
 
   test("a single edit forks exactly one version", async () => {

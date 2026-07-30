@@ -3476,6 +3476,131 @@ describe("McpClient", () => {
         fetchMock.mockRestore();
       });
 
+      // Regression: a catalog configured to inject into a custom header must
+      // send the brokered credential under that header only. Emitting it as
+      // `Authorization: Bearer` — or letting a leftover install secret add an
+      // `Authorization` alongside it — hands the upstream a credential it never
+      // asked for and drops the one it did.
+      test("injects the brokered managed credential into the configured custom header", async ({
+        makeIdentityProvider,
+        makeOrganization,
+        makeUser,
+      }) => {
+        const organization = await makeOrganization();
+        const user = await makeUser({ email: "managed-header@example.com" });
+        const managedConfig = {
+          requestedCredentialType: "secret" as const,
+          resourceIdentifier: "orn:okta:pam:github-secret",
+          tokenInjectionMode: "header" as const,
+          headerName: "x-provider-api-token",
+          responseFieldPath: "token",
+        };
+        const identityProvider = await makeIdentityProvider(organization.id, {
+          providerId: "okta-managed-header",
+          issuer: "https://example.okta.com",
+          oidcConfig: {
+            clientId: "web-client-id",
+            tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+            enterpriseManagedCredentials: {
+              exchangeStrategy: "okta_managed",
+              clientId: "ai-agent-client-id",
+              tokenEndpoint: "https://example.okta.com/oauth2/v1/token",
+              tokenEndpointAuthentication: "client_secret_post",
+              clientSecret: "ai-agent-client-secret",
+            },
+          },
+        });
+
+        await AgentModel.update(agentId, {
+          organizationId: organization.id,
+          identityProviderId: identityProvider.id,
+        });
+
+        // A leftover static credential from before the catalog moved to
+        // enterprise-managed mode. It must not ride along on the request.
+        const staleSecret = await secretManager().createSecret(
+          { access_token: "stale-install-token" },
+          "managed-header-stale-secret",
+        );
+        await McpServerModel.update(mcpServerId, { secretId: staleSecret.id });
+        await InternalMcpCatalogModel.update(catalogId, {
+          enterpriseManagedConfig: managedConfig,
+        });
+
+        const tool = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__managed_header_tool",
+          description: "Managed credential tool using a custom header",
+          parameters: {},
+          catalogId,
+        });
+
+        await AgentToolModel.create(agentId, tool.id, {
+          credentialResolutionMode: "enterprise_managed",
+        });
+
+        await db.insert(schema.accountsTable).values({
+          id: randomUUID(),
+          accountId: "acct-managed-header",
+          providerId: identityProvider.providerId,
+          userId: user.id,
+          idToken: createJwt({ exp: futureExpSeconds() }),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              issued_token_type: "urn:okta:params:oauth:token-type:secret",
+              secret: { token: "ghu_managed_header_token" },
+              expires_in: 300,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+
+        mockCallTool.mockResolvedValue({
+          content: [{ type: "text", text: "Managed header result" }],
+          isError: false,
+        });
+
+        const headerResult = await mcpClient.executeToolCallForOwner(
+          {
+            id: "call_enterprise_managed_header",
+            name: "github-mcp-server__managed_header_tool",
+            arguments: {},
+          },
+          agentOwner(agentId),
+          {
+            tokenId: "session-token",
+            teamId: null,
+            isOrganizationToken: false,
+            userId: user.id,
+          },
+          { conversationId: "enterprise-managed-header-conv" },
+        );
+
+        expect(headerResult.isError).toBe(false);
+
+        const { StreamableHTTPClientTransport: HeaderModeTransport } =
+          await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
+        const [, headerOptions] =
+          vi.mocked(HeaderModeTransport).mock.calls.at(-1) ?? [];
+        const outgoingHeaders =
+          headerOptions?.requestInit?.headers instanceof Headers
+            ? headerOptions.requestInit.headers
+            : new Headers(headerOptions?.requestInit?.headers);
+
+        // The exchanged credential goes to the configured header, bare — the
+        // upstream expects the token itself, not a `Bearer `-prefixed value.
+        expect(outgoingHeaders.get("x-provider-api-token")).toBe(
+          "ghu_managed_header_token",
+        );
+        expect(outgoingHeaders.get("authorization")).toBeNull();
+
+        fetchMock.mockRestore();
+      });
+
       // Regression: assignments created before enterprise mode existed still
       // carry the default "static" mode. The catalog-level config must win,
       // otherwise runtime calls hit the protected server with no credential.

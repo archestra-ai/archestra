@@ -23,6 +23,8 @@ export function makeOrganization(
     onlineSkillCatalogEnabled: true,
     skillToolsEnabled: false,
     appsHackathonRecorderEnabled: true,
+    newAppsDisabledByDefault: false,
+    newAppsLockedByDefault: false,
     compressionScope: "organization",
     defaultDiscoveredToolInvocationPolicy: "allow_when_context_is_untrusted",
     defaultDiscoveredToolResultPolicy: "mark_as_untrusted",

@@ -712,6 +712,8 @@ export const RouteId = {
   UpdateApp: "updateApp",
   EnableApp: "enableApp",
   DisableApp: "disableApp",
+  LockApp: "lockApp",
+  UnlockApp: "unlockApp",
   DeleteApp: "deleteApp",
   GetAppVersions: "getAppVersions",
   GetAppVersion: "getAppVersion",

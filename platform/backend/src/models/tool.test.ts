@@ -4,6 +4,7 @@ import {
   getArchestraMcpCatalogName,
   getArchestraToolFullName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_ADVISOR_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
@@ -2109,6 +2110,7 @@ describe("ToolModel", () => {
       expect(assignedTools.map((tool) => tool.name).sort()).toEqual(
         (
           [
+            TOOL_ADVISOR_SHORT_NAME,
             TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
             TOOL_TODO_WRITE_SHORT_NAME,
           ] as const

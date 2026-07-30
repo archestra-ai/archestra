@@ -1,9 +1,12 @@
+import config from "@/config";
 import logger from "@/logging";
 import { A2ATaskModel } from "@/models";
 import {
   A2AProtocolRole,
   type A2AProtocolStreamResponse,
 } from "./a2a-protocol";
+import { a2aPushNotificationService } from "./a2a-push-notification-service";
+import { a2aTaskEventNotifier } from "./a2a-task-event-notifier";
 
 const DELTA_FLUSH_INTERVAL_MS = 250;
 const HEARTBEAT_INTERVAL_MS = 30 * 1000;
@@ -11,6 +14,11 @@ const STOP_POLL_INTERVAL_MS = 2 * 1000;
 const STALE_RUN_MS = 10 * 60 * 1000;
 const REAP_INTERVAL_MS = 60 * 1000;
 const TERMINAL_EVENT_RETENTION_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Tasks deleted per sweep, so one tick cannot hold a long transaction. */
+const RETENTION_BATCH_SIZE = 500;
+/** Batches per tick, bounding how long a single sweep runs. */
+const RETENTION_MAX_BATCHES = 10;
 
 const ORPHANED_TASK_REASON =
   "The server executing this task stopped before the run completed.";
@@ -178,6 +186,30 @@ class A2ATaskRunService {
     }
   }
 
+  /**
+   * Push one persisted stream event to the task's registered webhooks.
+   * Fire-and-forget: the event log is the durable record, so a webhook that
+   * is down costs push updates, never the task's outcome.
+   */
+  notify(taskId: string, event: A2AProtocolStreamResponse): void {
+    void a2aPushNotificationService.deliver({ taskId, event });
+    this.wakeSubscribers(taskId);
+  }
+
+  /**
+   * Tell every replica's SubscribeToTask streams that this task has new
+   * events, so they re-read now instead of on their next poll. Best-effort by
+   * design: the poll is what makes the stream correct.
+   */
+  wakeSubscribers(taskId: string): void {
+    void a2aTaskEventNotifier.notify(taskId).catch((error) => {
+      logger.warn(
+        { error, taskId },
+        "Failed to publish an A2A task event notification",
+      );
+    });
+  }
+
   /** Reap orphans + prune terminal event logs (one interval tick). */
   async reapStale(): Promise<void> {
     try {
@@ -190,11 +222,46 @@ class A2ATaskRunService {
       if (reaped > 0) {
         logger.info({ reaped }, "Reaped stale A2A task runs");
       }
+      // Stream events are transport, not the record: nothing can subscribe
+      // to a task that settled an hour ago, so their events are dead weight.
       await A2ATaskModel.deleteEventsOfTerminalTasksOlderThan(
         TERMINAL_EVENT_RETENTION_MS,
       );
+
+      await this.sweepExpiredTasks();
     } catch (error) {
       logger.warn({ error }, "Failed to reap stale A2A task runs");
+    }
+  }
+
+  /**
+   * Delete terminal tasks past the configured retention window. Runs in
+   * bounded batches so a backlog is worked down over several ticks instead of
+   * one enormous transaction.
+   */
+  private async sweepExpiredTasks(): Promise<void> {
+    const retentionDays = config.a2aV2Gateway.taskRetentionDays;
+    if (retentionDays <= 0) {
+      return;
+    }
+
+    let deleted = 0;
+    for (let batch = 0; batch < RETENTION_MAX_BATCHES; batch++) {
+      const removed = await A2ATaskModel.deleteTerminalTasksOlderThan({
+        retentionMs: retentionDays * DAY_MS,
+        batchSize: RETENTION_BATCH_SIZE,
+      });
+      deleted += removed;
+      if (removed < RETENTION_BATCH_SIZE) {
+        break;
+      }
+    }
+
+    if (deleted > 0) {
+      logger.info(
+        { deleted, retentionDays },
+        "Deleted expired A2A tasks past their retention window",
+      );
     }
   }
 
@@ -307,7 +374,10 @@ class A2ATaskDeltaBatcher {
         if (appended === null) {
           this.stopped = true;
           this.params.onTaskNoLongerActive();
+          return;
         }
+        // The chunk is durable now, so subscribers on any replica can read it.
+        a2aTaskRunService.wakeSubscribers(this.params.taskId);
       } catch (error) {
         logger.warn(
           { error, taskId: this.params.taskId },

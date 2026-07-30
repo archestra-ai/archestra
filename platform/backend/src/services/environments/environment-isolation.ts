@@ -50,6 +50,29 @@ export function toolInEnvironmentPredicate(
 }
 
 /**
+ * App-surface variant of {@link toolInEnvironmentPredicate}: a tool matches when
+ * it belongs to `environmentId` OR to the Default environment (catalog
+ * `environment_id` null) — Default is the org-wide baseline every app may draw
+ * from, so an app bound to a non-default environment accepts that environment's
+ * tools plus Default's. Non-default environments stay isolated from each other.
+ * Agent/gateway discovery keeps the strict predicate; only the app fences
+ * (assignment resolution, the REST assign validation, and the app runtime gate)
+ * use this one, together, so they cannot drift apart.
+ */
+export function toolInEnvironmentOrDefaultPredicate(
+  environmentId: string | null,
+  tools = schema.toolsTable,
+): SQL {
+  if (environmentId === null) {
+    return toolInEnvironmentPredicate(null, tools);
+  }
+  return or(
+    toolInEnvironmentPredicate(null, tools),
+    toolInEnvironmentPredicate(environmentId, tools),
+  ) as SQL;
+}
+
+/**
  * SQL predicate selecting `knowledge_base_connectors` rows that belong to
  * `agentEnvironmentId`'s environment (strict equality, null = Default). There are
  * no built-in connectors, so there are no exemptions.

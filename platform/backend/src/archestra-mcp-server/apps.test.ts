@@ -2217,19 +2217,19 @@ describe("set_app_tools", () => {
       environmentId: env.id,
     });
 
-    // Succeeds only because resolution fences on app.environmentId (env), not the
-    // org default (null) scaffold_app uses — a default-env resolve would reject it.
+    // Succeeds only because resolution fences on app.environmentId (env): a
+    // resolve against a different non-default environment would reject it.
     const res = await setTools({ appId: app.id, tools: [envToolName] });
     expect(res.isError).toBe(false);
     expect(structured(res).tools).toEqual([envToolName]);
   });
 
-  test("rejects a default-env tool for an env-bound app, leaving it unchanged", async ({
+  test("accepts a default-env tool for an env-bound app (the Default baseline)", async ({
     makeApp,
   }) => {
     // toolName (beforeEach) lives in the org-default environment (null); the app
-    // is bound to a non-default environment — the counterfactual of the test
-    // above. A resolve against the org default would wrongly accept it.
+    // is bound to a non-default environment. Default-environment tools are the
+    // org baseline every app may draw from, so the resolve accepts it.
     const env = await EnvironmentModel.create({
       organizationId,
       name: `Env ${crypto.randomUUID().slice(0, 8)}`,
@@ -2242,6 +2242,44 @@ describe("set_app_tools", () => {
     });
 
     const res = await setTools({ appId: app.id, tools: [toolName] });
+    expect(res.isError).toBe(false);
+    expect(structured(res).tools).toEqual([toolName]);
+    expect(
+      (await AppToolModel.getToolsForApp(app.id)).map((tool) => tool.name),
+    ).toEqual([toolName]);
+  });
+
+  test("rejects a tool from a different non-default environment, leaving the app unchanged", async ({
+    makeApp,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    // Two sibling non-default environments stay isolated: only the Default
+    // baseline crosses environment lines.
+    const appEnv = await EnvironmentModel.create({
+      organizationId,
+      name: `Env ${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const otherEnv = await EnvironmentModel.create({
+      organizationId,
+      name: `Env ${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const otherCatalog = await makeInternalMcpCatalog({
+      organizationId,
+      environmentId: otherEnv.id,
+    });
+    await makeMcpServer({ catalogId: otherCatalog.id, scope: "org" });
+    const otherToolName = `other__tool_${crypto.randomUUID().slice(0, 8)}`;
+    await makeTool({ name: otherToolName, catalogId: otherCatalog.id });
+    const app = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: userId,
+      environmentId: appEnv.id,
+    });
+
+    const res = await setTools({ appId: app.id, tools: [otherToolName] });
     expect(res.isError).toBe(true);
     expect((res.content[0] as any).text).toContain("Unknown tool name");
     expect(await AppToolModel.getToolsForApp(app.id)).toEqual([]);

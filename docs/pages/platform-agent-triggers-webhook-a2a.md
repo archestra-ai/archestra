@@ -166,6 +166,41 @@ The response is the task in `TASK_STATE_SUBMITTED`. A client disconnect never ca
 
 Cancellation is durable first, cooperative second: the task settles as canceled immediately, and the running model call is aborted best-effort. Canceling a terminal task returns error `-32002`.
 
+## Push Notifications
+
+Push notifications POST a task's status changes to a URL you own, so a client that cannot hold a connection open — a serverless function, a mobile app — still learns when the work finishes. Register a webhook against a task:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "method": "CreateTaskPushNotificationConfig",
+  "params": {
+    "taskId": "task-...",
+    "pushNotificationConfig": {
+      "url": "https://hooks.example.com/a2a",
+      "token": "correlation-123",
+      "authentication": { "scheme": "Bearer", "credentials": "your-endpoint-secret" }
+    }
+  }
+}
+```
+
+Each delivery is a `POST` with `Content-Type: application/a2a+json`. The body is the same event a stream carries — a `statusUpdate` for the new state. Your `credentials` come back as the `Authorization` header and your `token` as `X-A2A-Notification-Token`, so the receiver can authenticate the call and match it to its own request.
+
+Field notes:
+
+- `url` — must be absolute and `https`. URLs pointing at private, loopback, or link-local addresses are rejected.
+- `token` — optional correlation value, echoed on every delivery.
+- `authentication.credentials` — stored encrypted and never returned by a read; `Get` and `List` show only the scheme.
+- `id` — omit to create a config. Pass the id of an existing one to update it in place, so repeated setup calls don't stack up duplicate webhooks.
+
+Deliveries carry state changes, not tokens: use `SendStreamingMessage` for incremental text. Delivery is at-least-once and retried on network and 5xx errors, so make your receiver idempotent. A webhook that stays down never affects the task itself — `GetTask` remains the authoritative record.
+
+Manage configs with `GetTaskPushNotificationConfig` and `DeleteTaskPushNotificationConfig` (both take `taskId` and `id`), and `ListTaskPushNotificationConfigs` (takes `taskId`).
+
+The AgentCard advertises support with `capabilities.pushNotifications: true`.
+
 ## SubscribeToTask
 
 `SubscribeToTask` re-joins a running task's event stream — after a dropped `SendStreamingMessage` connection, for example:

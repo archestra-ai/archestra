@@ -1697,6 +1697,32 @@ export async function validateMCPGatewayToken(
 }
 
 /**
+ * Resolve which organization a platform token belongs to, without naming an
+ * agent.
+ *
+ * Every other entry point here answers "may this token reach *this* agent",
+ * which needs the agent up front. Enumerating agents inverts that, so it needs
+ * the principal first. This deliberately grants nothing: it only narrows the
+ * candidate set to one organization, and the caller still has to run the
+ * ordinary per-agent check on each candidate.
+ *
+ * Only platform tokens can be resolved this way. An external IdP JWT is
+ * validated against a JWKS configured *on an agent*, and an OAuth token is
+ * looked up per agent, so neither has an agent-independent identity to read.
+ */
+export async function resolveTokenOrganizationId(
+  tokenValue: string,
+): Promise<string | null> {
+  if (!hasArchestraTokenPrefix(tokenValue)) {
+    return null;
+  }
+
+  const rawTokenHash = createHash("sha256").update(tokenValue).digest("hex");
+  const resolved = await resolveArchestraToken(tokenValue, rawTokenHash);
+  return resolved?.token.organizationId ?? null;
+}
+
+/**
  * Same as {@link validateMCPGatewayToken}, but also reports why authentication
  * failed so the gateway route can return an actionable 401 instead of a
  * catch-all. Failures are never cached (see `cacheTokenAuthResult`), so the

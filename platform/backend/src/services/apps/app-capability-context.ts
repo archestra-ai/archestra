@@ -23,13 +23,14 @@ interface AppCapabilityContext {
  * assigned MCP tools plus, when the agent has dynamic access, the tools the
  * user can otherwise reach — resolved through {@link resolveAppAssignableToolRows},
  * the exact surface `resolveAppToolsByName` assigns from. Each name maps to its
- * canonical row (RBAC-filtered, install-scoped, Archestra built-ins excluded
- * because apps reach the data store through archestra.storage), so the grounding
- * lists exactly the names that can really be attached and each description comes
- * from the row that would actually be assigned and run.
+ * canonical row (RBAC-filtered, catalog-visibility-scoped, Archestra built-ins
+ * excluded because apps reach the data store through archestra.storage), so the
+ * grounding lists exactly the names that can really be attached and each
+ * description comes from the row that would actually be assigned and run.
  *
- * Grounding resolves in the *app's* `environmentId`, not the authoring agent's:
- * an app is bound to a deliberate environment (e.g. staging/prod) and its tools
+ * Grounding resolves in the *app's* `environmentId` (plus the Default-
+ * environment baseline every app may draw from), not the authoring agent's: an
+ * app is bound to a deliberate environment (e.g. staging/prod) and its tools
  * are assigned (set_app_tools) and executed (runtime gate) there, so the
  * capability list must reflect that environment even when the agent editing the
  * app runs in a different one.

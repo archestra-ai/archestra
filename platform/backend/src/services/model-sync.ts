@@ -28,6 +28,7 @@ import {
   type CrossProviderPrices,
   resolveCrossProviderMetadata,
   resolveCrossProviderPrices,
+  resolveSelfHostedModelMetadata,
   stripModelDateSuffix,
 } from "@/services/cross-provider-pricing";
 import {
@@ -315,9 +316,18 @@ export function buildModelsToUpsert(params: {
     const crossProviderPrices = isReseller
       ? resolveCrossProviderPrices(crossProviderArgs)
       : null;
+    // A self-hosted server reports an id but no capabilities, and models.dev
+    // has no entry for it to look up. Describe the model from whichever vendor
+    // publishes it; the deployment's own price and window are left to the
+    // fetcher, which is the only thing that can know them.
     const crossProviderMetadata = isReseller
       ? resolveCrossProviderMetadata(crossProviderArgs)
-      : null;
+      : provider === "vllm"
+        ? (resolveSelfHostedModelMetadata({
+            modelId: model.id,
+            modelsDevData,
+          }) ?? SELF_HOSTED_TEXT_ONLY)
+        : null;
 
     const capabilities = resolveModelCapabilities({
       provider,
@@ -642,6 +652,24 @@ function parseModalities<T>(
 
   return validated.length > 0 ? validated : null;
 }
+
+/**
+ * What a self-hosted model is assumed to be when no vendor publishes it: an
+ * operator's own fine-tune or a `--served-model-name` alias, which no registry
+ * can describe.
+ *
+ * Guessing text is not free of consequence, but leaving both lists null is
+ * worse than a wrong guess an admin can correct: the edit dialog requires at
+ * least one input modality, so a null list makes the form invalid the moment it
+ * opens and every save fails validation against a message rendered off-screen.
+ */
+const SELF_HOSTED_TEXT_ONLY: CrossProviderMetadata = {
+  contextLength: null,
+  outputLength: null,
+  inputModalities: ["text"],
+  outputModalities: ["text"],
+  supportsToolCalling: null,
+};
 
 function inferModelCapabilities(params: {
   provider: SupportedProvider;

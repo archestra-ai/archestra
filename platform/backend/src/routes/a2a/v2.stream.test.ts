@@ -120,7 +120,7 @@ describe("a2a v2 streaming route", () => {
     );
 
     app = createFastifyInstance();
-    const { default: a2aV2Routes } = await import("./a2a-v2");
+    const { default: a2aV2Routes } = await import("./v2");
     await app.register(a2aV2Routes);
   });
 

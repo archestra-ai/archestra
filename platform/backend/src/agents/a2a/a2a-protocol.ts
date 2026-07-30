@@ -12,21 +12,36 @@ import { A2ATaskStateSchema } from "@/types/a2a-task";
  * The A2A spec mandates that an absent or empty header means pre-1.0
  * semantics, which is exactly the stream shape this endpoint has always
  * served ("legacy": statusUpdate-first frames carrying a `final` flag).
- * `A2A-Version: 1.0` (and, until real negotiation exists, anything else
- * explicitly set) selects the strict v1.0 lifecycle shape: an initial `task`
- * frame, `artifactUpdate` frames, and no `final` field.
+ * `A2A-Version: 1.0` selects the strict v1.0 lifecycle shape: an initial
+ * `task` frame, `artifactUpdate` frames, and no `final` field.
  */
 export type A2AProtocolVersion = "legacy" | "v1";
 
+/** Major.Minor versions this endpoint can serve. */
+const SUPPORTED_A2A_VERSIONS: Record<string, A2AProtocolVersion> = {
+  "0.3": "legacy",
+  "1.0": "v1",
+};
+
+/**
+ * Resolve the wire shape for a request, or null when the client asked for a
+ * version we cannot serve — the caller answers that with
+ * `VersionNotSupportedError` (-32009) rather than silently serving 1.0
+ * semantics to, say, a future 2.x client (A2A v1.0 §3.6).
+ */
 export function resolveA2AProtocolVersion(
   header: string | string[] | undefined,
-): A2AProtocolVersion {
-  const value = Array.isArray(header) ? header[0] : header;
-  if (!value || value.trim() === "" || value.trim() === "0.3") {
+): A2AProtocolVersion | null {
+  const raw = Array.isArray(header) ? header[0] : header;
+  const value = raw?.trim();
+  if (!value) {
     return "legacy";
   }
-  return "v1";
+  return SUPPORTED_A2A_VERSIONS[value] ?? null;
 }
+
+/** Versions advertised in the error when negotiation fails. */
+export const SUPPORTED_A2A_VERSION_LIST = Object.keys(SUPPORTED_A2A_VERSIONS);
 
 export enum A2AProtocolRole {
   Unspecified = "ROLE_UNSPECIFIED",
@@ -201,6 +216,72 @@ export const A2AProtocolListTasksRequestSchema = z.object({
 });
 export type A2AProtocolListTasksRequest = z.infer<
   typeof A2AProtocolListTasksRequestSchema
+>;
+
+// --- A2A push notification configs ---
+
+/** A2A v1.0 `AuthenticationInfo` for an outbound webhook call. */
+const A2AProtocolAuthenticationInfoSchema = z.object({
+  scheme: z.string(),
+  credentials: z.string().optional(),
+});
+
+/**
+ * A2A v1.0 `PushNotificationConfig`. `id` is server-assigned on create and
+ * required to address the config afterwards; `credentials` is write-only —
+ * reads never echo it back.
+ */
+const A2AProtocolPushNotificationConfigSchema = z.object({
+  id: z.string().optional(),
+  url: z.string(),
+  token: z.string().optional(),
+  authentication: A2AProtocolAuthenticationInfoSchema.optional(),
+});
+
+export const A2AProtocolTaskPushNotificationConfigSchema = z.object({
+  tenant: z.string().optional(),
+  taskId: z.string(),
+  pushNotificationConfig: A2AProtocolPushNotificationConfigSchema,
+});
+export type A2AProtocolTaskPushNotificationConfig = z.infer<
+  typeof A2AProtocolTaskPushNotificationConfigSchema
+>;
+
+export const A2AProtocolGetTaskPushNotificationConfigRequestSchema = z.object({
+  tenant: z.string().optional(),
+  taskId: z.string(),
+  id: z.string(),
+});
+export type A2AProtocolGetTaskPushNotificationConfigRequest = z.infer<
+  typeof A2AProtocolGetTaskPushNotificationConfigRequestSchema
+>;
+
+export const A2AProtocolListTaskPushNotificationConfigsRequestSchema = z.object(
+  {
+    tenant: z.string().optional(),
+    taskId: z.string(),
+  },
+);
+export type A2AProtocolListTaskPushNotificationConfigsRequest = z.infer<
+  typeof A2AProtocolListTaskPushNotificationConfigsRequestSchema
+>;
+
+export const A2AProtocolListTaskPushNotificationConfigsResponseSchema =
+  z.object({
+    configs: z.array(A2AProtocolTaskPushNotificationConfigSchema),
+  });
+export type A2AProtocolListTaskPushNotificationConfigsResponse = z.infer<
+  typeof A2AProtocolListTaskPushNotificationConfigsResponseSchema
+>;
+
+export const A2AProtocolDeleteTaskPushNotificationConfigRequestSchema =
+  z.object({
+    tenant: z.string().optional(),
+    taskId: z.string(),
+    id: z.string(),
+  });
+export type A2AProtocolDeleteTaskPushNotificationConfigRequest = z.infer<
+  typeof A2AProtocolDeleteTaskPushNotificationConfigRequestSchema
 >;
 
 export const A2AProtocolListTasksResponseSchema = z.object({

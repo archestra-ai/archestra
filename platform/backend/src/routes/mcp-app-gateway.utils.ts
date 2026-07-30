@@ -434,11 +434,11 @@ function buildAppLaunchTool(appId: string, app: App): McpListTool {
 
 async function buildAppToolList(appId: string): Promise<McpListTool[]> {
   const upstream = await AppToolModel.getToolsForApp(appId);
-  // Trim the runtime list to the app's bound environment so it never offers a
-  // tool the call-time gate would refuse. UX hygiene only — the hard fence is
-  // gateAppToolCall.
+  // Trim the runtime list to the app's bound environment (plus the Default
+  // baseline) so it never offers a tool the call-time gate would refuse. UX
+  // hygiene only — the hard fence is gateAppToolCall.
   const app = await AppModel.findById(appId);
-  const inEnvIds = await ToolModel.filterToolIdsInEnvironment(
+  const inEnvIds = await ToolModel.filterToolIdsInEnvironmentOrDefault(
     upstream.map((tool) => tool.id),
     app?.environmentId ?? null,
   );

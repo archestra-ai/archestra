@@ -13,6 +13,7 @@ import logger from "@/logging";
 import {
   A2AArtifactModel,
   A2AMessageModel,
+  A2APushNotificationConfigModel,
   A2ATaskModel,
   AgentModel,
   AgentTeamModel,
@@ -23,6 +24,10 @@ import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import type { A2AContext, A2AMessage } from "@/types";
 import { isTerminalA2ATaskState } from "@/types/a2a-task";
+import {
+  type OutboundUrlRejection,
+  validateOutboundUrl,
+} from "@/utils/outbound-url";
 import type { InteractionSource } from "../../../../shared";
 import {
   type A2AAttachment,
@@ -46,7 +51,11 @@ import {
   type A2AArchestraTaskApprovalDecision,
   type A2AArchestraTaskOps,
   type A2AProtocolCancelTaskRequest,
+  type A2AProtocolDeleteTaskPushNotificationConfigRequest,
+  type A2AProtocolGetTaskPushNotificationConfigRequest,
   type A2AProtocolGetTaskRequest,
+  type A2AProtocolListTaskPushNotificationConfigsRequest,
+  type A2AProtocolListTaskPushNotificationConfigsResponse,
   type A2AProtocolListTasksRequest,
   type A2AProtocolListTasksResponse,
   type A2AProtocolMessage,
@@ -57,6 +66,7 @@ import {
   type A2AProtocolStreamResponse,
   type A2AProtocolSubscribeToTaskRequest,
   type A2AProtocolTask,
+  type A2AProtocolTaskPushNotificationConfig,
   A2AProtocolTaskState,
 } from "./a2a-protocol";
 import { a2aTaskRunService } from "./a2a-task-run-service";
@@ -761,6 +771,13 @@ export class A2AManager {
     // transaction, so there is nothing to do. A CAS miss means the task was
     // canceled between creation/validation and here.
     if (task.state !== A2AProtocolTaskState.Working) {
+      const workingEvent: A2AProtocolStreamResponse = {
+        statusUpdate: {
+          taskId,
+          contextId,
+          status: { state: A2AProtocolTaskState.Working },
+        },
+      };
       const started = await A2ATaskModel.transitionStateWithEvent({
         id: taskId,
         to: A2AProtocolTaskState.Working,
@@ -768,19 +785,14 @@ export class A2AManager {
           A2AProtocolTaskState.Submitted,
           A2AProtocolTaskState.InputRequired,
         ],
-        eventPayload: {
-          statusUpdate: {
-            taskId,
-            contextId,
-            status: { state: A2AProtocolTaskState.Working },
-          },
-        },
+        eventPayload: workingEvent,
       });
       if (!started) {
         const refreshed = await A2ATaskManager.loadTaskWithDataById(taskId);
         return { task: A2ATaskManager.toProtocolTask(refreshed) };
       }
       task = { ...task, ...started };
+      a2aTaskRunService.notify(taskId, workingEvent);
     }
 
     let isFirstChunk = true;
@@ -838,6 +850,13 @@ export class A2AManager {
         const sortedRequests = [...approvalRequests].sort((a, b) =>
           a.approvalId.localeCompare(b.approvalId),
         );
+        const interruptEvent: A2AProtocolStreamResponse = {
+          statusUpdate: {
+            taskId,
+            contextId,
+            status: { state: A2AProtocolTaskState.InputRequired },
+          },
+        };
         await A2ATaskModel.interruptForApproval({
           taskId,
           agentMessage,
@@ -849,14 +868,9 @@ export class A2AManager {
             approved: request.approved,
             resolved: request.resolved,
           })),
-          eventPayload: {
-            statusUpdate: {
-              taskId,
-              contextId,
-              status: { state: A2AProtocolTaskState.InputRequired },
-            },
-          },
+          eventPayload: interruptEvent,
         });
+        a2aTaskRunService.notify(taskId, interruptEvent);
         // A CAS miss here means a cancellation landed while the run was
         // interrupting — the refreshed task carries whichever outcome won.
         const refreshed = await A2ATaskManager.loadTaskWithDataById(taskId);
@@ -865,6 +879,22 @@ export class A2AManager {
 
       // Seal from the authoritative response message (which spans an
       // approval interrupt), not `result.text` (this run's generation only).
+      const completedEvent: A2AProtocolStreamResponse = {
+        statusUpdate: {
+          taskId,
+          contextId,
+          status: {
+            state: A2AProtocolTaskState.Completed,
+            message: {
+              messageId: result.responseUiMessage.id,
+              contextId,
+              taskId,
+              role: A2AProtocolRole.Agent,
+              parts,
+            },
+          },
+        },
+      };
       const finalParts: { text: string }[] = [
         { text: parts.map((part) => part.text ?? "").join("") },
       ];
@@ -892,24 +922,11 @@ export class A2AManager {
               lastChunk: true,
             },
           },
-          {
-            statusUpdate: {
-              taskId,
-              contextId,
-              status: {
-                state: A2AProtocolTaskState.Completed,
-                message: {
-                  messageId: result.responseUiMessage.id,
-                  contextId,
-                  taskId,
-                  role: A2AProtocolRole.Agent,
-                  parts,
-                },
-              },
-            },
-          },
+          completedEvent,
         ],
       });
+      a2aTaskRunService.notify(taskId, completedEvent);
+
       // CAS miss = cancellation won while the run was completing: the
       // completion transaction rolled back, and the task stays CANCELED with
       // no completed outputs.
@@ -948,6 +965,9 @@ export class A2AManager {
               },
             },
           });
+          // Terminal state and its event committed together; let parked
+          // subscribers read the cancellation now.
+          a2aTaskRunService.wakeSubscribers(taskId);
         } else {
           await this.settleFailedRun({
             taskId,
@@ -998,6 +1018,11 @@ export class A2AManager {
         },
       },
     });
+
+    // Inside the helper rather than at its call sites: a failure can settle a
+    // task from several escape paths, and a parked subscriber must learn about
+    // every one of them without waiting out its fallback interval.
+    a2aTaskRunService.wakeSubscribers(params.taskId);
   }
 
   /**
@@ -1303,6 +1328,10 @@ export class A2AManager {
     }
 
     a2aTaskRunService.abortLocal(task.id);
+    // The canceled state and its terminal event committed together above, so
+    // subscribers on every replica can read the cancellation now rather than
+    // waiting out their fallback interval.
+    a2aTaskRunService.wakeSubscribers(task.id);
 
     const refreshed = await A2ATaskManager.loadTaskWithData(canceled);
     return A2ATaskManager.toProtocolTask(refreshed);
@@ -1382,6 +1411,117 @@ export class A2AManager {
       return null;
     }
     return { state: result.task.state, events: result.events };
+  }
+
+  /**
+   * A2A `CreateTaskPushNotificationConfig`. The URL is validated up front so a
+   * caller learns about an unreachable or disallowed endpoint synchronously
+   * rather than through silent non-delivery.
+   */
+  public async createTaskPushNotificationConfig(params: {
+    actor: A2AActor;
+    agentId: string;
+    request: A2AProtocolTaskPushNotificationConfig;
+  }): Promise<A2AProtocolTaskPushNotificationConfig> {
+    const task = await this.findTaskForAgent({
+      taskId: params.request.taskId,
+      actor: params.actor,
+      agentId: params.agentId,
+    });
+
+    const { pushNotificationConfig: input } = params.request;
+    const validated = validateOutboundUrl(input.url);
+    if (!validated.ok) {
+      throw new A2AError(
+        A2AErrorKind.InvalidPushNotificationUrl,
+        PUSH_URL_REJECTION_DETAIL[validated.reason],
+      );
+    }
+
+    // A client that supplies an id is re-registering that config; keep the id
+    // stable so repeated setup calls do not pile up duplicate webhooks.
+    if (input.id) {
+      const updated = await A2APushNotificationConfigModel.update({
+        id: input.id,
+        taskId: task.id,
+        url: input.url,
+        token: input.token,
+        authScheme: input.authentication?.scheme,
+        authCredentials: input.authentication?.credentials,
+      });
+      if (updated) {
+        return toProtocolPushConfig(updated);
+      }
+    }
+
+    const created = await A2APushNotificationConfigModel.create({
+      taskId: task.id,
+      url: input.url,
+      token: input.token,
+      authScheme: input.authentication?.scheme,
+      authCredentials: input.authentication?.credentials,
+    });
+    return toProtocolPushConfig(created);
+  }
+
+  /** A2A `GetTaskPushNotificationConfig`. Credentials are never echoed back. */
+  public async getTaskPushNotificationConfig(params: {
+    actor: A2AActor;
+    agentId: string;
+    request: A2AProtocolGetTaskPushNotificationConfigRequest;
+  }): Promise<A2AProtocolTaskPushNotificationConfig> {
+    const task = await this.findTaskForAgent({
+      taskId: params.request.taskId,
+      actor: params.actor,
+      agentId: params.agentId,
+    });
+
+    const config = await A2APushNotificationConfigModel.findByIdForTask({
+      id: params.request.id,
+      taskId: task.id,
+    });
+    if (!config) {
+      throw new A2AError(A2AErrorKind.PushNotificationConfigNotFound);
+    }
+    return toProtocolPushConfig(config);
+  }
+
+  /** A2A `ListTaskPushNotificationConfigs`. */
+  public async listTaskPushNotificationConfigs(params: {
+    actor: A2AActor;
+    agentId: string;
+    request: A2AProtocolListTaskPushNotificationConfigsRequest;
+  }): Promise<A2AProtocolListTaskPushNotificationConfigsResponse> {
+    const task = await this.findTaskForAgent({
+      taskId: params.request.taskId,
+      actor: params.actor,
+      agentId: params.agentId,
+    });
+
+    const configs = await A2APushNotificationConfigModel.findByTaskId(task.id);
+    return { configs: configs.map(toProtocolPushConfig) };
+  }
+
+  /** A2A `DeleteTaskPushNotificationConfig`. */
+  public async deleteTaskPushNotificationConfig(params: {
+    actor: A2AActor;
+    agentId: string;
+    request: A2AProtocolDeleteTaskPushNotificationConfigRequest;
+  }): Promise<Record<string, never>> {
+    const task = await this.findTaskForAgent({
+      taskId: params.request.taskId,
+      actor: params.actor,
+      agentId: params.agentId,
+    });
+
+    const deleted = await A2APushNotificationConfigModel.delete({
+      id: params.request.id,
+      taskId: task.id,
+    });
+    if (!deleted) {
+      throw new A2AError(A2AErrorKind.PushNotificationConfigNotFound);
+    }
+    return {};
   }
 
   /** A2A `ListTasks`, scoped to the calling actor and the route's agent. */
@@ -1516,6 +1656,35 @@ function decodeListTasksPageToken(token: string): {
   } catch {
     throw new A2AError(A2AErrorKind.InvalidPageToken);
   }
+}
+
+/** Why a webhook URL was refused, phrased for the caller. */
+const PUSH_URL_REJECTION_DETAIL: Record<OutboundUrlRejection, string> = {
+  not_a_url: "the url is not a valid absolute URL",
+  scheme_not_https: "the url must use https",
+  private_or_loopback_host:
+    "the url must not point at a private or loopback address",
+};
+
+/** Protocol shape of a stored config. Credentials are deliberately omitted. */
+function toProtocolPushConfig(config: {
+  id: string;
+  taskId: string;
+  url: string;
+  token: string | null;
+  authScheme: string | null;
+}): A2AProtocolTaskPushNotificationConfig {
+  return {
+    taskId: config.taskId,
+    pushNotificationConfig: {
+      id: config.id,
+      url: config.url,
+      ...(config.token ? { token: config.token } : {}),
+      ...(config.authScheme
+        ? { authentication: { scheme: config.authScheme } }
+        : {}),
+    },
+  };
 }
 
 /** TaskStatus.message carrying a terminal reason (same shape GetTask serves). */

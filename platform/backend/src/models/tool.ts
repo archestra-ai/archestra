@@ -51,7 +51,10 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
-import { toolInEnvironmentPredicate } from "@/services/environments/environment-isolation";
+import {
+  toolInEnvironmentOrDefaultPredicate,
+  toolInEnvironmentPredicate,
+} from "@/services/environments/environment-isolation";
 import type {
   AssignedTool,
   ExtendedTool,
@@ -903,6 +906,13 @@ class ToolModel {
      * run_tool cannot reach cross-environment tools.
      */
     environmentId: string | null;
+    /**
+     * Also match Default-environment tools when `environmentId` is non-default
+     * ({@link toolInEnvironmentOrDefaultPredicate}). App tool assignment only —
+     * apps may always draw from the Default baseline; agent/gateway discovery
+     * must stay strictly fenced and never sets this.
+     */
+    includeDefaultEnvironment?: boolean;
     /** Exact-name filter for single-tool resolution (avoids loading the whole corpus). */
     name?: string;
     /**
@@ -949,7 +959,9 @@ class ToolModel {
         and(
           inArray(schema.toolsTable.catalogId, catalogIds),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
-          toolInEnvironmentPredicate(params.environmentId),
+          params.includeDefaultEnvironment
+            ? toolInEnvironmentOrDefaultPredicate(params.environmentId)
+            : toolInEnvironmentPredicate(params.environmentId),
           params.name !== undefined
             ? eq(schema.toolsTable.name, params.name)
             : undefined,
@@ -2203,11 +2215,12 @@ class ToolModel {
    * Of `toolIds`, the subset assignable to an MCP App in `environmentId`:
    * catalog-backed (non-null catalogId, which app dispatch requires), org-visible
    * (the catalog belongs to the org or is a global org-less entry), not an
-   * Archestra built-in, not a clone pending discovery, and in the environment.
+   * Archestra built-in, not a clone pending discovery, and in the environment or
+   * the Default baseline ({@link toolInEnvironmentOrDefaultPredicate}).
    * This is the by-id, install-agnostic gate {@link resolveAppAssignableToolRows}
    * applies to the agent's *assigned* tools — an assigned tool is reachable
    * through its assignment without a separate discoverable install, but must
-   * still be org-visible and in-environment.
+   * still be org-visible and environment-matched.
    */
   static async filterAppAssignableToolIds(
     organizationId: string,
@@ -2227,7 +2240,7 @@ class ToolModel {
           inArray(schema.toolsTable.id, toolIds),
           ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
-          toolInEnvironmentPredicate(environmentId),
+          toolInEnvironmentOrDefaultPredicate(environmentId),
           or(
             eq(schema.internalMcpCatalogTable.organizationId, organizationId),
             isNull(schema.internalMcpCatalogTable.organizationId),
@@ -2273,13 +2286,14 @@ class ToolModel {
   }
 
   /**
-   * Whether a tool belongs to (is assignable/callable within) `environmentId`,
-   * reusing the canonical {@link toolInEnvironmentPredicate} so the app
-   * assignment fence and call-time fence never drift from the agent isolation
-   * rules: null = org default, and the built-in Archestra/Playwright catalogs
-   * plus delegation tools are exempt.
+   * Whether a tool is assignable/callable within an *app* bound to
+   * `environmentId`: the app fences share
+   * {@link toolInEnvironmentOrDefaultPredicate} — the environment's own tools
+   * plus the Default baseline — so the assignment fence and call-time fence
+   * never drift apart. The built-in Archestra/Playwright catalogs and
+   * delegation tools are exempt as everywhere.
    */
-  static async isToolInEnvironment(
+  static async isToolInEnvironmentOrDefault(
     toolId: string,
     environmentId: string | null,
   ): Promise<boolean> {
@@ -2289,7 +2303,7 @@ class ToolModel {
       .where(
         and(
           eq(schema.toolsTable.id, toolId),
-          toolInEnvironmentPredicate(environmentId),
+          toolInEnvironmentOrDefaultPredicate(environmentId),
         ),
       )
       .limit(1);
@@ -2297,11 +2311,12 @@ class ToolModel {
   }
 
   /**
-   * Of `toolIds`, the subset that belongs to `environmentId` — the batch form of
-   * {@link isToolInEnvironment}, used to trim an app's runtime tool list to its
-   * bound environment (UX hygiene; the call-time gate is the hard fence).
+   * Of `toolIds`, the subset callable within an app bound to `environmentId` —
+   * the batch form of {@link isToolInEnvironmentOrDefault}, used to trim an
+   * app's runtime tool list to what the call-time gate would allow (UX hygiene;
+   * the call-time gate is the hard fence).
    */
-  static async filterToolIdsInEnvironment(
+  static async filterToolIdsInEnvironmentOrDefault(
     toolIds: string[],
     environmentId: string | null,
   ): Promise<Set<string>> {
@@ -2312,7 +2327,7 @@ class ToolModel {
       .where(
         and(
           inArray(schema.toolsTable.id, toolIds),
-          toolInEnvironmentPredicate(environmentId),
+          toolInEnvironmentOrDefaultPredicate(environmentId),
         ),
       );
     return new Set(rows.map((r) => r.id));
@@ -2321,7 +2336,7 @@ class ToolModel {
   /**
    * App-owner counterpart of {@link getMcpToolsAssignedToAgent}. Includes the
    * tool `id` so the runtime gate can apply the environment fence
-   * ({@link isToolInEnvironment}) against the resolved tool.
+   * ({@link isToolInEnvironmentOrDefault}) against the resolved tool.
    */
   static async getMcpToolsAssignedToApp(
     toolNames: string[],

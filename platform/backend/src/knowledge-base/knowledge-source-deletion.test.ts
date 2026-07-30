@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   AgentConnectorAssignmentModel,
   AgentKnowledgeBaseModel,
+  ConnectorRunModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   TaskModel,
@@ -10,7 +11,6 @@ import {
 import { secretManager } from "@/secrets-manager";
 import { describe, expect, test } from "@/test";
 import type { ConnectorConfig } from "@/types";
-import { ApiError } from "@/types";
 import {
   deleteConnector,
   deleteKnowledgeBase,
@@ -99,20 +99,178 @@ describe("knowledge-source soft-delete", () => {
     ).toBe(false);
   });
 
-  test("deleteConnector preserves the secret (revocation deferred to purge)", async ({
+  test("deleteConnector revokes the connector's credential", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
     const secret = await secretManager().createSecret(
-      { email: "svc", apiToken: "keep-me" },
+      { email: "svc", apiToken: "revoke-me" },
       "soft-delete-secret",
     );
     const connector = await makeConnector(org.id, { secretId: secret.id });
 
     await deleteConnector(connector.id);
 
-    // The secret must still exist so a future restore is credential-preserving.
-    expect(await secretManager().getSecret(secret.id)).not.toBeNull();
+    // Deleting a connector is how an admin cuts the platform's access to the
+    // source. Retaining the credential would be unrevocable: once stamped, the
+    // connector 404s from every route, and there is no secrets list/delete API.
+    expect(await secretManager().getSecret(secret.id)).toBeNull();
+
+    // `secret_id` is ON DELETE SET NULL, so the surviving row keeps no dangling
+    // reference — a restore re-authenticates.
+    const [raw] = await db
+      .select()
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(eq(schema.knowledgeBaseConnectorsTable.id, connector.id));
+    expect(raw.secretId).toBeNull();
+  });
+
+  test("deleteConnector stops an in-flight sync run", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const connector = await makeConnector(org.id);
+    const run = await ConnectorRunModel.create({
+      connectorId: connector.id,
+      status: "running",
+      startedAt: new Date(),
+      leaseOwner: "worker-1",
+      leaseEpoch: 0,
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+
+    await deleteConnector(connector.id);
+
+    // Hard delete cascaded the run row away, which failed the worker's next
+    // lease renewal and stopped it before the next batch. Soft delete leaves
+    // the row, so the delete path has to fail the lease itself — otherwise the
+    // run keeps pulling from the source and writing documents.
+    const stopped = await ConnectorRunModel.findById(run.id);
+    expect(stopped?.status).toBe("superseded");
+    expect(stopped?.leaseEpoch).toBe(1);
+
+    // The exact check the sync loop makes at each batch boundary.
+    expect(
+      await ConnectorRunModel.renewLease({
+        runId: run.id,
+        owner: "worker-1",
+        epoch: 0,
+        leaseTtlSeconds: 60,
+      }),
+    ).toBe(false);
+  });
+
+  test("deleteConnector leaves other connectors' running syncs alone", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const deleted = await makeConnector(org.id);
+    const survivor = await makeConnector(org.id);
+    const survivorRun = await ConnectorRunModel.create({
+      connectorId: survivor.id,
+      status: "running",
+      startedAt: new Date(),
+      leaseOwner: "worker-2",
+      leaseEpoch: 0,
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+    });
+
+    await deleteConnector(deleted.id);
+
+    expect((await ConnectorRunModel.findById(survivorRun.id))?.status).toBe(
+      "running",
+    );
+  });
+
+  test("writes no longer land on a soft-deleted knowledge source", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const connector = await makeConnector(org.id);
+    const kb = await KnowledgeBaseModel.create({
+      organizationId: org.id,
+      name: "Frozen KB",
+    });
+    const epochBefore = await KnowledgeBaseConnectorModel.bumpAclConfigEpoch(
+      connector.id,
+    );
+
+    await deleteConnector(connector.id);
+    await deleteKnowledgeBase(kb.id);
+
+    // A background job that finishes after the delete (a sync finalizing its
+    // status, an ACL epoch bump) must no-op rather than write to a gone row.
+    expect(
+      await KnowledgeBaseConnectorModel.update(connector.id, {
+        lastSyncStatus: "success",
+      }),
+    ).toBeNull();
+    expect(
+      await KnowledgeBaseConnectorModel.bumpAclConfigEpoch(connector.id),
+    ).toBe(0);
+    expect(
+      await KnowledgeBaseModel.update(kb.id, { name: "Renamed" }),
+    ).toBeNull();
+
+    const [rawConnector] = await db
+      .select()
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(eq(schema.knowledgeBaseConnectorsTable.id, connector.id));
+    expect(rawConnector.lastSyncStatus).not.toBe("success");
+    expect(rawConnector.aclConfigEpoch).toBe(epochBefore);
+
+    const [rawKb] = await db
+      .select()
+      .from(schema.knowledgeBasesTable)
+      .where(eq(schema.knowledgeBasesTable.id, kb.id));
+    expect(rawKb.name).toBe("Frozen KB");
+  });
+
+  test("the audit snapshot stops resolving once the entity is deleted", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const connector = await makeConnector(org.id);
+    const kb = await KnowledgeBaseModel.create({
+      organizationId: org.id,
+      name: "Audited KB",
+    });
+
+    // Both audit surfaces capture `before` ahead of the handler, so the delete
+    // record still gets its full prior state...
+    expect(
+      await KnowledgeBaseModel.findByIdForAudit(kb.id, org.id),
+    ).toMatchObject({ name: "Audited KB" });
+
+    await deleteConnector(connector.id);
+    await deleteKnowledgeBase(kb.id);
+
+    // ...but a re-delete of an already-deleted entity must not record a prior
+    // state that reads as though a live entity was torn down.
+    expect(await KnowledgeBaseModel.findByIdForAudit(kb.id, org.id)).toBeNull();
+    expect(
+      await KnowledgeBaseConnectorModel.findByIdForAudit(connector.id, org.id),
+    ).toBeNull();
+  });
+
+  test("org-scoped indexes are partial on deleted_at", async () => {
+    const { rows } = await db.execute<{ indexname: string; indexdef: string }>(
+      sql`
+        SELECT indexname, indexdef FROM pg_indexes
+        WHERE indexname IN (
+          'knowledge_bases_organization_id_idx',
+          'knowledge_base_connectors_organization_id_idx',
+          'knowledge_base_connectors_environment_id_idx'
+        )
+      `,
+    );
+
+    // Every read filters `deleted_at IS NULL`, so the indexes backing them
+    // carry the same predicate and never index rows nothing scans.
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row.indexdef).toContain("WHERE (deleted_at IS NULL)");
+    }
   });
 
   test("soft-deleting a connector stops surfacing it to its agents", async ({
@@ -218,8 +376,11 @@ describe("knowledge-source soft-delete", () => {
     ).toBeNull();
   });
 
-  describe("write guards reject attaching to a soft-deleted parent", () => {
-    test("connector→KB assignment 404s when the KB is soft-deleted", async ({
+  // The guards report "no active parent" as `false` and write nothing; mapping
+  // that to a 404 belongs to each entry point (route / MCP handler), not the
+  // model — see the route-level assertions in routes/knowledge-base.test.ts.
+  describe("write guards refuse to attach to a soft-deleted parent", () => {
+    test("connector→KB assignment is refused when the KB is soft-deleted", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -230,12 +391,18 @@ describe("knowledge-source soft-delete", () => {
       });
       await deleteKnowledgeBase(kb.id);
 
-      await expect(
-        KnowledgeBaseConnectorModel.assignToKnowledgeBase(connector.id, kb.id),
-      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(
+        await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+          connector.id,
+          kb.id,
+        ),
+      ).toBe(false);
+      expect(
+        await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(connector.id),
+      ).toEqual([]);
     });
 
-    test("connector→KB assignment 404s when the connector is soft-deleted", async ({
+    test("connector→KB assignment is refused when the connector is soft-deleted", async ({
       makeOrganization,
     }) => {
       const org = await makeOrganization();
@@ -246,12 +413,18 @@ describe("knowledge-source soft-delete", () => {
       });
       await deleteConnector(connector.id);
 
-      await expect(
-        KnowledgeBaseConnectorModel.assignToKnowledgeBase(connector.id, kb.id),
-      ).rejects.toBeInstanceOf(ApiError);
+      expect(
+        await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+          connector.id,
+          kb.id,
+        ),
+      ).toBe(false);
+      expect(await KnowledgeBaseConnectorModel.getConnectorIds(kb.id)).toEqual(
+        [],
+      );
     });
 
-    test("agent→KB assignment 404s when the KB is soft-deleted", async ({
+    test("agent→KB assignment is refused when the KB is soft-deleted", async ({
       makeOrganization,
       makeAgent,
     }) => {
@@ -263,12 +436,13 @@ describe("knowledge-source soft-delete", () => {
       });
       await deleteKnowledgeBase(kb.id);
 
-      await expect(
-        AgentKnowledgeBaseModel.assign(agent.id, kb.id),
-      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(await AgentKnowledgeBaseModel.assign(agent.id, kb.id)).toBe(false);
+      expect(
+        await AgentKnowledgeBaseModel.getKnowledgeBaseIds(agent.id),
+      ).toEqual([]);
     });
 
-    test("agent→connector assignment 404s when the connector is soft-deleted", async ({
+    test("agent→connector assignment is refused when the connector is soft-deleted", async ({
       makeOrganization,
       makeAgent,
     }) => {
@@ -277,9 +451,12 @@ describe("knowledge-source soft-delete", () => {
       const connector = await makeConnector(org.id);
       await deleteConnector(connector.id);
 
-      await expect(
-        AgentConnectorAssignmentModel.assign(agent.id, connector.id),
-      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(
+        await AgentConnectorAssignmentModel.assign(agent.id, connector.id),
+      ).toBe(false);
+      expect(
+        await AgentConnectorAssignmentModel.getConnectorIds(agent.id),
+      ).toEqual([]);
     });
   });
 });

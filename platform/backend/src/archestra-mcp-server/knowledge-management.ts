@@ -1202,10 +1202,13 @@ async function handleAssignKnowledgeConnectorToKnowledgeBase(params: {
     ) {
       return knowledgeBaseNotFound(args.knowledge_base_id);
     }
-    await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+    const assigned = await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
       args.connector_id,
       args.knowledge_base_id,
     );
+    if (!assigned) {
+      return knowledgeBaseNotFound(args.knowledge_base_id);
+    }
     return successResult(
       `Knowledge connector ${args.connector_id} assigned to knowledge base ${args.knowledge_base_id}`,
     );
@@ -1259,10 +1262,32 @@ async function handleAssignKnowledgeBaseToAgent(params: {
   args: KnowledgeBaseAgentAssignmentArgs;
   context: ArchestraContext;
 }) {
-  const { args } = params;
+  const { args, context } = params;
 
   try {
-    await AgentKnowledgeBaseModel.assign(args.agent_id, args.knowledge_base_id);
+    if (!context.organizationId) {
+      return errorResult("Organization context not available");
+    }
+    // Resolve the KB in the caller's org first, mirroring the connector
+    // handlers: an unknown, out-of-org or soft-deleted KB is a not-found, not a
+    // silently-created link.
+    const knowledgeBase = await KnowledgeBaseModel.findById(
+      args.knowledge_base_id,
+    );
+    if (
+      !knowledgeBase ||
+      knowledgeBase.organizationId !== context.organizationId
+    ) {
+      return knowledgeBaseNotFound(args.knowledge_base_id);
+    }
+
+    const assigned = await AgentKnowledgeBaseModel.assign(
+      args.agent_id,
+      args.knowledge_base_id,
+    );
+    if (!assigned) {
+      return knowledgeBaseNotFound(args.knowledge_base_id);
+    }
     return successResult(
       `Knowledge base ${args.knowledge_base_id} assigned to agent ${args.agent_id}`,
     );
@@ -1328,10 +1353,13 @@ async function handleAssignKnowledgeConnectorToAgent(params: {
       );
     }
 
-    await AgentConnectorAssignmentModel.assign(
+    const assigned = await AgentConnectorAssignmentModel.assign(
       args.agent_id,
       args.connector_id,
     );
+    if (!assigned) {
+      return knowledgeConnectorNotFound(args.connector_id);
+    }
     return successResult(
       `Knowledge connector ${args.connector_id} assigned to agent ${args.agent_id}`,
     );

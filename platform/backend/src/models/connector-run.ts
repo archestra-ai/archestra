@@ -400,6 +400,41 @@ class ConnectorRunModel {
     return rows;
   }
 
+  /**
+   * Stop every live run of a connector: mark it `superseded` and bump the
+   * fencing epoch. Called from the connector delete path.
+   *
+   * Under the old hard delete this happened implicitly — `connector_runs` has
+   * `ON DELETE CASCADE`, so the run row vanished, the worker's next
+   * `renewLease` (which requires `status = 'running'` on an existing row)
+   * returned false, and the loop stopped BEFORE ingesting the next batch. A
+   * soft delete leaves the row, so nothing would fail the lease and the run
+   * would keep pulling from the upstream source and writing documents for a
+   * connector the user just deleted. Failing the lease here restores that stop,
+   * and the epoch bump additionally no-ops the run's fenced writes
+   * (`updateIfOwned`, `setCheckpointIfRunActive`).
+   *
+   * Covers both run families (content and permission) — the filter is the
+   * `running` status, not `runType`.
+   */
+  static async supersedeRunningForConnector(
+    connectorId: string,
+  ): Promise<number> {
+    const t = schema.connectorRunsTable;
+    const rows = await db
+      .update(t)
+      .set({
+        status: "superseded",
+        completedAt: new Date(),
+        leaseEpoch: sql`${t.leaseEpoch} + 1`,
+        error: "Sync stopped: the connector was deleted.",
+      })
+      .where(and(eq(t.connectorId, connectorId), eq(t.status, "running")))
+      .returning({ id: t.id });
+
+    return rows.length;
+  }
+
   static async deleteByConnector(connectorId: string): Promise<number> {
     const result = await db
       .delete(schema.connectorRunsTable)

@@ -2682,6 +2682,13 @@
       "when": 1785449051138,
       "tag": "0382_kb_soft_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 383,
+      "version": "7",
+      "when": 1785449105861,
+      "tag": "0383_kb_soft_delete_partial_indexes",
+      "breakpoints": true
     }
   ]
 }

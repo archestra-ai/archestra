@@ -2,7 +2,6 @@ import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentConnectorAssignment } from "@/types";
-import { ApiError } from "@/types";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentVersionModel from "./agent-version";
 
@@ -51,9 +50,12 @@ class AgentConnectorAssignmentModel {
       );
   }
 
-  static async assign(agentId: string, connectorId: string): Promise<void> {
-    // Guard: never attach an agent to a soft-deleted connector (the row
-    // survives soft-delete, so the FK alone won't stop it).
+  /**
+   * Attach a connector to an agent. Returns false — without writing — when the
+   * connector is soft-deleted, which callers surface as a 404. The row survives
+   * soft-delete, so the FK alone won't stop the link.
+   */
+  static async assign(agentId: string, connectorId: string): Promise<boolean> {
     const [connector] = await db
       .select({ id: schema.knowledgeBaseConnectorsTable.id })
       .from(schema.knowledgeBaseConnectorsTable)
@@ -63,9 +65,7 @@ class AgentConnectorAssignmentModel {
           notDeleted(schema.knowledgeBaseConnectorsTable),
         ),
       );
-    if (!connector) {
-      throw new ApiError(404, "Connector not found");
-    }
+    if (!connector) return false;
 
     await db
       .insert(schema.agentConnectorAssignmentsTable)
@@ -75,6 +75,8 @@ class AgentConnectorAssignmentModel {
     // Connectors are part of the config snapshot — fork a version.
     // (AgentModel.update goes through syncForAgent, not here, so no double fork.)
     await AgentVersionModel.forkIfChangedBestEffort(agentId);
+
+    return true;
   }
 
   static async unassign(

@@ -665,13 +665,18 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         enabled: body.enabled,
       });
 
-      // Assign to knowledge bases if provided
+      // Assign to knowledge bases if provided. The ids were validated above;
+      // a false here means one was deleted in between.
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
         for (const kbId of body.knowledgeBaseIds) {
-          await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
-            connector.id,
-            kbId,
-          );
+          const assigned =
+            await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+              connector.id,
+              kbId,
+            );
+          if (!assigned) {
+            throw new ApiError(404, "Knowledge base not found");
+          }
         }
       }
 
@@ -1746,7 +1751,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
           userId: user.id,
         });
-        await KnowledgeBaseConnectorModel.assignToKnowledgeBase(id, kbId);
+        const assigned =
+          await KnowledgeBaseConnectorModel.assignToKnowledgeBase(id, kbId);
+        if (!assigned) {
+          throw new ApiError(404, "Connector or knowledge base not found");
+        }
       }
 
       return reply.send({ success: true });

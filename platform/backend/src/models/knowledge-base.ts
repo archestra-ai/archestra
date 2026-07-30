@@ -86,6 +86,10 @@ class KnowledgeBaseModel {
     return result;
   }
 
+  /**
+   * `notDeleted`-filtered like every read: a soft-deleted KB is gone, so a
+   * write must not land on it either. Returns null when nothing matched.
+   */
   static async update(
     id: string,
     data: Partial<UpdateKnowledgeBase>,
@@ -93,7 +97,12 @@ class KnowledgeBaseModel {
     const [result] = await db
       .update(schema.knowledgeBasesTable)
       .set(data)
-      .where(eq(schema.knowledgeBasesTable.id, id))
+      .where(
+        and(
+          eq(schema.knowledgeBasesTable.id, id),
+          notDeleted(schema.knowledgeBasesTable),
+        ),
+      )
       .returning();
 
     return result ?? null;
@@ -164,8 +173,14 @@ class KnowledgeBaseModel {
     return result ?? null;
   }
 
-  // NOTE: findByIdForAudit is deliberately NOT notDeleted-filtered — the delete
-  // audit reads the row *after* it is stamped, so it must see soft-deleted rows.
+  /**
+   * Prior/post-state snapshot for the audit hook. `notDeleted`-filtered like
+   * every other read: both the REST hook and the MCP tool dispatch capture
+   * `before` ahead of the handler (the row is still active then) and never
+   * fetch an after-state for a `.deleted` action, so the delete record keeps
+   * its full before-state while a re-delete of an already-deleted KB records no
+   * phantom prior state.
+   */
   static async findByIdForAudit(
     id: string,
     organizationId: string,
@@ -177,6 +192,7 @@ class KnowledgeBaseModel {
         and(
           eq(schema.knowledgeBasesTable.id, id),
           eq(schema.knowledgeBasesTable.organizationId, organizationId),
+          notDeleted(schema.knowledgeBasesTable),
         ),
       )
       .limit(1);

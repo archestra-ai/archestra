@@ -2,7 +2,6 @@ import { and, eq, getTableColumns, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentKnowledgeBase } from "@/types";
-import { ApiError } from "@/types";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentVersionModel from "./agent-version";
 
@@ -47,9 +46,15 @@ class AgentKnowledgeBaseModel {
       );
   }
 
-  static async assign(agentId: string, knowledgeBaseId: string): Promise<void> {
-    // Guard: never attach an agent to a soft-deleted KB. The row survives under
-    // soft-delete, so without this the FK would accept a link to a gone KB.
+  /**
+   * Attach a knowledge base to an agent. Returns false — without writing — when
+   * the KB is soft-deleted, which callers surface as a 404. The row survives
+   * soft-delete, so the FK alone would accept a link to a gone KB.
+   */
+  static async assign(
+    agentId: string,
+    knowledgeBaseId: string,
+  ): Promise<boolean> {
     const [kb] = await db
       .select({ id: schema.knowledgeBasesTable.id })
       .from(schema.knowledgeBasesTable)
@@ -59,9 +64,7 @@ class AgentKnowledgeBaseModel {
           notDeleted(schema.knowledgeBasesTable),
         ),
       );
-    if (!kb) {
-      throw new ApiError(404, "Knowledge base not found");
-    }
+    if (!kb) return false;
 
     await db
       .insert(schema.agentKnowledgeBasesTable)
@@ -71,6 +74,8 @@ class AgentKnowledgeBaseModel {
     // Knowledge bases are part of the config snapshot — fork a version.
     // (AgentModel.update goes through syncForAgent, not here, so no double fork.)
     await AgentVersionModel.forkIfChangedBestEffort(agentId);
+
+    return true;
   }
 
   static async unassign(

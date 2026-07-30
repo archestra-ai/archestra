@@ -629,7 +629,11 @@ describe("POST /api/chat toUIMessageStream onError deduplication", () => {
     const patchResponse = await app.inject({
       method: "PATCH",
       url: `/api/chat/messages/${userMessage?.id}`,
-      payload: { partIndex: 0, text: "Edited after provider error" },
+      payload: {
+        conversationId,
+        partIndex: 0,
+        text: "Edited after provider error",
+      },
     });
     expect(patchResponse.statusCode).toBe(200);
   });

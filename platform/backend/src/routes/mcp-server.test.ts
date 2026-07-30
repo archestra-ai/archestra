@@ -2078,8 +2078,95 @@ describe("mcp server inspect route", () => {
     });
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
-      secrets: { access_token: "exchanged-github-token" },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer exchanged-github-token",
+      },
     });
+    // The exchanged credential travels as a resolved header, never as a static
+    // secret — the static path would ignore the catalog's injection mode.
+    expect(connectAndGetToolsMock.mock.calls[0][0].secrets).not.toHaveProperty(
+      "access_token",
+    );
+  });
+
+  // Regression: install-time discovery used to hand the exchanged credential to
+  // the transport as a static `access_token`, which always emits
+  // `Authorization: Bearer` and silently ignores a configured custom header.
+  test("enterprise-managed install discovery honors a custom injection header", async ({
+    makeAccount,
+    makeIdentityProvider,
+    makeInternalMcpCatalog,
+  }) => {
+    const identityProvider = await makeIdentityProvider(user.id, {
+      providerId: "keycloak",
+      issuer: "http://localhost:30081/realms/archestra",
+      oidcConfig: {
+        clientId: "archestra-oidc",
+        clientSecret: "archestra-oidc-secret",
+        tokenEndpoint:
+          "http://localhost:30081/realms/archestra/protocol/openid-connect/token",
+        tokenEndpointAuthentication: "client_secret_post",
+        enterpriseManagedCredentials: {
+          exchangeStrategy: "rfc8693",
+          subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+        },
+      },
+    });
+
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Custom Header Remote",
+      serverType: "remote",
+      serverUrl: "https://internal.example.com/mcp",
+      enterpriseManagedConfig: {
+        identityProviderId: identityProvider.id,
+        requestedCredentialType: "bearer_token",
+        tokenInjectionMode: "header",
+        headerName: "x-provider-api-token",
+      },
+    });
+
+    await makeAccount(user.id, {
+      providerId: "keycloak",
+      accessToken: "session-access-token",
+    });
+
+    exchangeEnterpriseManagedCredentialMock.mockResolvedValueOnce({
+      credentialType: "bearer_token",
+      expiresInSeconds: null,
+      issuedTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+      value: "exchanged-custom-header-token",
+    });
+
+    connectAndGetToolsMock.mockResolvedValueOnce([
+      {
+        name: "get-server-info",
+        description: "Returns server details",
+        inputSchema: { type: "object", properties: {} },
+      },
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Custom Header Remote",
+        catalogId: catalog.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
+
+    const [discoveryParams] = connectAndGetToolsMock.mock.calls[0];
+    // Bare value under the configured header — not `Bearer …`, and not
+    // `Authorization`.
+    expect(discoveryParams.enterpriseTransportCredential).toMatchObject({
+      headerName: "x-provider-api-token",
+      headerValue: "exchanged-custom-header-token",
+    });
+    expect(discoveryParams.secrets).not.toHaveProperty("access_token");
   });
 
   // Regression: enterprise-managed catalogs with install-time userConfig used
@@ -2176,7 +2263,10 @@ describe("mcp server inspect route", () => {
     expect(callsForCatalog[0][0]).toMatchObject({
       secrets: {
         header_x_tenant: "tenant-a",
-        access_token: "exchanged-downstream-token",
+      },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer exchanged-downstream-token",
       },
     });
   });
@@ -2271,7 +2361,10 @@ describe("mcp server inspect route", () => {
     );
     expect(callsForCatalog).toHaveLength(1);
     expect(callsForCatalog[0][0]).toMatchObject({
-      secrets: { access_token: "exchanged-local-token" },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer exchanged-local-token",
+      },
     });
   });
 
@@ -2348,7 +2441,10 @@ describe("mcp server inspect route", () => {
       }),
     });
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
-      secrets: { access_token: "downstream-user-token" },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer downstream-user-token",
+      },
     });
   });
 
@@ -2394,7 +2490,10 @@ describe("mcp server inspect route", () => {
     expect(exchangeEnterpriseManagedCredentialMock).not.toHaveBeenCalled();
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
-      secrets: { access_token: "raw-session-access-token" },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer raw-session-access-token",
+      },
     });
   });
 
@@ -2487,7 +2586,10 @@ describe("mcp server inspect route", () => {
     });
     expect(connectAndGetToolsMock).toHaveBeenCalledTimes(1);
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
-      secrets: { access_token: "shared-install-discovery-token" },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer shared-install-discovery-token",
+      },
     });
   });
 
@@ -2614,7 +2716,10 @@ describe("mcp server inspect route", () => {
       }),
     });
     expect(connectAndGetToolsMock.mock.calls[0][0]).toMatchObject({
-      secrets: { access_token: "mcp-server-access-token" },
+      enterpriseTransportCredential: {
+        headerName: "Authorization",
+        headerValue: "Bearer mcp-server-access-token",
+      },
     });
 
     const persistedTool = await ToolModel.findByName(

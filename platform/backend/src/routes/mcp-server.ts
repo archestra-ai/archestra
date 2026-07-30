@@ -31,7 +31,10 @@ import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { filterMcpServersAssignableToTarget } from "@/services/agent-tool-assignment";
 import { assertValuesMatchEnvironmentRegex } from "@/services/environments/environment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
-import { exchangeIdJagAtProtectedResource } from "@/services/identity-providers/enterprise-managed/broker";
+import {
+  buildEnterpriseCredentialHeader,
+  exchangeIdJagAtProtectedResource,
+} from "@/services/identity-providers/enterprise-managed/broker";
 import { exchangeEnterpriseManagedCredential } from "@/services/identity-providers/enterprise-managed/exchange";
 import {
   findExternalIdentityProviderById,
@@ -2319,9 +2322,20 @@ async function connectAndGetToolsForInstallation(params: {
           userId: params.userId,
         })
       : undefined;
-  const discoverySecrets = installDiscoveryAccessToken
-    ? { ...secrets, access_token: installDiscoveryAccessToken }
-    : secrets;
+  // Route the exchanged credential through the catalog's injection mode rather
+  // than folding it into `access_token`: the static-secret path always emits
+  // `Authorization: Bearer`, which silently ignores a configured custom header
+  // and sends discovery traffic with a credential the upstream never expects.
+  const installDiscoveryCredential =
+    installDiscoveryAccessToken && catalogItem.enterpriseManagedConfig
+      ? {
+          ...buildEnterpriseCredentialHeader({
+            config: catalogItem.enterpriseManagedConfig,
+            value: installDiscoveryAccessToken,
+          }),
+          expiresInSeconds: null,
+        }
+      : undefined;
 
   if (catalogItem.enterpriseManagedConfig && !installDiscoveryAccessToken) {
     const identityProvider = catalogItem.enterpriseManagedConfig
@@ -2340,8 +2354,9 @@ async function connectAndGetToolsForInstallation(params: {
     return await mcpClient.connectAndGetTools({
       catalogItem,
       mcpServerId: params.mcpServerId,
-      secrets: discoverySecrets,
+      secrets,
       secretId: params.secretId,
+      enterpriseTransportCredential: installDiscoveryCredential,
     });
   } catch (error) {
     if (
@@ -2356,7 +2371,10 @@ async function connectAndGetToolsForInstallation(params: {
       catalogItem,
       userId: params.userId,
     });
-    if (!accessToken || discoverySecrets.access_token === accessToken) {
+    // Only non-enterprise catalogs reach the retry (the guard above rethrows
+    // when an enterprise config is set), so the token already tried is the
+    // install's own stored one.
+    if (!accessToken || secrets.access_token === accessToken) {
       throw error;
     }
 
@@ -2373,7 +2391,7 @@ async function connectAndGetToolsForInstallation(params: {
       catalogItem,
       mcpServerId: params.mcpServerId,
       secrets: {
-        ...discoverySecrets,
+        ...secrets,
         access_token: accessToken,
       },
       secretId: params.secretId,

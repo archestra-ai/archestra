@@ -2111,8 +2111,10 @@ class McpClient {
           secrets,
         });
         if (enterpriseTransportCredential) {
-          localHeaders[enterpriseTransportCredential.headerName] =
-            enterpriseTransportCredential.headerValue;
+          applyEnterpriseCredentialHeader(
+            localHeaders,
+            enterpriseTransportCredential,
+          );
         } else if (
           !hasStaticAuthorizationCredential(secrets) &&
           tokenAuth?.isExternalIdp &&
@@ -2163,8 +2165,10 @@ class McpClient {
           secrets,
         });
         if (enterpriseTransportCredential) {
-          headers[enterpriseTransportCredential.headerName] =
-            enterpriseTransportCredential.headerValue;
+          applyEnterpriseCredentialHeader(
+            headers,
+            enterpriseTransportCredential,
+          );
         } else if (
           !hasStaticAuthorizationCredential(secrets) &&
           tokenAuth?.isExternalIdp &&
@@ -3309,8 +3313,21 @@ class McpClient {
     mcpServerId: string;
     secrets: Record<string, unknown>;
     secretId?: string;
+    /**
+     * Credential resolved from the catalog's enterprise-managed config, already
+     * mapped onto the header its injection mode asks for. Passing the raw token
+     * as a `secrets.access_token` instead would force `Authorization: Bearer`
+     * and ignore a configured custom header.
+     */
+    enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential;
   }): Promise<CommonMcpToolDefinition[]> {
-    const { catalogItem, mcpServerId, secrets, secretId } = params;
+    const {
+      catalogItem,
+      mcpServerId,
+      secrets,
+      secretId,
+      enterpriseTransportCredential,
+    } = params;
 
     // Local stdio servers can report a ready pod before the MCP process accepts
     // JSON-RPC, especially while the runtime is still pulling or starting Node.
@@ -3328,6 +3345,9 @@ class McpClient {
           mcpServerId,
           secrets,
           secretId,
+          undefined,
+          undefined,
+          enterpriseTransportCredential ?? undefined,
         );
 
         // No `roots` — see the identical omission above.
@@ -3967,6 +3987,23 @@ class McpClient {
     }
     const { secrets, secretId } = secretResult;
 
+    // Resource reads hit the same upstream as tool calls, so they must carry
+    // the same enterprise-managed credential. Without it the transport falls
+    // back to forwarding the caller's raw IdP token as `Authorization: Bearer`,
+    // bypassing the catalog's configured injection mode entirely.
+    const enterpriseTransportCredential = catalogItem.enterpriseManagedConfig
+      ? await this.resolveCachedEnterpriseTransportCredential({
+          owner: agentOwner(agentId),
+          tokenAuth,
+          enterpriseManagedConfig: catalogItem.enterpriseManagedConfig,
+        })
+      : null;
+    if (catalogItem.enterpriseManagedConfig && !enterpriseTransportCredential) {
+      throw new Error(
+        `Enterprise-managed credential could not be resolved for ${catalogItem.name}`,
+      );
+    }
+
     const transport = await this.getTransport(
       catalogItem,
       server.id,
@@ -3974,6 +4011,7 @@ class McpClient {
       secretId,
       undefined,
       tokenAuth,
+      enterpriseTransportCredential ?? undefined,
     );
     const connectionKey = `${catalogItem.id}:${server.id}:${agentId}`;
     const client = await this.getOrCreateClient(
@@ -4760,6 +4798,30 @@ function getStaticCredentialHeaderValue(params: {
   }
 
   return params.secretValue;
+}
+
+/**
+ * Apply an enterprise-managed credential as the outbound auth header, dropping
+ * any `Authorization` the install's own static secrets already contributed.
+ *
+ * The enterprise exchange is authoritative once it runs, so a leftover
+ * `Authorization` from a stale `access_token` must not ride along: when the
+ * catalog injects into a custom header the upstream would otherwise receive
+ * two credentials and typically authenticate as the stale one.
+ */
+function applyEnterpriseCredentialHeader(
+  headers: Record<string, string>,
+  credential: { headerName: string; headerValue: string },
+): void {
+  if (credential.headerName.toLowerCase() !== "authorization") {
+    for (const headerName of Object.keys(headers)) {
+      if (headerName.toLowerCase() === "authorization") {
+        delete headers[headerName];
+      }
+    }
+  }
+
+  headers[credential.headerName] = credential.headerValue;
 }
 
 function buildDefaultAuthorizationHeaders(

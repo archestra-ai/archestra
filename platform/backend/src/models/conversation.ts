@@ -6,6 +6,7 @@ import {
   getTableColumns,
   ilike,
   isNotNull,
+  isNull,
   or,
   sql,
 } from "drizzle-orm";
@@ -582,15 +583,80 @@ class ConversationModel {
     };
   }
 
+  /**
+   * Write a generated title only while the conversation still looks the way it
+   * did before generation started. Generation awaits a slow LLM call, and a
+   * rename landing in that window has to win — the user typed that name, the
+   * model only guessed one. Returns null when the row moved on.
+   *
+   * The placeholder flag is part of the guard, not just the text: the sidebar
+   * rename box prefills the current title, so saving it unchanged claims the
+   * name (clearing the flag) while leaving the text identical. Matching on text
+   * alone would overwrite that. `updatedAt` would be too broad a version to
+   * guard on — marking the conversation read also touches the row.
+   */
+  static async updateTitleIfUnchanged(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+    expectedTitle: string | null;
+    expectedTitleIsPlaceholder: boolean;
+    title: string;
+  }): Promise<Conversation | null> {
+    const {
+      id,
+      userId,
+      organizationId,
+      expectedTitle,
+      expectedTitleIsPlaceholder,
+      title,
+    } = params;
+
+    const [updated] = await db
+      .update(schema.conversationsTable)
+      .set({ title, titleIsPlaceholder: false })
+      .where(
+        and(
+          eq(schema.conversationsTable.id, id),
+          eq(schema.conversationsTable.userId, userId),
+          eq(schema.conversationsTable.organizationId, organizationId),
+          eq(
+            schema.conversationsTable.titleIsPlaceholder,
+            expectedTitleIsPlaceholder,
+          ),
+          expectedTitle === null
+            ? isNull(schema.conversationsTable.title)
+            : eq(schema.conversationsTable.title, expectedTitle),
+        ),
+      )
+      .returning();
+
+    if (!updated) {
+      return null;
+    }
+
+    return (await ConversationModel.findById({
+      id: updated.id,
+      userId,
+      organizationId,
+    })) as Conversation;
+  }
+
   static async update(
     id: string,
     userId: string,
     organizationId: string,
     data: UpdateConversation,
   ): Promise<Conversation | null> {
+    // An explicit title write — generated or hand-typed — makes the title real,
+    // so the seeded app-name placeholder is gone. Centralized here so no title
+    // path can forget and leave a chat open to being retitled from under the user.
+    const patch: Partial<typeof schema.conversationsTable.$inferInsert> =
+      data.title !== undefined ? { ...data, titleIsPlaceholder: false } : data;
+
     const [updated] = await db
       .update(schema.conversationsTable)
-      .set(data)
+      .set(patch)
       .where(
         and(
           eq(schema.conversationsTable.id, id),

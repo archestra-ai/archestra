@@ -118,6 +118,10 @@ describe("POST /api/apps/:appId/open-in-chat", () => {
       organizationId,
     });
     expect(conversation?.origin).toBe("app_open");
+    // The app name is only a stand-in, so the first settled exchange retitles
+    // the chat instead of leaving it named after the app forever.
+    expect(conversation?.title).toBe("Notes");
+    expect(conversation?.titleIsPlaceholder).toBe(true);
   });
 
   test("seeds a render plus a greeting for a brand-new scaffold app", async () => {

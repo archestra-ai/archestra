@@ -2633,6 +2633,13 @@
       "when": 1785357332334,
       "tag": "0375_youthful_centennial",
       "breakpoints": true
+    },
+    {
+      "idx": 376,
+      "version": "7",
+      "when": 1785405450794,
+      "tag": "0376_omniscient_aaron_stack",
+      "breakpoints": true
     }
   ]
 }

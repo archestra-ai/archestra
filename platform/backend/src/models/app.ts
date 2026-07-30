@@ -5,13 +5,13 @@ import {
   desc,
   eq,
   getTableColumns,
-  ilike,
   inArray,
   or,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { softDelete } from "@/database/soft-delete";
+import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import { ApiError } from "@/types";
 import {
   APP_NAME_MAX_LENGTH,
@@ -20,7 +20,6 @@ import {
   isReservedAppSlug,
 } from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
-import { escapeLikePattern } from "@/utils/sql-search";
 import { isUuid } from "@/utils/uuid";
 import AppAccessModel from "./app-access";
 import AppToolModel from "./app-tool";
@@ -63,10 +62,14 @@ function buildOrgFilters(params: {
   accessibleAppIds?: string[];
   enabled?: boolean;
 }) {
-  const normalizedSearch = params.search?.trim();
-  const searchPattern = normalizedSearch
-    ? `%${escapeLikePattern(normalizedSearch)}%`
-    : undefined;
+  // Per-token rather than one whole-string substring: an app is usually named
+  // from memory ("merge queue take a number" for "Merge Queue — Take a Number"),
+  // and a single LIKE makes the match hinge on reproducing the saved word order
+  // and punctuation exactly. Still a conjunction, so extra words keep narrowing.
+  const searchFilter = buildTokenizedSearchFilter({
+    query: params.search,
+    columns: [schema.appsTable.name, schema.appsTable.description],
+  });
   return [
     eq(schema.appsTable.organizationId, params.organizationId),
     notDeleted(schema.appsTable),
@@ -76,14 +79,7 @@ function buildOrgFilters(params: {
     ...(params.enabled !== undefined
       ? [eq(schema.appsTable.enabled, params.enabled)]
       : []),
-    ...(searchPattern
-      ? [
-          or(
-            ilike(schema.appsTable.name, searchPattern),
-            ilike(schema.appsTable.description, searchPattern),
-          ),
-        ]
-      : []),
+    ...(searchFilter ? [searchFilter] : []),
   ];
 }
 

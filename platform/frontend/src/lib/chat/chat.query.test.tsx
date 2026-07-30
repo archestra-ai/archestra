@@ -310,6 +310,43 @@ describe("mergeUpdatedConversationIntoCache", () => {
     expect(merged.chatApiKeyId).toBe("key-openai");
     expect(merged.modelId).toBe("model-gpt41");
   });
+
+  test("a rename carries the cleared placeholder flag into the cache", () => {
+    // Stale `true` here would make the chat look retitleable to the auto-title
+    // gate for the rest of the session, undoing the rename the user just made.
+    const oldConversation = { ...makeConversation(), titleIsPlaceholder: true };
+    const updatedConversation = {
+      ...oldConversation,
+      title: "Q3 budget planning",
+      titleIsPlaceholder: false,
+    } satisfies archestraApiTypes.UpdateChatConversationResponses["200"];
+
+    const merged = mergeUpdatedConversationIntoCache(
+      oldConversation,
+      updatedConversation,
+      { id: "conversation-1", title: "Q3 budget planning" },
+    );
+
+    expect(merged.title).toBe("Q3 budget planning");
+    expect(merged.titleIsPlaceholder).toBe(false);
+  });
+
+  test("leaves the placeholder flag alone for a model-only update", () => {
+    const oldConversation = { ...makeConversation(), titleIsPlaceholder: true };
+    const updatedConversation = {
+      ...oldConversation,
+      modelId: "model-gpt41",
+      titleIsPlaceholder: false,
+    } satisfies archestraApiTypes.UpdateChatConversationResponses["200"];
+
+    const merged = mergeUpdatedConversationIntoCache(
+      oldConversation,
+      updatedConversation,
+      { id: "conversation-1", modelId: "model-gpt41" },
+    );
+
+    expect(merged.titleIsPlaceholder).toBe(true);
+  });
 });
 
 describe("invalidateConversationFileQueries", () => {
@@ -360,6 +397,7 @@ function makeConversation(): archestraApiTypes.GetChatConversationResponses["200
     agentId: "agent-a",
     chatApiKeyId: "key-openai",
     title: "Test",
+    titleIsPlaceholder: false,
     selectedModel: "gpt-4o",
     selectedProvider: "openai",
     modelId: null,

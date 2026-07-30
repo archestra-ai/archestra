@@ -95,13 +95,17 @@ function resolveCacheDirection(params: {
   }
   if (syncedPerToken != null) {
     return {
-      price: formatCachePrice(Number.parseFloat(syncedPerToken) * 1_000_000),
+      price: formatPerMillionPrice(
+        Number.parseFloat(syncedPerToken) * 1_000_000,
+      ),
       source: "models_dev",
     };
   }
   if (multiplierFactor !== undefined) {
     return {
-      price: formatCachePrice(effectivePricePerMillionInput * multiplierFactor),
+      price: formatPerMillionPrice(
+        effectivePricePerMillionInput * multiplierFactor,
+      ),
       source: "derived_multiplier",
     };
   }
@@ -132,11 +136,14 @@ function combineCacheSource(
 }
 
 /**
- * Format a per-million cache price as a precise, trailing-zero-free string.
- * Cache prices are often sub-cent per million, so the 2-decimal rounding used
- * for the larger input/output magnitudes would be materially lossy here.
+ * Format a per-million price as a precise, trailing-zero-free string.
+ *
+ * Callers compute cost by parsing this back, so rounding it to the cent quietly
+ * becomes a billing error: $0.035/M reads as $0.04, a 14% overstatement, and
+ * anything under $0.005/M reads as free. Padding for display is the reading
+ * end's job.
  */
-function formatCachePrice(perMillion: number): string {
+function formatPerMillionPrice(perMillion: number): string {
   return Number.parseFloat(perMillion.toFixed(8)).toString();
 }
 
@@ -767,12 +774,12 @@ class ModelModel {
           ? "aws"
           : "models_dev";
       return {
-        pricePerMillionInput: (
-          Number.parseFloat(model.promptPricePerToken) * 1_000_000
-        ).toFixed(2),
-        pricePerMillionOutput: (
-          Number.parseFloat(model.completionPricePerToken) * 1_000_000
-        ).toFixed(2),
+        pricePerMillionInput: formatPerMillionPrice(
+          Number.parseFloat(model.promptPricePerToken) * 1_000_000,
+        ),
+        pricePerMillionOutput: formatPerMillionPrice(
+          Number.parseFloat(model.completionPricePerToken) * 1_000_000,
+        ),
         source: syncedSource,
       };
     }

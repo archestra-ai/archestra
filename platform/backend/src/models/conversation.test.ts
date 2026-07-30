@@ -365,6 +365,91 @@ describe("ConversationModel", () => {
     expect(Array.isArray(updated?.messages)).toBe(true);
   });
 
+  test("an ordinary conversation is not born with a placeholder title", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    // Only app-open seeding opts in; if the column default flipped, every chat
+    // would become eligible to be retitled behind the user's back.
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Default Agent", teams: [] });
+
+    const created = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Hand-picked title",
+    });
+
+    expect(created.titleIsPlaceholder).toBe(false);
+  });
+
+  test("a title write clears the placeholder flag", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    // This is what stops automatic generation from overwriting a name the user
+    // typed, so it has to hold for every title write, not just the rename route.
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Placeholder Agent", teams: [] });
+
+    const created = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Expense Tracker",
+      titleIsPlaceholder: true,
+      origin: "app_open",
+    });
+    expect(created.titleIsPlaceholder).toBe(true);
+
+    const renamed = await ConversationModel.update(
+      created.id,
+      user.id,
+      org.id,
+      {
+        title: "Q3 budget planning",
+      },
+    );
+
+    expect(renamed?.title).toBe("Q3 budget planning");
+    expect(renamed?.titleIsPlaceholder).toBe(false);
+  });
+
+  test("an update that does not touch the title keeps the placeholder flag", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Placeholder Agent", teams: [] });
+
+    const created = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Expense Tracker",
+      titleIsPlaceholder: true,
+      origin: "app_open",
+    });
+
+    const updated = await ConversationModel.update(
+      created.id,
+      user.id,
+      org.id,
+      {
+        pinnedAt: new Date(),
+      },
+    );
+
+    expect(updated?.titleIsPlaceholder).toBe(true);
+  });
+
   test("can delete a conversation", async ({
     makeUser,
     makeOrganization,

@@ -1,5 +1,55 @@
 # Changelog
 
+## [1.3.22](https://github.com/archestra-ai/archestra/compare/platform-v1.3.21...platform-v1.3.22) (2026-07-30)
+
+
+### Features
+
+* **a2a:** full A2A v1.0 Task + Artifact support ([#6967](https://github.com/archestra-ai/archestra/issues/6967)) ([7469f17](https://github.com/archestra-ai/archestra/commit/7469f17d280a1362090d367d8aa88ee27de97e8b))
+* **a2a:** group A2A routes/models into subdirs and make the AgentCard spec-conformant ([#6969](https://github.com/archestra-ai/archestra/issues/6969)) ([2b30700](https://github.com/archestra-ai/archestra/commit/2b3070042e5ef553da144d22da42fb906547f6f3))
+* **a2a:** name the provider on the agent card ([#6976](https://github.com/archestra-ai/archestra/issues/6976)) ([1369603](https://github.com/archestra-ai/archestra/commit/1369603cd79a645e62086be1a69d409c4f2b6d97))
+* **a2a:** push notifications for disconnected clients ([#6973](https://github.com/archestra-ai/archestra/issues/6973)) ([0f92836](https://github.com/archestra-ai/archestra/commit/0f928366d6e6ac176ce1d5d1d50f0bc9f82d296c))
+* **a2a:** registry endpoint listing every card a credential can reach ([#6977](https://github.com/archestra-ai/archestra/issues/6977)) ([d1f748b](https://github.com/archestra-ai/archestra/commit/d1f748baafbe81427488ec6dfa67626e59f12724))
+* **a2a:** retention for finished A2A tasks ([#6974](https://github.com/archestra-ai/archestra/issues/6974)) ([a5295be](https://github.com/archestra-ai/archestra/commit/a5295be9f661f97a25ec6fe9d7f65426d3d7f1f4))
+* **a2a:** wake task streams across replicas with LISTEN/NOTIFY ([#6975](https://github.com/archestra-ai/archestra/issues/6975)) ([952655c](https://github.com/archestra-ai/archestra/commit/952655ce23fb775e9bc553a42230a63cb32776a5))
+* **mcp-gateway:** stop advertising unimplemented subscriptions, refuse removed methods ([#6952](https://github.com/archestra-ai/archestra/issues/6952)) ([c6782a7](https://github.com/archestra-ai/archestra/commit/c6782a731c53f3e343ecf3cfdcc818af9d84339a))
+* **mcp-gateway:** subscriptions/listen and x-mcp-header support ([#6953](https://github.com/archestra-ai/archestra/issues/6953)) ([18695c1](https://github.com/archestra-ai/archestra/commit/18695c1387be23097b27b6fbe5034ba3a2aa67cd))
+* **mcp:** bind credentials to their issuer, complete the result envelope, and finish the error-code migration ([#6944](https://github.com/archestra-ai/archestra/issues/6944)) ([47a64f3](https://github.com/archestra-ai/archestra/commit/47a64f3c04ac7fcc3e3da15b713441a3b1f4f8fd))
+* **mcp:** Tasks extension for long-running tool calls — gateway and chat ([#6956](https://github.com/archestra-ai/archestra/issues/6956)) ([eebc51f](https://github.com/archestra-ai/archestra/commit/eebc51f32e596601b9debc8defbf59e019736961))
+* **sandbox:** raise the per-file cap to 50 MiB and sync large uploads via filesync ([#6926](https://github.com/archestra-ai/archestra/issues/6926)) ([a2ea594](https://github.com/archestra-ai/archestra/commit/a2ea5941b5be262089b4b5f62acff25b871b6364))
+* **sharing:** share agents, MCP gateways, LLM proxies, skills, projects and models with named people ([#6928](https://github.com/archestra-ai/archestra/issues/6928)) ([216a1bb](https://github.com/archestra-ai/archestra/commit/216a1bb3d0809ee0495adffcc24805ba44b22ebe))
+
+
+### Bug Fixes
+
+* **a2a:** reject contentless message turns instead of sending them to the provider ([#6959](https://github.com/archestra-ai/archestra/issues/6959)) ([7bc0ff3](https://github.com/archestra-ai/archestra/commit/7bc0ff3262d277b328cd4d87370cc13193df6b8f))
+* **apps:** bind scaffolded apps to the agent's environment, accept Default tools as the app baseline ([#6981](https://github.com/archestra-ai/archestra/issues/6981)) ([031a132](https://github.com/archestra-ai/archestra/commit/031a1327811e5768e80ecb5390e783b56e2c9ceb))
+* **apps:** bound app tool calls at the LLM ceiling and cancel abandoned calls ([#6963](https://github.com/archestra-ai/archestra/issues/6963)) ([2feed0c](https://github.com/archestra-ai/archestra/commit/2feed0ce9363debe4df6b0d0829639bd5f383299))
+* **apps:** let session replays show the images the live app CSP blocked ([#6942](https://github.com/archestra-ai/archestra/issues/6942)) ([6afdd4d](https://github.com/archestra-ai/archestra/commit/6afdd4d7001b2554a84828e5e608b5cf064455f9))
+* **apps:** let the review player load a submission as large as the gallery accepts ([#6950](https://github.com/archestra-ai/archestra/issues/6950)) ([f350153](https://github.com/archestra-ai/archestra/commit/f350153e1237453af0c140b8b77f2e7c76a44bd6))
+* **deps:** bump dompurify override to 3.4.12 to clear GHSA-cmwh-pvxp-8882 & GHSA-c2j3-45gr-mqc4 ([#6940](https://github.com/archestra-ai/archestra/issues/6940)) ([2c61608](https://github.com/archestra-ai/archestra/commit/2c61608dd2e54f447c3f2ca40cb565832cf15056))
+* **frontend:** cover /api/organization/members in the MSW handler set ([#6948](https://github.com/archestra-ai/archestra/issues/6948)) ([77af09b](https://github.com/archestra-ai/archestra/commit/77af09b9c3f88796ec1d095e67a52390a41ff111))
+* **github-copilot:** verify model invocability at sync, surface an actionable model-not-supported error ([#6964](https://github.com/archestra-ai/archestra/issues/6964)) ([1dd549c](https://github.com/archestra-ai/archestra/commit/1dd549c91308beee38066bbc75e1baaf7af97ebc))
+* **llm-cost:** drop a Claude context-variant marker before recording a model ([#6915](https://github.com/archestra-ai/archestra/issues/6915)) ([b9623da](https://github.com/archestra-ai/archestra/commit/b9623dac8f48a6d082d42f1eef2ecb72902a39b7))
+* **llm-cost:** price a model the proxy discovers under a mismatched provider ([#6946](https://github.com/archestra-ai/archestra/issues/6946)) ([7e731bb](https://github.com/archestra-ai/archestra/commit/7e731bbaf73d4661e7dff52b45c924b174002e03))
+* **llm-cost:** price the OpenAI Codex models the registry omits ([#6957](https://github.com/archestra-ai/archestra/issues/6957)) ([40fe031](https://github.com/archestra-ai/archestra/commit/40fe0314f3c722cb6358c48cd4dbecd3484cc798))
+* **llm-cost:** stop pricing self-hosted models, and read the window vLLM reports ([#6984](https://github.com/archestra-ai/archestra/issues/6984)) ([e32495b](https://github.com/archestra-ai/archestra/commit/e32495b169c4694aaa477934a91d768984ab88dc))
+* **llm-proxy:** classify client aborts as 499 and string-payload stream errors as upstream ([#6971](https://github.com/archestra-ai/archestra/issues/6971)) ([56d8e47](https://github.com/archestra-ai/archestra/commit/56d8e476f4f768856994e4656bf1bca1aa14288e))
+* **llm-proxy:** mark status-less in-stream provider errors as upstream failures ([#6968](https://github.com/archestra-ai/archestra/issues/6968)) ([9be8744](https://github.com/archestra-ai/archestra/commit/9be8744ff6856de8591260829e72c6840d5c6f5f))
+* **oauth:** forward the RFC 9207 iss parameter from the callback ([#6949](https://github.com/archestra-ai/archestra/issues/6949)) ([b015eed](https://github.com/archestra-ai/archestra/commit/b015eed72f97476d3327bc8e1aea6ad2455b9f39))
+* **teams:** add the creator to the team they create, as its admin ([#6931](https://github.com/archestra-ai/archestra/issues/6931)) ([0765df4](https://github.com/archestra-ai/archestra/commit/0765df426b9e72d7fc0be3cb4491ea17399ee0b6))
+* **white-label:** resolve the deployment brand in user- and LLM-facing copy ([#6965](https://github.com/archestra-ai/archestra/issues/6965)) ([2f955b4](https://github.com/archestra-ai/archestra/commit/2f955b4167908000db9617cc25d5c24c1089ce98))
+
+
+### Code Refactoring
+
+* **mcp-gateway:** move gateway modules into their own directory ([#6947](https://github.com/archestra-ai/archestra/issues/6947)) ([3218944](https://github.com/archestra-ai/archestra/commit/3218944d89f5ef19e7089e6562c69c1a590d6257))
+
+
+### Miscellaneous Chores
+
+* **mcp:** stop declaring the roots capability no client implements ([#6960](https://github.com/archestra-ai/archestra/issues/6960)) ([2cb4a58](https://github.com/archestra-ai/archestra/commit/2cb4a589217f3511054924e1e5e8e5de7b290b72))
+
 ## [1.3.21](https://github.com/archestra-ai/archestra/compare/platform-v1.3.20...platform-v1.3.21) (2026-07-29)
 
 

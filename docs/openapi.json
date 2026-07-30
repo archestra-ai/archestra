@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.3.21"
+    "version": "1.3.22"
   },
   "components": {
     "schemas": {
@@ -94440,6 +94440,9 @@
                           "app_open"
                         ]
                       },
+                      "titleIsPlaceholder": {
+                        "type": "boolean"
+                      },
                       "pinnedAt": {
                         "nullable": true,
                         "type": "string",
@@ -94792,6 +94795,7 @@
                       "artifact",
                       "projectId",
                       "origin",
+                      "titleIsPlaceholder",
                       "pinnedAt",
                       "lastMessageAt",
                       "createdAt",
@@ -95221,6 +95225,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -95573,6 +95580,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -95973,6 +95981,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -96325,6 +96336,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -96766,6 +96778,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -97118,6 +97133,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -99295,6 +99311,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -99647,6 +99666,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -100690,6 +100710,9 @@
                             "app_open"
                           ]
                         },
+                        "titleIsPlaceholder": {
+                          "type": "boolean"
+                        },
                         "pinnedAt": {
                           "nullable": true,
                           "type": "string",
@@ -101042,6 +101065,7 @@
                         "artifact",
                         "projectId",
                         "origin",
+                        "titleIsPlaceholder",
                         "pinnedAt",
                         "lastMessageAt",
                         "createdAt",
@@ -102398,6 +102422,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -102753,6 +102780,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -103174,6 +103202,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -103526,6 +103557,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -103942,6 +103974,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -104294,6 +104329,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -104720,6 +104756,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -105072,6 +105111,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -282235,6 +282275,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -282587,6 +282630,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",

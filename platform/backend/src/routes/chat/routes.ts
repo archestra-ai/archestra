@@ -2917,8 +2917,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Skip if title is already set (unless regenerating)
-      if (conversation.title && !regenerate) {
+      // Skip if title is already set (unless regenerating). A placeholder title
+      // — an app's name, seeded so an app chat isn't blank before its first
+      // exchange — doesn't count as set. The write below clears the flag, so
+      // this fires once; a manual rename clears it too, so a name the user
+      // typed is never overwritten.
+      if (
+        conversation.title &&
+        !conversation.titleIsPlaceholder &&
+        !regenerate
+      ) {
         logger.info(
           { conversationId: id, existingTitle: conversation.title },
           "Skipping title generation - title already set",
@@ -3015,10 +3023,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const title = generatedTitle ?? toPlaceholderTitle(titleUserInput);
       const titleSource = generatedTitle !== null ? "model" : "fallback";
 
-      if (title === conversation.title) {
+      if (title === conversation.title && !conversation.titleIsPlaceholder) {
         // Most often the fallback matched the placeholder the client stored
         // when it opened the chat. Writing it again would touch the row — and
         // reorder the sidebar — to leave the title exactly as it was.
+        //
+        // Only when the row isn't flagged a placeholder, though: the write
+        // below is also what clears that flag, and skipping it would leave an
+        // app chat asking to be retitled on every open.
         logger.info(
           { conversationId: id, title, titleSource },
           "Skipping title update - the new title is identical to the stored one",
@@ -3031,24 +3043,41 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Updating conversation title",
       );
 
-      const updatedConversation = await ConversationModel.update(
-        id,
-        user.id,
-        organizationId,
-        { title },
-      );
+      // Compare-and-set on the title read before generation. The LLM call above
+      // takes seconds, and a rename landing in that window must survive — an
+      // app chat's placeholder title is unhelpful, so renaming while the reply
+      // streams is ordinary behaviour, and the model's guess must not win. The
+      // fallback is written through the same guard: a rename outranks the
+      // opening words just as it outranks a generated title.
+      const updatedConversation =
+        await ConversationModel.updateTitleIfUnchanged({
+          id,
+          userId: user.id,
+          organizationId,
+          expectedTitle: conversation.title,
+          expectedTitleIsPlaceholder: conversation.titleIsPlaceholder,
+          title,
+        });
 
       if (!updatedConversation) {
-        // No row matched id + user + org, even though findById succeeded at the
-        // start of this handler — the conversation was deleted during the async
-        // title generation (a slow LLM call). That's a benign race, not a server
-        // fault: title generation is best-effort, so fall through gracefully like
-        // the other skip branches above instead of raising a 500.
+        // Either the conversation was deleted during the async title generation
+        // or its title changed under us. Both are benign races, not server
+        // faults: title generation is best-effort, so fall through gracefully
+        // like the other skip branches above instead of raising a 500.
         logger.info(
           { conversationId: id },
-          "Skipping title update - conversation no longer exists (deleted during generation)",
+          "Skipping title update - conversation deleted or retitled during generation",
         );
-        return reply.send(conversation);
+        // Re-read rather than replying with the pre-generation snapshot: the
+        // client merges this response into its conversation cache, so a stale
+        // title here would put the placeholder back on screen even though the
+        // rename survived in the database. Null means deleted, nothing to show.
+        const current = await ConversationModel.findById({
+          id,
+          userId: user.id,
+          organizationId,
+        });
+        return reply.send(current ?? conversation);
       }
 
       return reply.send(updatedConversation);
@@ -3373,8 +3402,8 @@ export interface ExtractedMessages {
 const MAX_SKILL_NAME_LENGTH = 80;
 
 /**
- * Extracts the first user message and first assistant message text from conversation messages.
- * Used for generating conversation titles.
+ * Extracts the first exchange — the first user message and the first assistant
+ * message that follows it — from conversation messages, for title generation.
  */
 export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
   let firstUserMessage = "";
@@ -3408,7 +3437,16 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
         }
       }
     }
-    if (!firstAssistantMessage && msgContent.role === "assistant") {
+    // Only a reply, i.e. an assistant message after the first user one. A chat
+    // opened from an app is seeded before any user message with a render tool
+    // call and a canned greeting ("Here's <App>. Want to change the app?");
+    // that boilerplate is not a reply and must not become the title prompt's
+    // assistant half.
+    if (
+      !firstAssistantMessage &&
+      sawFirstUser &&
+      msgContent.role === "assistant"
+    ) {
       // Extract text from parts (skip tool calls)
       for (const part of msgContent.parts || []) {
         if (part.type === "text" && part.text) {

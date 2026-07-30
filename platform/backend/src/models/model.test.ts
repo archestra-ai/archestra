@@ -970,8 +970,8 @@ describe("ModelModel", () => {
       expect(capabilities.inputModalities).toEqual(["text", "image"]);
       expect(capabilities.outputModalities).toEqual(["text"]);
       expect(capabilities.supportsToolCalling).toBe(true);
-      expect(capabilities.pricePerMillionInput).toBe("5.00");
-      expect(capabilities.pricePerMillionOutput).toBe("15.00");
+      expect(capabilities.pricePerMillionInput).toBe("5");
+      expect(capabilities.pricePerMillionOutput).toBe("15");
     });
   });
 

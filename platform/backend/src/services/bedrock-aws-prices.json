@@ -331,15 +331,27 @@
   },
   "Nova 2.0 Lite": {
     "in": 0.33,
+    "out": 2.75
+  },
+  "Nova 2.0 Lite|global": {
+    "in": 0.3,
     "out": 2.5
   },
   "Nova 2.0 Omni": {
+    "in": 0.3,
+    "out": 2.8
+  },
+  "Nova 2.0 Omni|global": {
     "in": 0.3,
     "out": 2.5
   },
   "Nova 2.0 Pro": {
     "in": 1.375,
     "out": 11
+  },
+  "Nova 2.0 Pro|global": {
+    "in": 1.25,
+    "out": 10
   },
   "Nova Lite": {
     "in": 0.06,

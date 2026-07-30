@@ -212,6 +212,10 @@ async function createAppChatConversation(params: {
     // user writes a message (see ConversationModel.findAll), so clicking
     // through apps doesn't pile unused chats into the sidebar.
     origin: "app_open",
+    // The app's name above is a stand-in so the header and sidebar have
+    // something to show before the first exchange; title generation replaces it
+    // once there is a real conversation to title.
+    titleIsPlaceholder: true,
   });
 
   return { conversationId: conversation.id };

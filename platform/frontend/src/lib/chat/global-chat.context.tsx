@@ -694,17 +694,28 @@ function ChatSessionHook({
       ]);
 
       // Auto-generate title after the first settled exchange if still untitled
-      const cachedTitle = queryClient.getQueryData<{ title?: string | null }>([
-        "conversation",
-        conversationId,
-      ])?.title;
-      // A new chat is created with the opening prompt as its title, so a stored
-      // title is not proof the server ever titled this chat.
-      const hasPlaceholderTitle = isPlaceholderTitle(
+      const cachedConversation = queryClient.getQueryData<{
+        title?: string | null;
+        titleIsPlaceholder?: boolean;
+      }>(["conversation", conversationId]);
+      const cachedTitle = cachedConversation?.title;
+      // Two kinds of stand-in title, and neither is proof the server ever
+      // titled this chat. An app chat carries the durable flag, set when the
+      // row was seeded with the app's name. An ordinary chat carries none — the
+      // client wrote the opening prompt as its title — so that one is only
+      // recognisable by shape, and only here: the server's "already titled"
+      // gate sees an ordinary non-empty title and would skip, which is why
+      // this kind alone has to ask for a regeneration.
+      const hasInferredPlaceholderTitle = isPlaceholderTitle(
         cachedTitle,
         stableMessages,
       );
+      const hasPlaceholderTitle =
+        cachedConversation?.titleIsPlaceholder === true ||
+        hasInferredPlaceholderTitle;
 
+      // A placeholder title counts as untitled. The server re-reads the flag
+      // and skips if it's stale, so this only decides whether to ask.
       const shouldGenerateTitle =
         !titleGenerationAttemptedRef.current &&
         (!cachedTitle || hasPlaceholderTitle);
@@ -714,7 +725,7 @@ function ChatSessionHook({
         generateTitleMutation.mutate(
           {
             id: conversationId,
-            regenerate: hasPlaceholderTitle,
+            regenerate: hasInferredPlaceholderTitle,
           },
           {
             onSuccess: (data) => {

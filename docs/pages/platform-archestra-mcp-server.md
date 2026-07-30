@@ -2029,11 +2029,12 @@ Required RBAC permission: `skill:update`
 |------|-------------|--------------------------|
 | `scaffold_app` | Create a new interactive app (dashboard, form, tracker, game, or any custom UI) seeded from the default starter template. | `app:create` |
 | `refine_app` | Clarify what an existing app should be and record it as a persisted product spec, between scaffold_app and edit_app. | `app:update` |
-| `list_apps` | List apps visible to the caller, optionally filtered by name — use it to find an app's id. | `app:read` |
+| `list_apps` | List apps visible to the caller, optionally filtered by name or labels — use it to find an app's id. | `app:read` |
 | `render_app` | Render an existing app by id, if the caller may view it. | `app:read` |
 | `read_app` | Return an app's stored HTML (pre-injection — exactly what was saved, without the platform SDK or base stylesheet) plus its version, byte size, name, and scope. | `app:read` |
 | `edit_app` | The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to s... | `app:update` |
 | `set_app_tools` | Replace an existing app's assigned upstream tools with exactly the set you pass (the full desired list; [] clears all). | `app:update` |
+| `set_app_labels` | Replace an app's labels with exactly the set you pass ([] clears them). | `app:update` |
 | `validate_app` | The pre-publish gate for an app's head version: static structural checks (`findings`, each carrying its own specific message) plus the most recent live-render diagnostics (`live`), with `ok` true w... | `app:read` |
 | `publish_app` | Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, wi... | `app:update` |
 | `preview_app_tool` | Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. | `app:update` |
@@ -2061,6 +2062,9 @@ Required RBAC permission: `app:create`
 | `uiPermissions.microphone` | `object` | No |  |
 | `uiPermissions.geolocation` | `object` | No |  |
 | `uiPermissions.clipboardWrite` | `object` | No |  |
+| `labels` | `object[]` | No | Optional key-value labels for organization and categorization. |
+| `labels[].key` | `string` | Yes |  |
+| `labels[].value` | `string` | Yes |  |
 | `tools` | `string[]` | No | Upstream MCP tool names to assign to the new app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Omitted leaves the app with no assigned tools. |
 
 ##### Output
@@ -2072,6 +2076,9 @@ Required RBAC permission: `app:create`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
+| `labels` | `object[]` | Yes | Key-value labels for organization/categorization. |
+| `labels[].key` | `string` | Yes | The label key. |
+| `labels[].value` | `string` | Yes | The label value. |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 | `tools` | `string[]` | No | The app's assigned tool names after this call (present when the tools param was given). |
 | `status` | `"ok" \| "partial"` | No | Absent or "ok" on full success. "partial" means the app was created (see id) but assigning its tools failed — the app exists; assign them with set_app_tools rather than re-scaffolding. |
@@ -2124,6 +2131,9 @@ Required RBAC permission: `app:read`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | `string` | No | Filter by name. Each whitespace-separated word must appear in the name or description, in any order — so a remembered name matches even when its word order or punctuation differs from how the app was saved. |
+| `labels` | `object[]` | No | Filter by labels. AND across keys, OR within the values given for the same key. |
+| `labels[].key` | `string` | Yes |  |
+| `labels[].value` | `string` | Yes |  |
 | `limit` | `integer` | No |  |
 
 ##### Output
@@ -2136,6 +2146,9 @@ Required RBAC permission: `app:read`
 | `apps[].description` | `string \| null` | Yes |  |
 | `apps[].scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `apps[].latestVersion` | `number` | Yes |  |
+| `apps[].labels` | `object[]` | Yes | Key-value labels for organization/categorization. |
+| `apps[].labels[].key` | `string` | Yes | The label key. |
+| `apps[].labels[].value` | `string` | Yes | The label value. |
 | `apps[].warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 
 #### render_app
@@ -2157,6 +2170,9 @@ Required RBAC permission: `app:read`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
+| `labels` | `object[]` | Yes | Key-value labels for organization/categorization. |
+| `labels[].key` | `string` | Yes | The label key. |
+| `labels[].value` | `string` | Yes | The label value. |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 
 #### read_app
@@ -2212,6 +2228,9 @@ Required RBAC permission: `app:update`
 | `description` | `string \| null` | Yes |  |
 | `scope` | `"personal" \| "team" \| "org"` | Yes |  |
 | `latestVersion` | `number` | Yes |  |
+| `labels` | `object[]` | Yes | Key-value labels for organization/categorization. |
+| `labels[].key` | `string` | Yes | The label key. |
+| `labels[].value` | `string` | Yes | The label value. |
 | `warnings` | `string[]` | No | Soft save-time validation warnings about the html (the save succeeded); fix them via edit_app. |
 
 #### set_app_tools
@@ -2231,6 +2250,28 @@ Required RBAC permission: `app:update`
 |-------|------|----------|-------------|
 | `id` | `string` | Yes |  |
 | `tools` | `string[]` | Yes | The app's assigned tool names after this call. |
+
+#### set_app_labels
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id whose labels to set. |
+| `labels` | `object[]` | Yes | Key-value labels to assign to the app, replacing its current set exactly — pass the full desired list, or [] to clear all. One value per key; a repeated key keeps the last one. |
+| `labels[].key` | `string` | Yes |  |
+| `labels[].value` | `string` | Yes |  |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `labels` | `object[]` | Yes | The app's labels after this call. |
+| `labels[].key` | `string` | Yes | The label key. |
+| `labels[].value` | `string` | Yes | The label value. |
 
 #### validate_app
 

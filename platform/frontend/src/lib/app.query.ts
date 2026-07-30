@@ -23,12 +23,20 @@ const {
   unpinApp,
   pinExternalApp,
   unpinExternalApp,
+  getAppLabelKeys,
+  getAppLabelValues,
 } = archestraApiSdk;
 
 type AppsQuery = NonNullable<archestraApiTypes.GetAppsData["query"]>;
 type AppsParams = Pick<
   AppsQuery,
-  "limit" | "offset" | "search" | "scope" | "authorIds" | "excludeAuthorIds"
+  | "limit"
+  | "offset"
+  | "search"
+  | "scope"
+  | "authorIds"
+  | "excludeAuthorIds"
+  | "labels"
 >;
 type AppDetailQueryOptions = { toastOnError?: boolean };
 
@@ -51,6 +59,34 @@ export function useApps(
       throwOnApiError(error, { toastOnError });
       return data;
     },
+  });
+}
+
+export function useAppLabelKeys() {
+  const { data: canReadApps } = useHasPermissions({ app: ["read"] });
+  return useQuery({
+    queryKey: ["apps", "labels", "keys"],
+    enabled: !!canReadApps,
+    queryFn: async () => {
+      const { data, error } = await getAppLabelKeys();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
+}
+
+export function useAppLabelValues(params?: { key?: string }) {
+  const { key } = params || {};
+  return useQuery({
+    queryKey: ["apps", "labels", "values", key],
+    queryFn: async () => {
+      const { data, error } = await getAppLabelValues({
+        query: key ? { key } : {},
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: key !== undefined,
   });
 }
 

@@ -44,6 +44,7 @@ const app = {
   environmentId: null,
   teams: [],
   users: [],
+  labels: [],
   viewerRole: "owner",
   authorName: null,
 } satisfies archestraApiTypes.GetAppResponses["200"];

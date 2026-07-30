@@ -38,6 +38,16 @@ The `/apps` gallery lists everything the viewer can reach in two sections: apps 
 
 While the feature is enabled, newly created agents get the full app tool set assigned by default — the staged flow (`refine_app`, `scaffold_app`, `read_app`, `edit_app`, `validate_app`, `publish_app`) plus the supporting `preview_app_tool`, `get_app_diagnostics`, `render_app`, `list_apps`, and `delete_app` — so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
 
+## Labels
+
+Labels are key-value tags that organize your apps — `env: prod`, for example. You add them in App settings.
+
+The `/apps` gallery filters by label. Pick a key, then the values you want. Choosing values under two keys narrows the list to apps carrying both. Choosing several values under one key widens it to apps carrying any of them.
+
+Apps from installed MCP servers show their server's labels, so one filter covers the whole gallery. You edit those on the server's page in the [MCP registry](./platform-mcp).
+
+Agents can read and set labels through the built-in app tools, so you can ask one in chat to tag an app.
+
 ## External MCP clients
 
 An owned app is also a standalone MCP server at `POST /api/mcp/app/:id`. An external MCP client (for example a desktop MCP host) connects there with a **user (personal) token**, which resolves to a concrete viewer; organization/team tokens are rejected, because an app needs a viewer for its per-user store and RBAC. The connection binds the app from the route, so the client speaks ordinary MCP: `tools/list` exposes the app's assigned tools, its data-store tools, and an `open` tool whose result carries the app's `ui://` resource; `resources/read` returns the app's HTML. Tool calls reuse the connecting token for upstream MCP servers, exactly as in-app calls do — so an app behaves the same whether driven from Archestra or another client.

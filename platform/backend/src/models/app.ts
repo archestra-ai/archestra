@@ -19,9 +19,11 @@ import {
   type InsertApp,
   isReservedAppSlug,
 } from "@/types/app";
+import type { AgentLabelWithDetails } from "@/types/label";
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
 import AppAccessModel from "./app-access";
+import AppLabelModel from "./app-label";
 import AppToolModel from "./app-tool";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -84,6 +86,32 @@ function buildOrgFilters(params: {
 }
 
 /**
+ * Attach labels to a batch of app rows in one query (no N+1). `App` carries
+ * `labels` as a required field, so every read path funnels through here.
+ */
+async function withLabels<T extends { id: string }>(
+  rows: T[],
+): Promise<(T & { labels: AgentLabelWithDetails[] })[]> {
+  if (rows.length === 0) return [];
+  const labelsByApp = await AppLabelModel.getLabelsForApps(
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) => ({
+    ...row,
+    labels: labelsByApp.get(row.id) ?? [],
+  }));
+}
+
+/** Single-row convenience wrapper around {@link withLabels}. */
+async function withLabelsOne<T extends { id: string }>(
+  row: T | undefined,
+): Promise<(T & { labels: AgentLabelWithDetails[] }) | null> {
+  if (!row) return null;
+  const [hydrated] = await withLabels([row]);
+  return hydrated ?? null;
+}
+
+/**
  * Scope-aware CRUD for apps, mirroring `SkillModel`/`AgentModel`. Create and
  * update fork an immutable `app_versions` snapshot in the same transaction
  * (with content-hash no-op suppression) and keep `apps.latest_version` pointing
@@ -113,7 +141,7 @@ class AppModel {
 
     if (params.limit !== undefined) query = query.limit(params.limit);
     if (params.offset !== undefined) query = query.offset(params.offset);
-    return await query;
+    return await withLabels(await query);
   }
 
   static async countByOrganization(params: {
@@ -133,7 +161,7 @@ class AppModel {
     const [result] = await appWithCatalogQuery().where(
       and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)),
     );
-    return result ?? null;
+    return await withLabelsOne(result);
   }
 
   /**
@@ -211,7 +239,7 @@ class AppModel {
         notDeleted(schema.appsTable),
       ),
     );
-    return result ?? null;
+    return await withLabelsOne(result);
   }
 
   /** A single active app scoped to an org. */
@@ -226,7 +254,7 @@ class AppModel {
         notDeleted(schema.appsTable),
       ),
     );
-    return result ?? null;
+    return await withLabelsOne(result);
   }
 
   /**
@@ -632,8 +660,17 @@ class AppModel {
     // Tool assignments live in appToolsTable (audited:false, "parent carries the
     // signal"), so include them here — otherwise assigning/removing a tool via
     // /api/apps/:appId/tools/:toolId → app.updated would show no diff.
-    const tools = await AppToolModel.getToolsForApp(id);
-    return { ...row, tools: tools.map((t) => t.name).sort() };
+    // Labels live in appLabelsTable (audited:false, "parent carries the
+    // signal") for the same reason, so a label-only edit still shows a diff.
+    const [tools, labels] = await Promise.all([
+      AppToolModel.getToolsForApp(id),
+      AppLabelModel.getLabelsForApp(id),
+    ]);
+    return {
+      ...row,
+      tools: tools.map((t) => t.name).sort(),
+      labels: labels.map((label) => `${label.key}:${label.value}`).sort(),
+    };
   }
 }
 

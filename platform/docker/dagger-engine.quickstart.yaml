@@ -21,7 +21,7 @@ metadata:
     helm.sh/chart: archestra-dagger-runtime-0.2.0
     app.kubernetes.io/name: archestra-dagger-runtime
     app.kubernetes.io/instance: dagger-runtime
-    app.kubernetes.io/version: "0.21.5"
+    app.kubernetes.io/version: "0.21.7"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: archestra
 automountServiceAccountToken: false
@@ -34,10 +34,10 @@ metadata:
   name: dagger-runtime-engine-config
   namespace: default
   labels:
-    helm.sh/chart: dagger-0.21.5
+    helm.sh/chart: dagger-0.21.7
     app.kubernetes.io/name: dagger
     app.kubernetes.io/instance: dagger-runtime
-    app.kubernetes.io/version: v0.21.5
+    app.kubernetes.io/version: v0.21.7
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: dagger
 data:
@@ -62,10 +62,10 @@ metadata:
   name: dagger-runtime-engine
   namespace: default
   labels:
-    helm.sh/chart: dagger-0.21.5
+    helm.sh/chart: dagger-0.21.7
     app.kubernetes.io/name: dagger
     app.kubernetes.io/instance: dagger-runtime
-    app.kubernetes.io/version: v0.21.5
+    app.kubernetes.io/version: v0.21.7
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/part-of: dagger
 spec:
@@ -86,10 +86,10 @@ spec:
         checksum/config: 1d1b1fa423b9b17298e9f1f4044d7adb3283d154665c58a651ec92ba56abe706
       labels:
         name: dagger-runtime-engine
-        helm.sh/chart: dagger-0.21.5
+        helm.sh/chart: dagger-0.21.7
         app.kubernetes.io/name: dagger
         app.kubernetes.io/instance: dagger-runtime
-        app.kubernetes.io/version: v0.21.5
+        app.kubernetes.io/version: v0.21.7
         app.kubernetes.io/managed-by: Helm
         app.kubernetes.io/part-of: dagger
     spec:
@@ -101,7 +101,7 @@ spec:
       serviceAccountName: dagger-runtime
       containers:
         - name: dagger-engine
-          image: registry.dagger.io/engine:v0.21.5
+          image: registry.dagger.io/engine:v0.21.7
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true

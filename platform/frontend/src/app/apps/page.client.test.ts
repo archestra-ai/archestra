@@ -23,6 +23,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",
   pinnedAt: null,
+  labels: [],
 };
 
 const externalApp: Extract<AppListItem, { source: "external" }> = {
@@ -37,6 +38,7 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   executionModel: "server-scoped",
   cspOrigin: "author-declared",
   pinnedAt: null,
+  labels: [],
   icon: null,
   requiresInput: false,
 };

@@ -88,6 +88,7 @@ const APP = {
   enabled: true,
   teams: [],
   users: [],
+  labels: [],
   environmentId: null,
 } as unknown as Parameters<typeof AppSettingsForm>[0]["app"];
 
@@ -162,6 +163,9 @@ describe("AppSettingsForm save", () => {
         name: "Budget v2",
         description: "Team budget tracker",
         environmentId: null,
+        // Labels are replaced wholesale too, so the full current set rides
+        // every save — here the fixture's empty one.
+        labels: [],
       },
     });
     expect(assignMutateAsync).not.toHaveBeenCalled();

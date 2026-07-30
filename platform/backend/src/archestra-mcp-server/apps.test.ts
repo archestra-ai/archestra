@@ -19,6 +19,7 @@ import {
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_SET_APP_LABELS_SHORT_NAME,
   TOOL_SET_APP_TOOLS_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
@@ -31,6 +32,7 @@ import {
 } from "@/clients/chat-mcp-elicitation";
 import {
   AppAccessModel,
+  AppLabelModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
@@ -3609,5 +3611,127 @@ describe("edit_app replacementHtmlSource", () => {
     expect(text).toContain("exactly one");
     // Names what actually collided rather than a generic mode complaint.
     expect(text).toContain("edits and replacementHtmlSource");
+  });
+});
+
+describe("set_app_labels", () => {
+  let context: ArchestraContext;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({
+      name: "Label Agent",
+      accessAllTools: true,
+    });
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+  });
+
+  function scaffold(args: Record<string, unknown>) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      args,
+      context,
+    );
+  }
+
+  function setLabels(args: Record<string, unknown>) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_SET_APP_LABELS_SHORT_NAME),
+      args,
+      context,
+    );
+  }
+
+  test("scaffold_app persists labels given at creation", async () => {
+    const created = await scaffold({
+      name: "Labelled At Birth",
+      labels: [{ key: "env", value: "prod" }],
+    });
+    const appId = structured(created).id as string;
+
+    expect(await AppLabelModel.getLabelsForApp(appId)).toEqual([
+      expect.objectContaining({ key: "env", value: "prod" }),
+    ]);
+    expect(structured(created).labels).toEqual([{ key: "env", value: "prod" }]);
+  });
+
+  test("replaces the app's labels wholesale", async () => {
+    const created = await scaffold({
+      name: "Relabel Me",
+      labels: [{ key: "env", value: "prod" }],
+    });
+    const appId = structured(created).id as string;
+
+    const res = await setLabels({
+      appId,
+      labels: [{ key: "tier", value: "gold" }],
+    });
+
+    expect(res.isError).toBe(false);
+    expect(structured(res).labels).toEqual([{ key: "tier", value: "gold" }]);
+    const persisted = await AppLabelModel.getLabelsForApp(appId);
+    expect(persisted.map((label) => label.key)).toEqual(["tier"]);
+  });
+
+  test("an empty list clears the labels", async () => {
+    const created = await scaffold({
+      name: "Clear Me",
+      labels: [{ key: "env", value: "prod" }],
+    });
+    const appId = structured(created).id as string;
+
+    const res = await setLabels({ appId, labels: [] });
+
+    expect(res.isError).toBe(false);
+    expect(structured(res).labels).toEqual([]);
+    expect(await AppLabelModel.getLabelsForApp(appId)).toEqual([]);
+  });
+
+  test("collapses a repeated key to its last value", async () => {
+    const created = await scaffold({ name: "Deduped" });
+    const appId = structured(created).id as string;
+
+    const res = await setLabels({
+      appId,
+      labels: [
+        { key: "env", value: "staging" },
+        { key: "env", value: "prod" },
+      ],
+    });
+
+    expect(res.isError).toBe(false);
+    const persisted = await AppLabelModel.getLabelsForApp(appId);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]?.value).toBe("prod");
+  });
+
+  test("list_apps filters by labels and returns them", async () => {
+    const matching = await scaffold({
+      name: "Matching",
+      labels: [{ key: "env", value: "prod" }],
+    });
+    await scaffold({
+      name: "Other",
+      labels: [{ key: "env", value: "dev" }],
+    });
+
+    const res = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+      { labels: [{ key: "env", value: "prod" }] },
+      context,
+    );
+
+    const apps = structured(res).apps as { id: string; labels: unknown }[];
+    expect(apps.map((entry) => entry.id)).toEqual([
+      structured(matching).id as string,
+    ]);
+    expect(apps[0]?.labels).toEqual([{ key: "env", value: "prod" }]);
   });
 });

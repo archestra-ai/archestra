@@ -264,8 +264,14 @@ class AppLabelModel {
       return;
     }
 
+    // One value per key is a table invariant (PK is (app_id, key_id)), so a
+    // repeated key collapses to its last value here rather than failing the
+    // insert — callers reaching the model directly (e.g. the REST body) do not
+    // all pre-deduplicate.
+    const byKey = new Map(labels.map((label) => [label.key, label]));
+
     const inserts: { appId: string; keyId: string; valueId: string }[] = [];
-    for (const label of labels) {
+    for (const label of byKey.values()) {
       const keyId = await AgentLabelModel.getOrCreateKey(label.key, tx);
       const valueId = await AgentLabelModel.getOrCreateValue(label.value, tx);
       inserts.push({ appId, keyId, valueId });

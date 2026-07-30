@@ -15,11 +15,16 @@ export interface ProviderConfig {
    */
   showVirtualDmRow?: boolean;
   /**
-   * Show the per-channel "answer all messages" toggle. Only Slack honors it in
-   * the message gate today, so other providers leave it off and the column is
-   * hidden for them.
+   * Show the per-channel "answer all messages" toggle. Telegram leaves it off —
+   * its message gate ignores the setting, so the column is hidden for it.
    */
   supportsAnswerAll?: boolean;
+  /**
+   * The provider only delivers un-mentioned channel messages after someone
+   * grants a permission at install time, so "answer all messages" can be on and
+   * still do nothing. MS Teams turns this on to hint at that where we can tell.
+   */
+  answerAllNeedsConsent?: boolean;
   docsUrl: string | null;
   slashCommand: string;
   /**

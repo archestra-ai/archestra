@@ -111126,6 +111126,12 @@
                     },
                     "hasDmBinding": {
                       "type": "boolean"
+                    },
+                    "workspacesWithUnmentionedTraffic": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   },
                   "required": [
@@ -111133,7 +111139,8 @@
                     "pagination",
                     "counts",
                     "workspaces",
-                    "hasDmBinding"
+                    "hasDmBinding",
+                    "workspacesWithUnmentionedTraffic"
                   ],
                   "additionalProperties": false
                 }

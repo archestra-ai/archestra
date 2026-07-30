@@ -30652,6 +30652,7 @@ export type ListChatOpsBindingsResponses = {
             name: string;
         }>;
         hasDmBinding: boolean;
+        workspacesWithUnmentionedTraffic: Array<string>;
     };
 };
 

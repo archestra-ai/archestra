@@ -661,8 +661,20 @@ export class ChatOpsManager {
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
     sendReply?: boolean;
+    /**
+     * Whether an access failure is explained in the conversation. Pass false for
+     * a message the sender never addressed to the bot — it reached us only
+     * because the channel answers every message, so a public "Access Denied"
+     * would be the bot interrupting a conversation it wasn't part of.
+     */
+    announceAccessErrors?: boolean;
   }): Promise<ChatOpsProcessingResult> {
-    const { message, provider, sendReply = true } = params;
+    const {
+      message,
+      provider,
+      sendReply = true,
+      announceAccessErrors = true,
+    } = params;
 
     // Deduplication check
     const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
@@ -738,6 +750,7 @@ export class ChatOpsManager {
       agentId: agentToUse.id,
       agentName: agentToUse.name,
       organizationId: agent.organizationId,
+      announceAccessErrors,
     });
 
     if (!authResult.success) {
@@ -1311,10 +1324,19 @@ export class ChatOpsManager {
     agentId: string;
     agentName: string;
     organizationId: string;
+    announceAccessErrors: boolean;
   }): Promise<
     { success: true; userId: string } | { success: false; error: string }
   > {
-    const { message, provider, agentId, agentName, organizationId } = params;
+    const {
+      message,
+      provider,
+      agentId,
+      agentName,
+      organizationId,
+      announceAccessErrors,
+    } = params;
+    const denyQuietly = !announceAccessErrors;
 
     // Try pre-resolved email first (from Bot Framework TeamsInfo, no Graph API needed)
     let userEmail = message.senderEmail || null;
@@ -1336,11 +1358,13 @@ export class ChatOpsManager {
         { senderId: message.senderId },
         "[ChatOps] Could not resolve user email via TeamsInfo or Graph API",
       );
-      await this.sendSecurityErrorReply(
-        provider,
-        message,
-        "Could not verify your identity. Please ensure the bot is properly installed in your team or chat.",
-      );
+      if (!denyQuietly) {
+        await this.sendSecurityErrorReply(
+          provider,
+          message,
+          "Could not verify your identity. Please ensure the bot is properly installed in your team or chat.",
+        );
+      }
       return {
         success: false,
         error: "Could not resolve user email for security validation",
@@ -1403,11 +1427,13 @@ export class ChatOpsManager {
         },
         "[ChatOps] User does not have access to agent",
       );
-      await this.sendSecurityErrorReply(
-        provider,
-        message,
-        `You don't have access to the agent "${agentName}". Contact your administrator for access.`,
-      );
+      if (!denyQuietly) {
+        await this.sendSecurityErrorReply(
+          provider,
+          message,
+          `You don't have access to the agent "${agentName}". Contact your administrator for access.`,
+        );
+      }
       return {
         success: false,
         error: "Unauthorized: user does not have access to this agent",

@@ -513,6 +513,51 @@ describe("ChatOpsChannelBindingModel", () => {
       const binding = await ChatOpsChannelBindingModel.findById(created.id);
       expect(binding).toBeDefined();
     });
+
+    test("returns the deleted row so callers can drop caches keyed on it", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const created = await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "channel-cache-key",
+        workspaceId: "team-uuid",
+      });
+
+      const deleted =
+        await ChatOpsChannelBindingModel.deleteByIdAndOrganization(
+          created.id,
+          org.id,
+        );
+
+      // The delete route needs these three to invalidate the answer-all cache;
+      // a bare boolean would leave a deleted channel answering until the TTL.
+      expect(deleted).toMatchObject({
+        provider: "ms-teams",
+        channelId: "channel-cache-key",
+        workspaceId: "team-uuid",
+      });
+    });
+
+    test("returns null when there was nothing to delete", async ({
+      makeOrganization,
+    }) => {
+      const org1 = await makeOrganization();
+      const org2 = await makeOrganization();
+      const created = await ChatOpsChannelBindingModel.create({
+        organizationId: org1.id,
+        provider: "ms-teams",
+        channelId: "channel-other-org",
+      });
+
+      expect(
+        await ChatOpsChannelBindingModel.deleteByIdAndOrganization(
+          created.id,
+          org2.id,
+        ),
+      ).toBeNull();
+    });
   });
 
   describe("ensureChannelsExist", () => {

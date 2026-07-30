@@ -18,6 +18,10 @@ import {
   isToolRowExcluded,
 } from "@/services/agent-tool-exclusions";
 // Import all groups
+import {
+  toolEntries as advisorToolEntries,
+  tools as advisorTools,
+} from "./advisor";
 import { toolEntries as agentToolEntries, tools as agentTools } from "./agents";
 import {
   toolEntries as appDataToolEntries,
@@ -138,6 +142,7 @@ const toolEntries: Partial<
   ...appToolEntries,
   ...appDataToolEntries,
   ...appLlmToolEntries,
+  ...advisorToolEntries,
 };
 
 export function getArchestraMcpTools() {
@@ -164,6 +169,7 @@ export function getArchestraMcpTools() {
     ...appTools,
     ...appDataTools,
     ...appLlmTools,
+    ...advisorTools,
   ];
 
   // Descriptions are shipped strings frozen at module load, so they cannot read

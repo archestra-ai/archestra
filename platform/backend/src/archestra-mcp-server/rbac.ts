@@ -217,6 +217,11 @@ export const TOOL_PERMISSIONS: Record<
   app_data_delete: { resource: "app", action: "update" },
   // A viewer who can use an app can run its archestra.llm.complete() calls.
   llm_complete: { resource: "app", action: "read" },
+  // A consultation reads no platform resource — it asks a configured model a
+  // question. Any caller who can reach the tool at all may use it; what it
+  // costs is governed by usage limits, and whether it exists at all by whether
+  // an administrator configured an advisor model.
+  advisor: null,
 };
 
 /**

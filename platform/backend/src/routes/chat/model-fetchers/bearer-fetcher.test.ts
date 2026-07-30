@@ -1,4 +1,8 @@
-import { MINIMAX_MODELS, PERPLEXITY_MODELS } from "@archestra/shared";
+import {
+  MINIMAX_MODELS,
+  PERPLEXITY_AGENT_MODELS,
+  PERPLEXITY_MODELS,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import { beforeEach, describe, expect, test } from "@/test";
 import { modelFetchers } from "./index";
@@ -167,14 +171,25 @@ describe("static fetchers", () => {
     );
   });
 
-  test("perplexity preserves distinct displayName labels", async () => {
+  test("perplexity serves both of its catalogs under the one provider", async () => {
     const models = await modelFetchers.perplexity("");
     expect(models).toEqual(
-      PERPLEXITY_MODELS.map((m) => ({
+      [...PERPLEXITY_MODELS, ...PERPLEXITY_AGENT_MODELS].map((m) => ({
         id: m.id,
         displayName: m.displayName,
         provider: "perplexity",
       })),
     );
+  });
+
+  test("the two perplexity catalogs stay disjoint", async () => {
+    // Agent API ids are vendor-prefixed (`perplexity/glm-5.2`); the Sonar
+    // chat-completions ids are bare (`sonar-pro`). Sharing a provider makes an
+    // overlap fatal rather than confusing: one model id would resolve to two
+    // different transports (see requiresPerplexityAgentApi).
+    const sonarIds = new Set<string>(PERPLEXITY_MODELS.map((m) => m.id));
+    for (const model of PERPLEXITY_AGENT_MODELS) {
+      expect(sonarIds.has(model.id)).toBe(false);
+    }
   });
 });

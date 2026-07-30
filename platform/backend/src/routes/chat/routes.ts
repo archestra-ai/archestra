@@ -13,6 +13,7 @@ import {
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   RouteId,
   requiresOpenAiResponsesApi,
+  requiresPerplexityAgentApi,
   type SupportedProvider,
   supportsGeminiThoughtSummaries,
   TimeInMs,
@@ -1045,15 +1046,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                 // Omit tools for models that can't take them (e.g. Microsoft
                 // 365 Copilot) instead of letting the provider reject the
-                // turn; an unknown capability is assumed supported. Perplexity
-                // stays hardcoded — its models don't declare capabilities and
-                // it has built-in web search instead of tool calling
-                // (https://docs.perplexity.ai/api-reference/chat-completions-post).
-                // Perplexity's tool calling (2026) exists only on its separate
-                // Agent API (/responses/create, a Responses-style wire format),
-                // not the chat-completions surface we proxy.
+                // turn; an unknown capability is assumed supported. Decided
+                // per model, never per provider: a provider-wide gate hides a
+                // tool-capable model behind its siblings, and it disagrees
+                // with the composer's "no tools" chip, which reads this same
+                // capability. Providers whose endpoint takes no tools record
+                // it as `supportsToolCalling: false` on the model row — see
+                // inferPerplexityCapabilities in services/model-sync.ts for
+                // why every `sonar*` row carries that flag.
                 const supportsToolCalling =
-                  provider !== "perplexity" &&
                   modelRow?.supportsToolCalling !== false;
 
                 const { modelMessages, preparedMessages } =
@@ -1326,6 +1327,43 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       ...(summariesUnsupported
                         ? {}
                         : { reasoningSummary: "auto" }),
+                    },
+                  };
+                }
+
+                // Perplexity Agent API models (the provider's Responses
+                // transport). The key is literally `openai` because the SDK
+                // picks that namespace from the transport rather than the
+                // provider name.
+                //
+                // `store: false` — the Agent API stores nothing, so there are
+                // no server-side item ids to point back at. The SDK's
+                // Responses converter defaults `store` to true and then
+                // replaces each earlier assistant text and tool call that
+                // carries an item id with `{ type: "item_reference", id }` —
+                // references the second turn of every conversation would send
+                // and Perplexity could not resolve.
+                //
+                // The reasoning options exist because the SDK gates its whole
+                // reasoning request path on OpenAI's own model-name heuristic
+                // (o1/o3/gpt-5*), which no vendor-prefixed Perplexity id
+                // matches: without `forceReasoning` the request carries no
+                // `reasoning` block, so reasoning models answer with their
+                // thinking withheld and chat shows none. Forcing it also
+                // flips the SDK's system-message default to the `developer`
+                // role, so `systemMessageMode` pins the plain `system` role
+                // every vendor behind this cross-vendor catalog accepts.
+                if (
+                  provider === "perplexity" &&
+                  requiresPerplexityAgentApi(selectedModel)
+                ) {
+                  streamTextConfig.providerOptions = {
+                    ...streamTextConfig.providerOptions,
+                    openai: {
+                      store: false,
+                      forceReasoning: true,
+                      reasoningSummary: "auto",
+                      systemMessageMode: "system",
                     },
                   };
                 }

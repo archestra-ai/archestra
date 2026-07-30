@@ -1,5 +1,9 @@
 import type { SupportedProvider } from "@archestra/shared";
-import { MINIMAX_MODELS, PERPLEXITY_MODELS } from "@archestra/shared";
+import {
+  MINIMAX_MODELS,
+  PERPLEXITY_AGENT_MODELS,
+  PERPLEXITY_MODELS,
+} from "@archestra/shared";
 import type { OpenAi } from "@/types";
 import { fetchAnthropicModels } from "./anthropic";
 import { fetchArchestraModels } from "./archestra";
@@ -128,7 +132,13 @@ export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   "ollama-native": fetchOllamaNativeModels,
   openai: fetchOpenAiModels,
   openrouter: fetchOpenrouterModels,
-  perplexity: makeStaticFetcher("perplexity", PERPLEXITY_MODELS),
+  // Both of the provider's surfaces publish no usable /models endpoint, so
+  // the catalog is the two static families side by side: the `sonar*`
+  // chat-completions models and the vendor-prefixed Agent API models.
+  perplexity: makeStaticFetcher("perplexity", [
+    ...PERPLEXITY_MODELS,
+    ...PERPLEXITY_AGENT_MODELS,
+  ]),
   vllm: fetchVllmModels,
   xai: fetchXaiModels,
   zhipuai: fetchZhipuaiModels,

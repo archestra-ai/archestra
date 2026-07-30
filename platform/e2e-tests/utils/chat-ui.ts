@@ -77,10 +77,18 @@ export async function sendChatMessage(
   await page.keyboard.press("Enter");
 }
 
+/**
+ * First catalogued model for a provider, or the first one `matchModel` accepts.
+ * Pass the predicate when the provider serves more than one upstream API and
+ * the test only stubs one of them: the catalogue is ordered by model id, so
+ * which transport an unfiltered pick lands on changes whenever the provider
+ * gains a model that sorts earlier.
+ */
 export async function getRuntimeModelForProviderFromApi(
   makeApiRequest: MakeApiRequest,
   request: APIRequestContext,
   providerName: string,
+  matchModel?: (model: RuntimeChatModel) => boolean,
 ): Promise<RuntimeChatModel | null> {
   const query = new URLSearchParams({ provider: providerName });
   const response = await makeApiRequest({
@@ -90,7 +98,12 @@ export async function getRuntimeModelForProviderFromApi(
   });
 
   const models = (await response.json()) as RuntimeChatModel[];
-  return models.find((entry) => entry.provider === providerName) ?? null;
+  return (
+    models.find(
+      (entry) =>
+        entry.provider === providerName && (matchModel?.(entry) ?? true),
+    ) ?? null
+  );
 }
 
 // Keep this as real backend setup: browser-route mocks would only satisfy the

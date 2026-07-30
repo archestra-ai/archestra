@@ -23,11 +23,14 @@ import type { Tool } from "@/types";
  * over discoverable ones, and among discoverable rows the newest wins
  * (`getMcpToolsAccessibleToUser` returns them newest-first).
  *
- * Discoverable candidates are install-scoped to what the user can actually reach
- * and run; assigned tools are reachable through their assignment without a
- * separate install. Both are fenced to `environmentId` (the assignment target:
- * the org default for scaffold_app, the app's bound env for set_app_tools),
- * exclude Archestra built-ins (apps reach the data store through
+ * Discoverable candidates follow catalog visibility, not installs — a visible
+ * catalog whose server the user has not connected yet stays assignable, and the
+ * runtime surfaces the auth-required connect link per viewer; assigned tools
+ * are reachable through their assignment without a separate install. Both are
+ * fenced to `environmentId` (the assignment target: the authoring agent's env
+ * for scaffold_app — which is where the app gets bound — and the app's bound
+ * env for set_app_tools) plus the Default-environment baseline every app may
+ * draw from, exclude Archestra built-ins (apps reach the data store through
  * archestra.storage), and are RBAC-filtered the same way search/grounding are.
  */
 export async function resolveAppAssignableToolRows(params: {
@@ -60,6 +63,7 @@ export async function resolveAppAssignableToolRows(params: {
         userId,
         organizationId,
         environmentId,
+        includeDefaultEnvironment: true,
         isAdmin: await userIsCatalogAdmin(userId, organizationId),
       })
     : [];

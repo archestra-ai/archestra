@@ -48,6 +48,7 @@ import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
 import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
@@ -119,9 +120,15 @@ import {
   buildGatewayServerCapabilities,
   buildPrivateListCacheHint,
   isResourceUnavailableError,
+  type McpProtocolRevision,
   withCompleteResultEnvelope,
   withPrivateCacheHint,
 } from "./protocol";
+import {
+  clientDeclaredTasks,
+  runToolCallMaybeTask,
+  TASK_TTL_MS,
+} from "./tasks";
 
 export { deriveAuthMethod };
 
@@ -183,13 +190,13 @@ export function describeGatewayAuthFailure(
 ): string {
   switch (reason) {
     case "idp_not_linked":
-      return "Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an Archestra token or OAuth.";
+      return `Invalid token for this profile. This gateway has no Identity Provider linked, so it cannot accept an external IdP JWT — link one to the gateway, or authenticate with an ${archestraMcpBranding.appName} token or OAuth.`;
     case "idp_misconfigured":
       return "Invalid token for this profile. The gateway's Identity Provider cannot be used to validate JWTs: it must be an OIDC provider with a client ID and a discoverable JWKS endpoint.";
     case "no_email_claim":
       return "Token validated, but it carries no email claim. Set the Identity Provider's Email Claim attribute mapping to the claim holding the email (IdPs that namespace custom claims do not populate the standard `email` claim).";
     case "unknown_user":
-      return "Token validated, but its email does not match any Archestra user.";
+      return `Token validated, but its email does not match any ${archestraMcpBranding.appName} user.`;
     case "not_org_member":
       return "Token validated, but its user is not a member of this gateway's organization.";
     case "no_gateway_access":
@@ -271,9 +278,11 @@ export async function createAgentServer(params: {
       version: config.api.version,
     },
     {
-      // Shared with the `server/discover` payload so the capabilities a
-      // 2025-11-25 client learns at `initialize` and a 2026-07-28 client learns
-      // on demand cannot drift apart.
+      // The legacy revision's capability set: `initialize` is only ever
+      // answered for 2025-11-25-and-older clients, which have no notification
+      // channel, so `tools.listChanged` stays false here. `server/discover`
+      // deliberately passes the negotiated revision instead and may advertise
+      // `tools.listChanged: true`, backed by `subscriptions/listen`.
       capabilities: buildGatewayServerCapabilities(),
     },
   );
@@ -314,8 +323,19 @@ export async function createAgentServer(params: {
     // filter runs BEFORE filterExposedTools, so an excluded always-exposed
     // built-in is dropped here and never re-admitted below. Empty (no-op)
     // unless the agent's accessAllTools setting is on.
-    const { tools: mcpTools, exclusionSets } =
+    const { tools: fetchedMcpTools, exclusionSets } =
       await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+
+    // SEP-2243: a tool definition with an invalid x-mcp-header annotation must
+    // be excluded from tools/list (with a warning), so one malformed upstream
+    // definition cannot poison the rest of the list.
+    const mcpTools = fetchedMcpTools.filter(
+      (tool) =>
+        !isToolRejectedForMcpHeaders({
+          toolName: tool.name,
+          inputSchema: tool.parameters,
+        }),
+    );
 
     // A tools/list is served to one of two surfaces, and the whole gateway/chat
     // difference lives in this policy. An internal chat (agentType "agent") is
@@ -619,9 +639,21 @@ export async function createAgentServer(params: {
     );
   });
 
-  server.setRequestHandler(
-    CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }, extra) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+    const { name, arguments: args } = request.params;
+
+    // Tasks extension (io.modelcontextprotocol/tasks): an eligible call —
+    // the client declared the extension in this request's _meta — races the
+    // sync threshold and detaches into a durable background task when it
+    // outlives it. Everything below (dispatch, policies, envelope, metrics,
+    // persistence) runs identically either way; only who is waiting for the
+    // outcome changes.
+    const taskEligible =
+      mrtrEnabled && clientDeclaredTasks({ params: request.params });
+
+    const executeCallToolRequest = async (
+      taskAbortSignal: AbortSignal,
+    ): Promise<Record<string, unknown>> => {
       const startTime = Date.now();
       const mcpServerName = parseFullToolName(name).serverName ?? "unknown";
 
@@ -918,6 +950,13 @@ export async function createAgentServer(params: {
               tokenAuth,
               {
                 availableTool,
+                // Tasks: tasks/cancel on this replica aborts the gateway-side
+                // await; whether the upstream stops working is up to the
+                // upstream (stateless HTTP servers run on — see tasks.ts).
+                abortSignal: taskAbortSignal,
+                // A call that may detach is bounded by the task TTL, not the
+                // synchronous patience window (see mcp-client).
+                ...(taskEligible ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
                 elicitationHandler: async (request) => {
                   // MRTR: a retry already carries the answer, so consume it
                   // instead of asking again.
@@ -1085,8 +1124,20 @@ export async function createAgentServer(params: {
           data: error instanceof Error ? error.message : "Unknown error",
         };
       }
-    },
-  );
+    };
+
+    return runToolCallMaybeTask({
+      eligible: taskEligible,
+      agentId,
+      principal: deriveStatePrincipal({
+        userId: tokenAuth?.userId,
+        tokenId: tokenAuth?.tokenId,
+        organizationId: tokenAuth?.organizationId,
+      }),
+      toolName: name,
+      execute: executeCallToolRequest,
+    });
+  });
 
   logger.info({ agentId }, "MCP server instance created");
   return { server: mcpServer, agent };
@@ -1643,6 +1694,32 @@ export async function validateMCPGatewayToken(
   tokenValue: string,
 ): Promise<TokenAuthResult | null> {
   return (await authenticateMCPGatewayRequest(profileId, tokenValue)).result;
+}
+
+/**
+ * Resolve which organization a platform token belongs to, without naming an
+ * agent.
+ *
+ * Every other entry point here answers "may this token reach *this* agent",
+ * which needs the agent up front. Enumerating agents inverts that, so it needs
+ * the principal first. This deliberately grants nothing: it only narrows the
+ * candidate set to one organization, and the caller still has to run the
+ * ordinary per-agent check on each candidate.
+ *
+ * Only platform tokens can be resolved this way. An external IdP JWT is
+ * validated against a JWKS configured *on an agent*, and an OAuth token is
+ * looked up per agent, so neither has an agent-independent identity to read.
+ */
+export async function resolveTokenOrganizationId(
+  tokenValue: string,
+): Promise<string | null> {
+  if (!hasArchestraTokenPrefix(tokenValue)) {
+    return null;
+  }
+
+  const rawTokenHash = createHash("sha256").update(tokenValue).digest("hex");
+  const resolved = await resolveArchestraToken(tokenValue, rawTokenHash);
+  return resolved?.token.organizationId ?? null;
 }
 
 /**

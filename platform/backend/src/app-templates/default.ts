@@ -141,6 +141,7 @@ const html = `<!DOCTYPE html>
 
 // The default mark for the `{{APP_LOGO}}` slot, used when the organization has
 // no white-label logo configured.
+// white-label-ok: default brand mark, shown only when no white-label logo is configured
 export const defaultTemplateLogoHtml = `<button type="button" class="logo" aria-label="Archestra">
     <svg width="80" height="80" viewBox="0 0 994 953" xmlns="http://www.w3.org/2000/svg">
       <rect width="993.958" height="952.543" rx="204.92" fill="black"/>

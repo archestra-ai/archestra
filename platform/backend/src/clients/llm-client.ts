@@ -663,6 +663,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     // beats the old silent fallback to api.openai.com with a virtual key.
     createModel: reasoningCompatibleCreateModel({
       name: "archestra",
+      // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
       missingBaseUrlMessage: "Archestra base URL is required.",
       // The upstream is another Archestra model router, which forwards
       // `response_format: json_schema` the same way the strict openai client
@@ -673,6 +674,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     }),
     defaultBaseUrl: config.llm.archestra.baseUrl,
     apiKeyRequiredMessage:
+      // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
       "Archestra API key is required. Please configure an Archestra API key.",
   },
 

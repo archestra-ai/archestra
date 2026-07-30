@@ -1200,10 +1200,12 @@ Enable polling compatibility only when your database endpoint cannot keep sessio
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Uses polling only instead of the default Postgres `LISTEN/NOTIFY` wake-ups for active chat run replay and stop detection.
   - Default: `false`
   - Keep disabled when direct Postgres or session pooling is available
+  - This also covers A2A task streams, which use the same wake-up mechanism. The setting describes the database endpoint, not the feature
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL`** - Optional Postgres connection string for active chat run `LISTEN/NOTIFY`.
   - Default: Uses `ARCHESTRA_DATABASE_URL`
   - Set this when regular database traffic goes through PgBouncer transaction pooling but notifications can use a direct or session-pooled connection
+  - A2A task streams use this connection too
 
 - **`ARCHESTRA_CHAT_SECRET_SCAN_ENABLED`** - Enables client-side pre-send scanning of chat messages for secrets and high-entropy tokens.
   - Default: `true`
@@ -1277,11 +1279,22 @@ Each MCP server automatically gets a unique hash-based subdomain (e.g., `a1b2c3d
 
 The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS` (the same variables that control CORS). When set, only those origins can embed the sandbox iframe. When neither is set (local dev), all origins are accepted.
 
+### A2A Gateway
+
+A2A task streams work across replicas. A client can subscribe on one replica while the task runs on another — the stream reads the task's event log from the database, and Postgres `LISTEN/NOTIFY` wakes it as soon as the running replica writes. If a notification is missed, the stream falls back to a periodic read, so it stays correct either way. Behind a connection pooler that cannot hold a listener, set `ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`.
+
+- **`ARCHESTRA_A2A_TASK_RETENTION_DAYS`** - How long a finished A2A task is kept before it is deleted, along with its artifacts and stream events.
+  - Default: `90`. Set to `0` to keep tasks forever.
+  - Only terminal tasks (completed, failed, canceled, rejected) are eligible; a task still running is never deleted.
+  - The task's messages are detached before it goes, so the conversation history they belong to is untouched — only the task-scoped view of them is lost. The agent's answer also stays in that history.
+  - Deletion runs in bounded batches on the same background sweep that reaps orphaned tasks, so a large backlog is worked down over several passes.
+
 ### MCP Gateway
 
 - **`ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS`** - Per-request timeout, in milliseconds, for an upstream MCP tool call made through the gateway.
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
+- The MCP Tasks threshold — how long a call from a Tasks-capable client runs synchronously before becoming a background task — derives from this value: half of it, capped at 10 seconds. Task executions themselves are bounded by the 30-minute task retention window, not this timeout.
 
 ### MCP Servers
 

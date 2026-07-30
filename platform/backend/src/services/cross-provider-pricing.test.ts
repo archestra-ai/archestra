@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 import type { ModelsDevApiResponse } from "@/clients/models-dev-client";
-import { resolveCrossProviderPrices } from "./cross-provider-pricing";
+import {
+  resolveCrossProviderPrices,
+  resolveDiscoveredModelRegistryEntry,
+  resolveSelfHostedModelMetadata,
+} from "./cross-provider-pricing";
 
 // Minimal models.dev fixture mirroring real shapes: the canonical `anthropic`
 // entry carries cache prices; the `amazon-bedrock` entry is keyed by the Bedrock
@@ -34,6 +38,20 @@ const MODELS_DEV: ModelsDevApiResponse = {
         id: "gpt-4o",
         name: "GPT-4o",
         cost: { input: 2.5, output: 10, cache_read: 1.25 },
+      },
+    },
+  },
+  meta: {
+    id: "meta",
+    name: "Meta",
+    models: {
+      "llama-4-maverick": {
+        id: "llama-4-maverick",
+        name: "Llama 4 Maverick",
+        cost: { input: 0.22, output: 0.85 },
+        limit: { context: 1048576, output: 16384 },
+        modalities: { input: ["text", "image"], output: ["text"] },
+        tool_call: true,
       },
     },
   },
@@ -297,4 +315,132 @@ test("returns null for providers that match models.dev keys directly", () => {
   });
 
   expect(prices).toBeNull();
+});
+
+describe("resolveDiscoveredModelRegistryEntry", () => {
+  // A client can send any model name to any gateway endpoint, and the row is
+  // recorded under the endpoint's provider. Provider-scoped resolution then
+  // matches nothing, even when the registry lists the model under its own
+  // vendor, so the model lands on the fabricated default estimate.
+  test("prices a vendor model that arrived at a mismatched provider endpoint", () => {
+    const resolved = resolveDiscoveredModelRegistryEntry({
+      provider: "bedrock",
+      modelId: "gpt-4o",
+      modelsDevData: MODELS_DEV,
+    });
+
+    expect(resolved?.prices).toEqual({
+      promptPricePerToken: "0.0000025",
+      completionPricePerToken: "0.00001",
+      cacheReadPricePerToken: "0.00000125",
+      cacheWritePricePerToken: null,
+    });
+  });
+
+  test("still prefers the provider-scoped match when one exists", () => {
+    const resolved = resolveDiscoveredModelRegistryEntry({
+      provider: "bedrock",
+      modelId: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      modelsDevData: MODELS_DEV,
+    });
+
+    // The bedrock entry, not a registry-wide guess.
+    expect(resolved?.prices?.promptPricePerToken).toBe("0.000003");
+    expect(resolved?.metadata?.contextLength).toBeNull();
+  });
+
+  test("abstains when no first-party vendor lists the model", () => {
+    expect(
+      resolveDiscoveredModelRegistryEntry({
+        provider: "bedrock",
+        modelId: "somevendor.private-model-v3",
+        modelsDevData: MODELS_DEV,
+      }),
+    ).toBeNull();
+  });
+
+  test("does not resolve a model listed only by a reseller", () => {
+    // `us.meta.llama3-3-70b-instruct-v1:0` exists in the fixture under
+    // amazon-bedrock only. Reached as a bare id under another provider it must
+    // not be priced from that reseller row.
+    expect(
+      resolveDiscoveredModelRegistryEntry({
+        provider: "openai",
+        modelId: "us.meta.llama3-3-70b-instruct-v1:0",
+        modelsDevData: MODELS_DEV,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("resolveSelfHostedModelMetadata", () => {
+  test("matches a HuggingFace path to the vendor that publishes the model", () => {
+    expect(
+      resolveSelfHostedModelMetadata({
+        modelId: "meta-llama/Llama-4-Maverick",
+        modelsDevData: MODELS_DEV,
+      }),
+    ).toMatchObject({
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+    });
+  });
+
+  test("asserts no window or output limit, whatever the vendor publishes", () => {
+    // The entry carries a 1M window; the server that serves it decides its own.
+    const metadata = resolveSelfHostedModelMetadata({
+      modelId: "meta-llama/Llama-4-Maverick",
+      modelsDevData: MODELS_DEV,
+    });
+
+    expect(metadata?.contextLength).toBeNull();
+    expect(metadata?.outputLength).toBeNull();
+  });
+
+  test("reports nothing for a name no vendor publishes", () => {
+    expect(
+      resolveSelfHostedModelMetadata({
+        modelId: "our-finetune-v3",
+        modelsDevData: MODELS_DEV,
+      }),
+    ).toBeNull();
+  });
+
+  test("ignores a reseller listing, matching only the vendor", () => {
+    // `us.meta.llama3-3-70b-instruct-v1:0` exists under amazon-bedrock alone.
+    expect(
+      resolveSelfHostedModelMetadata({
+        modelId: "us.meta.llama3-3-70b-instruct-v1:0",
+        modelsDevData: MODELS_DEV,
+      }),
+    ).toBeNull();
+  });
+
+  test("reports nothing when vendors disagree about what the name means", () => {
+    // An operator alias can collide with an unrelated model. Two vendors
+    // publishing the same bare name with different modalities means the name
+    // does not identify one model, so nothing is asserted.
+    const ambiguous: ModelsDevApiResponse = {
+      ...MODELS_DEV,
+      cohere: {
+        id: "cohere",
+        name: "Cohere",
+        models: {
+          "llama-4-maverick": {
+            id: "llama-4-maverick",
+            name: "Not the same model",
+            modalities: { input: ["text"], output: ["text"] },
+          },
+        },
+      },
+    };
+
+    expect(
+      resolveSelfHostedModelMetadata({
+        modelId: "meta-llama/Llama-4-Maverick",
+        modelsDevData: ambiguous,
+      }),
+    ).toBeNull();
+  });
 });

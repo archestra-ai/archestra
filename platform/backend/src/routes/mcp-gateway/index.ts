@@ -19,6 +19,7 @@ import {
   buildDiscoverResult,
   extractTraceContext,
   isDiscoverRequest,
+  isMethodRemovedForRevision,
   MCP_PROTOCOL_VERSION_HEADER,
   type McpProtocolRevision,
   type ProtocolResolution,
@@ -28,6 +29,12 @@ import {
   SUPPORTED_MCP_PROTOCOL_REVISIONS,
   validateRoutingHeaders,
 } from "./protocol";
+import {
+  isSubscriptionsListenRequest,
+  parseSubscriptionFilter,
+  runSubscriptionStream,
+} from "./subscriptions";
+import { handleTaskMethod, isTaskMethod } from "./tasks";
 import {
   authenticateMCPGatewayRequest,
   createAgentServer,
@@ -470,6 +477,87 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
             id: (request.body as { id?: string | number })?.id ?? null,
           };
         }
+      }
+
+      // 2026-07-28 removes ping, logging/setLevel, and resources
+      // subscription methods. A client that declared that revision gets
+      // method-not-found rather than an answer from a surface it opted out
+      // of; legacy clients are untouched.
+      const bodyMethod = (request.body as { method?: string })?.method;
+      if (
+        isMethodRemovedForRevision({
+          method: bodyMethod,
+          revision: resolution.revision,
+        })
+      ) {
+        reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
+        return {
+          jsonrpc: "2.0",
+          error: {
+            code: -32601,
+            message: `Method "${bodyMethod}" was removed in protocol version ${resolution.revision}.`,
+          },
+          id: (request.body as { id?: string | number })?.id ?? null,
+        };
+      }
+
+      // Tasks extension methods, served from the durable row so any replica
+      // can answer. Stateless clients only — the extension's per-request
+      // capability mechanics do not exist earlier, so a legacy client falls
+      // through to the SDK and gets method-not-found.
+      if (
+        resolution.revision === STATELESS_MCP_PROTOCOL_REVISION &&
+        isTaskMethod(request.body)
+      ) {
+        reply.header(MCP_PROTOCOL_VERSION_HEADER, resolution.revision);
+        const outcome = await handleTaskMethod({
+          body: request.body,
+          agentId: profileId,
+          principal: deriveStatePrincipal({
+            userId: tokenAuth.userId,
+            tokenId: tokenAuth.tokenId,
+            organizationId: tokenAuth.organizationId,
+          }),
+        });
+        return {
+          jsonrpc: "2.0",
+          ...outcome,
+          id: (request.body as { id?: string | number })?.id ?? null,
+        };
+      }
+
+      // `subscriptions/listen` (2026-07-28) opens a long-lived notification
+      // stream. Handled at the route because the SDK transport answers with a
+      // single JSON body, and this is the one method that must not. Requires
+      // the stateless revision: a legacy client falls through to the SDK and
+      // gets method-not-found, since the method does not exist there.
+      if (
+        resolution.revision === STATELESS_MCP_PROTOCOL_REVISION &&
+        isSubscriptionsListenRequest(request.body)
+      ) {
+        const subscriptionId =
+          (request.body as { id?: string | number })?.id ?? null;
+        if (subscriptionId === null) {
+          reply.status(400);
+          return {
+            jsonrpc: "2.0",
+            error: {
+              code: -32600,
+              message:
+                "subscriptions/listen must be a request with an id; the id becomes the subscription id.",
+            },
+            id: null,
+          };
+        }
+
+        await runSubscriptionStream({
+          request,
+          reply,
+          agentId: profileId,
+          subscriptionId,
+          requested: parseSubscriptionFilter(request.body),
+        });
+        return;
       }
 
       // `server/discover` replaces the `initialize` handshake under 2026-07-28.

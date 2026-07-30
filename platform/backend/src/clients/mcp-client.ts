@@ -96,6 +96,7 @@ import {
   type McpElicitationHandler,
   withMcpElicitationCapability,
 } from "./mcp-elicitation";
+import { mcpParamHeadersForCall } from "./mcp-param-headers";
 
 const MCP_CLIENT_EXTENSION_CAPABILITIES = {
   ...MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
@@ -412,6 +413,12 @@ class McpClient {
        */
       abortSignal?: AbortSignal;
       /**
+       * Overrides the default upstream tool-call timeout. Set by the gateway
+       * for task-eligible calls, whose bound is the task TTL rather than the
+       * synchronous patience window.
+       */
+      upstreamTimeoutMs?: number;
+      /**
        * Pre-resolved catalog tool row for dynamic tool access: lets run_tool
        * execute a tool the agent was never assigned. This governs tool ACCESS
        * only. Whose credential/connection the call uses is still decided by
@@ -450,6 +457,35 @@ class McpClient {
     const { tool, catalogItem, resolvedToolCall } = validationResult;
     // Use the resolved name (may have been prefixed by suffix fallback lookup)
     toolCall = resolvedToolCall;
+
+    // SEP-2243 x-mcp-header: mirror annotated argument values into
+    // Mcp-Param-* headers on the upstream call. Widening the passthrough set
+    // deliberately reuses its whole pipeline — the headers are merged into the
+    // transport exactly where passthrough headers are, and the credential
+    // fingerprint check discards a cached connection whose baked headers no
+    // longer match, so per-call values cannot leak across pooled calls.
+    const mcpParamHeaders = mcpParamHeadersForCall({
+      inputSchema: tool.parameters,
+      args: toolCall.arguments,
+    });
+    if (mcpParamHeaders && tokenAuth) {
+      tokenAuth = {
+        ...tokenAuth,
+        passthroughHeaders: {
+          ...tokenAuth.passthroughHeaders,
+          ...mcpParamHeaders,
+        },
+      };
+    } else if (mcpParamHeaders) {
+      // Every gateway request carries token auth, so this should be
+      // unreachable — but if a call path without auth context ever reaches an
+      // annotated tool, the mirrored headers are dropped, and that should be
+      // visible rather than silent.
+      logger.debug(
+        { toolName: toolCall.name, headers: Object.keys(mcpParamHeaders) },
+        "Skipping Mcp-Param headers: no token auth context to carry them",
+      );
+    }
 
     // App backing servers have no upstream to connect to: the `open` launch tool is
     // served in-process. Hand the host the app's UI resource pointer (the
@@ -743,7 +779,12 @@ class McpClient {
           undefined,
           {
             signal: options?.abortSignal,
-            timeout: config.mcpGateway.toolCallTimeoutMs,
+            // A detached task answers its client immediately, so the
+            // synchronous patience window no longer applies — the task TTL
+            // does. Without this, a task outliving the sync timeout dies at
+            // the timeout even though nobody is waiting on it.
+            timeout:
+              options?.upstreamTimeoutMs ?? config.mcpGateway.toolCallTimeoutMs,
           },
         );
 
@@ -814,12 +855,26 @@ class McpClient {
         // McpError(RequestTimeout) — indistinguishable by shape from a real
         // timeout — so key off the signal, not the error. Rethrow before any
         // recovery so an aborted call is never retried (token refresh / fresh
-        // session). The aborted call is intentionally not audited from here:
-        // it runs in the AI SDK's abandoned tool-execute promise, so a DB write
-        // at this point is unreliable. Auditing a cancelled (possibly
-        // upstream-committed) call needs a non-abandoned context and is tracked
-        // separately.
+        // session).
+        //
+        // Persist the cancellation first: a call the user stopped mid-flight
+        // used to vanish from the tool-call log entirely, which is exactly
+        // the kind of half-finished action an operator later needs to see
+        // (the upstream may have committed work before the abort landed).
+        // The structured `cancelled` marker — not `isError` — is what log
+        // surfaces key off, because a user-initiated stop is not a tool
+        // failure. Best-effort by design: for a chat-stop abort this runs in
+        // the AI SDK's abandoned tool-execute promise, so the write races
+        // process shutdown; for a background-task cancel the promise is held
+        // by the task's detached continuation and the write is reliable.
         if (options?.abortSignal?.aborted) {
+          await this.persistToolCall(
+            owner,
+            mcpServerName,
+            toolCall,
+            this.buildCancelledResult(toolCall, authInfo),
+            authInfo,
+          );
           throw error;
         }
 
@@ -1204,8 +1259,10 @@ class McpClient {
     }
 
     // Create the client with UI extension capabilities
+    // No `roots`: nothing here implements `roots/list`, and declaring it
+    // invited upstream servers to call a method we always failed. Deprecated
+    // in 2026-07-28 besides.
     const baseCapabilities: ClientCapabilitiesWithExtensions = {
-      roots: { listChanged: true },
       extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
     };
     const capabilities = elicitationHandler
@@ -1424,6 +1481,8 @@ class McpClient {
     if (!tool && availableTool && availableTool.name === toolCall.name) {
       tool = {
         toolName: availableTool.name,
+        parameters:
+          (availableTool.parameters as Record<string, unknown> | null) ?? null,
         rawName: availableTool.rawName,
         mcpServerId: null,
         credentialResolutionMode: "dynamic",
@@ -2413,6 +2472,31 @@ class McpClient {
   }
 
   /**
+   * The row persisted for a call aborted mid-flight. `isError` stays false —
+   * a user-initiated stop is not a tool failure — and the structured
+   * `cancelled` marker is what the log surfaces render as their distinct
+   * Cancelled state. Never returned to the caller: the abort rethrows, and
+   * this row exists purely so the call doesn't vanish from the audit surface.
+   */
+  private buildCancelledResult(
+    toolCall: CommonToolCall,
+    authInfo?: ToolCallAuthInfo,
+  ): CommonToolResult {
+    const message =
+      "Cancelled before it finished — the run was stopped or the background task was cancelled. The upstream server may have completed work before the cancellation landed.";
+    return {
+      id: toolCall.id,
+      name: toolCall.name,
+      content: [{ type: "text", text: message }],
+      isError: false,
+      _meta: {
+        archestraError: { type: "cancelled", message },
+        ...this.executedAsMeta(authInfo),
+      },
+    };
+  }
+
+  /**
    * Create and persist an error result
    */
   private async createErrorResult(
@@ -3246,8 +3330,8 @@ class McpClient {
           secretId,
         );
 
+        // No `roots` — see the identical omission above.
         const capabilities: ClientCapabilitiesWithExtensions = {
-          roots: { listChanged: true },
           extensions: MCP_CLIENT_EXTENSION_CAPABILITIES,
         };
 

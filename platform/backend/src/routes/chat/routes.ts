@@ -55,6 +55,11 @@ import {
   resolveChatMcpElicitation,
 } from "@/clients/chat-mcp-elicitation";
 import {
+  applyMcpTasksToMessages,
+  chatTaskPrincipal,
+  createChatTaskBridge,
+} from "@/clients/chat-task-bridge";
+import {
   createLLMModel,
   createLLMModelForAgent,
   isApiKeyRequired,
@@ -90,6 +95,7 @@ import {
   ConversationModel,
   ConversationShareModel,
   LlmProviderApiKeyModel,
+  McpGatewayTaskModel,
   MemberModel,
   MessageModel,
   ModelModel,
@@ -102,6 +108,7 @@ import {
 } from "@/models";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { startActiveChatSpan } from "@/observability/tracing";
+import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
   activeChatRunService,
@@ -400,6 +407,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // splicing into the assistant message in onFinish. One instance is shared
       // down the whole delegation chain.
       const subagentToolStream = createSubagentToolStreamBridge();
+      // Detaches a tool call that outlives the synchronous threshold into a
+      // durable task, so the user sees a live cancellable card instead of the
+      // turn simply failing at the timeout.
+      const chatTaskBridge = createChatTaskBridge();
       // The conversation's user id (the sandbox is keyed per org/user/conversation).
       const conversationUserId = conversation.userId;
 
@@ -765,6 +776,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               hookRunCollector,
               elicitation: chatMcpElicitation,
               subagentToolStream,
+              taskBridge: chatTaskBridge,
               abortSignal: chatAbortController.signal,
             }),
           ),
@@ -927,6 +939,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               execute: async ({ writer }) => {
                 chatMcpElicitation.setWriter(writer);
                 subagentToolStream.setWriter(writer);
+                chatTaskBridge.setWriter(writer);
 
                 // Create the LLM model here, inside execute, so a credential
                 // failure (e.g. a per-user provider like GitHub Copilot the user
@@ -1088,9 +1101,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     messages: preparedMessages,
                   });
                   latestBreakdown = breakdown;
+                  // Transient: this fires before the model stream's `start`
+                  // chunk, and a non-transient pre-start data part makes the
+                  // client mint a phantom assistant message per attach (see
+                  // prepare-model-messages.ts). Consumed via onData state.
                   writer.write({
                     type: CONTEXT_WINDOW_BREAKDOWN_EVENT,
                     data: breakdown,
+                    transient: true,
                   });
                 } catch (error) {
                   // The visualizer is non-essential; never let it break a chat turn.
@@ -1534,12 +1552,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // Splice the turn's collected hook runs into the assistant
                     // message(s) as inline `data-hook-run` parts before persisting,
                     // so they survive refresh and sit at their lifecycle position.
-                    const messagesToPersist = applySubagentToolCallsToMessages(
-                      applyHookRunsToMessages(
-                        finalMessages as unknown as ChatMessage[],
-                        hookRunCollector,
+                    const messagesToPersist = applyMcpTasksToMessages(
+                      applySubagentToolCallsToMessages(
+                        applyHookRunsToMessages(
+                          finalMessages as unknown as ChatMessage[],
+                          hookRunCollector,
+                        ),
+                        subagentToolStream.collected(),
                       ),
-                      subagentToolStream.collected(),
+                      chatTaskBridge.collected(),
                     );
 
                     // Only persist if not already persisted by onError
@@ -1726,6 +1747,38 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await resolveChatMcpElicitation({ id, response: body });
 
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/chat/tasks/:taskId/cancel",
+    {
+      schema: {
+        operationId: RouteId.CancelChatMcpTask,
+        description: "Cancel a long-running MCP task started from chat",
+        tags: ["Chat"],
+        params: z.object({ taskId: UuidIdSchema }),
+        response: constructResponseSchema(z.object({ cancelled: z.boolean() })),
+      },
+    },
+    async ({ params: { taskId }, user }, reply) => {
+      // The principal match inside the model is the authorization: another
+      // user's task reports false rather than cancelling, and is
+      // indistinguishable from one that had already finished.
+      const cancelled = await McpGatewayTaskModel.cancelForPrincipal({
+        taskId,
+        principal: chatTaskPrincipal(user.id),
+      });
+
+      // Only reachable once the row flip proved ownership. Aborts the in-flight
+      // call when it is running on this replica; elsewhere the row is what the
+      // polling turn sees. Whether the upstream server stops working is up to
+      // it — cancellation is cooperative.
+      if (cancelled) {
+        mcpGatewayTaskRunner.abort(taskId);
+      }
+
+      return reply.send({ cancelled });
     },
   );
 

@@ -3,6 +3,7 @@ import {
   permissionDescriptions,
   requiredEndpointPermissionsMap,
 } from "@archestra/shared/access-control";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 
 // === Exports ===
 
@@ -44,7 +45,49 @@ export function enrichOpenApiWithRbac<T extends OpenApiDocument>(spec: T): T {
     }
   }
 
+  brandSpecTextInPlace(clonedSpec);
   return clonedSpec;
+}
+
+// === Internal helpers ===
+
+/**
+ * Rebrand the prose fields of the served spec.
+ *
+ * Route schemas are registered while the server is being built, which happens
+ * *before* the branding singleton is synced from the organization — so a route's
+ * `description` cannot resolve the app name where it is written. The spec is
+ * assembled per request, though, which makes this the one place that can.
+ *
+ * Only `description`/`summary` are rewritten, never arbitrary strings: schema
+ * ids, `$ref` targets, operationIds and enum values are wire identifiers, and
+ * rewriting a `$ref` value while its schema key stays put would produce a spec
+ * that no longer resolves. `brandBuiltInText` is a no-op for non-white-labeled
+ * deployments.
+ *
+ * Mutates the given node in place — the caller hands it the fresh
+ * `structuredClone` it is about to serve, so nothing shared is touched and a
+ * copying transform would only churn allocations on every /openapi.json hit.
+ */
+const BRANDABLE_SPEC_KEYS = new Set(["description", "summary"]);
+
+function brandSpecTextInPlace(node: unknown): void {
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      brandSpecTextInPlace(item);
+    }
+    return;
+  }
+  if (node && typeof node === "object") {
+    for (const [key, child] of Object.entries(node)) {
+      if (typeof child === "string" && BRANDABLE_SPEC_KEYS.has(key)) {
+        (node as Record<string, unknown>)[key] =
+          archestraMcpBranding.brandBuiltInText(child);
+      } else {
+        brandSpecTextInPlace(child);
+      }
+    }
+  }
 }
 
 // === Types ===
@@ -173,6 +216,9 @@ function createAuthenticationSection(operationId: string): string {
   return [
     "Authentication:",
     "",
+    // white-label-ok: OpenAPI prose; this section is appended to the operation's
+    // description, which brandSpecTextInPlace rebrands with everything else —
+    // branding it inline too would just be the same swap twice.
     "Required. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.",
   ].join("\n");
 }

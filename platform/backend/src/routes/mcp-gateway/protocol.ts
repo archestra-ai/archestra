@@ -7,6 +7,7 @@ import {
 import { SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
+import { MCP_TASKS_EXTENSION_ID } from "./tasks";
 
 /**
  * MCP protocol revision support for the gateway.
@@ -67,6 +68,32 @@ export const MCP_CLIENT_CAPABILITIES_META_KEY =
   "io.modelcontextprotocol/clientCapabilities";
 
 export const SERVER_DISCOVER_METHOD = "server/discover";
+
+/**
+ * Methods 2026-07-28 removes from the protocol (SEP-2575). A client that
+ * declared that revision and calls one gets method-not-found — answering would
+ * mean serving a revision surface the client explicitly opted out of. Clients
+ * on earlier revisions are unaffected; the SDK keeps answering `ping` for
+ * them, and the rest never had handlers here.
+ */
+export const METHODS_REMOVED_IN_STATELESS_REVISION = new Set([
+  "ping",
+  "logging/setLevel",
+  "resources/subscribe",
+  "resources/unsubscribe",
+]);
+
+export function isMethodRemovedForRevision(params: {
+  method: string | undefined;
+  revision: McpProtocolRevision;
+}): boolean {
+  const { method, revision } = params;
+  return (
+    revision === STATELESS_MCP_PROTOCOL_REVISION &&
+    typeof method === "string" &&
+    METHODS_REMOVED_IN_STATELESS_REVISION.has(method)
+  );
+}
 
 /**
  * W3C Trace Context keys the revision fixes for `_meta` (SEP-414).
@@ -214,19 +241,41 @@ export function withPrivateCacheHint<T extends object>(
  * response (built by the SDK from these) and by `server/discover`, so the two
  * revisions can never drift apart.
  */
-export function buildGatewayServerCapabilities(): McpServerCapabilitiesWithExtensions {
+export function buildGatewayServerCapabilities(
+  revision: McpProtocolRevision = LEGACY_MCP_PROTOCOL_REVISION,
+): McpServerCapabilitiesWithExtensions {
   return {
+    // The resources subscription flags are not advertised in any revision:
+    // no `resources/subscribe` handler has ever existed — callers always got
+    // method-not-found — and no resources `list_changed` notification has
+    // ever been sent. Advertising them cost real behavior: a client seeing
+    // `listChanged: true` may cache its lists indefinitely waiting for a
+    // notification that never comes. Freshness is signalled by the SEP-2549
+    // `ttlMs`/`cacheScope` hints instead. (Tools are different — see the
+    // `tools` block below, whose flag is backed by `subscriptions/listen`
+    // on the stateless revision.)
     resources: {
-      subscribe: true,
-      listChanged: true,
+      listChanged: false,
     },
     extensions: {
+      // Tasks negotiation rides per-request _meta capabilities, which exist
+      // only on the stateless revision; the task methods are gated the same
+      // way, so a legacy client is not shown an extension it cannot invoke.
+      ...(revision === STATELESS_MCP_PROTOCOL_REVISION
+        ? { [MCP_TASKS_EXTENSION_ID]: {} }
+        : {}),
       ...MCP_APPS_SERVER_EXTENSION_CAPABILITIES,
       ...MCP_ENTERPRISE_AUTH_EXTENSION_CAPABILITIES,
       ...MCP_OAUTH_CLIENT_CREDENTIALS_SERVER_EXTENSION_CAPABILITIES,
     },
     prompts: {},
-    tools: { listChanged: false },
+    tools: {
+      // Backed by `subscriptions/listen` fingerprint polling, which exists
+      // only on the stateless revision — a legacy client has no channel a
+      // notification could arrive on, so advertising it there would recreate
+      // the wait-forever caching problem this flag used to cause.
+      listChanged: revision === STATELESS_MCP_PROTOCOL_REVISION,
+    },
   } as McpServerCapabilitiesWithExtensions;
 }
 
@@ -446,7 +495,7 @@ export function buildDiscoverResult(params: {
       name: `archestra-agent-${agentId}`,
       version,
     },
-    capabilities: buildGatewayServerCapabilities(),
+    capabilities: buildGatewayServerCapabilities(revision),
   };
 }
 

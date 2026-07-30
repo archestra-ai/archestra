@@ -95,6 +95,12 @@ export interface ProxyBuildParams {
   tokenPlaceholder: string;
   /** Slug of the LLM proxy (profile) name — for use as a provider id in client configs. */
   proxyName: string;
+  /**
+   * The deployment's display name, for prose that refers to this platform.
+   * Threaded in rather than hardcoded so a white-labeled deployment's connect
+   * instructions read under its own brand.
+   */
+  appName: string;
 }
 
 /** A proxy step — either descriptive (title/body) or with a copyable code block beneath it. */
@@ -213,7 +219,7 @@ export const CONNECT_CLIENTS: ConnectClient[] = [
     proxy: {
       kind: "custom",
       supportedProviders: ["anthropic", "bedrock"],
-      build: ({ provider, url, tokenPlaceholder }) => {
+      build: ({ provider, url, tokenPlaceholder, appName }) => {
         if (provider === "bedrock") {
           return {
             kind: "steps",
@@ -256,7 +262,7 @@ claude`,
               body: "Create the file if it doesn't exist.",
             },
             {
-              title: "Add the Archestra base URL to env",
+              title: `Add the ${appName} base URL to env`,
               body: "Merge the snippet below into the file (keep your existing keys). Your Claude subscription keeps working as-is.",
               language: "json",
               code: JSON.stringify(
@@ -385,7 +391,7 @@ claude`,
     proxy: {
       kind: "custom",
       supportedProviders: ["openai"],
-      build: ({ url, tokenPlaceholder }) => ({
+      build: ({ url, tokenPlaceholder, appName }) => ({
         kind: "steps",
         steps: [
           {
@@ -402,7 +408,7 @@ claude`,
           },
           {
             title: "Paste your key and verify",
-            body: `Paste ${tokenPlaceholder} into the API Key field, then click Verify. Cursor now routes every OpenAI-compatible model through Archestra.`,
+            body: `Paste ${tokenPlaceholder} into the API Key field, then click Verify. Cursor now routes every OpenAI-compatible model through ${appName}.`,
           },
         ],
       }),
@@ -508,7 +514,7 @@ requires_openai_auth = true`,
         "cerebras",
         "github-copilot",
       ],
-      build: ({ provider, providerLabel, url }) => ({
+      build: ({ provider, providerLabel, url, appName }) => ({
         kind: "steps",
         steps: [
           ...(provider === "github-copilot"
@@ -524,8 +530,13 @@ requires_openai_auth = true`,
             body:
               provider === "github-copilot"
                 ? 'COPILOT_PROVIDER_TYPE stays "openai" because Copilot speaks the OpenAI-compatible protocol; the API key is your GitHub OAuth token (or a virtual key mapped to a stored GitHub Copilot key).'
-                : `Use a virtual key mapped to ${providerLabel}. COPILOT_PROVIDER_TYPE stays "openai" because Copilot is speaking the OpenAI-compatible protocol; the Archestra base URL still needs the selected provider path.`,
+                : `Use a virtual key mapped to ${providerLabel}. COPILOT_PROVIDER_TYPE stays "openai" because Copilot is speaking the OpenAI-compatible protocol; the ${appName} base URL still needs the selected provider path.`,
             language: "bash" as const,
+            // The `<your-archestra-virtual-key>` placeholder and the
+            // `archestra-copilot-cli-ok` echo sentinel below are wire-level
+            // probe strings inside code blocks, not prose — they stay stable
+            // across brands (and lowercase, so the white-label copy check
+            // ignores them by design).
             code: `export COPILOT_PROVIDER_TYPE="openai"
 export COPILOT_PROVIDER_BASE_URL="${url}"
 export COPILOT_PROVIDER_API_KEY="${provider === "github-copilot" ? "<your-github-oauth-token>" : "<your-archestra-virtual-key>"}"
@@ -625,7 +636,7 @@ export COPILOT_MODEL="<model-name>"`,
         "azure",
         "github-copilot",
       ],
-      build: ({ provider, providerLabel, url, tokenPlaceholder }) => {
+      build: ({ provider, providerLabel, url, tokenPlaceholder, appName }) => {
         if (provider === "bedrock") {
           const openaiUrl = url.replace("/bedrock/", "/bedrock/openai/");
           return {
@@ -634,7 +645,7 @@ export COPILOT_MODEL="<model-name>"`,
             steps: [
               {
                 title: 'Add an "OpenAI Chat Model" node',
-                body: 'In your AI Agent workflow, add the "OpenAI Chat Model" node. Archestra exposes Bedrock through an OpenAI-compatible URL.',
+                body: `In your AI Agent workflow, add the "OpenAI Chat Model" node. ${appName} exposes Bedrock through an OpenAI-compatible URL.`,
               },
               {
                 title: "Create new OpenAI credentials",
@@ -729,7 +740,7 @@ export COPILOT_MODEL="<model-name>"`,
               body:
                 provider === "openai"
                   ? 'In your AI Agent workflow, add the "OpenAI Chat Model" node from the AI nodes panel.'
-                  : `In your AI Agent workflow, add the "OpenAI Chat Model" node. Archestra exposes ${providerLabel} as an OpenAI-compatible endpoint, so the OpenAI node is the right one.`,
+                  : `In your AI Agent workflow, add the "OpenAI Chat Model" node. ${appName} exposes ${providerLabel} as an OpenAI-compatible endpoint, so the OpenAI node is the right one.`,
             },
             {
               title: "Create new OpenAI credentials",

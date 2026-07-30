@@ -9,6 +9,7 @@ export const McpToolErrorTypeSchema = z.enum([
   "assigned_credential_unavailable",
   "policy_denied",
   "tool_state",
+  "cancelled",
   "generic",
 ]);
 
@@ -100,8 +101,22 @@ export const ToolStateMcpToolErrorSchema = z
   })
   .strict();
 
+/**
+ * The call was aborted before it finished — the user cancelled a background
+ * task or stopped the chat run. Deliberately its own type rather than
+ * `generic`: a user-initiated stop is not a tool failure, and log surfaces
+ * render it as a distinct Cancelled state instead of an error.
+ */
+export const CancelledMcpToolErrorSchema = z
+  .object({
+    type: z.literal("cancelled"),
+    message: z.string(),
+  })
+  .strict();
+
 export const McpToolErrorSchema = z.discriminatedUnion("type", [
   GenericMcpToolErrorSchema,
+  CancelledMcpToolErrorSchema,
   AuthRequiredMcpToolErrorSchema,
   AuthExpiredMcpToolErrorSchema,
   AssignedCredentialUnavailableMcpToolErrorSchema,

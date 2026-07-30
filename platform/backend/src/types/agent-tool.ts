@@ -106,4 +106,6 @@ export type McpToolAssignment = {
   catalogId: string | null;
   catalogName: string | null;
   meta: Record<string, unknown> | null;
+  /** Tool input schema, for x-mcp-header extraction on the call path. */
+  parameters?: Record<string, unknown> | null;
 };

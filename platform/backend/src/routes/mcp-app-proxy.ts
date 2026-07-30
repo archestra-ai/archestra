@@ -153,6 +153,7 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       let hijacked = false;
       let server: McpServer | undefined;
       let serverHealthy = false;
+      let clientAborted = false;
       try {
         server =
           (useServerCache
@@ -172,11 +173,31 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         hijacked = true;
 
         ensureRequestSocketDestroySoon(request.raw);
-        await transport.handleRequest(
-          request.raw as IncomingMessage,
-          reply.raw as ServerResponse,
-          body,
-        );
+        // A caller that gives up mid-call (the guest's request timeout or
+        // cancellation, a closed tab) surfaces here only as the connection
+        // closing before the response is written. Closing the transport makes
+        // the protocol abort the in-flight handler's signal, which stops the
+        // dispatched work — an LLM completion in particular. The race is
+        // required because in JSON-response mode an aborted handler never
+        // produces a response, so handleRequest would never settle.
+        const clientGaveUp = new Promise<void>((resolve) => {
+          reply.raw.on("close", () => resolve());
+        }).then(async () => {
+          if (reply.raw.writableEnded) return;
+          clientAborted = true;
+          await transport.close();
+        });
+        const handling = transport
+          .handleRequest(
+            request.raw as IncomingMessage,
+            reply.raw as ServerResponse,
+            body,
+          )
+          .catch((error) => {
+            // Write failures after the client vanished are expected noise.
+            if (!clientAborted) throw error;
+          });
+        await Promise.race([handling, clientGaveUp]);
       } catch (error) {
         fastify.log.error(
           { error, appId },
@@ -198,8 +219,15 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       } finally {
+        // An aborted request leaves the server's transport closed mid-flight;
+        // evict it rather than reuse it.
         if (server && useServerCache)
-          appServerCache.release(appId, userId, server, serverHealthy);
+          appServerCache.release(
+            appId,
+            userId,
+            server,
+            serverHealthy && !clientAborted,
+          );
       }
     },
   );

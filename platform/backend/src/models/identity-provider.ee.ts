@@ -30,7 +30,7 @@ import type {
   UpdateIdentityProvider,
 } from "@/types";
 import { ApiError } from "@/types";
-import { isPrivateOrLoopbackHostname } from "@/utils/network";
+import { validateOutboundUrl } from "@/utils/outbound-url";
 import AccountModel from "./account";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
@@ -1184,35 +1184,21 @@ function selectTokenEndpointAuthentication(
 }
 
 function assertValidOidcDiscoveryEndpoint(discoveryEndpoint: string): void {
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(discoveryEndpoint);
-  } catch {
-    throw new ApiError(
-      400,
-      `OIDC discovery endpoint "${discoveryEndpoint}" is not a valid URL.`,
-    );
+  const validated = validateOutboundUrl(discoveryEndpoint);
+  if (validated.ok) {
+    return;
   }
 
-  const allowLocalDevelopmentDiscovery = !config.production;
-
-  if (
-    !config.test.enableE2eTestEndpoints &&
-    !allowLocalDevelopmentDiscovery &&
-    parsedUrl.protocol !== "https:"
-  ) {
-    throw new ApiError(400, "OIDC discovery endpoint must use HTTPS.");
-  }
-
-  if (
-    !config.test.enableE2eTestEndpoints &&
-    !allowLocalDevelopmentDiscovery &&
-    isPrivateOrLoopbackHostname(parsedUrl.hostname)
-  ) {
-    throw new ApiError(
-      400,
-      `OIDC discovery endpoint host "${parsedUrl.hostname}" is not allowed.`,
-    );
+  switch (validated.reason) {
+    case "not_a_url":
+      throw new ApiError(
+        400,
+        `OIDC discovery endpoint "${discoveryEndpoint}" is not a valid URL.`,
+      );
+    case "scheme_not_https":
+      throw new ApiError(400, "OIDC discovery endpoint must use HTTPS.");
+    case "private_or_loopback_host":
+      throw new ApiError(400, `OIDC discovery endpoint host is not allowed.`);
   }
 }
 

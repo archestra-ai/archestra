@@ -361,6 +361,22 @@ describe("McpClient", () => {
 
     expect(mockCallTool).toHaveBeenCalledTimes(1);
     expect(mockClose).not.toHaveBeenCalled();
+
+    // The cancelled call must not vanish from the tool-call log: a row is
+    // persisted carrying the structured `cancelled` marker (not isError —
+    // a user-initiated stop is not a tool failure), which the log surfaces
+    // render as their distinct Cancelled state.
+    const [logged] = await db
+      .select()
+      .from(schema.mcpToolCallsTable)
+      .where(eq(schema.mcpToolCallsTable.agentId, agentId));
+    expect(logged).toBeDefined();
+    const loggedResult = logged.toolResult as {
+      isError?: boolean;
+      _meta?: { archestraError?: { type?: string } };
+    };
+    expect(loggedResult.isError).toBe(false);
+    expect(loggedResult._meta?.archestraError?.type).toBe("cancelled");
   });
 
   test("returns an error result (does not throw) for a non-abort failure", async () => {
@@ -8688,5 +8704,241 @@ describe("executed-as identity", () => {
       kind: "platform",
       callerUserId: caller.id,
     });
+  });
+});
+
+describe("task-mode upstream timeout", () => {
+  test("an explicit upstreamTimeoutMs reaches the SDK call in place of the sync window", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser({ email: "tt-admin@example.com" });
+    const caller = await makeUser({ email: "tt-caller@example.com" });
+    await makeMember(caller.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+
+    const catalog = await InternalMcpCatalogModel.create({
+      name: "timeout-lab",
+      serverType: "remote",
+      serverUrl: "https://mcp.timeout.example/mcp",
+    });
+    const secret = await secretManager().createSecret(
+      { access_token: "tl-token" },
+      "tl-secret",
+    );
+    const server = await McpServerModel.create({
+      name: "timeout-lab",
+      catalogId: catalog.id,
+      secretId: secret.id,
+      serverType: "remote",
+      ownerId: admin.id,
+      scope: "org",
+    });
+    await InternalMcpCatalogModel.update(catalog.id, {
+      dynamicConnectionMcpServerId: server.id,
+    });
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "timeout-lab__slow",
+      description: "slow",
+      parameters: {},
+      catalogId: catalog.id,
+    });
+    await AgentToolModel.createOrUpdateCredentials(
+      agent.id,
+      tool.id,
+      null,
+      "dynamic",
+    );
+
+    mockCallTool.mockResolvedValueOnce({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    await mcpClient.executeToolCallForOwner(
+      { id: "call_tt", name: "timeout-lab__slow", arguments: {} },
+      agentOwner(agent.id),
+      {
+        tokenId: "tt-token",
+        teamId: null,
+        isOrganizationToken: false,
+        isUserToken: true,
+        userId: caller.id,
+        organizationId: org.id,
+      },
+      { upstreamTimeoutMs: 1_800_000 },
+    );
+
+    const lastOptions = mockCallTool.mock.calls.at(-1)?.[2] as {
+      timeout?: number;
+    };
+    // A detached task is bounded by the task TTL, not the synchronous
+    // patience window — without this, a task outliving the sync timeout dies
+    // even though nobody is waiting on it.
+    expect(lastOptions?.timeout).toBe(1_800_000);
+  });
+});
+
+describe("x-mcp-header mirroring (SEP-2243)", () => {
+  async function seedAnnotatedTool({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }: {
+    makeOrganization: () => Promise<{ id: string }>;
+    makeUser: (a?: object) => Promise<{ id: string }>;
+    makeMember: (u: string, o: string) => Promise<unknown>;
+    makeAgent: (a?: object) => Promise<{ id: string }>;
+  }) {
+    const org = await makeOrganization();
+    const admin = await makeUser({ email: "xh-admin@example.com" });
+    const caller = await makeUser({ email: "xh-caller@example.com" });
+    await makeMember(caller.id, org.id);
+    const agent = await makeAgent({ organizationId: org.id });
+
+    const catalog = await InternalMcpCatalogModel.create({
+      name: "spanner",
+      serverType: "remote",
+      serverUrl: "https://mcp.spanner.example/mcp",
+    });
+    const secret = await secretManager().createSecret(
+      { access_token: "spanner-token" },
+      "spanner-secret",
+    );
+    const server = await McpServerModel.create({
+      name: "spanner",
+      catalogId: catalog.id,
+      secretId: secret.id,
+      serverType: "remote",
+      ownerId: admin.id,
+      scope: "org",
+    });
+    await InternalMcpCatalogModel.update(catalog.id, {
+      dynamicConnectionMcpServerId: server.id,
+    });
+
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "spanner__execute_sql",
+      description: "Execute SQL",
+      parameters: {
+        type: "object",
+        properties: {
+          region: { type: "string", "x-mcp-header": "Region" },
+          query: { type: "string" },
+        },
+        required: ["region", "query"],
+      },
+      catalogId: catalog.id,
+    });
+    await AgentToolModel.createOrUpdateCredentials(
+      agent.id,
+      tool.id,
+      null,
+      "dynamic",
+    );
+
+    const tokenAuth = {
+      tokenId: "xh-token",
+      teamId: null,
+      isOrganizationToken: false,
+      isUserToken: true,
+      userId: caller.id,
+      organizationId: org.id,
+    };
+
+    return { agent, tokenAuth };
+  }
+
+  async function lastTransportHeaders(): Promise<Headers> {
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+    const calls = vi.mocked(StreamableHTTPClientTransport).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    return calls[calls.length - 1][1]?.requestInit?.headers as Headers;
+  }
+
+  test("annotated argument values reach the upstream transport as Mcp-Param headers", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { agent, tokenAuth } = await seedAnnotatedTool({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+
+    mockCallTool.mockResolvedValueOnce({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    const result = await mcpClient.executeToolCallForOwner(
+      {
+        id: "call_xh_1",
+        name: "spanner__execute_sql",
+        arguments: { region: "us-west1", query: "SELECT 1" },
+      },
+      agentOwner(agent.id),
+      tokenAuth,
+    );
+
+    expect(result).toMatchObject({ isError: false });
+    const headers = await lastTransportHeaders();
+    expect(headers.get("mcp-param-region")).toBe("us-west1");
+    // Only annotated params are mirrored — the body-only param stays put.
+    expect(headers.get("mcp-param-query")).toBeNull();
+  });
+
+  test("a second call with a different value gets its own headers, not the first call's", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    // The leakage this guards: connections are pooled, and a header baked at
+    // connection creation must not survive onto a call that supplied a
+    // different value. The credential-fingerprint check rebuilds the
+    // connection when the header set changes.
+    const { agent, tokenAuth } = await seedAnnotatedTool({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    await mcpClient.executeToolCallForOwner(
+      {
+        id: "call_xh_2",
+        name: "spanner__execute_sql",
+        arguments: { region: "us-west1", query: "SELECT 1" },
+      },
+      agentOwner(agent.id),
+      tokenAuth,
+    );
+    await mcpClient.executeToolCallForOwner(
+      {
+        id: "call_xh_3",
+        name: "spanner__execute_sql",
+        arguments: { region: "eu-central1", query: "SELECT 2" },
+      },
+      agentOwner(agent.id),
+      tokenAuth,
+    );
+
+    const headers = await lastTransportHeaders();
+    expect(headers.get("mcp-param-region")).toBe("eu-central1");
   });
 });

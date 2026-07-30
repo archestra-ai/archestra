@@ -1,8 +1,10 @@
-export { default as A2AContextModel } from "./a2a-context";
-export { default as A2AContextCompactionModel } from "./a2a-context-compaction";
-export { default as A2AMessageModel } from "./a2a-message";
-export { default as A2ATaskModel } from "./a2a-task";
-export { default as A2ATaskApprovalRequestModel } from "./a2a-task-approval-request";
+export { default as A2AArtifactModel } from "./a2a/artifact";
+export { default as A2AContextModel } from "./a2a/context";
+export { default as A2AContextCompactionModel } from "./a2a/context-compaction";
+export { default as A2AMessageModel } from "./a2a/message";
+export { default as A2APushNotificationConfigModel } from "./a2a/push-notification-config";
+export { default as A2ATaskModel } from "./a2a/task";
+export { default as A2ATaskApprovalRequestModel } from "./a2a/task-approval-request";
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentConnectorAssignmentModel } from "./agent-connector-assignment";
@@ -61,6 +63,7 @@ export {
   selectionKey,
 } from "./llm-provider-api-key-model";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
+export { default as McpGatewayTaskModel } from "./mcp-gateway-task";
 export { default as McpHttpSessionModel } from "./mcp-http-session";
 export { default as McpOauthClientModel } from "./mcp-oauth-client";
 export { default as McpServerModel } from "./mcp-server";

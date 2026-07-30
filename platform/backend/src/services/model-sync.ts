@@ -28,8 +28,13 @@ import {
   type CrossProviderPrices,
   resolveCrossProviderMetadata,
   resolveCrossProviderPrices,
+  resolveSelfHostedModelMetadata,
   stripModelDateSuffix,
 } from "@/services/cross-provider-pricing";
+import {
+  type OpenAiPublishedPrices,
+  resolveOpenAiPublishedPrices,
+} from "@/services/openai-published-pricing";
 import type {
   CreateModel,
   ModelInputModality,
@@ -302,12 +307,27 @@ export function buildModelsToUpsert(params: {
       modelId: model.id,
       underlyingModelName: model.underlyingModelName,
     });
+    // Fills the Codex and chat-latest models the registry never backfilled,
+    // which would otherwise reach the same fabricated estimate.
+    const publishedPrices = resolveOpenAiPublishedPrices({
+      provider,
+      modelId: model.id,
+    });
     const crossProviderPrices = isReseller
       ? resolveCrossProviderPrices(crossProviderArgs)
       : null;
+    // A self-hosted server reports an id but no capabilities, and models.dev
+    // has no entry for it to look up. Describe the model from whichever vendor
+    // publishes it; the deployment's own price and window are left to the
+    // fetcher, which is the only thing that can know them.
     const crossProviderMetadata = isReseller
       ? resolveCrossProviderMetadata(crossProviderArgs)
-      : null;
+      : provider === "vllm"
+        ? (resolveSelfHostedModelMetadata({
+            modelId: model.id,
+            modelsDevData,
+          }) ?? SELF_HOSTED_TEXT_ONLY)
+        : null;
 
     const capabilities = resolveModelCapabilities({
       provider,
@@ -317,6 +337,7 @@ export function buildModelsToUpsert(params: {
       crossProviderPrices,
       crossProviderMetadata,
       awsPrices,
+      publishedPrices,
       underlyingModelName: model.underlyingModelName,
     });
 
@@ -443,6 +464,8 @@ export function resolveModelCapabilities(params: {
   crossProviderMetadata?: CrossProviderMetadata | null;
   /** Prices published by AWS for a Bedrock model. Used where the registry has none. */
   awsPrices?: BedrockAwsPrices | null;
+  /** Prices published by OpenAI. Used where the registry has none. */
+  publishedPrices?: OpenAiPublishedPrices | null;
   /** Underlying vendor model name, when the fetcher can determine it (Azure). */
   underlyingModelName?: string | null;
 }): ProviderModelCapabilities {
@@ -454,6 +477,7 @@ export function resolveModelCapabilities(params: {
     crossProviderPrices,
     crossProviderMetadata,
     awsPrices,
+    publishedPrices,
     underlyingModelName,
   } = params;
   const inferredCapabilities = inferModelCapabilities({
@@ -469,8 +493,9 @@ export function resolveModelCapabilities(params: {
   // provider, which the resold vendor entry cannot: an Azure embedding
   // deployment emits no output modality even though the OpenAI entry it
   // resolves to lists "text".
-  // Price priority: fetcher -> models.dev (same provider) -> cross-provider
-  // -> null.
+  // Price priority: fetcher -> models.dev (same provider) -> cross-provider ->
+  // vendor-published (AWS, OpenAI) -> null. The published tiers rank last so
+  // they only fill what the registry omits.
   return normalizeKnownModelCapabilities({
     provider,
     modelId,
@@ -512,17 +537,20 @@ export function resolveModelCapabilities(params: {
         capabilities?.promptPricePerToken ??
         crossProviderPrices?.promptPricePerToken ??
         awsPrices?.promptPricePerToken ??
+        publishedPrices?.promptPricePerToken ??
         null,
       completionPricePerToken:
         fetched?.completionPricePerToken ??
         capabilities?.completionPricePerToken ??
         crossProviderPrices?.completionPricePerToken ??
         awsPrices?.completionPricePerToken ??
+        publishedPrices?.completionPricePerToken ??
         null,
       cacheReadPricePerToken:
         fetched?.cacheReadPricePerToken ??
         capabilities?.cacheReadPricePerToken ??
         crossProviderPrices?.cacheReadPricePerToken ??
+        publishedPrices?.cacheReadPricePerToken ??
         null,
       cacheWritePricePerToken:
         fetched?.cacheWritePricePerToken ??
@@ -624,6 +652,24 @@ function parseModalities<T>(
 
   return validated.length > 0 ? validated : null;
 }
+
+/**
+ * What a self-hosted model is assumed to be when no vendor publishes it: an
+ * operator's own fine-tune or a `--served-model-name` alias, which no registry
+ * can describe.
+ *
+ * Guessing text is not free of consequence, but leaving both lists null is
+ * worse than a wrong guess an admin can correct: the edit dialog requires at
+ * least one input modality, so a null list makes the form invalid the moment it
+ * opens and every save fails validation against a message rendered off-screen.
+ */
+const SELF_HOSTED_TEXT_ONLY: CrossProviderMetadata = {
+  contextLength: null,
+  outputLength: null,
+  inputModalities: ["text"],
+  outputModalities: ["text"],
+  supportsToolCalling: null,
+};
 
 function inferModelCapabilities(params: {
   provider: SupportedProvider;

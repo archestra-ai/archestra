@@ -151,7 +151,8 @@ describe("MCP Gateway - protocol revision negotiation", () => {
       LEGACY_MCP_PROTOCOL_REVISION,
     ]);
     expect(body.result.serverInfo.name).toBe(`archestra-agent-${agent.id}`);
-    expect(body.result.capabilities.tools).toEqual({ listChanged: false });
+    // listChanged is true for this revision: subscriptions/listen backs it.
+    expect(body.result.capabilities.tools).toEqual({ listChanged: true });
     expect(body.result.capabilities.extensions).toHaveProperty(
       "io.modelcontextprotocol/ui",
     );
@@ -336,6 +337,114 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     // Stable order is what makes the ttlMs hint worth anything to a cache.
     const names = (result.tools as Array<{ name: string }>).map((t) => t.name);
     expect(names).toEqual([...names].sort());
+  });
+
+  test("ping answers for legacy clients and is refused for 2026-07-28", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const { agent, token } = await setup({ makeAgent, makeOrganization });
+
+    // A legacy client keeps the SDK's automatic pong.
+    const legacy = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "ping", id: 20 },
+    });
+    expect(legacy.statusCode).toBe(200);
+    expect(legacy.json()).toMatchObject({ id: 20, result: {} });
+
+    // A client that declared 2026-07-28 opted out of the surface ping
+    // belongs to, so answering would be serving the wrong revision.
+    const stateless = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value, {
+        "mcp-protocol-version": STATELESS_MCP_PROTOCOL_REVISION,
+        "mcp-method": "ping",
+      }),
+      payload: { jsonrpc: "2.0", method: "ping", id: 21 },
+    });
+    expect(stateless.statusCode).toBe(200);
+    expect(stateless.json().error).toMatchObject({ code: -32601 });
+    expect(stateless.json().error.message).toContain("removed");
+  });
+
+  test("capabilities no longer advertise unimplemented subscriptions", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const { agent, token } = await setup({ makeAgent, makeOrganization });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value, {
+        "mcp-protocol-version": STATELESS_MCP_PROTOCOL_REVISION,
+        "mcp-method": "server/discover",
+      }),
+      payload: { jsonrpc: "2.0", method: "server/discover", id: 22 },
+    });
+
+    const { capabilities } = response.json().result;
+    expect(capabilities.resources).not.toHaveProperty("subscribe");
+    expect(capabilities.resources.listChanged).toBe(false);
+  });
+
+  test("a tool with an invalid x-mcp-header annotation is excluded from tools/list", async ({
+    makeAgent,
+    makeOrganization,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent();
+    const org = await makeOrganization();
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      name: "xh-catalog",
+    });
+
+    // Invalid: number is explicitly forbidden as an annotated type.
+    const invalid = await makeTool({
+      catalogId: catalog.id,
+      name: "xh-catalog__bad",
+      parameters: {
+        type: "object",
+        properties: { n: { type: "number", "x-mcp-header": "N" } },
+      },
+    });
+    const valid = await makeTool({
+      catalogId: catalog.id,
+      name: "xh-catalog__good",
+      parameters: {
+        type: "object",
+        properties: { region: { type: "string", "x-mcp-header": "Region" } },
+      },
+    });
+    await makeAgentTool(agent.id, invalid.id);
+    await makeAgentTool(agent.id, valid.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: makeMcpHeaders(token.value),
+      payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 30 },
+    });
+
+    const names = (response.json().result.tools as Array<{ name: string }>).map(
+      (t) => t.name,
+    );
+    // One malformed definition must not poison the rest of the list.
+    expect(names).toContain("xh-catalog__good");
+    expect(names).not.toContain("xh-catalog__bad");
   });
 
   test("GET discovery advertises both supported revisions", async ({

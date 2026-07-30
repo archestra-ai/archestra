@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   A2AMessage,
@@ -159,6 +159,29 @@ class A2AMessageModel {
       .orderBy(schema.a2aMessagesTable.createdAt);
 
     return messages;
+  }
+
+  /** Batch variant of findByTaskId (N+1 prevention for task listings). */
+  static async findByTaskIds(
+    taskIds: string[],
+  ): Promise<Map<string, A2AMessage[]>> {
+    if (taskIds.length === 0) {
+      return new Map();
+    }
+    const messages = await db
+      .select()
+      .from(schema.a2aMessagesTable)
+      .where(inArray(schema.a2aMessagesTable.taskId, taskIds))
+      .orderBy(schema.a2aMessagesTable.createdAt);
+
+    const byTask = new Map<string, A2AMessage[]>();
+    for (const message of messages) {
+      if (!message.taskId) continue;
+      const list = byTask.get(message.taskId) ?? [];
+      list.push(message);
+      byTask.set(message.taskId, list);
+    }
+    return byTask;
   }
 
   static async delete(id: string): Promise<void> {

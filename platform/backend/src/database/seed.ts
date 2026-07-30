@@ -150,7 +150,11 @@ export async function syncBuiltInAgents(): Promise<void> {
       name: BUILT_IN_AGENT_NAMES.APP_RUNTIME,
       description:
         "Backs archestra.llm.complete() for MCP Apps — the proxy identity that attributes app LLM completions to org usage limits",
-      systemPrompt: APP_RUNTIME_SYSTEM_PROMPT,
+      // Shipped platform text: branded here, at seed time, for the same reason
+      // built-in skills are — the model should see the org's brand, not ours.
+      systemPrompt: archestraMcpBranding.brandBuiltInText(
+        APP_RUNTIME_SYSTEM_PROMPT,
+      ),
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
       } as const,
@@ -697,6 +701,7 @@ async function syncModelsForApiKey(
 function getProviderDisplayName(provider: SupportedProvider): string {
   const displayNames: Record<SupportedProvider, string> = {
     anthropic: "Anthropic",
+    // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
     archestra: "Archestra",
     openai: "OpenAI",
     openrouter: "OpenRouter",
@@ -947,7 +952,9 @@ export async function seedDefaultAppsForPristineOrgs(): Promise<void> {
                 name: definition.name,
                 organizationId: org.id,
               }),
-              description: definition.description,
+              description: archestraMcpBranding.brandBuiltInText(
+                definition.description,
+              ),
               templateId: definition.templateId,
             },
             payload: {

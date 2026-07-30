@@ -121,6 +121,29 @@ describe("AnthropicResponseAdapter", () => {
     });
   });
 
+  describe("toRefusalResponse", () => {
+    // A refusal replaces the whole message: the model's own text and any tool
+    // call that was allowed are dropped along with the blocked one, and the
+    // turn is reported as finished.
+    test("replaces all content and reports end_turn", () => {
+      const adapter = anthropicAdapterFactory.createResponseAdapter({
+        ...createMockResponse([
+          { type: "text", text: "Checking the cluster." },
+          { type: "tool_use", id: "toolu_ok", name: "allowed_tool", input: {} },
+          { type: "tool_use", id: "toolu_no", name: "blocked_tool", input: {} },
+        ]),
+        stop_reason: "tool_use",
+      });
+
+      const refusal = adapter.toRefusalResponse("refusal", "blocked message");
+
+      expect(refusal.content).toEqual([
+        { type: "text", text: "blocked message", citations: null },
+      ]);
+      expect(refusal.stop_reason).toBe("end_turn");
+    });
+  });
+
   describe("getUsage", () => {
     test("captures the 1h portion of the cache-creation split", () => {
       const response = {
@@ -147,6 +170,58 @@ describe("AnthropicResponseAdapter", () => {
         cacheWrite1hTokens: 400,
       });
     });
+  });
+});
+
+// Availability checks compare the names a caller declared against the names the
+// model called. These two adapters disagree about provider built-ins, and that
+// disagreement decides whether a call is treated as available — pinned here so
+// any change to either side is visible.
+describe("declared tools vs called tools", () => {
+  const messages = [
+    { role: "user", content: "Hello" },
+  ] as Anthropic.Types.MessagesRequest["messages"];
+
+  test("getTools omits provider built-ins, which carry a type and no input schema", () => {
+    const tools = [
+      {
+        name: "github__list_issues",
+        description: "list issues",
+        input_schema: { type: "object", properties: {} },
+      },
+      { type: "bash_20250124", name: "bash" },
+      { type: "text_editor_20250124", name: "str_replace_editor" },
+    ] as unknown as Anthropic.Types.MessagesRequest["tools"];
+
+    const adapter = anthropicAdapterFactory.createRequestAdapter(
+      createMockRequest(messages, { tools }),
+    );
+
+    expect(adapter.getTools().map((t) => t.name)).toEqual([
+      "github__list_issues",
+    ]);
+  });
+
+  test("a tool declared without a type counts as custom", () => {
+    const tools = [
+      { name: "bash", input_schema: { type: "object", properties: {} } },
+    ] as unknown as Anthropic.Types.MessagesRequest["tools"];
+
+    const adapter = anthropicAdapterFactory.createRequestAdapter(
+      createMockRequest(messages, { tools }),
+    );
+
+    expect(adapter.getTools().map((t) => t.name)).toEqual(["bash"]);
+  });
+
+  test("getToolCalls returns built-in tool calls, which getTools never lists", () => {
+    const adapter = anthropicAdapterFactory.createResponseAdapter(
+      createMockResponse([
+        { type: "tool_use", id: "toolu_bash", name: "bash", input: {} },
+      ]),
+    );
+
+    expect(adapter.getToolCalls().map((c) => c.name)).toEqual(["bash"]);
   });
 });
 
@@ -774,6 +849,36 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
 
     expect(endEvents).toContain('"stop_reason":"end_turn"');
     expect(endEvents).not.toContain('"stop_reason":"tool_use"');
+  });
+
+  // The refusal block index is derived only from non-tool blocks, so it can
+  // land on an index a tool_use block already occupies. Harmless while those
+  // blocks stay buffered; a collision on the wire once they are forwarded.
+  test("formatCompleteTextSSE ignores tool_use indices when choosing its own", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    } as Chunk);
+    adapter.processChunk({ type: "content_block_stop", index: 0 } as Chunk);
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 1,
+      content_block: {
+        type: "tool_use",
+        id: "toolu_1",
+        name: "list",
+        input: {},
+      },
+    } as Chunk);
+    adapter.processChunk({ type: "content_block_stop", index: 1 } as Chunk);
+
+    const refusal = adapter.formatCompleteTextSSE("blocked").join("");
+
+    // 2 would clear the tool_use block; 1 reuses its index.
+    expect(refusal).toContain('"index":1');
+    expect(refusal).not.toContain('"index":2');
   });
 
   test("refusal text block is placed after already-streamed blocks (no index reuse)", () => {

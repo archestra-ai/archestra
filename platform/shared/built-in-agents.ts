@@ -247,6 +247,7 @@ Output exactly one title:
 // `archestra.llm.complete()`. Each call supplies its own instruction (the SDK's
 // `system` option), so this prompt is only the fallback when the app provides
 // none; it is intentionally minimal.
+// white-label-ok: shipped default text; branded by brandBuiltInText where it is seeded
 export const APP_RUNTIME_SYSTEM_PROMPT = `You answer prompts sent by an Archestra MCP App. Follow the app's instructions for the request and reply with only the requested content.`;
 
 /** Maps built-in agent IDs to their default system prompts for reset-to-default. */

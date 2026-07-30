@@ -147,6 +147,50 @@ describe("access-control", () => {
     });
   });
 
+  describe("conversation soft-delete routes", () => {
+    // Restore is the inverse of delete, and listing the trash is part of the
+    // delete/restore lifecycle — both gate on chat:delete so a chat:read-only
+    // role can see active chats but neither the trash nor the restore action.
+    test("RestoreChatConversation requires chat:delete", () => {
+      expect(
+        requiredEndpointPermissionsMap[RouteId.RestoreChatConversation]?.chat,
+      ).toEqual(["delete"]);
+    });
+
+    test("GetDeletedChatConversations requires chat:delete", () => {
+      expect(
+        requiredEndpointPermissionsMap[RouteId.GetDeletedChatConversations]
+          ?.chat,
+      ).toEqual(["delete"]);
+    });
+
+    test("the member role can restore and view trashed chats (members can delete)", () => {
+      expect(memberPermissions.chat).toContain("delete");
+    });
+
+    // Pin the intended divergence from the active-list sibling: a live 403 for a
+    // chat:read-only caller isn't reachable in the chat route tests (that harness
+    // injects request.user and skips the RBAC middleware), so enforcement is
+    // proven generically in the middleware tests. Here we lock the map contract
+    // that makes it bite — the trash/restore routes must gate on delete, NOT
+    // read, so they never collapse to the same gate as GetChatConversations.
+    test("GetChatConversations (the active list) still gates on chat:read", () => {
+      expect(
+        requiredEndpointPermissionsMap[RouteId.GetChatConversations]?.chat,
+      ).toEqual(["read"]);
+    });
+
+    test("trash/restore routes do NOT gate on chat:read (divergence from the active list)", () => {
+      expect(
+        requiredEndpointPermissionsMap[RouteId.GetDeletedChatConversations]
+          ?.chat,
+      ).not.toContain("read");
+      expect(
+        requiredEndpointPermissionsMap[RouteId.RestoreChatConversation]?.chat,
+      ).not.toContain("read");
+    });
+  });
+
   describe("MCP server re-authentication route", () => {
     // Returns true when `rolePermissions` covers every resource:action pair the
     // route's RBAC middleware gate demands. Mirrors what hasPermission() does

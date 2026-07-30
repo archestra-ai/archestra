@@ -1966,6 +1966,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // Registered before `/conversations/:id` so the static `deleted` segment is
+  // unambiguous (find-my-way prioritizes static over parametric regardless, and
+  // `:id` is a UUID so "deleted" would 400 there anyway — this keeps it clear).
+  fastify.get(
+    "/api/chat/conversations/deleted",
+    {
+      schema: {
+        operationId: RouteId.GetDeletedChatConversations,
+        description:
+          "List the current user's soft-deleted conversations (the Trash view), newest deletion first.",
+        tags: ["Chat"],
+        response: constructResponseSchema(z.array(SelectConversationSchema)),
+      },
+    },
+    async (request, reply) => {
+      return reply.send(
+        await ConversationModel.findAllDeleted(
+          request.user.id,
+          request.organizationId,
+        ),
+      );
+    },
+  );
+
   fastify.get(
     "/api/chat/conversations/:id",
     {
@@ -2552,6 +2576,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // files + hard-delete rows past the window) is planned as a follow-up.
       // The delete count is ignored: a concurrent winner making it 0 is still
       // success for an idempotent DELETE.
+      // No audit record is emitted: conversations are intentionally absent from
+      // AUDITABLE_ROUTES (see AUDIT_DECISIONS.conversationsTable).
       await ConversationModel.delete(id, user.id, organizationId);
 
       // Best-effort teardown of live-only resources; failures here must not fail
@@ -2588,6 +2614,47 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/chat/conversations/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreChatConversation,
+        description: "Restore a soft-deleted conversation",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(SelectConversationSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Idempotent restore: clear deleted_at (no-op / count 0 when the row is
+      // already active), then read the now-active row back. Restore does not
+      // resurrect the aborted stream left by delete — history returns, the run
+      // stays stopped. Share links are re-activated by design (the shares join
+      // filters on the soft-delete predicate), so a formerly-shared chat is
+      // shared again.
+      // No audit record is emitted: conversations are intentionally absent from
+      // AUDITABLE_ROUTES (see AUDIT_DECISIONS.conversationsTable — high-volume
+      // chat data surfaced via /llm/logs), so restore matches the sibling
+      // create/update/delete conversation routes rather than auditing alone.
+      await ConversationModel.restore(id, user.id, organizationId);
+
+      // A lightweight sidebar-row read (no message hydration): restore only
+      // needs to confirm the chat is back. Null means the conversation never
+      // existed, isn't owned by the caller, or was hard-deleted in a race —
+      // nothing to restore, so 404.
+      const conversation = await ConversationModel.findListRowById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      return reply.send(conversation);
     },
   );
 

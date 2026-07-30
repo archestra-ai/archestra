@@ -8,11 +8,12 @@ import {
   isNotNull,
   isNull,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
-import { hardDelete, softDelete } from "@/database/soft-delete";
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import type {
   Conversation,
   ConversationOrigin,
@@ -295,6 +296,39 @@ class ConversationModel {
         compactions: [],
       }));
     }
+  }
+
+  /**
+   * List a user's soft-deleted conversations (owner + org scoped), newest
+   * deletion first — the read backing a future "Trash" view. Same sidebar-row
+   * shape as the active list (no messages loaded), but selects rows where
+   * `deleted_at IS NOT NULL`.
+   *
+   * The active-list partial index (`conversations_active_owner_last_message_idx`,
+   * `WHERE deleted_at IS NULL`) does not cover these rows, so this is an
+   * owner-filtered scan — acceptable while the soft-deleted set stays small; a
+   * retention job (and, if needed, a trash index) will bound it.
+   */
+  static async findAllDeleted(
+    userId: string,
+    organizationId: string,
+  ): Promise<Conversation[]> {
+    return ConversationModel.selectListRows({
+      conditions: [
+        isNotNull(schema.conversationsTable.deletedAt),
+        eq(schema.conversationsTable.userId, userId),
+        eq(schema.conversationsTable.organizationId, organizationId),
+        // Same app-open draft filter as the active list: a chat seeded by
+        // opening an app stays a draft until the user writes into it, so a
+        // never-written draft must not surface in trash either.
+        sql`(${schema.conversationsTable.origin} != 'app_open' OR EXISTS (
+          SELECT 1 FROM ${schema.messagesTable}
+          WHERE ${schema.messagesTable.conversationId} = ${schema.conversationsTable.id}
+          AND ${schema.messagesTable.role} = 'user'
+        ))`,
+      ],
+      orderBy: desc(schema.conversationsTable.deletedAt),
+    });
   }
 
   static async findById({
@@ -819,6 +853,60 @@ class ConversationModel {
   }
 
   /**
+   * Restore a soft-deleted conversation (owner + org scoped): clears
+   * `deleted_at` so it reappears in every read path with its messages, files,
+   * runs, and share links intact. Idempotent — returns the number of rows that
+   * transitioned from deleted to active, so 0 means the conversation was
+   * already active, never existed, or is not owned by the caller.
+   *
+   * Restore intentionally does NOT resurrect a live stream: the delete path
+   * leaves the run row and stamps `stopRequestedAt`, and a restored
+   * conversation keeps that terminal run — the user starts a fresh one. Share
+   * links are re-activated by design (the `conversation_shares` join filters on
+   * `notDeletedConversation`), so a chat that was shared before deletion is
+   * shared again after restore.
+   */
+  static async restore(
+    id: string,
+    userId: string,
+    organizationId: string,
+  ): Promise<number> {
+    return restore(
+      db,
+      schema.conversationsTable,
+      and(
+        eq(schema.conversationsTable.id, id),
+        eq(schema.conversationsTable.userId, userId),
+        eq(schema.conversationsTable.organizationId, organizationId),
+      ),
+    );
+  }
+
+  /**
+   * Sidebar-row shape for a single active conversation (owner + org scoped),
+   * without loading messages — used by the restore endpoint to return the
+   * now-active row cheaply instead of hydrating full history via
+   * {@link findById}. Null when the conversation is missing, not owned, or
+   * still soft-deleted.
+   */
+  static async findListRowById(params: {
+    id: string;
+    userId: string;
+    organizationId: string;
+  }): Promise<Conversation | null> {
+    const [row] = await ConversationModel.selectListRows({
+      conditions: [
+        notDeletedConversation,
+        eq(schema.conversationsTable.id, params.id),
+        eq(schema.conversationsTable.userId, params.userId),
+        eq(schema.conversationsTable.organizationId, params.organizationId),
+      ],
+      orderBy: desc(schema.conversationsTable.lastMessageAt),
+    });
+    return row ?? null;
+  }
+
+  /**
    * Get the agentId for a conversation (without user context checks)
    * Used by internal services that need to look up conversation -> agent mapping.
    * Excludes soft-deleted conversations, so late/in-flight callers resolve null
@@ -862,6 +950,68 @@ class ConversationModel {
       .limit(1);
 
     return result[0]?.agentId ?? null;
+  }
+
+  /**
+   * Shared SELECT for conversation "list rows" — the sidebar-row shape
+   * (agent/share/project columns joined, no messages/errors/compactions
+   * loaded) used by {@link findAllDeleted} and {@link findListRowById}. The
+   * hot active-list path ({@link findAll}) keeps its own inline copy of this
+   * query on purpose, so this shared helper is not on that path. Callers own
+   * the WHERE conditions and the ordering.
+   */
+  private static async selectListRows(params: {
+    conditions: SQL[];
+    orderBy: SQL;
+  }): Promise<Conversation[]> {
+    const rows = await db
+      .select({
+        conversation: getTableColumns(schema.conversationsTable),
+        share: {
+          id: schema.conversationSharesTable.id,
+          visibility: schema.conversationSharesTable.visibility,
+        },
+        projectName: schema.projectsTable.name,
+        projectIcon: schema.projectsTable.icon,
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+          systemPrompt: schema.agentsTable.systemPrompt,
+          agentType: schema.agentsTable.agentType,
+          toolExposureMode: schema.agentsTable.toolExposureMode,
+          llmApiKeyId: schema.agentsTable.llmApiKeyId,
+          deletedAt: schema.agentsTable.deletedAt,
+        },
+      })
+      .from(schema.conversationsTable)
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.conversationSharesTable,
+        eq(
+          schema.conversationsTable.id,
+          schema.conversationSharesTable.conversationId,
+        ),
+      )
+      .leftJoin(
+        schema.projectsTable,
+        eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+      )
+      .where(and(...params.conditions))
+      .orderBy(params.orderBy);
+
+    return rows.map((row) => ({
+      ...withVisibleAgent(row.conversation, row.agent),
+      share: row.share?.id ? row.share : null,
+      projectName: row.projectName ?? null,
+      projectIcon: listProjectIcon(row.projectIcon),
+      unread: isConversationUnread(row.conversation),
+      messages: [],
+      chatErrors: [],
+      compactions: [],
+    }));
   }
 }
 

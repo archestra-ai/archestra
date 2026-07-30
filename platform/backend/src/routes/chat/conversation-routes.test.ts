@@ -2,9 +2,11 @@ import { ChatErrorCode } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import client from "prom-client";
 import db, { schema } from "@/database";
+import ActiveChatRunModel from "@/models/chat-active-run";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
+import ConversationShareModel from "@/models/conversation-share";
 import MessageModel from "@/models/message";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import { initializeChatMetrics } from "@/observability/metrics/chat";
@@ -1590,5 +1592,242 @@ describe("conversation list projectName", () => {
       .where(eq(schema.conversationsTable.id, conversation.id));
     expect(row).toBeDefined();
     expect(row.deletedAt).toBeInstanceOf(Date);
+  });
+
+  test("restore brings a soft-deleted conversation back onto every read surface", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "restore me",
+    });
+
+    await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    const whileDeleted = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(whileDeleted.statusCode).toBe(404);
+
+    const restore = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/restore`,
+    });
+    expect(restore.statusCode).toBe(200);
+    expect(restore.json()).toMatchObject({
+      id: conversation.id,
+      deletedAt: null,
+    });
+
+    // Reappears in the owner-scoped read and in the active list.
+    const afterGet = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    expect(afterGet.statusCode).toBe(200);
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations",
+    });
+    expect(list.json().map((c: { id: string }) => c.id)).toContain(
+      conversation.id,
+    );
+  });
+
+  test("restore is idempotent: restoring an already-active conversation returns it with 200", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "already active",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/restore`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ id: conversation.id });
+  });
+
+  test("restore returns 404 for a missing conversation", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${uuidv7()}/restore`,
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  test("restore returns 404 for another user's conversation and leaves it deleted", async ({
+    makeUser,
+    makeAgent,
+  }) => {
+    const otherUser = await makeUser();
+    const agent = await makeAgent({
+      organizationId,
+      authorId: otherUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: otherUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "not yours",
+    });
+    await ConversationModel.delete(
+      conversation.id,
+      otherUser.id,
+      organizationId,
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/restore`,
+    });
+    // Restore is owner-scoped: admin status does not grant it, so 404 and the
+    // row stays soft-deleted.
+    expect(response.statusCode).toBe(404);
+    const [row] = await db
+      .select()
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, conversation.id));
+    expect(row.deletedAt).toBeInstanceOf(Date);
+  });
+
+  test("restore re-activates a share link that was hidden by the delete", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "shared then trashed",
+    });
+    await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId,
+      createdByUserId: currentUser.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+
+    await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+
+    const restore = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/restore`,
+    });
+    expect(restore.statusCode).toBe(200);
+    // Auto-resurrection by design: the share row survives the soft delete and
+    // the restore response surfaces it as active again.
+    expect(restore.json().share).toMatchObject({ visibility: "organization" });
+  });
+
+  test("a new run can start on a restored conversation (the stopped run does not wedge it)", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "run then restore",
+    });
+
+    // A run that was live when the conversation was deleted.
+    const run = await ActiveChatRunModel.create({
+      conversationId: conversation.id,
+      userId: currentUser.id,
+      organizationId,
+    });
+    if (!run) throw new Error("expected the initial run to be created");
+
+    // DELETE requests a stop (stamps stopRequestedAt, leaves the row running);
+    // the stream then finalizes the aborted run as cancelled.
+    await app.inject({
+      method: "DELETE",
+      url: `/api/chat/conversations/${conversation.id}`,
+    });
+    await ActiveChatRunModel.markTerminal({
+      runId: run.id,
+      status: "cancelled",
+    });
+
+    const restore = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/restore`,
+    });
+    expect(restore.statusCode).toBe(200);
+
+    // The terminal run left behind must not block a fresh run: the running-
+    // conversation unique index only covers status = 'running' rows.
+    const newRun = await ActiveChatRunModel.create({
+      conversationId: conversation.id,
+      userId: currentUser.id,
+      organizationId,
+    });
+    expect(newRun).not.toBeNull();
+  });
+
+  test("the deleted-conversations list returns soft-deleted chats and excludes active ones", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const active = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "active",
+    });
+    const trashed = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+      title: "trashed",
+    });
+    await ConversationModel.delete(trashed.id, currentUser.id, organizationId);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/chat/conversations/deleted",
+    });
+    expect(response.statusCode).toBe(200);
+    const ids = response.json().map((c: { id: string }) => c.id);
+    expect(ids).toContain(trashed.id);
+    expect(ids).not.toContain(active.id);
   });
 });

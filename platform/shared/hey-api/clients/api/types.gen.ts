@@ -27062,6 +27062,7 @@ export type GetChatConversationsResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -27226,6 +27227,7 @@ export type CreateChatConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -27284,6 +27286,164 @@ export type CreateChatConversationResponses = {
 };
 
 export type CreateChatConversationResponse = CreateChatConversationResponses[keyof CreateChatConversationResponses];
+
+export type GetDeletedChatConversationsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat/conversations/deleted';
+};
+
+export type GetDeletedChatConversationsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDeletedChatConversationsError = GetDeletedChatConversationsErrors[keyof GetDeletedChatConversationsErrors];
+
+export type GetDeletedChatConversationsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        modelId: string | null;
+        hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        projectId: string | null;
+        origin: 'user' | 'schedule_trigger' | 'app_open';
+        pinnedAt: string | null;
+        lastMessageAt: string;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
+            llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
+        projectName?: string | null;
+        projectIcon?: string | null;
+        unread?: boolean;
+        messages: Array<unknown>;
+        chatErrors: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
+            createdAt: string;
+        }>;
+    }>;
+};
+
+export type GetDeletedChatConversationsResponse = GetDeletedChatConversationsResponses[keyof GetDeletedChatConversationsResponses];
 
 export type DeleteChatConversationData = {
     body?: never;
@@ -27471,6 +27631,7 @@ export type GetChatConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -27638,6 +27799,7 @@ export type UpdateChatConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -28238,6 +28400,7 @@ export type ForkChatConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -28385,6 +28548,166 @@ export type GetChatAgentMcpToolsResponses = {
 };
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
+
+export type RestoreChatConversationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/restore';
+};
+
+export type RestoreChatConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RestoreChatConversationError = RestoreChatConversationErrors[keyof RestoreChatConversationErrors];
+
+export type RestoreChatConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        modelId: string | null;
+        hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        projectId: string | null;
+        origin: 'user' | 'schedule_trigger' | 'app_open';
+        pinnedAt: string | null;
+        lastMessageAt: string;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
+            llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
+        projectName?: string | null;
+        projectIcon?: string | null;
+        unread?: boolean;
+        messages: Array<unknown>;
+        chatErrors: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type RestoreChatConversationResponse = RestoreChatConversationResponses[keyof RestoreChatConversationResponses];
 
 export type ClearChatConversationErrorsData = {
     body?: never;
@@ -28587,6 +28910,7 @@ export type CompactChatConversationResponses = {
             lastMessageAt: string;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
             agent: {
                 id: string;
                 name: string;
@@ -29021,6 +29345,7 @@ export type GetSharedConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -29184,6 +29509,7 @@ export type ForkSharedConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -29349,6 +29675,7 @@ export type GenerateChatConversationTitleResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -29513,6 +29840,7 @@ export type UpdateChatMessageResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -74219,6 +74547,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;

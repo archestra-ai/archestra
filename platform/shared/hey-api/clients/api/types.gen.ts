@@ -19591,6 +19591,12 @@ export type LockAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         teams: Array<{
             id: string;
             name: string;
@@ -19724,6 +19730,12 @@ export type UnlockAppResponses = {
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         teams: Array<{
             id: string;
             name: string;

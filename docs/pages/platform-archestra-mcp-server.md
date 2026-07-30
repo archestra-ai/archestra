@@ -2035,6 +2035,7 @@ Required RBAC permission: `skill:update`
 | `edit_app` | The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to s... | `app:update` |
 | `set_app_tools` | Replace an existing app's assigned upstream tools with exactly the set you pass (the full desired list; [] clears all). | `app:update` |
 | `set_app_labels` | Replace an app's labels with exactly the set you pass ([] clears them). | `app:update` |
+| `set_app_lock` | Lock or unlock an app. | `app:update` |
 | `validate_app` | The pre-publish gate for an app's head version: static structural checks (`findings`, each carrying its own specific message) plus the most recent live-render diagnostics (`live`), with `ok` true w... | `app:read` |
 | `publish_app` | Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, wi... | `app:update` |
 | `preview_app_tool` | Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. | `app:update` |
@@ -2272,6 +2273,24 @@ Required RBAC permission: `app:update`
 | `labels` | `object[]` | Yes | The app's labels after this call. |
 | `labels[].key` | `string` | Yes | The label key. |
 | `labels[].value` | `string` | Yes | The label value. |
+
+#### set_app_lock
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+| `locked` | `boolean` | Yes | true locks the app against all modification; false unlocks it (only on the user's direct request). |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `locked` | `boolean` | Yes |  |
 
 #### validate_app
 

@@ -1,3 +1,4 @@
+import { DEFAULT_APP_NAME } from "./consts";
 import { urlSlugify } from "./utils";
 
 /**
@@ -43,7 +44,7 @@ export const SLACK_SLASH_COMMAND_SUFFIXES = {
 
 export type SlackSlashCommandAction = keyof typeof SLACK_SLASH_COMMAND_SUFFIXES;
 
-export const SLACK_SLASH_COMMANDS = buildSlackSlashCommands("Archestra");
+export const SLACK_SLASH_COMMANDS = buildSlackSlashCommands(DEFAULT_APP_NAME);
 
 export function buildSlackSlashCommands(
   appName: string,

@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { type Button, type ColorScheme, WebClient } from "@slack/web-api";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   type AllowedCacheKey,
   CacheKey,
@@ -714,7 +715,7 @@ class SlackProvider implements ChatOpsProvider {
             type: "section",
             text: {
               type: "mrkdwn",
-              text: "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).",
+              text: `*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @${archestraMcpBranding.appName} Sales > what's the status?).`,
             },
           },
           {
@@ -752,7 +753,7 @@ class SlackProvider implements ChatOpsProvider {
 
     const isDM = params.message.metadata?.channelType === "im";
     const fallbackText = params.isWelcome
-      ? "Welcome to Archestra!"
+      ? `Welcome to ${archestraMcpBranding.appName}!`
       : "Change Default Agent";
 
     if (isDM) {
@@ -1225,7 +1226,7 @@ class SlackProvider implements ChatOpsProvider {
             response_type: "ephemeral",
             text:
               `This channel is assigned to agent: *${agent?.name || binding.agentId}*\n\n` +
-              "*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @Archestra Sales > what's the status?).\n\n" +
+              `*Tip:* You can use other agents with the syntax *AgentName >* (e.g., @${archestraMcpBranding.appName} Sales > what's the status?).\n\n` +
               `Use \`${slashCommands.SELECT_AGENT}\` to change the default agent.`,
           };
         }

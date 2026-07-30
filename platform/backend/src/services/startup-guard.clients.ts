@@ -198,8 +198,8 @@ export const CODEX_GUARD_CLIENT: StartupGuardClient = {
     mcpDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source mcp remove $McpServerName 2>$null | Out-Null } catch { } }`,
     skillsDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source plugin marketplace remove $SkillsMarketplaceName 2>$null | Out-Null } catch { } }`,
     renderProxyDisconnect: codexWindowsProxyDisconnect,
-    proxyDisconnectNote: () =>
-      "Removed the Archestra provider from ~/.codex/config.toml. If you signed Codex in with an Archestra virtual key, run codex logout (then log back in) to restore your own credentials.",
+    proxyDisconnectNote: (ctx) =>
+      `Removed the ${ctx.appName} provider from ~/.codex/config.toml. If you signed Codex in with an ${ctx.appName} virtual key, run codex logout (then log back in) to restore your own credentials.`,
   },
 };
 
@@ -248,7 +248,7 @@ function codexProxyDisconnect(ctx: StartupGuardContext): string {
 
 proxy_disconnect_notes() {
   line_reset
-  printf '%s  Removed the Archestra provider from ~/.codex/config.toml. If you signed Codex in with an Archestra virtual key, run \`codex logout\` (then log back in) to restore your own credentials.%s\\n' "$C_DIM" "$C_RESET"
+  printf '%s  Removed the ${ctx.appName} provider from ~/.codex/config.toml. If you signed Codex in with an ${ctx.appName} virtual key, run \`codex logout\` (then log back in) to restore your own credentials.%s\\n' "$C_DIM" "$C_RESET"
   return 0
 }`;
 }

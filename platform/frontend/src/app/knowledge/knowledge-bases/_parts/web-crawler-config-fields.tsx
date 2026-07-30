@@ -10,6 +10,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 interface WebCrawlerConfigFieldsProps {
   // biome-ignore lint/suspicious/noExplicitAny: form type is generic across different connector schemas
@@ -21,6 +22,8 @@ export function WebCrawlerConfigFields({
   form,
   prefix = "config",
 }: WebCrawlerConfigFieldsProps) {
+  // Mirrors the backend crawler's default User-Agent, which is branded too.
+  const appName = useAppName();
   return (
     <div className="space-y-4">
       <FormField
@@ -151,7 +154,7 @@ export function WebCrawlerConfigFields({
             <FormLabel>User Agent (optional)</FormLabel>
             <FormControl>
               <Input
-                placeholder="Archestra Web Crawler"
+                placeholder={`${appName} Web Crawler`}
                 {...field}
                 value={(field.value as string | undefined) ?? ""}
               />

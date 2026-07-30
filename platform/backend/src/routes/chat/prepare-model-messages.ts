@@ -44,13 +44,29 @@ import { prepareMessagesForProvider } from "./normalization/prepare-for-provider
 const PROVIDERS_WITHOUT_DOCUMENT_CONTENT_PARTS: ReadonlySet<SupportedProvider> =
   new Set<SupportedProvider>(["zhipuai"]);
 
+// All of these fire BEFORE the model stream's `start` chunk. They must be
+// transient: a non-transient data part arriving before `start` makes the AI
+// SDK open an assistant message under a client-generated id to hold it, and
+// on a reattach (refresh, reconnect, backend restart mid-run) each attach
+// builds its own such message — rendering the whole turn twice. The client
+// consumes all of them via onData state, exactly like the heartbeat, so
+// nothing is lost by keeping them out of the message list.
 type CompactionStreamEvent =
-  | { type: "data-context-compaction-start"; data: { trigger: "auto" } }
+  | {
+      type: "data-context-compaction-start";
+      data: { trigger: "auto" };
+      transient: true;
+    }
   | {
       type: "data-context-compaction-finish";
       data: ContextCompactionStreamData;
+      transient: true;
     }
-  | { type: "data-context-window-estimate"; data: ContextWindowEstimate };
+  | {
+      type: "data-context-window-estimate";
+      data: ContextWindowEstimate;
+      transient: true;
+    };
 
 /**
  * Compact the (already normalized) history when it is over the auto-compaction
@@ -109,6 +125,7 @@ export async function buildModelMessages(params: {
       emit({
         type: "data-context-compaction-start",
         data: { trigger: "auto" },
+        transient: true,
       });
     },
   });
@@ -121,6 +138,7 @@ export async function buildModelMessages(params: {
     emit({
       type: "data-context-compaction-finish",
       data: buildContextCompactionStreamData(compactionResult),
+      transient: true,
     });
   }
 
@@ -134,6 +152,7 @@ export async function buildModelMessages(params: {
       data: {
         estimatedTokens: compactionResult.inputTokenEstimate,
       } satisfies ContextWindowEstimate,
+      transient: true,
     });
   }
 

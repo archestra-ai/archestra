@@ -28,6 +28,7 @@ import {
   useEnableTwoFactorMutation,
 } from "@/lib/auth/two-factor.query";
 import { copyToClipboard } from "@/lib/clipboard";
+import { useAppName } from "@/lib/hooks/use-app-name";
 
 const PasswordFormSchema = z.object({
   password: z.string().min(1, "Password is required"),
@@ -102,6 +103,7 @@ function TwoFactorPasswordDialog({
   twoFactorEnabled: boolean;
   onEnabled: (result: { totpURI: string; backupCodes: string[] }) => void;
 }) {
+  const appName = useAppName();
   const enableTwoFactor = useEnableTwoFactorMutation();
   const disableTwoFactor = useDisableTwoFactorMutation();
   const isPending = enableTwoFactor.isPending || disableTwoFactor.isPending;
@@ -130,6 +132,7 @@ function TwoFactorPasswordDialog({
 
     const result = await enableTwoFactor.mutateAsync({
       password: values.password,
+      issuer: appName,
     });
     if (result) {
       onEnabled({ totpURI: result.totpURI, backupCodes: result.backupCodes });

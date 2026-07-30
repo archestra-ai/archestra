@@ -182,6 +182,7 @@ export const OPENAI_CODEX_MODELS = [
  * agent's real instructions still reach the model via the input.
  */
 export const OPENAI_CODEX_INSTRUCTIONS =
+  // white-label-ok: shipped prompt; branded at the proxy use site by brandBuiltInText
   "You are a coding agent running in Archestra, powered by a GPT-5 Codex model " +
   "accessed through the user's ChatGPT subscription. Follow the user's and the " +
   "developer's instructions, use the provided tools when helpful, and be " +

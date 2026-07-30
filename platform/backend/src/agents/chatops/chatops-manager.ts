@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import {
   ChatErrorCode,
+  DEFAULT_APP_NAME,
   providerDisplayNames,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import { userHasPermission } from "@/auth/utils";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -793,7 +795,7 @@ export class ChatOpsManager {
       // a task"), which matches neither the agent nor the chat display name.
       const platformName =
         (await OrganizationModel.getById(agent.organizationId))?.appName ||
-        "Archestra";
+        DEFAULT_APP_NAME;
       const botMentioned = message.metadata?.botMentioned === true;
       const mentionedOthers = Array.isArray(message.metadata?.mentionedOthers)
         ? (message.metadata.mentionedOthers as string[])
@@ -935,7 +937,7 @@ export class ChatOpsManager {
           text: [
             welcome.text,
             "",
-            "💡 To send me a direct message in Teams, you first need to install the Archestra app personally — click **Add** when Teams prompts you.",
+            `💡 To send me a direct message in Teams, you first need to install the ${archestraMcpBranding.appName} app personally — click **Add** when Teams prompts you.`,
             "",
             "Once installed, send me a direct message and I'll send you back a signup link.",
           ].join("\n"),
@@ -1175,7 +1177,9 @@ export class ChatOpsManager {
 
       const contextMessages = history.map((msg) => {
         const text = msg.isFromBot ? stripBotFooter(msg.text) : msg.text;
-        const sender = msg.isFromBot ? "You (Archestra)" : msg.senderName;
+        const sender = msg.isFromBot
+          ? `You (${archestraMcpBranding.appName})`
+          : msg.senderName;
         // A file-only turn has no text; name its attachments so the turn is
         // meaningful (the file arrives separately or gets a skip note below).
         if (!text.trim() && msg.files?.length) {

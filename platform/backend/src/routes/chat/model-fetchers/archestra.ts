@@ -13,5 +13,6 @@ export const fetchArchestraModels = makeBearerFetcher<{
 }>({
   provider: "archestra",
   configKey: "archestra",
+  // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
   errorLabel: "Archestra models",
 });

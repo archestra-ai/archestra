@@ -34,6 +34,7 @@ import {
 } from "@/agents/chatops/constants";
 import { EventDedupMap } from "@/agents/chatops/utils";
 import { isRateLimited } from "@/agents/utils";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -468,7 +469,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           },
                           {
                             type: "TextBlock",
-                            text: `**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @Archestra Sales > what's the status?).`,
+                            text: `**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @${archestraMcpBranding.appName} Sales > what's the status?).`,
                             wrap: true,
                           },
                           {
@@ -2322,11 +2323,13 @@ function getSecurityErrorMessage(error: string): string {
   if (error.includes("Could not resolve user email")) {
     return "Could not verify your identity. Please ensure the bot is properly installed in your team or chat.";
   }
+  // white-label-ok: matches the internal sentinel thrown by the incoming-email
+  // authorizer, not copy — the branded sentence is built on the next line.
   if (error.includes("not a registered Archestra user")) {
     // Extract email from error message if present
     const emailMatch = error.match(/Unauthorized: (.+?) is not/);
     const email = emailMatch?.[1] || "Your email";
-    return `${email} is not a registered Archestra user. Contact your administrator for access.`;
+    return `${email} is not a registered ${archestraMcpBranding.appName} user. Contact your administrator for access.`;
   }
   if (error.includes("does not have access to this agent")) {
     return "You don't have access to this agent. Contact your administrator for access.";

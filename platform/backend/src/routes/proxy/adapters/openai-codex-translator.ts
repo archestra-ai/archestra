@@ -19,6 +19,7 @@ import type {
   ResponseInput,
   ResponseStreamEvent,
 } from "openai/resources/responses/responses";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import { OPENAI_CODEX_INSTRUCTIONS } from "@/services/openai-codex-credentials";
 import { ApiError, type OpenAi } from "@/types";
@@ -40,7 +41,9 @@ export function buildCodexResponsesRequest(
 ): ResponseCreateParamsStreaming {
   const request: LooseItem = {
     model: params.model,
-    instructions: OPENAI_CODEX_INSTRUCTIONS,
+    instructions: archestraMcpBranding.brandBuiltInText(
+      OPENAI_CODEX_INSTRUCTIONS,
+    ),
     input: chatMessagesToResponsesInput(params.messages),
     store: false,
     stream: true,

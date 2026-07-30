@@ -12,6 +12,7 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -283,7 +284,7 @@ export function assertConsistentUserCredentials(
   if (distinct.size > 1) {
     throw new ApiError(
       401,
-      "Conflicting Archestra user credentials: the request's credentials identify different users.",
+      `Conflicting ${archestraMcpBranding.appName} user credentials: the request's credentials identify different users.`,
     );
   }
 }

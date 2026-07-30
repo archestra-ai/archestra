@@ -912,6 +912,45 @@ class AgentModel {
   }
 
   /**
+   * Candidates for the A2A registry: every internal agent in the organization
+   * that could have an Agent Card, with only the fields a card needs.
+   *
+   * This is deliberately *not* an authorization query. It answers "which
+   * agents belong in the catalog", and the caller then runs the ordinary
+   * per-agent gateway check against each one. Keeping the two apart means the
+   * registry cannot disagree with what a direct card fetch would allow.
+   *
+   * Built-in agents are left out: title generation, context compaction and the
+   * dual-LLM pair are machinery this platform runs on, not collaborators
+   * anyone would address over A2A. Personal agents stay in — one belongs to
+   * somebody, and the per-agent check decides whether that is the caller.
+   */
+  static async findA2ARegistryCandidates(
+    organizationId: string,
+  ): Promise<
+    Pick<Agent, "id" | "name" | "description" | "systemPrompt" | "updatedAt">[]
+  > {
+    return db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        description: schema.agentsTable.description,
+        systemPrompt: schema.agentsTable.systemPrompt,
+        updatedAt: schema.agentsTable.updatedAt,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.builtIn, false),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.name));
+  }
+
+  /**
    * Find all non-personal internal agents (excluding built-in agents).
    * Used to populate the agent selection dropdown in Teams/Slack/etc channels.
    * Personal agents are excluded because channels are shared — only org/team

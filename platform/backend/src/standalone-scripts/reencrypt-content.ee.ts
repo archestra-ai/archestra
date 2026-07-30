@@ -7,6 +7,11 @@
  * ..._SECRET_PREVIOUS set). Idempotent — safe to run concurrently with the
  * background task; overlapping runs are merely redundant.
  *
+ * Unlike the background task, an explicit run is always a FULL re-verify:
+ * a sweep already marked completed is restarted from the beginning, so rows
+ * written in plaintext by not-yet-restarted replicas during the enablement
+ * rollout are picked up (already-encrypted rows are cheap skips).
+ *
  * Run (dev, from platform/backend):
  *   pnpm db:reencrypt-content
  * Run (prod image, from /app/backend):
@@ -22,10 +27,16 @@ async function main(): Promise<void> {
   await verifyContentEncryptionKey();
 
   let totalRewritten = 0;
+  let firstRun = true;
   for (;;) {
     const result = await runContentEncryptionBackfill({
       maxBatchesPerRun: 50,
+      // Only the first iteration restarts a completed sweep (an explicit
+      // operator run is a full re-verify); later iterations must observe the
+      // completion they themselves produce, or this loop would never end.
+      restartIfCompleted: firstRun,
     });
+    firstRun = false;
     totalRewritten += result.rowsRewritten;
     logger.info(
       { status: result.status, totalRewritten },

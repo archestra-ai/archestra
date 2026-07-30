@@ -86,6 +86,25 @@ class ContentEncryptionStateModel {
       .set({ completedAt: new Date() })
       .where(eq(schema.contentEncryptionStateTable.id, SINGLETON_ID));
   }
+
+  /**
+   * Restart the sweep from the beginning for the SAME key: clear the cursors
+   * and completion mark. Used by the operator script's full re-verify — rows
+   * written in plaintext by not-yet-restarted replicas during the enablement
+   * rollout can land behind a completed sweep, and only a from-scratch pass
+   * picks them up (already-encrypted rows are cheap CAS-skip reads).
+   */
+  static async restart(): Promise<void> {
+    await db
+      .update(schema.contentEncryptionStateTable)
+      .set({
+        interactionsCursorCreatedAt: null,
+        interactionsCursorId: null,
+        messagesCursorId: null,
+        completedAt: null,
+      })
+      .where(eq(schema.contentEncryptionStateTable.id, SINGLETON_ID));
+  }
 }
 
 export default ContentEncryptionStateModel;

@@ -61,8 +61,6 @@ async function rawInteraction(id: string) {
 }
 
 describe("content encryption", () => {
-  const originalCore = config.enterpriseFeatures.core;
-
   beforeEach(() => {
     vi.clearAllMocks();
     config.enterpriseFeatures.core = true;
@@ -199,6 +197,36 @@ describe("content encryption", () => {
       // Steady state is an O(1) no-op.
       const again = await runContentEncryptionBackfill({});
       expect(again).toEqual({ status: "completed", rowsRewritten: 0 });
+    });
+
+    test("restartIfCompleted re-sweeps plaintext rows stranded behind a completed sweep", async () => {
+      await seedPlaintextInteraction();
+      setKeys(SECRET_A);
+      await dropTrgmIndex();
+      await runContentEncryptionBackfill({});
+
+      // A replica that had not restarted yet during the enablement rollout
+      // writes plaintext AFTER the sweep completed.
+      const stragglerId = await seedPlaintextInteraction();
+      expect(await runContentEncryptionBackfill({})).toEqual({
+        status: "completed",
+        rowsRewritten: 0,
+      });
+      expect(
+        isContentEnvelope((await rawInteraction(stragglerId)).request),
+      ).toBe(false);
+
+      // The operator's explicit run is a full re-verify and picks it up.
+      const rerun = await runContentEncryptionBackfill({
+        restartIfCompleted: true,
+      });
+      expect(rerun.status).toBe("completed");
+      expect(rerun.rowsRewritten).toBeGreaterThan(0);
+      const raw = await rawInteraction(stragglerId);
+      expect(isContentEnvelope(raw.request)).toBe(true);
+      expect(decryptContentValue(raw.request, "interactions.request")).toEqual(
+        request,
+      );
     });
 
     test("re-encrypts previous-key rows after rotation", async () => {

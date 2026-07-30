@@ -33,10 +33,17 @@ type BackfillRunResult = {
  * cursor back up on its next tick. Completed state keyed by the current key's
  * fingerprint makes steady-state runs O(1); a rotation changes the
  * fingerprint and restarts the sweep.
+ *
+ * `restartIfCompleted` re-runs a completed sweep from the beginning for the
+ * same key. The operator script sets it so an explicit run is always a full
+ * re-verify: during the enablement rollout, replicas that have not restarted
+ * yet still write plaintext, and rows they write behind an already-completed
+ * sweep would otherwise stay plaintext until the next rotation.
  */
 export async function runContentEncryptionBackfill(params: {
   batchSize?: number;
   maxBatchesPerRun?: number;
+  restartIfCompleted?: boolean;
 }): Promise<BackfillRunResult> {
   if (!isContentEncryptionEnabled()) {
     return { status: "disabled", rowsRewritten: 0 };
@@ -53,11 +60,17 @@ export async function runContentEncryptionBackfill(params: {
     return { status: "deferred", rowsRewritten: 0 };
   }
 
-  const state = await ContentEncryptionStateModel.ensureForFingerprint(
+  let state = await ContentEncryptionStateModel.ensureForFingerprint(
     contentKeyFingerprint(),
   );
   if (state.completedAt) {
-    return { status: "completed", rowsRewritten: 0 };
+    if (!params.restartIfCompleted) {
+      return { status: "completed", rowsRewritten: 0 };
+    }
+    await ContentEncryptionStateModel.restart();
+    state = await ContentEncryptionStateModel.ensureForFingerprint(
+      contentKeyFingerprint(),
+    );
   }
 
   const batchSize = params.batchSize ?? 500;
@@ -151,17 +164,14 @@ async function sweepInteractionsBatch(
   const cursorClause = cursor
     ? sql`WHERE (created_at, id) > (${cursor.createdAt}::timestamp, ${cursor.id}::uuid)`
     : sql``;
-  const rows = await db.execute<{
-    id: string;
-    created_at: string;
-    request: unknown;
-    processed_request: unknown;
-    response: unknown;
-    dual_llm_analyses: unknown;
-    unsafe_context_boundary: unknown;
-  }>(sql`
-    SELECT id, created_at::text AS created_at, request, processed_request,
-           response, dual_llm_analyses, unsafe_context_boundary
+  // Page over ids only; payloads are fetched one row at a time below so peak
+  // memory is O(largest row), not O(batch) — LLM payloads run to tens of MB
+  // and cluster by session, so a payload-carrying batch can exceed the worker
+  // pod's memory limit. The alias must NOT be `created_at`: a bare
+  // `ORDER BY created_at` binds to the ::text output column, which no index
+  // satisfies, turning every batch into a full-table scan and sort.
+  const page = await db.execute<{ id: string; created_at_text: string }>(sql`
+    SELECT id, created_at::text AS created_at_text
     FROM ${schema.interactionsTable}
     ${cursorClause}
     ORDER BY created_at ASC, id ASC
@@ -169,8 +179,16 @@ async function sweepInteractionsBatch(
   `);
 
   let rewritten = 0;
-  for (const row of rows.rows) {
-    const record = row as unknown as Record<string, unknown>;
+  for (const { id } of page.rows) {
+    const payload = await db.execute<Record<string, unknown>>(sql`
+      SELECT request, processed_request, response, dual_llm_analyses,
+             unsafe_context_boundary
+      FROM ${schema.interactionsTable}
+      WHERE id = ${id}::uuid
+    `);
+    const record = payload.rows[0];
+    if (!record) continue; // deleted concurrently (e.g. retention sweep)
+
     const assignments = [];
     const guards = [];
     for (const { column, context } of INTERACTION_COLUMNS) {
@@ -185,24 +203,47 @@ async function sweepInteractionsBatch(
     }
     if (assignments.length === 0) continue;
 
-    const result = await db.execute<{ updated: number }>(sql`
-      WITH updated AS (
-        UPDATE ${schema.interactionsTable}
-        SET ${sql.join(assignments, sql`, `)}
-        WHERE id = ${row.id}::uuid AND ${sql.join(guards, sql` AND `)}
-        RETURNING 1
-      )
-      SELECT COUNT(*)::int AS updated FROM updated
-    `);
+    let result: { rows: Array<{ updated: number }> };
+    try {
+      result = await db.execute<{ updated: number }>(sql`
+        WITH updated AS (
+          UPDATE ${schema.interactionsTable}
+          SET ${sql.join(assignments, sql`, `)}
+          WHERE id = ${id}::uuid AND ${sql.join(guards, sql` AND `)}
+          RETURNING 1
+        )
+        SELECT COUNT(*)::int AS updated FROM updated
+      `);
+    } catch (error) {
+      throw rowRewriteError("interactions", id, error);
+    }
     rewritten += Number(result.rows[0]?.updated ?? 0);
   }
 
-  const last = rows.rows.at(-1);
+  const last = page.rows.at(-1);
   return {
     rewritten,
-    lastCursor: last ? { createdAt: last.created_at, id: last.id } : null,
-    exhausted: rows.rows.length < batchSize,
+    lastCursor: last ? { createdAt: last.created_at_text, id: last.id } : null,
+    exhausted: page.rows.length < batchSize,
   };
+}
+
+/**
+ * Failures are rethrown with row context and only the ROOT cause message —
+ * never the raw query error, whose message embeds the SQL params (i.e. the
+ * content being encrypted) and must not reach logs.
+ */
+function rowRewriteError(table: string, id: string, error: unknown): Error {
+  let root = error;
+  while (root instanceof Error && root.cause instanceof Error) {
+    root = root.cause;
+  }
+  const message =
+    root instanceof Error ? root.message.slice(0, 300) : String(root);
+  return new Error(
+    `content sweep failed rewriting ${table} row ${id}: ${message}`,
+    { cause: error },
+  );
 }
 
 async function sweepMessagesBatch(
@@ -210,8 +251,10 @@ async function sweepMessagesBatch(
   batchSize: number,
 ): Promise<{ rewritten: number; lastId: string | null; exhausted: boolean }> {
   const cursorClause = cursorId ? sql`WHERE id > ${cursorId}::uuid` : sql``;
-  const rows = await db.execute<{ id: string; content: unknown }>(sql`
-    SELECT id, content
+  // Ids only for the same reason as the interactions sweep: message bodies
+  // run to tens of MB, so payloads are fetched one row at a time.
+  const page = await db.execute<{ id: string }>(sql`
+    SELECT id
     FROM ${schema.messagesTable}
     ${cursorClause}
     ORDER BY id ASC
@@ -219,28 +262,39 @@ async function sweepMessagesBatch(
   `);
 
   let rewritten = 0;
-  for (const row of rows.rows) {
+  for (const { id } of page.rows) {
+    const payload = await db.execute<{ content: unknown }>(sql`
+      SELECT content FROM ${schema.messagesTable} WHERE id = ${id}::uuid
+    `);
+    const row = payload.rows[0];
+    if (!row) continue; // deleted concurrently (e.g. retention sweep)
+
     const next = rewriteFor(row.content, "messages.content");
     if (next === undefined) continue;
 
-    const result = await db.execute<{ updated: number }>(sql`
-      WITH updated AS (
-        UPDATE ${schema.messagesTable}
-        SET content = ${JSON.stringify(next)}::jsonb
-        WHERE id = ${row.id}::uuid
-          AND content = ${JSON.stringify(row.content)}::jsonb
-        RETURNING 1
-      )
-      SELECT COUNT(*)::int AS updated FROM updated
-    `);
+    let result: { rows: Array<{ updated: number }> };
+    try {
+      result = await db.execute<{ updated: number }>(sql`
+        WITH updated AS (
+          UPDATE ${schema.messagesTable}
+          SET content = ${JSON.stringify(next)}::jsonb
+          WHERE id = ${id}::uuid
+            AND content = ${JSON.stringify(row.content)}::jsonb
+          RETURNING 1
+        )
+        SELECT COUNT(*)::int AS updated FROM updated
+      `);
+    } catch (error) {
+      throw rowRewriteError("messages", id, error);
+    }
     rewritten += Number(result.rows[0]?.updated ?? 0);
   }
 
-  const last = rows.rows.at(-1);
+  const last = page.rows.at(-1);
   return {
     rewritten,
     lastId: last ? last.id : null,
-    exhausted: rows.rows.length < batchSize,
+    exhausted: page.rows.length < batchSize,
   };
 }
 

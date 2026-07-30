@@ -55,6 +55,7 @@ import {
   syncAppBacking,
 } from "@/services/apps/app-mcp-backing";
 import { buildAppRenderResult } from "@/services/apps/app-render-result";
+import { mergeStaleBaseDocument } from "@/services/apps/app-version-merge";
 import {
   appRunLink,
   appRunUrl,
@@ -193,7 +194,7 @@ const EditAppSchema = z.strictObject({
     .int()
     .positive()
     .describe(
-      "The version this edit is based on — the one named by read_app or the latest scaffold_app/edit_app result. The edit is rejected when the app's head has moved past it (another conversation edited the app); read the current source with read_app and rebuild the edit on it.",
+      "The version this edit is based on — the one named by read_app or the latest scaffold_app/edit_app result. Always report the version you actually built the edit from. When the head has moved past it (another conversation edited the app), your edit is treated as a delta from that base and merged with the newer changes; if the regions overlap, the call fails with the head's conflicting content to incorporate.",
     ),
   edits: z
     .array(
@@ -918,7 +919,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
-    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to swap in the bytes of a file you already saved without reproducing them here — exactly one of the three. Read the current HTML with read_app first if it is not already in context (see the schema for the str_replace matching and atomicity rules). baseVersion is required: pass the version named by read_app or the latest scaffold_app/edit_app result — a stale one is rejected, so a concurrent edit from another conversation is never silently overwritten. A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
+    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to swap in the bytes of a file you already saved without reproducing them here — exactly one of the three. Read the current HTML with read_app first if it is not already in context (see the schema for the str_replace matching and atomicity rules). baseVersion is required: pass the version your edit is actually built from (named by read_app or the latest scaffold_app/edit_app result) — when the head has moved past it, your edit is merged with the newer changes rather than overwriting them, and overlapping regions fail with the head's content to incorporate. A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
     schema: EditAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -1019,6 +1020,9 @@ const registry = defineArchestraTools([
       let editedHtml: string;
       let editSpans: AppliedEditSpan[] = [];
       let skippedEdits: SkippedEdit[] = [];
+      // Set when the edit was rebased onto a head newer than its base; the
+      // CAS below then pins that head, and the result text says what merged.
+      let mergedOntoHeadVersion: number | null = null;
       try {
         if (resolvedMode.kind === "replacement") {
           editedHtml = resolvedMode.html;
@@ -1052,6 +1056,44 @@ const registry = defineArchestraTools([
             "The edit would leave the app without a document root (no <head> or <html> element), which breaks it. Keep the full HTML document intact; re-read with read_app if you need the current source. Nothing was saved.",
           );
         }
+        // A stale base is rebased, not rejected: the edit is a delta from the
+        // base the caller declared, three-way merged onto the head so changes
+        // published since (possibly by another conversation) land in the
+        // result mechanically. Overlapping regions come back as conflicts
+        // carrying the head's actual content — never a bare "re-read and
+        // retry", which steers a model into resubmitting the same document
+        // over the fresher head.
+        if (baseVersion !== app.latestVersion) {
+          const head = await AppVersionModel.findByAppAndVersion(
+            app.id,
+            app.latestVersion,
+          );
+          if (!head) {
+            return errorResult(
+              `App ${args.appId} has no head version ${app.latestVersion}.`,
+            );
+          }
+          const mergeResult = mergeStaleBaseDocument({
+            baseHtml: base.html,
+            headHtml: head.html,
+            proposedHtml: editedHtml,
+          });
+          if (!mergeResult.ok) {
+            const excerpts = mergeResult.conflicts
+              .slice(0, MERGE_CONFLICT_MAX_EXCERPTS)
+              .map(
+                (conflict, index) =>
+                  `--- conflict ${index + 1}: version ${app.latestVersion} contains ---\n${truncateUtf8(conflict.headContent, MERGE_CONFLICT_EXCERPT_MAX_BYTES).text}\n--- your document has instead ---\n${truncateUtf8(conflict.proposedContent, MERGE_CONFLICT_EXCERPT_MAX_BYTES).text}`,
+              )
+              .join("\n");
+            throw new ApiError(
+              409,
+              `The app has moved to version ${app.latestVersion} since version ${baseVersion}, and your document conflicts with what changed. Nothing was saved. Produce a new document that INCORPORATES the version ${app.latestVersion} content below (do not resubmit the same document, and do not drop these regions — they were added deliberately, possibly by another conversation):\n${fencedBlock(excerpts, "html")}`,
+            );
+          }
+          editedHtml = mergeResult.html;
+          mergedOntoHeadVersion = app.latestVersion;
+        }
         // Permissions ride the version envelope; an HTML-only edit inherits the
         // base version's permissions rather than dropping them.
         const validated = await buildValidatedVersionPayload({
@@ -1070,7 +1112,7 @@ const registry = defineArchestraTools([
         updated = await AppModel.update({
           id: args.appId,
           version,
-          expectedLatestVersion: baseVersion,
+          expectedLatestVersion: mergedOntoHeadVersion ?? baseVersion,
         });
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
@@ -1092,13 +1134,18 @@ const registry = defineArchestraTools([
           : sourceFilename
             ? `a full-document replacement from ${escapeAppNameForModelText(sourceFilename)}`
             : "a full-document replacement";
-      // A fork bumps latestVersion off baseVersion (the CAS guaranteed they were
-      // equal); when they stay equal the edits netted back to the head bytes and
+      // A fork bumps latestVersion off the version the write was pinned to;
+      // when they stay equal the edits netted back to the head bytes and
       // content-hash suppression created no new version — say so plainly.
-      const forked = updated.latestVersion !== baseVersion;
+      const pinnedHead = mergedOntoHeadVersion ?? baseVersion;
+      const forked = updated.latestVersion !== pinnedHead;
       const displayName = escapeAppNameForModelText(updated.name);
+      const mergeNote =
+        mergedOntoHeadVersion === null
+          ? ""
+          : ` Your edit was based on version ${baseVersion}; the document was merged with the changes versions ${baseVersion + 1}–${mergedOntoHeadVersion} made since (they are preserved in the result — call read_app if you need to see the merged source).`;
       const summary = forked
-        ? `Applied ${editLabel} to app "${displayName}" (now at version ${updated.latestVersion}).`
+        ? `Applied ${editLabel} to app "${displayName}" (now at version ${updated.latestVersion}).${mergeNote}`
         : resolvedMode.kind === "edits" && appliedEditCount === 0
           ? `No edits were applied to app "${displayName}" — every edit was skipped; it stays at version ${updated.latestVersion} and no new version was created.`
           : `Applied ${editLabel} to app "${displayName}", but the result is byte-identical to version ${updated.latestVersion}; no new version was created.`;
@@ -1110,14 +1157,18 @@ const registry = defineArchestraTools([
       // buildAppliedEditExcerpts fences the echoed source (an "html" hint here)
       // so edited markup can't render as markdown where this text is echoed.
       const excerptsNote =
-        resolvedMode.kind === "edits" && forked
+        resolvedMode.kind === "edits" &&
+        forked &&
+        mergedOntoHeadVersion === null
           ? `\n${buildAppliedEditExcerpts(editedHtml, editSpans, "html")}`
           : "";
       // A source-backed replacement deliberately does NOT claim the document
       // matches what was sent: only a file id was sent, so the model has not
       // seen these bytes and read_app is its only way to know what landed.
       const replacementNote =
-        !forked || resolvedMode.kind !== "replacement"
+        !forked ||
+        resolvedMode.kind !== "replacement" ||
+        mergedOntoHeadVersion !== null
           ? ""
           : sourceFilename
             ? `\nThe saved document is exactly the bytes ${escapeAppNameForModelText(sourceFilename)} held at save time; call read_app if you need to see them.`
@@ -1790,6 +1841,11 @@ function buildQuestionsSchema(
     required: questions.map((question) => question.id),
   };
 }
+
+// Conflict feedback stays useful only while it is readable — cap how many
+// conflicting regions and how much of each the 409 text carries.
+const MERGE_CONFLICT_MAX_EXCERPTS = 5;
+const MERGE_CONFLICT_EXCERPT_MAX_BYTES = 2_048;
 
 const PREVIEW_OUTPUT_MAX_BYTES = 16_384;
 // Untrusted tool text longer than this is never JSON.parsed for the preview —

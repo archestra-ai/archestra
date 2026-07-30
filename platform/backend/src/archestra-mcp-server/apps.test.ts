@@ -1352,16 +1352,56 @@ describe("read_app / edit_app", () => {
     expect((result.content[0] as any).text).toContain("no new version");
   });
 
-  test("a stale baseVersion is rejected for replacementHtml", async () => {
+  test("a stale rewrite that conflicts with the head is refused with the head's content", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
     await editApp(appId, version, [{ old_str: "v1", new_str: "v2" }]);
+    // Both sides rewrote the same line: no mechanical merge exists, so the
+    // call fails carrying what the head has — never a bare "re-read and
+    // retry", which steers a model into resubmitting the same document.
     const stale = await executeArchestraTool(
       getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
       { appId, baseVersion: version, replacementHtml: "<h1>other</h1>" },
       context,
     );
     expect(stale.isError).toBe(true);
+    expect((stale.content[0] as any).text).toContain("INCORPORATES");
+    expect((stale.content[0] as any).text).toContain("<h1>v2</h1>");
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version + 1);
+  });
+
+  test("a stale rewrite merges with disjoint changes another chat made since", async () => {
+    const baseHtml =
+      '<html>\n<head></head>\n<body>\n<div id="a">alpha</div>\n<div id="b">beta</div>\n</body>\n</html>';
+    const { appId, version } = await scaffoldWithHtml(baseHtml);
+
+    // Another conversation adds a feature (a reset button) below region b.
+    const other = await editApp(appId, version, [
+      {
+        old_str: '<div id="b">beta</div>',
+        new_str: '<div id="b">beta</div>\n<button id="reset">Reset</button>',
+      },
+    ]);
+    expect(other.isError).toBe(false);
+
+    // This conversation, still based on `version`, rewrites region a — its
+    // document knows nothing of the reset button. The edit is a delta from
+    // its declared base, so the merge keeps both changes.
+    const rewrite = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: version,
+        replacementHtml: baseHtml.replace("alpha", "ALPHA"),
+      },
+      context,
+    );
+    expect(rewrite.isError).toBe(false);
+    expect((rewrite.content[0] as any).text).toContain("merged");
+    const head = structured(rewrite).latestVersion as number;
+    expect(head).toBe(version + 2);
+    const merged = await AppVersionModel.findByAppAndVersion(appId, head);
+    expect(merged?.html).toContain('<div id="a">ALPHA</div>');
+    expect(merged?.html).toContain('<button id="reset">Reset</button>');
   });
 
   test("edit_app without baseVersion is rejected without saving", async () => {

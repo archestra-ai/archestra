@@ -245,8 +245,21 @@ describe("ModelSelector coverage matrix", () => {
     setQuery({
       modelsByProvider: {
         perplexity: [
-          model({ dbId: "p1", id: "anthropic/claude-opus-5", isBest: false }),
-          model({ dbId: "p2", id: "sonar-pro", isBest: true }),
+          model({
+            dbId: "p1",
+            id: "anthropic/claude-opus-5",
+            isBest: false,
+            capabilities: { supportsToolCalling: true },
+          }),
+          model({
+            dbId: "p2",
+            id: "sonar-pro",
+            isBest: true,
+            capabilities: {
+              inputModalities: ["text"],
+              supportsToolCalling: false,
+            },
+          }),
         ],
         openai: [model()],
       },
@@ -268,6 +281,9 @@ describe("ModelSelector coverage matrix", () => {
         .getAllByTestId("model-group")
         .some((group) => group.getAttribute("data-heading") === "OpenAI"),
     ).toBe(true);
+    // A recorded supportsToolCalling: false is known data — the row carries
+    // the explicit "no tools" marker, not the unknown-capabilities badge.
+    expect(screen.getByText("no tools")).toBeInTheDocument();
   });
 
   it("keeps the pinned model and shows the fallback name when auto-select is suppressed", () => {

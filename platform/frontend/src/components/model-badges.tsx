@@ -67,6 +67,25 @@ export function UnknownCapabilitiesBadge() {
   );
 }
 
+/**
+ * Label shared by every tool-less-model marker (the composer chip and the
+ * model picker badge), so the two surfaces always say the same thing.
+ */
+export const NO_TOOLS_LABEL = "no tools";
+
+/**
+ * Marks a model recorded as not supporting tool calling (an explicit false,
+ * not merely unknown): agents' tools never fire on it, which the picker
+ * should say up front rather than leaving the row unmarked.
+ */
+export function NoToolsBadge() {
+  return (
+    <InlineTag className="text-muted-foreground bg-muted">
+      {NO_TOOLS_LABEL}
+    </InlineTag>
+  );
+}
+
 export function BestModelBadge() {
   return (
     <InlineTag

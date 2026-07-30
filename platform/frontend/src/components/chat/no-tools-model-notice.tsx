@@ -1,5 +1,6 @@
 import { InfoIcon } from "lucide-react";
 import { ComposerBadge } from "@/components/chat/composer-badge";
+import { NO_TOOLS_LABEL } from "@/components/model-badges";
 import {
   Tooltip,
   TooltipContent,
@@ -20,7 +21,7 @@ export function NoToolsModelBadge() {
       <TooltipTrigger asChild>
         <ComposerBadge className="cursor-default">
           <InfoIcon className="size-3" />
-          no tools
+          {NO_TOOLS_LABEL}
         </ComposerBadge>
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={4} className="max-w-60">

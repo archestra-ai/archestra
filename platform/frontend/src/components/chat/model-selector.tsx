@@ -41,6 +41,7 @@ import {
   ConnectAccountBadge,
   FreeModelBadge,
   LatestModelBadge,
+  NoToolsBadge,
   OldModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
@@ -242,13 +243,17 @@ function ModelCapabilityBadges({
   const hasPdf = capabilities?.inputModalities?.includes("pdf");
   const hasToolCalling = capabilities?.supportsToolCalling;
 
+  // An explicit false, as opposed to null/undefined ("unknown"): the model is
+  // known to take no tools, which gets its own marker below.
+  const lacksToolCalling = capabilities?.supportsToolCalling === false;
+
   const hasAnyCapability =
     hasVision || hasAudio || hasVideo || hasPdf || hasToolCalling;
 
   // "Unknown" strictly means no capability data was recorded. An explicit
   // `supportsToolCalling: false` or a recorded modality list is known data —
-  // a text-only, tool-less model (e.g. the Perplexity sonar family) simply
-  // has no icons to show, which is not the same as not knowing its shape.
+  // a text-only, tool-less model (e.g. the Perplexity sonar family) is marked
+  // as such rather than claiming ignorance.
   const hasCapabilityData =
     capabilities != null &&
     (capabilities.inputModalities != null ||
@@ -256,7 +261,7 @@ function ModelCapabilityBadges({
   if (!hasCapabilityData) {
     return <UnknownCapabilitiesBadge />;
   }
-  if (!hasAnyCapability) {
+  if (!hasAnyCapability && !lacksToolCalling) {
     return null;
   }
 
@@ -273,6 +278,7 @@ function ModelCapabilityBadges({
         {hasPdf && (
           <CapabilityIcon icon={FileText} label="Supports PDF input" />
         )}
+        {lacksToolCalling && <NoToolsBadge />}
         {hasToolCalling && (
           <CapabilityIcon icon={Settings2} label="Supports tool calling" />
         )}

@@ -80,15 +80,12 @@ import {
   ScaffoldAppSchema,
 } from "@/types/app";
 import { isUniqueConstraintError } from "@/utils/db";
+import { AgentLabelOutputSchema, LabelInputSchema } from "./agent-resources";
 import {
   ARCHESTRA_APP_SDK_SUMMARY,
   BUILD_APP_SKILL_POINTER,
   NO_RENDER_PROCEED,
 } from "./app-authoring-guidance";
-import {
-  AgentLabelOutputSchema,
-  LabelInputSchema,
-} from "./agent-resources";
 import { archestraMcpBranding } from "./branding";
 import {
   decodeUtf8Text,
@@ -749,7 +746,9 @@ const registry = defineArchestraTools([
       // semantics as the REST `?labels=` filter.
       const labelFilter = args.labels?.length
         ? args.labels.reduce<Record<string, string[]>>((acc, label) => {
-            (acc[label.key] ??= []).push(label.value);
+            const values = acc[label.key] ?? [];
+            values.push(label.value);
+            acc[label.key] = values;
             return acc;
           }, {})
         : undefined;

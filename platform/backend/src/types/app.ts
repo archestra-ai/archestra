@@ -324,9 +324,7 @@ export const ScaffoldAppSchema = z.strictObject({
   labels: z
     .array(AgentLabelWithDetailsSchema.pick({ key: true, value: true }))
     .optional()
-    .describe(
-      "Optional key-value labels for organization and categorization.",
-    ),
+    .describe("Optional key-value labels for organization and categorization."),
 });
 
 // Input for the `refine_app` MCP tool: the step between scaffold and edit. It

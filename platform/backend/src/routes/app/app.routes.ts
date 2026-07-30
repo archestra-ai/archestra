@@ -248,9 +248,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // An external item's labels are its backing catalog's (edited in the MCP
       // registry), so the one `?labels=` filter spans both halves of the mixed
       // listing instead of silently dropping every external app.
-      const externalLabels = await McpCatalogLabelModel.getLabelsForCatalogItems(
-        [...new Set(external.map((catalogApp) => catalogApp.catalogId))],
-      );
+      const externalLabels =
+        await McpCatalogLabelModel.getLabelsForCatalogItems([
+          ...new Set(external.map((catalogApp) => catalogApp.catalogId)),
+        ]);
       const labelFilter = parseLabelsParam(query.labels);
 
       // Each owned app's relationship to the caller: authored by them (owner),
@@ -1387,9 +1388,7 @@ function matchesLabelFilter(
 ): boolean {
   if (!filter) return true;
   return Object.entries(filter).every(([key, values]) =>
-    labels.some(
-      (label) => label.key === key && values.includes(label.value),
-    ),
+    labels.some((label) => label.key === key && values.includes(label.value)),
   );
 }
 

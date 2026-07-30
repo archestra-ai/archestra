@@ -4,6 +4,7 @@ import {
 } from "@archestra/shared";
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { AgentModel } from "@/models";
 import type { Agent } from "@/types";
 import type { AgentExportPayload } from "@/types/agent-export";
@@ -210,6 +211,8 @@ async function resolveKnowledgeBaseReferences(
     .where(
       and(
         inArray(schema.knowledgeBasesTable.id, knowledgeBaseIds),
+        // An export snapshot shouldn't carry KBs the user has deleted.
+        notDeleted(schema.knowledgeBasesTable),
         ...(organizationId
           ? [eq(schema.knowledgeBasesTable.organizationId, organizationId)]
           : []),
@@ -238,6 +241,8 @@ async function resolveConnectorReferences(
     .where(
       and(
         inArray(schema.knowledgeBaseConnectorsTable.id, connectorIds),
+        // An export snapshot shouldn't carry connectors the user has deleted.
+        notDeleted(schema.knowledgeBaseConnectorsTable),
         ...(organizationId
           ? [
               eq(

@@ -21,8 +21,9 @@ import type { KnowledgeSourceVisibility } from "@/types/knowledge-base";
 import environmentsTable from "./environment";
 import knowledgeBasesTable from "./knowledge-base";
 import secretTable from "./secret";
+import { softDeletablePgTable } from "./soft-deletable-table";
 
-const knowledgeBaseConnectorsTable = pgTable(
+const knowledgeBaseConnectorsTable = softDeletablePgTable(
   "knowledge_base_connectors",
   {
     id: uuid("id").primaryKey().defaultRandom(),

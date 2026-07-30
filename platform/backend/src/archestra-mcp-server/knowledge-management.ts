@@ -30,6 +30,10 @@ import {
   queryService,
 } from "@/knowledge-base";
 import { toKnowledgeBaseUserMessage } from "@/knowledge-base/errors";
+import {
+  deleteConnector,
+  deleteKnowledgeBase,
+} from "@/knowledge-base/knowledge-source-deletion";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -813,7 +817,9 @@ async function handleDeleteKnowledgeBase(params: {
     if (!existing || existing.organizationId !== context.organizationId) {
       return knowledgeBaseNotFound(args.id);
     }
-    await KnowledgeBaseModel.delete(args.id);
+    // Shared service so this MCP path runs the same side-effects (cache
+    // invalidation) as the REST route — not a bare model soft-delete.
+    await deleteKnowledgeBase(args.id);
     return successResult(`Knowledge base deleted: ${args.id}`);
   } catch (error) {
     return catchError(error, "deleting knowledge base");
@@ -1159,7 +1165,10 @@ async function handleDeleteKnowledgeConnector(params: {
         );
       }
     }
-    await KnowledgeBaseConnectorModel.delete(args.id);
+    // Shared service so this MCP path cancels queued syncs + invalidates the
+    // cache identically to the REST route (a bare model soft-delete would skip
+    // both and orphan the queued syncs). The secret is preserved here too.
+    await deleteConnector(args.id);
     return successResult(`Knowledge connector deleted: ${args.id}`);
   } catch (error) {
     return catchError(error, "deleting knowledge connector");

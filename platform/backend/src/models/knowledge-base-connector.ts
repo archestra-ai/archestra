@@ -1,12 +1,15 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { softDelete } from "@/database/soft-delete";
 import { connectorInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type {
   InsertKnowledgeBaseConnector,
   KnowledgeBaseConnector,
   UpdateKnowledgeBaseConnector,
 } from "@/types";
+import { ApiError } from "@/types";
 import type {
   ConnectorSyncStatus,
   ConnectorType,
@@ -33,6 +36,7 @@ class KnowledgeBaseConnectorModel {
       .from(schema.knowledgeBaseConnectorsTable)
       .where(
         and(
+          notDeleted(schema.knowledgeBaseConnectorsTable),
           eq(
             schema.knowledgeBaseConnectorsTable.organizationId,
             params.organizationId,
@@ -65,7 +69,13 @@ class KnowledgeBaseConnectorModel {
       .select({ count: count() })
       .from(schema.knowledgeBaseConnectorsTable)
       .where(
-        eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
+        and(
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            organizationId,
+          ),
+        ),
       );
 
     return result?.count ?? 0;
@@ -96,6 +106,10 @@ class KnowledgeBaseConnectorModel {
     const searchPattern = search ? `%${escapeLikePattern(search)}%` : null;
 
     const filters = [
+      // Added once to the shared array: covers both the data query and the
+      // count() total below, so a page can never show N rows with a total of
+      // N + soft-deleted.
+      notDeleted(schema.knowledgeBaseConnectorsTable),
       eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
       buildVisibilityFilter({
         canReadAll,
@@ -193,6 +207,7 @@ class KnowledgeBaseConnectorModel {
       )
       .where(
         and(
+          notDeleted(schema.knowledgeBaseConnectorsTable),
           eq(
             schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
             knowledgeBaseId,
@@ -261,6 +276,7 @@ class KnowledgeBaseConnectorModel {
       )
       .where(
         and(
+          notDeleted(schema.knowledgeBaseConnectorsTable),
           inArray(
             schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
             knowledgeBaseIds,
@@ -278,7 +294,12 @@ class KnowledgeBaseConnectorModel {
     const [result] = await db
       .select()
       .from(schema.knowledgeBaseConnectorsTable)
-      .where(eq(schema.knowledgeBaseConnectorsTable.id, id));
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.id, id),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      );
 
     return result ?? null;
   }
@@ -289,7 +310,12 @@ class KnowledgeBaseConnectorModel {
     return await db
       .select()
       .from(schema.knowledgeBaseConnectorsTable)
-      .where(inArray(schema.knowledgeBaseConnectorsTable.id, ids));
+      .where(
+        and(
+          inArray(schema.knowledgeBaseConnectorsTable.id, ids),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      );
   }
 
   static async create(
@@ -420,7 +446,12 @@ class KnowledgeBaseConnectorModel {
     return await db
       .select()
       .from(schema.knowledgeBaseConnectorsTable)
-      .where(eq(schema.knowledgeBaseConnectorsTable.enabled, true));
+      .where(
+        and(
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+          eq(schema.knowledgeBaseConnectorsTable.enabled, true),
+        ),
+      );
   }
 
   // SPDX-SnippetBegin
@@ -445,6 +476,7 @@ class KnowledgeBaseConnectorModel {
       .from(t)
       .where(
         and(
+          notDeleted(t),
           eq(t.enabled, true),
           eq(t.visibility, "auto-sync-permissions"),
           inArray(t.connectorType, connectorTypes),
@@ -453,19 +485,56 @@ class KnowledgeBaseConnectorModel {
   }
   // SPDX-SnippetEnd
 
+  /**
+   * Soft-delete: stamps `deleted_at`. Returns false when no active row matched
+   * (already deleted / unknown id) — the delete routes surface that as a 404.
+   * Side-effects (queued-sync cancellation, secret revocation, cache
+   * invalidation) are NOT here; they live in the knowledge-source-deletion
+   * service so every write surface (REST + MCP) runs them identically.
+   */
   static async delete(id: string): Promise<boolean> {
-    const rows = await db
-      .delete(schema.knowledgeBaseConnectorsTable)
-      .where(eq(schema.knowledgeBaseConnectorsTable.id, id))
-      .returning({ id: schema.knowledgeBaseConnectorsTable.id });
+    const count = await softDelete(
+      db,
+      schema.knowledgeBaseConnectorsTable,
+      eq(schema.knowledgeBaseConnectorsTable.id, id),
+    );
 
-    return rows.length > 0;
+    return count > 0;
   }
 
   static async assignToKnowledgeBase(
     connectorId: string,
     knowledgeBaseId: string,
   ): Promise<void> {
+    // Guard: never attach to a soft-deleted parent. A hard delete + FK cascade
+    // used to make this impossible; under soft-delete the rows survive, so the
+    // DB would otherwise happily link a connector to a gone KB (or a gone
+    // connector to a KB). Both sides must be active.
+    const [connector] = await db
+      .select({ id: schema.knowledgeBaseConnectorsTable.id })
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.id, connectorId),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      );
+    if (!connector) {
+      throw new ApiError(404, "Connector not found");
+    }
+    const [kb] = await db
+      .select({ id: schema.knowledgeBasesTable.id })
+      .from(schema.knowledgeBasesTable)
+      .where(
+        and(
+          eq(schema.knowledgeBasesTable.id, knowledgeBaseId),
+          notDeleted(schema.knowledgeBasesTable),
+        ),
+      );
+    if (!kb) {
+      throw new ApiError(404, "Knowledge base not found");
+    }
+
     await db
       .insert(schema.knowledgeBaseConnectorAssignmentsTable)
       .values({ connectorId, knowledgeBaseId })
@@ -498,16 +567,28 @@ class KnowledgeBaseConnectorModel {
   }
 
   static async getKnowledgeBaseIds(connectorId: string): Promise<string[]> {
+    // Join the KB parent so soft-deleted KBs drop out of "which KBs does this
+    // connector feed" — symmetric to getConnectorIds filtering deleted connectors.
     const results = await db
       .select({
         knowledgeBaseId:
           schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
       })
       .from(schema.knowledgeBaseConnectorAssignmentsTable)
-      .where(
+      .innerJoin(
+        schema.knowledgeBasesTable,
         eq(
-          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
-          connectorId,
+          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+          schema.knowledgeBasesTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(
+            schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+            connectorId,
+          ),
+          notDeleted(schema.knowledgeBasesTable),
         ),
       );
 
@@ -526,15 +607,28 @@ class KnowledgeBaseConnectorModel {
   }
 
   static async getConnectorIds(knowledgeBaseId: string): Promise<string[]> {
+    // Joins the connector parent so a soft-deleted-but-still-assigned connector
+    // is dropped from the returned ids — otherwise non-vectorSearch consumers
+    // of these ids (retrieval, hot-path tool visibility) would keep serving it.
     const results = await db
       .select({
         connectorId: schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
       })
       .from(schema.knowledgeBaseConnectorAssignmentsTable)
-      .where(
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
         eq(
-          schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-          knowledgeBaseId,
+          schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
+          schema.knowledgeBaseConnectorsTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(
+            schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
+            knowledgeBaseId,
+          ),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
         ),
       );
 
@@ -556,6 +650,8 @@ class KnowledgeBaseConnectorModel {
             schema.knowledgeBaseConnectorsTable.organizationId,
             organizationId,
           ),
+          // A soft-deleted connector frees its (name, type) for reuse.
+          notDeleted(schema.knowledgeBaseConnectorsTable),
         ),
       );
 
@@ -571,13 +667,14 @@ class KnowledgeBaseConnectorModel {
       .from(schema.knowledgeBaseConnectorsTable)
       .where(
         and(
+          notDeleted(schema.knowledgeBaseConnectorsTable),
           eq(
             schema.knowledgeBaseConnectorsTable.organizationId,
             params.organizationId,
           ),
           // only connectors actively authenticating via this App config count;
           // a stale githubAppConfigId left in the JSON after switching to PAT
-          // must not block deletion
+          // must not block deletion. A soft-deleted connector no longer counts.
           sql`${schema.knowledgeBaseConnectorsTable.config}->>'authMethod' = 'github_app'`,
           sql`${schema.knowledgeBaseConnectorsTable.config}->>'githubAppConfigId' = ${params.githubAppConfigId}`,
         ),
@@ -586,6 +683,9 @@ class KnowledgeBaseConnectorModel {
     return row?.value ?? 0;
   }
 
+  // NOTE: findByIdForAudit is deliberately NOT notDeleted-filtered — the delete
+  // audit reads the row *after* softDelete stamps it, so it must see
+  // soft-deleted rows (returns the raw Drizzle row, not the omit()'d schema).
   static async findByIdForAudit(
     id: string,
     organizationId: string,

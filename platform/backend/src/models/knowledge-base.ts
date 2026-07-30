@@ -1,5 +1,7 @@
 import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { softDelete } from "@/database/soft-delete";
 import type {
   InsertKnowledgeBase,
   KnowledgeBase,
@@ -16,6 +18,7 @@ class KnowledgeBaseModel {
   }): Promise<KnowledgeBase[]> {
     const normalizedSearch = params.search?.trim();
     const filters = [
+      notDeleted(schema.knowledgeBasesTable),
       eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
       ...(normalizedSearch
         ? [
@@ -51,7 +54,12 @@ class KnowledgeBaseModel {
     const [result] = await db
       .select()
       .from(schema.knowledgeBasesTable)
-      .where(eq(schema.knowledgeBasesTable.id, id));
+      .where(
+        and(
+          eq(schema.knowledgeBasesTable.id, id),
+          notDeleted(schema.knowledgeBasesTable),
+        ),
+      );
 
     return result ?? null;
   }
@@ -61,7 +69,12 @@ class KnowledgeBaseModel {
     return await db
       .select()
       .from(schema.knowledgeBasesTable)
-      .where(inArray(schema.knowledgeBasesTable.id, ids));
+      .where(
+        and(
+          inArray(schema.knowledgeBasesTable.id, ids),
+          notDeleted(schema.knowledgeBasesTable),
+        ),
+      );
   }
 
   static async create(data: InsertKnowledgeBase): Promise<KnowledgeBase> {
@@ -86,13 +99,22 @@ class KnowledgeBaseModel {
     return result ?? null;
   }
 
+  /**
+   * Soft-delete: stamps `deleted_at` so the row survives for a follow-up
+   * restore/purge but drops out of every `notDeleted()`-filtered read. Returns
+   * false when no active row matched (already deleted / unknown id), which the
+   * delete routes surface as a 404. Cross-model side-effects (queued-sync
+   * cancellation, cache invalidation) live in the knowledge-source-deletion
+   * service, not here.
+   */
   static async delete(id: string): Promise<boolean> {
-    const rows = await db
-      .delete(schema.knowledgeBasesTable)
-      .where(eq(schema.knowledgeBasesTable.id, id))
-      .returning({ id: schema.knowledgeBasesTable.id });
+    const count = await softDelete(
+      db,
+      schema.knowledgeBasesTable,
+      eq(schema.knowledgeBasesTable.id, id),
+    );
 
-    return rows.length > 0;
+    return count > 0;
   }
 
   static async countByOrganization(params: {
@@ -101,6 +123,7 @@ class KnowledgeBaseModel {
   }): Promise<number> {
     const normalizedSearch = params.search?.trim();
     const filters = [
+      notDeleted(schema.knowledgeBasesTable),
       eq(schema.knowledgeBasesTable.organizationId, params.organizationId),
       ...(normalizedSearch
         ? [
@@ -133,12 +156,16 @@ class KnowledgeBaseModel {
         and(
           eq(schema.knowledgeBasesTable.name, name),
           eq(schema.knowledgeBasesTable.organizationId, organizationId),
+          // A soft-deleted KB frees its name for reuse.
+          notDeleted(schema.knowledgeBasesTable),
         ),
       );
 
     return result ?? null;
   }
 
+  // NOTE: findByIdForAudit is deliberately NOT notDeleted-filtered — the delete
+  // audit reads the row *after* it is stamped, so it must see soft-deleted rows.
   static async findByIdForAudit(
     id: string,
     organizationId: string,

@@ -46,6 +46,10 @@ import {
 import { resolveConnectorCredentials } from "@/knowledge-base/connector-credentials";
 import { getConnector } from "@/knowledge-base/connectors/registry";
 import { invalidateGroupTokenCache } from "@/knowledge-base/group-token-cache";
+import {
+  deleteConnector,
+  deleteKnowledgeBase,
+} from "@/knowledge-base/knowledge-source-deletion";
 import { nextPermissionSyncDueAt } from "@/knowledge-base/permission-sync-schedule";
 import logger from "@/logging";
 import {
@@ -325,7 +329,11 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      const success = await KnowledgeBaseModel.delete(id);
+      // Soft-delete via the shared service (stamps deleted_at + invalidates the
+      // knowledge-source cache). A re-delete 404s at findKnowledgeBaseOrThrow
+      // above, since findById is now notDeleted-filtered — matching the prior
+      // hard-delete's non-idempotent behavior.
+      const success = await deleteKnowledgeBase(id);
       if (!success) {
         throw new ApiError(404, "Knowledge base not found");
       }
@@ -1148,30 +1156,16 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       // SPDX-SnippetEnd
 
-      // Drop the connector's queued work before the cascade removes its runs.
-      // The tasks table has no FK to connectors, so these would otherwise be
-      // orphaned — and orphaned batch_embedding tasks keep occupying content-lane
-      // worker slots, head-of-line-blocking the surviving connectors' syncs. An
-      // in-flight run stops cooperatively on its own once its (cascade-deleted)
-      // run row disappears and its fenced writes no-op.
-      await TaskModel.deleteQueuedForConnector(id);
-
-      // Delete the secret
-      if (connector.secretId) {
-        try {
-          await secretManager().deleteSecret(connector.secretId);
-        } catch (error) {
-          logger.warn(
-            {
-              secretId: connector.secretId,
-              error: error instanceof Error ? error.message : String(error),
-            },
-            "[Connector] Failed to delete connector secret",
-          );
-        }
-      }
-
-      const success = await KnowledgeBaseConnectorModel.delete(id);
+      // Soft-delete via the shared service: cancels queued syncs (they no longer
+      // self-heal via FK cascade under soft-delete) then stamps deleted_at and
+      // invalidates the knowledge-source cache. A re-delete 404s at
+      // findConnectorOrThrow above.
+      //
+      // The connector's SECRET is intentionally NOT revoked here — soft-delete
+      // preserves it so a future restore is credential-preserving. Secret
+      // revocation is deferred to the purge / hard-delete follow-up, which will
+      // run the real child cascade (documents, runs, ACLs, …) alongside it.
+      const success = await deleteConnector(id);
       if (!success) {
         throw new ApiError(404, "Connector not found");
       }

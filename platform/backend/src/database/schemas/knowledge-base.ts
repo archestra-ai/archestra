@@ -1,6 +1,7 @@
-import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { softDeletablePgTable } from "./soft-deletable-table";
 
-const knowledgeBasesTable = pgTable(
+const knowledgeBasesTable = softDeletablePgTable(
   "knowledge_bases",
   {
     id: uuid("id").primaryKey().defaultRandom(),

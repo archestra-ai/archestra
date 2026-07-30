@@ -42102,7 +42102,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by client app (queries external_agent_id; e.g. claude)
          */
-        client?: 'claude' | 'codex';
+        client?: 'claude' | 'codex' | 'copilot-cli';
         /**
          * Filter by session ID
          */
@@ -79353,7 +79353,7 @@ export type GetToolsWithAssignmentsData = {
         /**
          * Only tools observed from this client app family (e.g. claude, codex)
          */
-        observedByClient?: 'claude' | 'codex';
+        observedByClient?: 'claude' | 'codex' | 'copilot-cli';
         /**
          * Hide built-in Archestra tools
          */
@@ -79574,7 +79574,7 @@ export type GetToolObserversResponses = {
             name: string;
             email: string;
         }>;
-        clients: Array<'claude' | 'codex'>;
+        clients: Array<'claude' | 'codex' | 'copilot-cli'>;
     };
 };
 

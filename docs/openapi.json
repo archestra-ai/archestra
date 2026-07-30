@@ -264086,6 +264086,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -264152,7 +264158,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -265063,6 +265071,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -265129,7 +265143,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -265825,6 +265841,12 @@
                   "appsHackathonRecorderEnabled": {
                     "type": "boolean"
                   },
+                  "newAppsDisabledByDefault": {
+                    "type": "boolean"
+                  },
+                  "newAppsLockedByDefault": {
+                    "type": "boolean"
+                  },
                   "allowToolAutoAssignment": {
                     "type": "boolean"
                   }
@@ -266327,6 +266349,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -266393,7 +266421,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -267160,6 +267190,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -267226,7 +267262,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -267986,6 +268024,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -268052,7 +268096,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -268812,6 +268858,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -268878,7 +268930,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -269653,6 +269707,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -269719,7 +269779,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -270573,6 +270635,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -270639,7 +270707,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -271472,6 +271542,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -271538,7 +271614,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -272308,6 +272386,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -272374,7 +272458,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -273152,6 +273238,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -273218,7 +273310,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -273963,6 +274057,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -274029,7 +274129,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -275379,6 +275481,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -275445,7 +275553,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }

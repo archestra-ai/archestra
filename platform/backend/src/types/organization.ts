@@ -425,6 +425,8 @@ export const UpdateSecuritySettingsSchema = z.object({
     TrustedData.TrustedDataPolicyActionSchema.optional(),
   allowChatFileUploads: z.boolean().optional(),
   appsHackathonRecorderEnabled: z.boolean().optional(),
+  newAppsDisabledByDefault: z.boolean().optional(),
+  newAppsLockedByDefault: z.boolean().optional(),
   /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */
   allowToolAutoAssignment: z.boolean().optional(),
 });

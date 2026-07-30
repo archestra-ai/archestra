@@ -17,12 +17,17 @@ export function mergeStaleBaseDocument(params: {
   proposedHtml: string;
 }):
   | { ok: true; html: string }
-  | { ok: false; conflicts: { headContent: string; proposedContent: string }[] } {
+  | {
+      ok: false;
+      conflicts: { headContent: string; proposedContent: string }[];
+    } {
   const base = params.baseHtml.split("\n");
   const head = params.headHtml.split("\n");
   const proposed = params.proposedHtml.split("\n");
 
-  const regions = diff3Merge(proposed, base, head, { excludeFalseConflicts: true });
+  const regions = diff3Merge(proposed, base, head, {
+    excludeFalseConflicts: true,
+  });
   const merged: string[] = [];
   const conflicts: { headContent: string; proposedContent: string }[] = [];
   for (const region of regions) {

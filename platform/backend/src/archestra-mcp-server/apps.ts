@@ -56,7 +56,6 @@ import {
   syncAppBacking,
 } from "@/services/apps/app-mcp-backing";
 import { buildAppRenderResult } from "@/services/apps/app-render-result";
-import { mergeStaleBaseDocument } from "@/services/apps/app-version-merge";
 import {
   appRunLink,
   appRunUrl,
@@ -68,6 +67,8 @@ import {
   htmlHasDocumentRoot,
   validateAppHtmlStatic,
 } from "@/services/apps/app-ui-policy";
+import { mergeStaleBaseDocument } from "@/services/apps/app-version-merge";
+import { resolveNewAppLifecycleDefaults } from "@/services/apps/new-app-defaults";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { ApiError, appOwner, type CommonToolResult } from "@/types";
@@ -525,6 +526,8 @@ const registry = defineArchestraTools([
       // selection to the REST/UI path, so no teams here; the environment is the
       // authoring agent's (resolved above).
       const appName = args.name;
+      const lifecycleDefaults =
+        await resolveNewAppLifecycleDefaults(organizationId);
       let app: App | null;
       // App names are unique per author (apps_org_author_name_uidx); a duplicate
       // fails this insert before any backing is created.
@@ -541,6 +544,8 @@ const registry = defineArchestraTools([
             }),
             description: args.description ?? null,
             templateId: DEFAULT_APP_TEMPLATE_ID,
+            enabled: lifecycleDefaults.enabled,
+            locked: lifecycleDefaults.locked,
           },
           payload,
         });
@@ -617,6 +622,23 @@ const registry = defineArchestraTools([
       const seededHtmlNote = `\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${fencedBlock(payload.html, "html")}`;
       const warningsNote = formatWarningsNote(warnings);
       const toolsParts = toolsResultParts(resolvedTools);
+      // The org's new-app defaults can make the app un-editable from chat the
+      // moment it exists (disabled = invisible to chat tools; locked = every
+      // modification refused). Say so in the result, or the model walks into
+      // refusals it has no way to explain to the user.
+      const lifecycleNotes: string[] = [];
+      if (!lifecycleDefaults.enabled) {
+        lifecycleNotes.push(
+          "This organization creates new apps disabled: from now on this app is invisible to chat tools (do not try to edit or render it). Tell the user to enable it in App settings on the Apps page to keep building it.",
+        );
+      }
+      if (lifecycleDefaults.locked) {
+        lifecycleNotes.push(
+          "This organization creates new apps locked: every modification (edit_app, set_app_tools, delete_app) will be refused until the app is unlocked. Do not attempt edits and do not unlock on your own initiative — if the user wants to build it up now, they can ask you to unlock it, or unlock it in App settings.",
+        );
+      }
+      const lifecycleNote =
+        lifecycleNotes.length > 0 ? ` ${lifecycleNotes.join(" ")}` : "";
       return structuredSuccessResult(
         {
           id: app.id,
@@ -628,7 +650,7 @@ const registry = defineArchestraTools([
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+        `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)}${lifecycleNote} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
       );
     },
   }),

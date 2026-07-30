@@ -49,6 +49,7 @@ import {
   syncAppBacking,
 } from "@/services/apps/app-mcp-backing";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
+import { resolveNewAppLifecycleDefaults } from "@/services/apps/new-app-defaults";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
   ApiError,
@@ -496,6 +497,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           name: body.name,
           organizationId,
         }));
+      const lifecycleDefaults =
+        await resolveNewAppLifecycleDefaults(organizationId);
       // Names are unique per author and slugs per org; a duplicate of either
       // fails this insert before any backing is created.
       const created = await AppModel.create({
@@ -506,6 +509,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           slug,
           description: body.description ?? null,
           templateId: seededFromTemplate ? DEFAULT_APP_TEMPLATE_ID : null,
+          enabled: lifecycleDefaults.enabled,
+          locked: lifecycleDefaults.locked,
         },
         payload,
       }).catch((error) => {

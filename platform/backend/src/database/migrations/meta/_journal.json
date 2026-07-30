@@ -2689,6 +2689,13 @@
       "when": 1785450487138,
       "tag": "0383_app_lock",
       "breakpoints": true
+    },
+    {
+      "idx": 384,
+      "version": "7",
+      "when": 1785450512327,
+      "tag": "0384_new_app_defaults",
+      "breakpoints": true
     }
   ]
 }

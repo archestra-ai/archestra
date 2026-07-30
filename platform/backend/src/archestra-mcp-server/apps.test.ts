@@ -42,6 +42,7 @@ import {
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  OrganizationModel,
   ToolModel,
 } from "@/models";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
@@ -1861,6 +1862,90 @@ describe("app lock (set_app_lock)", () => {
     );
     expect(edit.isError).toBe(false);
     expect(structured(edit).latestVersion).toBe(2);
+  });
+});
+
+describe("org new-app defaults (disabled/locked by default)", () => {
+  let context: ArchestraContext;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({ name: "Defaults Agent" });
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+  });
+
+  test("scaffold honors locked-by-default: the app is born locked and the result says so", async () => {
+    await OrganizationModel.patch(organizationId, {
+      newAppsLockedByDefault: true,
+    });
+
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Born Locked" },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+    expect((await AppModel.findById(appId))?.locked).toBe(true);
+    // The model is warned in the result, so it reports the lock instead of
+    // walking into a refusal it cannot explain.
+    expect((created.content[0] as any).text).toContain("locked");
+
+    const edit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 1, replacementHtml: "<h1>nope</h1>" },
+      context,
+    );
+    expect(edit.isError).toBe(true);
+    expect((edit.content[0] as any).text).toContain("locked");
+  });
+
+  test("scaffold honors disabled-by-default: the app is born disabled and invisible to chat", async () => {
+    await OrganizationModel.patch(organizationId, {
+      newAppsDisabledByDefault: true,
+    });
+
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Born Disabled" },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+    expect((await AppModel.findById(appId))?.enabled).toBe(false);
+    expect((created.content[0] as any).text).toContain("disabled");
+
+    // The T-980 contract applies from birth: the disabled app reads as
+    // nonexistent to chat tools.
+    const read = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
+      { appId },
+      context,
+    );
+    expect(read.isError).toBe(true);
+  });
+
+  test("with both settings off, scaffold creates a live, unlocked app with no lifecycle note", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Born Free" },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+    const row = await AppModel.findById(appId);
+    expect(row?.enabled).toBe(true);
+    expect(row?.locked).toBe(false);
+    expect((created.content[0] as any).text).not.toContain(
+      "This organization creates new apps",
+    );
   });
 });
 

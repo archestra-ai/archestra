@@ -68303,6 +68303,8 @@ export type GetOrganizationResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -68602,6 +68604,8 @@ export type UpdateAppearanceSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -68613,6 +68617,8 @@ export type UpdateSecuritySettingsData = {
         defaultDiscoveredToolResultPolicy?: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads?: boolean;
         appsHackathonRecorderEnabled?: boolean;
+        newAppsDisabledByDefault?: boolean;
+        newAppsLockedByDefault?: boolean;
         allowToolAutoAssignment?: boolean;
     };
     path?: never;
@@ -68775,6 +68781,8 @@ export type UpdateSecuritySettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -68945,6 +68953,8 @@ export type UpdateLlmSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -69114,6 +69124,8 @@ export type UpdateMcpSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -69283,6 +69295,8 @@ export type UpdateSkillsSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -69454,6 +69468,8 @@ export type UpdateAgentSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -69636,6 +69652,8 @@ export type UpdateConnectionSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -69816,6 +69834,8 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -69987,6 +70007,8 @@ export type UpdateAuthSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -70159,6 +70181,8 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -70326,6 +70350,8 @@ export type DropEmbeddingConfigResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -70669,6 +70695,8 @@ export type CompleteOnboardingResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 

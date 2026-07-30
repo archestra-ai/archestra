@@ -162,6 +162,10 @@ describe("POST /api/apps/external/:mcpServerId/open-in-chat", () => {
       organizationId,
     });
     expect(conversation?.title).toBe("Atlassian");
+    // Prompt mode seeds no message, so the migration's backfill cannot reach an
+    // old one — creation setting the flag is the only thing that gets these
+    // chats retitled.
+    expect(conversation?.titleIsPlaceholder).toBe(true);
   });
 
   test("titles the conversation '<server> / <tool>' when the server has several UI tools", async ({

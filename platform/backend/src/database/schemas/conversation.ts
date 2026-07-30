@@ -76,6 +76,20 @@ const conversationsTable = pgTable(
       .$type<ConversationOrigin>()
       .notNull()
       .default("user"),
+    /**
+     * The stored `title` is a seeded stand-in rather than a real title: an
+     * `app_open` chat is created titled with the app's name so the header and
+     * sidebar have something to show before the first exchange (a null title
+     * would read "New Chat Session" — an app draft has no user message for
+     * `getConversationDisplayTitle` to fall back to). Title generation treats a
+     * placeholder as untitled and replaces it. Cleared by any explicit title
+     * write — generated or hand-typed — so generation fires once and can never
+     * overwrite a name the user chose. Never set for `user` or
+     * `schedule_trigger` origins.
+     */
+    titleIsPlaceholder: boolean("title_is_placeholder")
+      .notNull()
+      .default(false),
     pinnedAt: timestamp("pinned_at", { mode: "date" }),
     lastMessageAt: timestamp("last_message_at", { mode: "date" })
       .notNull()

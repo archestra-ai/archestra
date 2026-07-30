@@ -2859,8 +2859,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Skip if title is already set (unless regenerating)
-      if (conversation.title && !regenerate) {
+      // Skip if title is already set (unless regenerating). A placeholder title
+      // — an app's name, seeded so an app chat isn't blank before its first
+      // exchange — doesn't count as set. The write below clears the flag, so
+      // this fires once; a manual rename clears it too, so a name the user
+      // typed is never overwritten.
+      if (
+        conversation.title &&
+        !conversation.titleIsPlaceholder &&
+        !regenerate
+      ) {
         logger.info(
           { conversationId: id, existingTitle: conversation.title },
           "Skipping title generation - title already set",
@@ -3305,8 +3313,8 @@ export interface ExtractedMessages {
 const MAX_SKILL_NAME_LENGTH = 80;
 
 /**
- * Extracts the first user message and first assistant message text from conversation messages.
- * Used for generating conversation titles.
+ * Extracts the first exchange — the first user message and the first assistant
+ * message that follows it — from conversation messages, for title generation.
  */
 export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
   let firstUserMessage = "";
@@ -3337,7 +3345,16 @@ export function extractFirstMessages(messages: unknown[]): ExtractedMessages {
         }
       }
     }
-    if (!firstAssistantMessage && msgContent.role === "assistant") {
+    // Only a reply, i.e. an assistant message after the first user one. A chat
+    // opened from an app is seeded before any user message with a render tool
+    // call and a canned greeting ("Here's <App>. Want to change the app?");
+    // that boilerplate is not a reply and must not become the title prompt's
+    // assistant half.
+    if (
+      !firstAssistantMessage &&
+      sawFirstUser &&
+      msgContent.role === "assistant"
+    ) {
       // Extract text from parts (skip tool calls)
       for (const part of msgContent.parts || []) {
         if (part.type === "text" && part.text) {

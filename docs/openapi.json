@@ -93880,6 +93880,9 @@
                           "app_open"
                         ]
                       },
+                      "titleIsPlaceholder": {
+                        "type": "boolean"
+                      },
                       "pinnedAt": {
                         "nullable": true,
                         "type": "string",
@@ -94232,6 +94235,7 @@
                       "artifact",
                       "projectId",
                       "origin",
+                      "titleIsPlaceholder",
                       "pinnedAt",
                       "lastMessageAt",
                       "createdAt",
@@ -94661,6 +94665,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -95013,6 +95020,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -95413,6 +95421,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -95765,6 +95776,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -96206,6 +96218,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -96558,6 +96573,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -98735,6 +98751,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -99087,6 +99106,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -100130,6 +100150,9 @@
                             "app_open"
                           ]
                         },
+                        "titleIsPlaceholder": {
+                          "type": "boolean"
+                        },
                         "pinnedAt": {
                           "nullable": true,
                           "type": "string",
@@ -100482,6 +100505,7 @@
                         "artifact",
                         "projectId",
                         "origin",
+                        "titleIsPlaceholder",
                         "pinnedAt",
                         "lastMessageAt",
                         "createdAt",
@@ -101838,6 +101862,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -102193,6 +102220,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -102614,6 +102642,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -102966,6 +102997,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -103382,6 +103414,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -103734,6 +103769,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -104160,6 +104196,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -104512,6 +104551,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",
@@ -281675,6 +281715,9 @@
                         "app_open"
                       ]
                     },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
                     "pinnedAt": {
                       "nullable": true,
                       "type": "string",
@@ -282027,6 +282070,7 @@
                     "artifact",
                     "projectId",
                     "origin",
+                    "titleIsPlaceholder",
                     "pinnedAt",
                     "lastMessageAt",
                     "createdAt",

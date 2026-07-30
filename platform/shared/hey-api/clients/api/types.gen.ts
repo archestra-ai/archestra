@@ -26377,6 +26377,7 @@ export type GetChatConversationsResponses = {
         artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -26540,6 +26541,7 @@ export type CreateChatConversationResponses = {
         artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -26784,6 +26786,7 @@ export type GetChatConversationResponses = {
         artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -26950,6 +26953,7 @@ export type UpdateChatConversationResponses = {
         artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -27549,6 +27553,7 @@ export type ForkChatConversationResponses = {
         artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -27897,6 +27902,7 @@ export type CompactChatConversationResponses = {
             artifact: string | null;
             projectId: string | null;
             origin: 'user' | 'schedule_trigger' | 'app_open';
+            titleIsPlaceholder: boolean;
             pinnedAt: string | null;
             lastMessageAt: string;
             createdAt: string;
@@ -28330,6 +28336,7 @@ export type GetSharedConversationResponses = {
         artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -28492,6 +28499,7 @@ export type ForkSharedConversationResponses = {
         artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -28656,6 +28664,7 @@ export type GenerateChatConversationTitleResponses = {
         artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -28819,6 +28828,7 @@ export type UpdateChatMessageResponses = {
         artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -72649,6 +72659,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         artifact: string | null;
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;

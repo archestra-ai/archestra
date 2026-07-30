@@ -84,6 +84,74 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     return conversation as { id: string };
   }
 
+  /**
+   * Mirrors an app-opened chat: titled with the app's name up front and seeded
+   * with the render tool call plus the canned greeting before any user message,
+   * then a real exchange on top.
+   */
+  async function makeAppChatConversationWithExchange(
+    agentId: string,
+    overrides: { title?: string; titleIsPlaceholder?: boolean } = {},
+  ) {
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId,
+      title: overrides.title ?? "Expense Tracker",
+      titleIsPlaceholder: overrides.titleIsPlaceholder ?? true,
+      origin: "app_open",
+    });
+
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "render_app",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { appId: "app-1" },
+            output: { structuredContent: { name: "Expense Tracker" } },
+          },
+        ],
+      },
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "Here's **Expense Tracker**.\n\nWant to change the app? Tell me how!",
+          },
+        ],
+      },
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "user",
+      content: {
+        role: "user",
+        parts: [{ type: "text", text: "Add a monthly budget column" }],
+      },
+    });
+    await MessageModel.create({
+      conversationId: conversation.id,
+      role: "assistant",
+      content: {
+        role: "assistant",
+        parts: [{ type: "text", text: "Added a monthly budget column." }],
+      },
+    });
+
+    return conversation;
+  }
+
   /** Points the org default at the given (model, key) so the title LLM resolution is deterministic. */
   async function setOrganizationDefaultLlm(modelId: string, apiKeyId: string) {
     await db
@@ -230,6 +298,161 @@ describe("POST /api/chat/conversations/:id/generate-title", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+  });
+
+  /** The anthropic default the app-chat cases share. */
+  async function configureTitleLlm(
+    makeSecret: (args: {
+      secret: { apiKey: string };
+    }) => Promise<{ id: string }>,
+    makeLlmProviderApiKey: (
+      orgId: string,
+      secretId: string,
+      opts: { provider: string; scope: string; name: string },
+    ) => Promise<{ id: string }>,
+  ) {
+    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      scope: "org",
+      name: "Anthropic",
+    });
+    const model = await makeModelRow("anthropic", "claude-sonnet-5");
+    await setOrganizationDefaultLlm(model.id, apiKey.id);
+  }
+
+  test("titles an app chat still carrying its seeded app name", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await makeAppChatConversationWithExchange(agent.id);
+    await configureTitleLlm(makeSecret, makeLlmProviderApiKey);
+
+    mockGenerateText.mockResolvedValue({
+      text: "Monthly budget column",
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().title).toBe("Monthly budget column");
+    // The client merges this straight into its conversation cache, so the
+    // response has to carry the cleared flag, not just the database row.
+    expect(response.json().titleIsPlaceholder).toBe(false);
+
+    // The placeholder is spent: the flag must be off so no later exchange
+    // retitles a conversation that now has a real title.
+    const [stored] = await db
+      .select()
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, conversation.id));
+    expect(stored.titleIsPlaceholder).toBe(false);
+    expect(stored.title).toBe("Monthly budget column");
+  });
+
+  test("titles an app chat from the real reply, not the seeded greeting", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // The greeting is an assistant text message that precedes any user message,
+    // so a naive "first assistant text" scan feeds the model boilerplate about
+    // the app instead of the exchange the user actually had.
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await makeAppChatConversationWithExchange(agent.id);
+    await configureTitleLlm(makeSecret, makeLlmProviderApiKey);
+
+    mockGenerateText.mockResolvedValue({
+      text: "Monthly budget column",
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: {},
+    });
+
+    const prompt = JSON.stringify(mockGenerateText.mock.calls[0]?.[0]);
+    expect(prompt).toContain("Add a monthly budget column");
+    expect(prompt).toContain("Added a monthly budget column.");
+    expect(prompt).not.toContain("Want to change the app?");
+  });
+
+  test("leaves a renamed app chat alone", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // Renaming clears the placeholder flag, which is what protects a name the
+    // user typed from being overwritten by automatic generation.
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await makeAppChatConversationWithExchange(agent.id, {
+      title: "Q3 budget planning",
+      titleIsPlaceholder: false,
+    });
+    await configureTitleLlm(makeSecret, makeLlmProviderApiKey);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().title).toBe("Q3 budget planning");
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  test("does not retitle an app chat a second time", async ({
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // The flag, not a per-mount client ref, is what makes generation one-shot:
+    // the client re-asks on every remount.
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await makeAppChatConversationWithExchange(agent.id);
+    await configureTitleLlm(makeSecret, makeLlmProviderApiKey);
+
+    mockGenerateText.mockResolvedValue({
+      text: "Monthly budget column",
+    } as Awaited<ReturnType<typeof generateText>>);
+
+    await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: {},
+    });
+    const second = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversation.id}/generate-title`,
+      payload: {},
+    });
+
+    expect(second.json().title).toBe("Monthly budget column");
     expect(mockGenerateText).toHaveBeenCalledTimes(1);
   });
 });

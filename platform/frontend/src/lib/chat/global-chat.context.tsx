@@ -681,15 +681,21 @@ function ChatSessionHook({
       ]);
 
       // Auto-generate title after the first settled exchange if still untitled
-      const cachedTitle = queryClient.getQueryData<{ title?: string | null }>([
-        "conversation",
-        conversationId,
-      ])?.title;
+      const cachedConversation = queryClient.getQueryData<{
+        title?: string | null;
+        titleIsPlaceholder?: boolean;
+      }>(["conversation", conversationId]);
+      const cachedTitle = cachedConversation?.title;
       const firstUserText = getConversationDisplayTitle(null, stableMessages);
 
+      // A placeholder title is an app's name, seeded so an app chat isn't blank
+      // before its first exchange — it counts as untitled. The server re-reads
+      // the flag and skips if it's stale, so this only decides whether to ask.
       const shouldGenerateTitle =
         !titleGenerationAttemptedRef.current &&
-        (!cachedTitle || cachedTitle === firstUserText);
+        (!cachedTitle ||
+          cachedConversation?.titleIsPlaceholder === true ||
+          cachedTitle === firstUserText);
 
       if (shouldGenerateTitle) {
         titleGenerationAttemptedRef.current = true;

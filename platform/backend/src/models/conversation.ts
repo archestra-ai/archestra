@@ -588,9 +588,15 @@ class ConversationModel {
     organizationId: string,
     data: UpdateConversation,
   ): Promise<Conversation | null> {
+    // An explicit title write — generated or hand-typed — makes the title real,
+    // so the seeded app-name placeholder is gone. Centralized here so no title
+    // path can forget and leave a chat open to being retitled from under the user.
+    const patch: Partial<typeof schema.conversationsTable.$inferInsert> =
+      data.title !== undefined ? { ...data, titleIsPlaceholder: false } : data;
+
     const [updated] = await db
       .update(schema.conversationsTable)
-      .set(data)
+      .set(patch)
       .where(
         and(
           eq(schema.conversationsTable.id, id),

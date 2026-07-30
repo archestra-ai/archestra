@@ -1125,6 +1125,65 @@ describe("extractFirstMessages", () => {
     expect(result.firstAssistantMessage).toBe("");
   });
 
+  it("ignores the seeded greeting of an app chat and takes the real reply", () => {
+    const messages = [
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "render_app",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { appId: "app-1" },
+            output: { structuredContent: { name: "Expense Tracker" } },
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "Here's **Expense Tracker**.\n\nWant to change the app? Tell me how!",
+          },
+        ],
+      },
+      {
+        role: "user",
+        parts: [{ type: "text", text: "Add a monthly budget column" }],
+      },
+      {
+        role: "assistant",
+        parts: [{ type: "text", text: "Added a monthly budget column." }],
+      },
+    ];
+
+    const result = extractFirstMessages(messages);
+
+    expect(result.firstUserMessage).toBe("Add a monthly budget column");
+    expect(result.firstAssistantMessage).toBe("Added a monthly budget column.");
+  });
+
+  it("still captures the reply when the first user message has no text", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "" }],
+        metadata: { skill: { id: "skill-1", name: "deep-research" } },
+      },
+      {
+        role: "assistant",
+        parts: [{ type: "text", text: "Researching the repo now." }],
+      },
+    ];
+
+    const result = extractFirstMessages(messages);
+
+    expect(result.firstUserSkillName).toBe("deep-research");
+    expect(result.firstAssistantMessage).toBe("Researching the repo now.");
+  });
+
   it("skips messages without text parts", () => {
     const messages = [
       {

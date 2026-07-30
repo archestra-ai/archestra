@@ -31346,11 +31346,12 @@ export type CreateConnectionSetupData = {
         proxyAuth?: 'provider-key' | 'virtual-key';
         attributePassthrough?: boolean;
         /**
-         * Explicit model for the Copilot CLI's provider wiring — the CLI refuses to
-         * launch a BYOK provider without one, so the wizard's review step picks it.
-         * The script applies it as COPILOT_MODEL. copilot-cli setups only.
+         * Model the wizard's review step selected for clients whose setup wires a
+         * specific model into the client config. Currently copilot-cli only: the
+         * script applies it as COPILOT_MODEL (the CLI refuses to launch a BYOK
+         * provider without one).
          */
-        copilotModel?: string;
+        model?: string;
         skills?: {
             skillIds: Array<string>;
             ttlDays: number | null;

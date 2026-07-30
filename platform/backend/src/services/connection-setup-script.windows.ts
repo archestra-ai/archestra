@@ -716,7 +716,7 @@ ${PS_COPILOT_APPLIED_OK}${
     : `\nWrite-Host 'Set your own key the same way: $env:${COPILOT_PROVIDER_ENV_KEYS.apiKey} = "<your-${ctx.proxy.provider}-api-key>"'`
 }
 ${psCopilotModelApply({
-  chosenModel: ctx.proxy.copilotModel,
+  chosenModel: ctx.proxy.model,
   defaultModel: DEFAULT_MODELS[ctx.proxy.provider],
 })}`);
     }
@@ -882,7 +882,7 @@ if (-not [string]::IsNullOrEmpty($ArchGhcpToken)) {
   Write-Host 'No GitHub token was linked — set your own key the same way: $env:${COPILOT_PROVIDER_ENV_KEYS.apiKey} = "<your-github-oauth-token>"'
 }
 ${psCopilotModelApply({
-  chosenModel: proxy.copilotModel,
+  chosenModel: proxy.model,
   defaultModel: DEFAULT_MODELS["github-copilot"],
 })}`;
 }

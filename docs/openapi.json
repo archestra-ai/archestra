@@ -113136,12 +113136,12 @@
                     "default": true,
                     "type": "boolean"
                   },
-                  "copilotModel": {
+                  "model": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 128,
                     "pattern": "^[\\x20-\\x7E]+$",
-                    "description": "Explicit model for the Copilot CLI's provider wiring — the CLI refuses to launch a BYOK provider without one, so the wizard's review step picks it. The script applies it as COPILOT_MODEL. copilot-cli setups only."
+                    "description": "Model the wizard's review step selected for clients whose setup wires a specific model into the client config. Currently copilot-cli only: the script applies it as COPILOT_MODEL (the CLI refuses to launch a BYOK provider without one)."
                   },
                   "skills": {
                     "type": "object",

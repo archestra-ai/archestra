@@ -100,7 +100,7 @@ const CreateConnectionSetupBodySchema = z.object({
    * launch a BYOK provider without one, so the wizard's review step picks it.
    * The script applies it as COPILOT_MODEL. copilot-cli setups only.
    */
-  copilotModel: z
+  model: z
     .string()
     .min(1)
     .max(128)
@@ -267,7 +267,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider,
         proxyAuth,
         attributePassthrough,
-        copilotModel,
+        model,
         skills,
       } = body;
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
@@ -290,10 +290,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           `${provider} is not supported for ${clientId} setups`,
         );
       }
-      if (copilotModel && clientId !== "copilot-cli") {
+      if (model && clientId !== "copilot-cli") {
         throw new ApiError(
           400,
-          "copilotModel is only supported for copilot-cli setups",
+          "model is only supported for copilot-cli setups",
         );
       }
 
@@ -407,7 +407,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         llmProxyId: llmProxyId ?? null,
         provider: provider ?? null,
         proxyAuth,
-        copilotModel: copilotModel ?? null,
+        model: model ?? null,
         virtualApiKeyId,
         includeSkills: Boolean(skills),
         skillLinkTtlDays: skills?.ttlDays ?? null,
@@ -750,7 +750,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       virtualKey: virtualKeyValue,
       virtualKeyName,
       passthroughVirtualKey,
-      copilotModel: setup.copilotModel,
+      model: setup.model,
       // Passthrough Copilot setups run the GitHub device flow inside the
       // script; virtual-key setups resolve the stored token server-side.
       githubCopilot:

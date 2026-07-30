@@ -62,14 +62,15 @@ const connectionSetupsTable = pgTable(
       .notNull()
       .default("provider-key"),
     /**
-     * Model the wizard's review step selected for clients whose provider
-     * wiring needs an explicit one (the Copilot CLI refuses to launch a BYOK
-     * provider without a model). Rendered into the setup script, which
-     * applies it as COPILOT_MODEL. Null (API callers that omit it): the
-     * script falls back to the provider default only when the machine has no
-     * COPILOT_MODEL set.
+     * Model the wizard's review step selected for clients whose setup wires
+     * a specific model into the client config. Currently rendered by the
+     * Copilot CLI scripts (applied as COPILOT_MODEL — the CLI refuses to
+     * launch a BYOK provider without one); deliberately client-agnostic so
+     * other clients can adopt it. Null (API callers that omit it): the
+     * script falls back to the provider default only when the machine has
+     * none set.
      */
-    copilotModel: text("copilot_model"),
+    model: text("model"),
     /** Personal virtual key provisioned at create time; value injected at render. */
     virtualApiKeyId: uuid("virtual_api_key_id").references(
       () => virtualApiKeysTable.id,

@@ -485,7 +485,7 @@ describe("POST /api/connection-setups", () => {
     expect(attributionKey?.authorId).toBe(user.id);
   });
 
-  test("copilotModel persists for copilot-cli setups and 400s for other clients", async ({
+  test("model persists for copilot-cli setups and 400s for other clients", async ({
     makeAgent,
   }) => {
     const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
@@ -498,13 +498,13 @@ describe("POST /api/connection-setups", () => {
         baseUrl: "http://localhost:9000/v1",
         llmProxyId: proxy.id,
         provider: "github-copilot",
-        copilotModel: "claude-sonnet-4",
+        model: "claude-sonnet-4",
       },
     });
     expect(ok.statusCode).toBe(200);
     const rawToken = ok.json().command.match(/script\/([^']+)'/)?.[1] as string;
     const setup = await ConnectionSetupModel.findByToken(rawToken);
-    expect(setup?.copilotModel).toBe("claude-sonnet-4");
+    expect(setup?.model).toBe("claude-sonnet-4");
 
     const wrongClient = await app.inject({
       method: "POST",
@@ -514,7 +514,7 @@ describe("POST /api/connection-setups", () => {
         baseUrl: "http://localhost:9000/v1",
         llmProxyId: proxy.id,
         provider: "anthropic",
-        copilotModel: "gpt-4o",
+        model: "gpt-4o",
       },
     });
     expect(wrongClient.statusCode).toBe(400);

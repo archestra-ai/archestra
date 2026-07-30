@@ -45,7 +45,7 @@ const PROXY = {
   virtualKey: "arch_deadbeefcafe",
   virtualKeyName: "Connection setup — user@example.com",
   passthroughVirtualKey: null,
-  copilotModel: null,
+  model: null,
 };
 
 /**
@@ -61,7 +61,7 @@ const ANTHROPIC_PASSTHROUGH_PROXY = {
   virtualKey: null,
   virtualKeyName: null,
   passthroughVirtualKey: "arch_passthroughcafe",
-  copilotModel: null,
+  model: null,
 };
 
 /**
@@ -78,7 +78,7 @@ const OPENAI_PASSTHROUGH_PROXY = {
   virtualKey: null,
   virtualKeyName: null,
   passthroughVirtualKey: "arch_passthroughcafe",
-  copilotModel: null,
+  model: null,
 };
 
 const GITHUB_COPILOT_PROXY = {
@@ -90,7 +90,7 @@ const GITHUB_COPILOT_PROXY = {
   virtualKey: null,
   virtualKeyName: null,
   passthroughVirtualKey: null,
-  copilotModel: null,
+  model: null,
   githubCopilot: {
     tokenExchangeUrl:
       "https://api.github.example.com/copilot_internal/v2/token",
@@ -855,7 +855,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
   test("copilot-cli: a wizard-chosen model lands in the export lines", async () => {
     const script = renderSetupScript({
       ...fullContext("copilot-cli"),
-      proxy: { ...GITHUB_COPILOT_PROXY, copilotModel: "claude-sonnet-4" },
+      proxy: { ...GITHUB_COPILOT_PROXY, model: "claude-sonnet-4" },
     });
     await expectValidBash(script);
     expect(script).toContain('export COPILOT_MODEL="claude-sonnet-4"');
@@ -1127,7 +1127,7 @@ describe("renderSetupScript (windows)", () => {
   test("copilot-cli: a wizard-chosen model is applied outright, not if-unset", () => {
     const script = renderSetupScript({
       ...fullContext("copilot-cli", "windows"),
-      proxy: { ...GITHUB_COPILOT_PROXY, copilotModel: "claude-sonnet-4" },
+      proxy: { ...GITHUB_COPILOT_PROXY, model: "claude-sonnet-4" },
     });
     expect(script).toContain(
       "[Environment]::SetEnvironmentVariable('COPILOT_MODEL', 'claude-sonnet-4', 'User')",

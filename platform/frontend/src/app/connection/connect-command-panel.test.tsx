@@ -448,7 +448,7 @@ describe("ConnectCommandPanel", () => {
         expect(createSetupMock).toHaveBeenCalledWith(
           expect.objectContaining({
             clientId: "copilot-cli",
-            copilotModel: "gpt-5.5",
+            model: "gpt-5.5",
           }),
         ),
       );
@@ -465,7 +465,7 @@ describe("ConnectCommandPanel", () => {
 
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({ copilotModel: "o4-mini" }),
+          expect.objectContaining({ model: "o4-mini" }),
         ),
       );
     });

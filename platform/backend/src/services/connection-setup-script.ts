@@ -85,7 +85,7 @@ export interface SetupScriptProxySection {
    * Null: the script falls back to the provider default only when the
    * machine has no COPILOT_MODEL set.
    */
-  copilotModel: string | null;
+  model: string | null;
   /**
    * GitHub OAuth endpoints for the in-script device flow. Required when
    * provider is "github-copilot" in passthrough mode: Copilot has no static
@@ -859,7 +859,7 @@ Add these lines to your shell profile (e.g. ~/.zshrc); adjust ${COPILOT_PROVIDER
       ? sh(ctx.proxy.virtualKey)
       : `"<your-${ctx.proxy.provider}-api-key>"`
   }
-  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${ctx.proxy.copilotModel ?? DEFAULT_MODELS[ctx.proxy.provider]}"
+  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${ctx.proxy.model ?? DEFAULT_MODELS[ctx.proxy.provider]}"
   export ${COPILOT_PROVIDER_ENV_KEYS.headers}="${copilotAttributionHeadersValue(ctx.proxy)}"
 ARCHESTRA_COPILOT`);
     }
@@ -1024,7 +1024,7 @@ if [ -n "$ARCHESTRA_GHCP_TOKEN" ]; then
 else
   printf '  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}="%s"\\n' '<your-github-oauth-token>'
 fi
-printf '  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${proxy.copilotModel ?? DEFAULT_MODELS["github-copilot"]}"\\n'
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${proxy.model ?? DEFAULT_MODELS["github-copilot"]}"\\n'
 printf '  export ${COPILOT_PROVIDER_ENV_KEYS.headers}="%s"\\n' ${sh(copilotAttributionHeadersValue(proxy))}`;
 }
 

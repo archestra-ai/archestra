@@ -34,7 +34,7 @@ function setupCtx(
       virtualKey: "vk",
       virtualKeyName: "k",
       passthroughVirtualKey: null,
-      copilotModel: null,
+      model: null,
       githubCopilot: null,
     },
     skills: null,

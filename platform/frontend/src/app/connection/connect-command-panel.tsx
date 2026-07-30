@@ -255,22 +255,20 @@ export function ConnectCommandPanel({
   // leaks onto another. Options come from the org's synced model list; with
   // none synced for the provider, a free-text field takes any model id.
   const isCopilotClient = client.id === "copilot-cli";
-  const [copilotModel, setCopilotModel] = useState<string | null>(null);
+  const [modelChoice, setModelChoice] = useState<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: provider is the reset trigger
-  useEffect(() => setCopilotModel(null), [provider]);
+  useEffect(() => setModelChoice(null), [provider]);
   const { modelsByProvider } = useLlmModelsByProvider();
-  const effectiveCopilotModel =
+  const effectiveModel =
     isCopilotClient && provider
-      ? (copilotModel ?? DEFAULT_MODELS[provider])
+      ? (modelChoice ?? DEFAULT_MODELS[provider])
       : null;
-  const copilotModelOptions = useMemo(() => {
+  const modelOptions = useMemo(() => {
     if (!isCopilotClient || !provider) return [];
     const ids = (modelsByProvider[provider] ?? []).map((m) => m.id);
     // the current value stays selectable even when it's not in the synced list
-    return Array.from(
-      new Set(effectiveCopilotModel ? [effectiveCopilotModel, ...ids] : ids),
-    );
-  }, [isCopilotClient, provider, modelsByProvider, effectiveCopilotModel]);
+    return Array.from(new Set(effectiveModel ? [effectiveModel, ...ids] : ids));
+  }, [isCopilotClient, provider, modelsByProvider, effectiveModel]);
 
   // Per-user providers always use virtual-key auth (no passthrough tab). This
   // is derived rather than written back into `proxyAuth`: overwriting the
@@ -354,7 +352,7 @@ export function ConnectCommandPanel({
     proxyId: proxyActive ? proxy.id : null,
     provider: proxyActive ? provider : null,
     proxyAuth: proxyActive ? effectiveProxyAuth : null,
-    copilotModel: proxyActive ? effectiveCopilotModel : null,
+    model: proxyActive ? effectiveModel : null,
     // Sorted so reorderings of the same selection don't regenerate.
     skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
   });
@@ -371,7 +369,7 @@ export function ConnectCommandPanel({
         proxyId: string | null;
         provider: SupportedProvider | null;
         proxyAuth: ConnectProxyAuth | null;
-        copilotModel: string | null;
+        model: string | null;
         skillIds: string[] | null;
       };
 
@@ -392,7 +390,7 @@ export function ConnectCommandPanel({
         llmProxyId: inputs.proxyId ?? undefined,
         provider: inputs.provider ?? undefined,
         proxyAuth: inputs.proxyAuth ?? undefined,
-        copilotModel: inputs.copilotModel ?? undefined,
+        model: inputs.model ?? undefined,
         skills,
       });
       if (latestKeyRef.current !== key) return; // stale response
@@ -593,20 +591,20 @@ export function ConnectCommandPanel({
     </div>
   ) : null;
 
-  const copilotModelEditor =
+  const modelEditor =
     isCopilotClient && provider ? (
       <div className="grid gap-1.5">
         <EditorField label="Model">
-          {copilotModelOptions.length > 1 ? (
+          {modelOptions.length > 1 ? (
             <Select
-              value={effectiveCopilotModel ?? undefined}
-              onValueChange={setCopilotModel}
+              value={effectiveModel ?? undefined}
+              onValueChange={setModelChoice}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select model" />
               </SelectTrigger>
               <SelectContent>
-                {copilotModelOptions.map((id) => (
+                {modelOptions.map((id) => (
                   <SelectItem key={id} value={id}>
                     {id}
                   </SelectItem>
@@ -615,8 +613,8 @@ export function ConnectCommandPanel({
             </Select>
           ) : (
             <Input
-              value={effectiveCopilotModel ?? ""}
-              onChange={(event) => setCopilotModel(event.target.value || null)}
+              value={effectiveModel ?? ""}
+              onChange={(event) => setModelChoice(event.target.value || null)}
               placeholder="Model id"
             />
           )}
@@ -762,12 +760,12 @@ export function ConnectCommandPanel({
               editable
               isEditing={editing === "model"}
               onToggle={() => toggleEdit("model")}
-              editor={copilotModelEditor}
+              editor={modelEditor}
               changeTestId="connect-change-model"
             >
               Run Copilot with{" "}
               <span className="font-medium text-foreground">
-                {effectiveCopilotModel}
+                {effectiveModel}
               </span>
             </SummaryRow>
           )}

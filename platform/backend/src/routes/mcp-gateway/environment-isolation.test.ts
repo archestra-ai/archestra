@@ -39,8 +39,8 @@ import mcpGatewayRoutes from "./index";
  * environment decision and never RBAC masking one.
  */
 
-const LAUNCH = "Launch";
-const EXPLORE = "Explore";
+const PRODUCTION = "production";
+const STAGING = "staging";
 
 function makeMcpHeaders(token: string): Record<string, string> {
   return {
@@ -111,31 +111,31 @@ test("gateway: get_mcp_servers lists only the calling agent's environment", asyn
   const org = await makeOrganization();
   const user = await makeUser();
   await makeMember(user.id, org.id, { role: "admin" });
-  const launch = await EnvironmentModel.create({
+  const production = await EnvironmentModel.create({
     organizationId: org.id,
-    name: LAUNCH,
+    name: PRODUCTION,
   });
-  const explore = await EnvironmentModel.create({
+  const staging = await EnvironmentModel.create({
     organizationId: org.id,
-    name: EXPLORE,
+    name: STAGING,
   });
   const agent = await makeAgent({
-    name: "Launch Agent",
+    name: "Production Agent",
     organizationId: org.id,
-    environmentId: launch.id,
+    environmentId: production.id,
   });
   await seedAndAssignArchestraTools(agent.id);
   const token = await UserTokenModel.create(user.id, org.id);
 
-  const launchCatalog = await makeInternalMcpCatalog({
-    name: "Launch Server",
+  const productionCatalog = await makeInternalMcpCatalog({
+    name: "Production Server",
     organizationId: org.id,
-    environmentId: launch.id,
+    environmentId: production.id,
   });
-  const exploreCatalog = await makeInternalMcpCatalog({
-    name: "Explore Server",
+  const stagingCatalog = await makeInternalMcpCatalog({
+    name: "Staging Server",
     organizationId: org.id,
-    environmentId: explore.id,
+    environmentId: staging.id,
   });
   const defaultCatalog = await makeInternalMcpCatalog({
     name: "Default Server",
@@ -154,8 +154,8 @@ test("gateway: get_mcp_servers lists only the calling agent's environment", asyn
   const ids = (body.result.structuredContent?.items ?? []).map(
     (item) => item.id,
   );
-  expect(ids).toContain(launchCatalog.id);
-  expect(ids).not.toContain(exploreCatalog.id);
+  expect(ids).toContain(productionCatalog.id);
+  expect(ids).not.toContain(stagingCatalog.id);
   expect(ids).not.toContain(defaultCatalog.id);
 });
 
@@ -170,31 +170,31 @@ test("gateway: search_private_mcp_registry does not surface other environments",
   const org = await makeOrganization();
   const user = await makeUser();
   await makeMember(user.id, org.id, { role: "admin" });
-  const launch = await EnvironmentModel.create({
+  const production = await EnvironmentModel.create({
     organizationId: org.id,
-    name: LAUNCH,
+    name: PRODUCTION,
   });
-  const explore = await EnvironmentModel.create({
+  const staging = await EnvironmentModel.create({
     organizationId: org.id,
-    name: EXPLORE,
+    name: STAGING,
   });
   const agent = await makeAgent({
-    name: "Launch Agent",
+    name: "Production Agent",
     organizationId: org.id,
-    environmentId: launch.id,
+    environmentId: production.id,
   });
   await seedAndAssignArchestraTools(agent.id);
   const token = await UserTokenModel.create(user.id, org.id);
 
-  const launchCatalog = await makeInternalMcpCatalog({
-    name: "observability launch",
+  const productionCatalog = await makeInternalMcpCatalog({
+    name: "observability production",
     organizationId: org.id,
-    environmentId: launch.id,
+    environmentId: production.id,
   });
-  const exploreCatalog = await makeInternalMcpCatalog({
-    name: "observability explore",
+  const stagingCatalog = await makeInternalMcpCatalog({
+    name: "observability staging",
     organizationId: org.id,
-    environmentId: explore.id,
+    environmentId: staging.id,
   });
 
   const body = await callTool({
@@ -208,9 +208,9 @@ test("gateway: search_private_mcp_registry does not surface other environments",
   const ids = (body.result.structuredContent?.items ?? []).map(
     (item) => item.id,
   );
-  expect(ids).toEqual([launchCatalog.id]);
-  expect(ids).not.toContain(exploreCatalog.id);
-  expect(resultText(body)).not.toContain("observability explore");
+  expect(ids).toEqual([productionCatalog.id]);
+  expect(ids).not.toContain(stagingCatalog.id);
+  expect(resultText(body)).not.toContain("observability staging");
 });
 
 test("gateway: get_mcp_server_tools hides a server from another environment", async ({
@@ -225,41 +225,41 @@ test("gateway: get_mcp_server_tools hides a server from another environment", as
   const org = await makeOrganization();
   const user = await makeUser();
   await makeMember(user.id, org.id, { role: "admin" });
-  const launch = await EnvironmentModel.create({
+  const production = await EnvironmentModel.create({
     organizationId: org.id,
-    name: LAUNCH,
+    name: PRODUCTION,
   });
-  const explore = await EnvironmentModel.create({
+  const staging = await EnvironmentModel.create({
     organizationId: org.id,
-    name: EXPLORE,
+    name: STAGING,
   });
   const agent = await makeAgent({
-    name: "Launch Agent",
+    name: "Production Agent",
     organizationId: org.id,
-    environmentId: launch.id,
+    environmentId: production.id,
   });
   await seedAndAssignArchestraTools(agent.id);
   const token = await UserTokenModel.create(user.id, org.id);
 
-  const exploreCatalog = await makeInternalMcpCatalog({
-    name: "Explore Only",
+  const stagingCatalog = await makeInternalMcpCatalog({
+    name: "Staging Only",
     organizationId: org.id,
-    environmentId: explore.id,
+    environmentId: staging.id,
   });
-  await makeTool({ catalogId: exploreCatalog.id, name: "explore_only_tool" });
+  await makeTool({ catalogId: stagingCatalog.id, name: "staging_only_tool" });
 
   const body = await callTool({
     agentId: agent.id,
     token: token.value,
     name: toolName(TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME),
-    arguments: { mcpServerId: exploreCatalog.id },
+    arguments: { mcpServerId: stagingCatalog.id },
   });
 
   expect(body.result.isError).toBe(true);
   const text = resultText(body);
   expect(text).toContain("not found");
   // The fence must not leak the out-of-environment server's tools.
-  expect(text).not.toContain("explore_only_tool");
+  expect(text).not.toContain("staging_only_tool");
 });
 
 test("gateway: create_mcp_server lands in the calling agent's environment", async ({
@@ -272,14 +272,14 @@ test("gateway: create_mcp_server lands in the calling agent's environment", asyn
   const org = await makeOrganization();
   const user = await makeUser();
   await makeMember(user.id, org.id, { role: "admin" });
-  const launch = await EnvironmentModel.create({
+  const production = await EnvironmentModel.create({
     organizationId: org.id,
-    name: LAUNCH,
+    name: PRODUCTION,
   });
   const agent = await makeAgent({
-    name: "Launch Agent",
+    name: "Production Agent",
     organizationId: org.id,
-    environmentId: launch.id,
+    environmentId: production.id,
   });
   await seedAndAssignArchestraTools(agent.id);
   const token = await UserTokenModel.create(user.id, org.id);
@@ -299,7 +299,7 @@ test("gateway: create_mcp_server lands in the calling agent's environment", asyn
   const created = await InternalMcpCatalogModel.findByName(
     "Gateway Authored Server",
   );
-  expect(created?.environmentId).toBe(launch.id);
+  expect(created?.environmentId).toBe(production.id);
 });
 
 test("gateway: scaffold_app binds the app to the calling agent's environment", async ({
@@ -312,14 +312,14 @@ test("gateway: scaffold_app binds the app to the calling agent's environment", a
   const org = await makeOrganization();
   const user = await makeUser();
   await makeMember(user.id, org.id, { role: "admin" });
-  const launch = await EnvironmentModel.create({
+  const production = await EnvironmentModel.create({
     organizationId: org.id,
-    name: LAUNCH,
+    name: PRODUCTION,
   });
   const agent = await makeAgent({
-    name: "Launch Agent",
+    name: "Production Agent",
     organizationId: org.id,
-    environmentId: launch.id,
+    environmentId: production.id,
   });
   await seedAndAssignArchestraTools(agent.id);
   const token = await UserTokenModel.create(user.id, org.id);
@@ -328,7 +328,7 @@ test("gateway: scaffold_app binds the app to the calling agent's environment", a
     agentId: agent.id,
     token: token.value,
     name: toolName(TOOL_SCAFFOLD_APP_SHORT_NAME),
-    arguments: { name: "Launch Dashboard" },
+    arguments: { name: "Ops Dashboard" },
   });
 
   expect(body.result.isError).toBeFalsy();
@@ -338,5 +338,5 @@ test("gateway: scaffold_app binds the app to the calling agent's environment", a
   // An app's environment is owned by its backing catalog row, not the apps
   // table — `AppModel.findById` joins it back in.
   const scaffolded = await AppModel.findById(appId as string);
-  expect(scaffolded?.environmentId).toBe(launch.id);
+  expect(scaffolded?.environmentId).toBe(production.id);
 });

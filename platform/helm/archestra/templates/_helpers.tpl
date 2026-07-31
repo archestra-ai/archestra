@@ -504,13 +504,15 @@ args:
     done
     printf '%s' "$result" > /dev/termination-log
     {{- /*
-      Helm emits hook logs one line per record and in no guaranteed order, so
-      each line has to stand on its own rather than refer to the other arm's.
+      Silent when the target answers: a working check should cost the operator
+      one line, and that line is the treatment arm's.
+
+      When the target never answers, the treatment arm is blocked for the same
+      reason and reports enforcement it did not observe — so this says so, and
+      says it without depending on which line Helm printed first.
     */}}
-    if [ "$result" = reachable ]; then
-      echo "[archestra] network policy check: control pod reached {{ .host }}:{{ .port }}, so the enforcement result is valid"
-    else
-      echo "[archestra] network policy check: INCONCLUSIVE, control pod never reached {{ .host }}:{{ .port }} in {{ .attempts }} attempts, so enforcement was not tested"
+    if [ "$result" = blocked ]; then
+      echo "[archestra] network policy check: INCONCLUSIVE, could not reach {{ .host }}:{{ .port }} in {{ .attempts }} attempts — disregard any enforcement result reported for this release"
     fi
     exit 0
 {{- end }}
@@ -561,7 +563,7 @@ args:
     if [ "$result" = reachable ]; then
       echo "[archestra] network policy check: WARNING, this cluster does NOT enforce NetworkPolicy. A test pod under a deny-all egress policy still reached {{ .host }}:{{ .port }} on $ok of {{ .attempts }} attempts, so egress rules configured in Archestra are accepted and then ignored."
     else
-      echo "[archestra] network policy check: OK, enforcement confirmed (a deny-all policy blocked all {{ .attempts }} attempts)"
+      echo "[archestra] network policy check: OK, enforcement enabled"
     fi
     exit 0
 {{- end }}

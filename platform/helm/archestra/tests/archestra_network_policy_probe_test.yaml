@@ -238,15 +238,29 @@ tests:
       # message that refers to the other arm, or spans lines, arrives unreadable.
       - matchRegex:
           path: spec.containers[0].args[0]
+          pattern: 'OK, enforcement enabled'
+        documentIndex: 2
+      - matchRegex:
+          path: spec.containers[0].args[0]
           pattern: 'WARNING, this cluster does NOT enforce NetworkPolicy'
         documentIndex: 2
+
+  # A working cluster should cost one line. The control arm speaks only to void
+  # a result the treatment arm cannot know is meaningless: with the target down
+  # it is blocked for the wrong reason and would report enforcement regardless.
+  - it: says nothing when the target answers, and voids the result when it does not
+    asserts:
+      - notMatchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'echo "\[archestra\][^"]*reached'
+        documentIndex: 1
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: 'OK, enforcement confirmed'
-        documentIndex: 2
+          pattern: 'INCONCLUSIVE, could not reach'
+        documentIndex: 1
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: 'INCONCLUSIVE, control pod never reached'
+          pattern: 'disregard any enforcement result reported for this release'
         documentIndex: 1
 
   # The platform looks for the verdict in the namespace it manages workloads in.

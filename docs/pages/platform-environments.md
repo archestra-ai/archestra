@@ -93,18 +93,24 @@ On EKS Auto Mode, `ApplicationNetworkPolicy` only supports IP and domain egress 
 
 A Kubernetes cluster accepts `NetworkPolicy` objects whether or not anything acts on them. On a cluster with no enforcer, every egress rule you set here is stored and then ignored.
 
-Archestra measures this instead of guessing. After each `helm install` or `helm upgrade`, two short-lived pods probe the same address — a deny-all policy selects one of them, and nothing selects the other. If the restricted pod gets through, the cluster is not enforcing.
+Archestra measures this instead of guessing. After each `helm install` or `helm upgrade`, two short-lived pods probe the same address — a deny-all policy selects one of them, and nothing selects the other. If the restricted pod gets through, the cluster is not enforcing. The result is printed in the Helm output:
 
-Read the result any time:
-
-```bash
-kubectl --namespace <release-namespace> get pod -l app.kubernetes.io/component=netpol-probe \
-  -o custom-columns='POD:.metadata.name,RESULT:.status.containerStatuses[0].state.terminated.message'
+```text
+[archestra] network policy check: OK, enforcement confirmed (a deny-all policy blocked all 5 attempts)
 ```
 
-A control pod reporting `reachable` and a treatment pod reporting `blocked` means enforcement works. Both reporting `reachable` means it does not. A control pod reporting `blocked` means the target was unreachable, so the run proves nothing either way.
+On a cluster that does not enforce, the same line reads:
 
-The probe never fails a release, and you can turn it off with `archestra.networkPolicyProbe.enabled=false`. It reuses the chart's busybox image, so a private mirror set through `archestra.initContainers.busyboxImage` covers it too.
+```text
+[archestra] network policy check: WARNING, this cluster does NOT enforce NetworkPolicy. A test pod
+under a deny-all egress policy still reached ...
+```
+
+A third outcome says the check was inconclusive — the control pod never reached the target, so nothing was proven either way. That is not the same as "not enforced".
+
+Helm prints these from 3.18 and 4.0 onwards. On older versions, read them with `kubectl logs -l app.kubernetes.io/component=netpol-probe`.
+
+The probe never fails a release, and you can turn it off with `archestra.networkPolicyProbe.enabled=false`. It reuses the chart's busybox image, so a private mirror set through `archestra.initContainers.busyboxImage` covers it too. The pods are Helm hook resources, so `helm uninstall` leaves them behind; the install notes include the command to remove them.
 
 ### Domain Presets
 

@@ -71,6 +71,13 @@ metadata:
     environments screen shows. Replaced on the next release.
     */}}
     helm.sh/hook-delete-policy: before-hook-creation
+    {{- /*
+    Prints this pod's output in the `helm install`/`helm upgrade` console, so the
+    verdict reaches whoever ran the release without them going looking for it.
+    Ignored by Helm versions that predate the annotation, which falls back to
+    reading the pods.
+    */}}
+    helm.sh/hook-output-log-policy: hook-succeeded,hook-failed
 spec:
   restartPolicy: Never
   {{- /*
@@ -123,6 +130,13 @@ metadata:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-weight: "0"
     helm.sh/hook-delete-policy: before-hook-creation
+    {{- /*
+    Prints this pod's output in the `helm install`/`helm upgrade` console, so the
+    verdict reaches whoever ran the release without them going looking for it.
+    Ignored by Helm versions that predate the annotation, which falls back to
+    reading the pods.
+    */}}
+    helm.sh/hook-output-log-policy: hook-succeeded,hook-failed
 spec:
   restartPolicy: Never
   automountServiceAccountToken: false

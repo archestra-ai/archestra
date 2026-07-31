@@ -219,6 +219,36 @@ tests:
           pattern: exit 0
         documentIndex: 2
 
+  # Without this the verdict only exists inside the pods, and whoever ran the
+  # release has to go looking for it.
+  - it: prints the result in the helm install/upgrade output
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-output-log-policy"]
+          value: hook-succeeded,hook-failed
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["helm.sh/hook-output-log-policy"]
+          value: hook-succeeded,hook-failed
+        documentIndex: 2
+
+  - it: states each outcome in a single self-contained line
+    asserts:
+      # Helm emits one log record per line and in no guaranteed order, so a
+      # message that refers to the other arm, or spans lines, arrives unreadable.
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'WARNING, this cluster does NOT enforce NetworkPolicy'
+        documentIndex: 2
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'OK, enforcement confirmed'
+        documentIndex: 2
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'INCONCLUSIVE, control pod never reached'
+        documentIndex: 1
+
   # The platform looks for the verdict in the namespace it manages workloads in.
   # Rendering elsewhere leaves the probe running and its result never read.
   - it: renders into the namespace the platform inspects

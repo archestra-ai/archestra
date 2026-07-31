@@ -503,7 +503,15 @@ args:
       sleep 1
     done
     printf '%s' "$result" > /dev/termination-log
-    echo "archestra netpol probe (control): $result ({{ .host }}:{{ .port }})"
+    {{- /*
+      Helm emits hook logs one line per record and in no guaranteed order, so
+      each line has to stand on its own rather than refer to the other arm's.
+    */}}
+    if [ "$result" = reachable ]; then
+      echo "[archestra] network policy check: control pod reached {{ .host }}:{{ .port }}, so the enforcement result is valid"
+    else
+      echo "[archestra] network policy check: INCONCLUSIVE, control pod never reached {{ .host }}:{{ .port }} in {{ .attempts }} attempts, so enforcement was not tested"
+    fi
     exit 0
 {{- end }}
 
@@ -545,7 +553,16 @@ args:
       result=blocked
     fi
     printf '%s' "$result" > /dev/termination-log
-    echo "archestra netpol probe (treatment): $result, $ok/{{ .attempts }} attempts connected ({{ .host }}:{{ .port }})"
+    {{- /*
+      One line per outcome: Helm wraps each log record in its own `level=... msg=`
+      envelope, so a multi-line banner would arrive as a column of quoted
+      fragments.
+    */}}
+    if [ "$result" = reachable ]; then
+      echo "[archestra] network policy check: WARNING, this cluster does NOT enforce NetworkPolicy. A test pod under a deny-all egress policy still reached {{ .host }}:{{ .port }} on $ok of {{ .attempts }} attempts, so egress rules configured in Archestra are accepted and then ignored."
+    else
+      echo "[archestra] network policy check: OK, enforcement confirmed (a deny-all policy blocked all {{ .attempts }} attempts)"
+    fi
     exit 0
 {{- end }}
 

@@ -17,15 +17,20 @@ import logger from "@/logging";
  */
 export function assertRetentionConfigLicensed(): void {
   const { llmLogsDays, mcpLogsDays, chatConversationsDays } = config.retention;
+  const auditLogDays = config.auditLog.retentionDays;
   const anyConfigured =
-    llmLogsDays > 0 || mcpLogsDays > 0 || chatConversationsDays > 0;
+    llmLogsDays > 0 ||
+    mcpLogsDays > 0 ||
+    chatConversationsDays > 0 ||
+    auditLogDays > 0;
   if (!anyConfigured) return;
 
   if (!config.enterpriseFeatures.core) {
     throw new Error(
       "Data retention (ARCHESTRA_LLM_LOGS_RETENTION_DAYS / " +
         "ARCHESTRA_MCP_LOGS_RETENTION_DAYS / " +
-        "ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS) requires an enterprise " +
+        "ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS / " +
+        "ARCHESTRA_AUDIT_LOG_RETENTION_DAYS) requires an enterprise " +
         "license. Unset these variables or contact sales@archestra.ai.",
     );
   }

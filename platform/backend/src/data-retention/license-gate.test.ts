@@ -16,6 +16,7 @@ describe("assertRetentionConfigLicensed", () => {
     config.retention.llmLogsDays = 0;
     config.retention.mcpLogsDays = 0;
     config.retention.chatConversationsDays = 0;
+    config.auditLog.retentionDays = 0;
     config.enterpriseFeatures.core = originalCore;
   });
 
@@ -27,6 +28,14 @@ describe("assertRetentionConfigLicensed", () => {
   test("throws when a window is configured without an enterprise license", () => {
     config.enterpriseFeatures.core = false;
     config.retention.mcpLogsDays = 30;
+    expect(() => assertRetentionConfigLicensed()).toThrow(
+      /requires an enterprise license/,
+    );
+  });
+
+  test("throws when audit-log retention is configured without a license", () => {
+    config.enterpriseFeatures.core = false;
+    config.auditLog.retentionDays = 90;
     expect(() => assertRetentionConfigLicensed()).toThrow(
       /requires an enterprise license/,
     );

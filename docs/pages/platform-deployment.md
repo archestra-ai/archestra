@@ -1572,16 +1572,6 @@ Permission sync for connectors using [auto-sync permissions](/docs/platform-know
   - Default: `1`
   - This lane is separate from the content lane's `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`, so permission sync never competes with content sync for slots.
 
-### Audit Log Configuration
-
-The audit log records administrative actions (mutations via `/api/*` and auth events) across your organization. Automatic retention is **disabled by default** - audit rows are kept indefinitely unless an org admin opts in by setting a positive retention window.
-
-- **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Number of days to retain audit log records before they are automatically deleted by the daily retention sweep.
-  - Default: `0` (disabled — audit rows are never auto-deleted).
-  - Set to a positive integer (e.g. `90`, `180`) to opt in to automatic purging after that many days.
-  - Must be a non-negative integer; invalid values fall back to the default (disabled).
-  - When enabled, the sweep runs once every 24 hours as a background task.
-
 ### Data Retention
 
 > **Enterprise feature:** Contact sales@archestra.ai for licensing information.
@@ -1597,6 +1587,8 @@ Automatic deletion of content-bearing records after a configurable number of day
 - **`ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS`** - Days after a conversation's last message activity before the conversation is automatically deleted, together with its messages, attachments, and conversation files.
   - Default: `0` (disabled).
   - Any new message resets the clock — only genuinely idle conversations expire.
+- **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Days to retain audit log records (administrative actions — mutations via `/api/*` and auth events) before automatic deletion.
+  - Default: `0` (disabled — audit rows are kept indefinitely).
 
 ### Maintenance Mode
 

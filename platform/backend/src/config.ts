@@ -2717,6 +2717,8 @@ const config = {
   // maintenanceMode it does not affect request handling.
   siteNotificationMessage:
     process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
+  // Enterprise-licensed like the `retention` block below — the boot-time
+  // assertion in data-retention/license-gate.ee.ts covers this window too.
   auditLog: {
     retentionDays: parseRetentionDays(
       "ARCHESTRA_AUDIT_LOG_RETENTION_DAYS",

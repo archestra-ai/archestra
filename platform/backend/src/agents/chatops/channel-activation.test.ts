@@ -336,7 +336,7 @@ describe("isThreadMuteCommand", () => {
     });
 
     test.each([
-      "joey shut up", // aimed at a person, not the bot
+      "everyone shut up", // aimed at the room, not the bot
       "Archestra shut up the alerts channel", // not an exact command after the name
       "Archestra what's the status", // addressed, but not a mute
       "shut up Archestra", // name not a leading prefix
@@ -726,10 +726,10 @@ describe.each([
   test("an unrelated name before a mute command is not a mute", async () => {
     await markChannelThreadActive(activation);
 
-    // Only the names the bot answers to are stripped — "joey mute" is aimed at
-    // a person, and must reach the agent rather than silencing the thread.
+    // Only the names the bot answers to are stripped — "everyone mute" is aimed
+    // at the room, and must reach the agent rather than silencing the thread.
     expect(
-      await gate({ text: "joey mute", botDisplayName: "SupportBot" }),
+      await gate({ text: "everyone mute", botDisplayName: "SupportBot" }),
     ).toEqual({ proceed: true, addressed: true });
     expect(postMutedNotice).not.toHaveBeenCalled();
   });

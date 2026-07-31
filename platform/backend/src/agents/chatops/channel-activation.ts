@@ -319,8 +319,8 @@ export async function claimThreadMuteHint(params: {
  * `addressableNames` lets a command be prefixed by a name the bot answers to
  * (e.g. the app name: "Archestra shut up", "Acme mute") without an explicit
  * @mention — a leading addressable name is stripped before matching. Only those
- * specific names are stripped, never an arbitrary word, so "joey shut up" (aimed
- * at a person) is not treated as a mute.
+ * specific names are stripped, never an arbitrary word, so "everyone shut up"
+ * (aimed at the room) is not treated as a mute.
  *
  * @public — applyChannelGate is the only production caller; the phrase matching
  * has its own suite in channel-activation.test.ts (knip can't see tests).

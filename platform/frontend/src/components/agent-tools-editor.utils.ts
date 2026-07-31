@@ -5,14 +5,45 @@ import {
 } from "@archestra/shared";
 
 /**
+ * The IDs of the creation-default Archestra tools within a single catalog's
+ * tool list.
+ *
+ * The default set is composed by the shared
+ * `getCreationDefaultArchestraToolShortNames` from the same feature flags
+ * `AgentModel.create` reads server-side, so it matches exactly what the
+ * backend assigns at agent creation.
+ *
+ * Returns an empty set when `tools` is empty or nothing matches (e.g. a
+ * non-Archestra catalog, whose tool names never carry a default short name).
+ */
+export function filterDefaultArchestraToolIds(
+  tools: { id: string; name: string }[],
+  options: {
+    skillsEnabled?: boolean;
+    sandboxEnabled?: boolean;
+  } = {},
+): Set<string> {
+  const creationDefaultShortNames = new Set<string>(
+    getCreationDefaultArchestraToolShortNames({
+      skillsEnabled: options.skillsEnabled === true,
+      sandboxEnabled: options.sandboxEnabled === true,
+    }),
+  );
+
+  return new Set(
+    tools
+      .filter((t) => {
+        const shortName = parseFullToolName(t.name).toolName;
+        return shortName !== null && creationDefaultShortNames.has(shortName);
+      })
+      .map((t) => t.id),
+  );
+}
+
+/**
  * Given catalog items and a parallel array of tool lists, find the
  * creation-default Archestra tools and return their IDs plus the catalog
  * index.
- *
- * The set is composed by the shared
- * `getCreationDefaultArchestraToolShortNames` from the same feature flags
- * `AgentModel.create` reads server-side, so the new agent form pre-selects
- * exactly what the backend assigns at creation.
  *
  * Returns null if the Archestra catalog isn't found, tools aren't loaded,
  * or no default tools match.
@@ -33,22 +64,7 @@ export function getDefaultArchestraToolIds(
   const tools = toolsByCatalogIndex[catalogIndex];
   if (!tools || tools.length === 0) return null;
 
-  const creationDefaultShortNames = new Set<string>(
-    getCreationDefaultArchestraToolShortNames({
-      skillsEnabled: options.skillsEnabled === true,
-      sandboxEnabled: options.sandboxEnabled === true,
-    }),
-  );
-
-  const toolIds = new Set(
-    tools
-      .filter((t) => {
-        const shortName = parseFullToolName(t.name).toolName;
-        return shortName !== null && creationDefaultShortNames.has(shortName);
-      })
-      .map((t) => t.id),
-  );
-
+  const toolIds = filterDefaultArchestraToolIds(tools, options);
   if (toolIds.size === 0) return null;
 
   return { toolIds, catalogIndex };
@@ -308,6 +324,13 @@ export function sortAndFilterTools<
     if (aScore !== bScore) return bScore - aScore;
     return (indexMap.get(a.id) ?? 0) - (indexMap.get(b.id) ?? 0);
   });
+}
+
+/** Whether two ID sets contain exactly the same members. */
+export function setsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const value of a) if (!b.has(value)) return false;
+  return true;
 }
 
 function getToolSearchMatchScore<T extends { description?: string | null }>(

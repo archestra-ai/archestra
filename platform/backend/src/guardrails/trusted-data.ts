@@ -75,9 +75,10 @@ export class DualLlmSanitizationError extends ApiError {
  * @param apiKey - API key for the LLM provider (optional for Gemini with Vertex AI)
  * @param provider - The LLM provider
  * @param considerContextUntrusted - If true, marks context as untrusted from the beginning
- * @param onDualLlmStart - Optional callback when dual LLM processing starts
+ * @param onDualLlmStart - Optional callback when a tool result's dual LLM analysis starts
  * @param onDualLlmProgress - Optional callback for dual LLM Q&A progress
- * @param onDualLlmError - Optional callback to surface a failed analysis in the stream before the request fails closed
+ * @param onDualLlmError - Optional callback to surface a failed analysis before the request fails closed
+ * @param onDualLlmComplete - Optional callback when an analysis settles, fresh or reused from the sanitize-once cache
  * @param sanitizeCacheOnly - Consult only cached sanitizations: a sanitize-marked result without one counts as untrusted instead of triggering a live (expensive, fallible) analysis. For callers that need a trust verdict but have no surface to show the dual LLM workflow (tool-execution checks).
  * @returns Object with tool result updates and trust status
  */
@@ -88,13 +89,23 @@ export async function evaluateIfContextIsTrusted(
   userId: string | undefined,
   considerContextUntrusted: boolean = false,
   policyContext: PolicyEvaluationContext,
-  onDualLlmStart?: () => void,
+  onDualLlmStart?: (info: { toolCallId: string; toolName: string }) => void,
   onDualLlmProgress?: (progress: {
+    toolCallId: string;
+    toolName: string;
     question: string;
     options: string[];
     answer: string;
   }) => void,
-  onDualLlmError?: (message: string) => void,
+  onDualLlmError?: (info: {
+    toolCallId: string;
+    toolName: string;
+    message: string;
+  }) => void,
+  onDualLlmComplete?: (
+    analysis: DualLlmAnalysis,
+    info: { toolName: string; cached: boolean },
+  ) => void,
   initialUntrustedReason?: UnsafeContextBoundaryReason,
   sanitizeCacheOnly: boolean = false,
 ): Promise<{
@@ -231,7 +242,6 @@ export async function evaluateIfContextIsTrusted(
   );
 
   // Process evaluation results
-  let streamedDualLlmStart = false;
   for (let i = 0; i < allToolCalls.length; i++) {
     const {
       toolCallId,
@@ -338,6 +348,10 @@ export async function evaluateIfContextIsTrusted(
         toolResultUpdates[toolCallId] = cachedAnalysis.result;
         toolResultIsTrusted = true;
         usedDualLlm = true;
+        onDualLlmComplete?.(
+          { ...cachedAnalysis, toolCallId },
+          { toolName, cached: true },
+        );
       } else if (sanitizeCacheOnly) {
         // This caller has no surface to run the dual LLM workflow on (e.g. a
         // pre-execution tool trust check). An unsanitized untrusted result
@@ -350,13 +364,12 @@ export async function evaluateIfContextIsTrusted(
         toolResultIsTrusted = false;
       } else {
         usedDualLlm = true;
-        if (!streamedDualLlmStart && onDualLlmStart) {
+        if (onDualLlmStart) {
           logger.debug(
             { agentId, toolCallId },
             "[trustedData] evaluateIfContextIsTrusted: starting dual LLM processing",
           );
-          onDualLlmStart();
-          streamedDualLlmStart = true;
+          onDualLlmStart({ toolCallId, toolName });
         }
 
         logger.debug(
@@ -390,8 +403,11 @@ export async function evaluateIfContextIsTrusted(
             { agentId, toolCallId },
             "[trustedData] evaluateIfContextIsTrusted: processing with dual LLM subagent",
           );
-          analysis =
-            await dualLlmSubagent.processWithMainAgent(onDualLlmProgress);
+          analysis = await dualLlmSubagent.processWithMainAgent(
+            onDualLlmProgress &&
+              ((progress) =>
+                onDualLlmProgress({ ...progress, toolCallId, toolName })),
+          );
         } catch (error) {
           // Fail closed: the policy promises the model never sees this raw
           // result, so a failed analysis must fail the whole request — not
@@ -405,17 +421,21 @@ export async function evaluateIfContextIsTrusted(
             toolName,
             cause: error,
           });
-          // The streamed block carries the policy narrative; the thrown error
+          // The surfaced block carries the policy narrative; the thrown error
           // carries the upstream mechanics — no duplicated essay between them.
-          onDualLlmError?.(
-            `Sanitization failed for ${toolName}: ${sanitizationError.upstreamFailure.message}\n\n` +
+          onDualLlmError?.({
+            toolCallId,
+            toolName,
+            message:
+              `Sanitization failed for ${toolName}: ${sanitizationError.upstreamFailure.message}\n\n` +
               `The tool result was not shown to the model — the "sanitize with Dual LLM" trusted data policy fails closed. ` +
               `Fix the organization's LLM API keys before retrying.\n`,
-          );
+          });
           throw sanitizationError;
         }
         dualLlmAnalyses.push(analysis);
         toolResultUpdates[toolCallId] = analysis.result;
+        onDualLlmComplete?.(analysis, { toolName, cached: false });
         logger.debug(
           { agentId, toolCallId, summaryLength: analysis.result.length },
           "[trustedData] evaluateIfContextIsTrusted: dual LLM processing complete",

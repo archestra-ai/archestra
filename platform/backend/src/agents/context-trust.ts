@@ -34,6 +34,7 @@ export async function evaluateToolExecutionContextTrust(params: {
     undefined,
     undefined,
     undefined,
+    undefined,
     // Cache-only sanitization: this pre-execution check has no surface to
     // show (or fail) the dual LLM workflow — the LLM proxy request owns live
     // sanitization. A not-yet-sanitized result just reads as untrusted here.

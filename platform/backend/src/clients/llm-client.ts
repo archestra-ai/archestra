@@ -14,6 +14,7 @@ import {
   anthropicSupportsThinkingDisabled,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
+  DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   isProviderApiKeyOptional,
   PROVIDER_BASE_URL_HEADER,
@@ -168,6 +169,7 @@ export function createLLMModel(params: {
   baseUrl: string | null;
   contextIsTrusted?: boolean;
   chatApiKeyId?: string;
+  dualLlmProgressChannel?: string;
 }): LLMModel {
   const {
     provider,
@@ -181,6 +183,7 @@ export function createLLMModel(params: {
     baseUrl,
     contextIsTrusted,
     chatApiKeyId,
+    dualLlmProgressChannel,
   } = params;
 
   // Build headers for LLM Proxy
@@ -216,6 +219,12 @@ export function createLLMModel(params: {
       { chatApiKeyId, provider },
       `[${provider}Proxy] chat attaching provider-api-key-id header`,
     );
+  }
+  // Chat's per-turn dual LLM progress channel: the proxy publishes analysis
+  // events on the in-process bus under this id instead of injecting narration
+  // text into the response stream.
+  if (dualLlmProgressChannel) {
+    clientHeaders[DUAL_LLM_PROGRESS_CHANNEL_HEADER] = dualLlmProgressChannel;
   }
 
   const headers =
@@ -253,6 +262,8 @@ export async function createLLMModelForAgent(params: {
   source?: InteractionSource;
   agentLlmApiKeyId?: string | null;
   contextIsTrusted?: boolean;
+  /** Per-turn dual LLM progress channel id; only the chat main turn sets it. */
+  dualLlmProgressChannel?: string;
 }): Promise<{
   model: LLMModel;
   provider: SupportedProvider;
@@ -285,6 +296,7 @@ export async function createLLMModelForAgent(params: {
     source,
     agentLlmApiKeyId,
     contextIsTrusted,
+    dualLlmProgressChannel,
   } = params;
 
   const {
@@ -367,6 +379,7 @@ export async function createLLMModelForAgent(params: {
     baseUrl,
     contextIsTrusted,
     chatApiKeyId,
+    dualLlmProgressChannel,
   });
 
   const anthropicNativeEndpoint = isAnthropicNativeEndpoint({

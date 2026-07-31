@@ -591,6 +591,125 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       setSpy.mockRestore();
     });
 
+    test("emits per-analysis progress events with tool identity; cached reuse emits only completion", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "external" }],
+        action: "sanitize_with_dual_llm",
+        description: "Sanitize external data",
+      });
+
+      const store = new Map<string, unknown>();
+      const getSpy = vi
+        .spyOn(cacheManager, "get")
+        .mockImplementation(async (key) => store.get(key));
+      const setSpy = vi
+        .spyOn(cacheManager, "set")
+        .mockImplementation(async (key, value) => {
+          store.set(key, value);
+          return value;
+        });
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi
+          .fn()
+          .mockImplementation(
+            async (
+              onProgress?: (progress: {
+                question: string;
+                options: string[];
+                answer: string;
+              }) => void,
+            ) => {
+              onProgress?.({
+                question: "What is it?",
+                options: ["safe", "unsafe"],
+                answer: "0",
+              });
+              return {
+                toolCallId: "call_dual",
+                conversations: [
+                  { role: "assistant", content: "What is it?" },
+                  { role: "user", content: "0" },
+                ],
+                result: "Sanitized summary",
+              };
+            },
+          ),
+      } as unknown as DualLlmSubagent);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Summarize the tool results" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_dual",
+              name: "get_emails",
+              content: { source: "external", payload: "raw" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const events: Record<string, unknown>[] = [];
+      const evaluate = () =>
+        evaluateIfContextIsTrusted(
+          commonMessages,
+          agentId,
+          organizationId,
+          undefined,
+          false,
+          { teamIds: [] },
+          (info) => events.push({ kind: "start", ...info }),
+          (progress) => events.push({ kind: "qa", ...progress }),
+          (info) => events.push({ kind: "error", ...info }),
+          (analysis, info) =>
+            events.push({
+              kind: "complete",
+              toolCallId: analysis.toolCallId,
+              ...info,
+            }),
+        );
+
+      await evaluate();
+      expect(events).toEqual([
+        { kind: "start", toolCallId: "call_dual", toolName: "get_emails" },
+        {
+          kind: "qa",
+          toolCallId: "call_dual",
+          toolName: "get_emails",
+          question: "What is it?",
+          options: ["safe", "unsafe"],
+          answer: "0",
+        },
+        {
+          kind: "complete",
+          toolCallId: "call_dual",
+          toolName: "get_emails",
+          cached: false,
+        },
+      ]);
+
+      // Memoized replay: no interrogation runs, but the analysis still
+      // surfaces so the UI can render the block on later turns.
+      events.length = 0;
+      await evaluate();
+      expect(events).toEqual([
+        {
+          kind: "complete",
+          toolCallId: "call_dual",
+          toolName: "get_emails",
+          cached: true,
+        },
+      ]);
+      expect(createSpy).toHaveBeenCalledOnce();
+
+      createSpy.mockRestore();
+      getSpy.mockRestore();
+      setSpy.mockRestore();
+    });
+
     test("cache-only mode never runs the dual LLM workflow: unsanitized results read as untrusted, cached ones as trusted", async () => {
       await TrustedDataPolicyModel.create({
         toolId,
@@ -640,6 +759,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
           undefined,
           false,
           { teamIds: [] },
+          undefined,
           undefined,
           undefined,
           undefined,
@@ -713,7 +833,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         { teamIds: [] },
         undefined,
         undefined,
-        (message) => streamedErrors.push(message),
+        ({ message }) => streamedErrors.push(message),
       ).then(
         () => null,
         (error) => error,
@@ -1165,6 +1285,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         undefined,
         true,
         { teamIds: [] },
+        undefined,
         undefined,
         undefined,
         undefined,

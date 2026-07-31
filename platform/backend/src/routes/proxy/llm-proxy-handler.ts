@@ -9,6 +9,7 @@ import {
   ArchestraInternalErrorCode,
   type BillingMode,
   CHAT_API_KEY_ID_HEADER,
+  DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
@@ -31,6 +32,10 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
+import {
+  type DualLlmProgressEvent,
+  dualLlmProgressBus,
+} from "@/guardrails/dual-llm-progress-bus";
 import logger from "@/logging";
 import {
   AgentTeamModel,
@@ -62,6 +67,7 @@ import {
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import {
   ApiError,
+  DUAL_LLM_KEEPALIVE_SSE_COMMENT,
   type DualLlmAnalysis,
   type GatewayAgent,
   type InteractionAuthMethod,
@@ -899,6 +905,38 @@ export async function handleLLMProxy<
       : inheritedContextUntrusted
         ? UNSAFE_CONTEXT_BOUNDARY_REASON.inheritedFromParent
         : undefined;
+    // Dual LLM progress delivery. A chat-loopback request carries a progress
+    // channel header and receives structured events on the in-process bus,
+    // which the chat turn renders as model-invisible analysis parts. Everyone
+    // else gets protocol-level SSE keep-alive comments while an analysis
+    // holds the stream idle. Narration text is never injected into the
+    // stream: on chat-completions transports injected content shares the
+    // model's implicit text stream and fuses into the assistant's answer.
+    const dualLlmProgressChannelRaw =
+      request.headers[DUAL_LLM_PROGRESS_CHANNEL_HEADER.toLowerCase()];
+    const dualLlmProgressChannel =
+      typeof dualLlmProgressChannelRaw === "string" &&
+      dualLlmProgressChannelRaw.length > 0
+        ? dualLlmProgressChannelRaw
+        : undefined;
+    const publishDualLlmEvent = dualLlmProgressChannel
+      ? (event: DualLlmProgressEvent) =>
+          dualLlmProgressBus.publish(dualLlmProgressChannel, event)
+      : undefined;
+    // Only on `text/event-stream`: the keep-alive is an SSE comment, which
+    // the NDJSON and binary event-stream transports would surface as a parse
+    // error rather than ignore. Those streams simply go without one.
+    const writeDualLlmKeepAlive =
+      !publishDualLlmEvent &&
+      sseHeaders?.["Content-Type"]?.startsWith("text/event-stream")
+        ? () => {
+            ensureStreamHeaders();
+            reply.raw.write(DUAL_LLM_KEEPALIVE_SSE_COMMENT);
+          }
+        : undefined;
+    const wantsDualLlmCallbacks =
+      publishDualLlmEvent !== undefined || writeDualLlmKeepAlive !== undefined;
+
     const {
       toolResultUpdates,
       contextIsTrusted,
@@ -911,40 +949,40 @@ export async function handleLLMProxy<
       userId,
       effectiveConsiderContextUntrusted,
       { teamIds, externalAgentId },
-      // Streaming callbacks for dual LLM progress
-      requestAdapter.isStreaming()
-        ? () => {
-            ensureStreamHeaders();
-            reply.raw.write(
-              streamAdapter.formatTextDeltaSSE("Analyzing with Dual LLM:\n\n"),
-            );
+      wantsDualLlmCallbacks
+        ? (info) => {
+            writeDualLlmKeepAlive?.();
+            publishDualLlmEvent?.({ kind: "start", ...info });
           }
         : undefined,
-      requestAdapter.isStreaming()
-        ? (progress: {
-            question: string;
-            options: string[];
-            answer: string;
-          }) => {
-            const optionsText = progress.options
-              .map((opt: string, idx: number) => `  ${idx}: ${opt}`)
-              .join("\n");
-            ensureStreamHeaders();
-            reply.raw.write(
-              streamAdapter.formatTextDeltaSSE(
-                `Question: ${progress.question}\nOptions:\n${optionsText}\nAnswer: ${progress.answer}\n\n`,
-              ),
-            );
+      wantsDualLlmCallbacks
+        ? (progress) => {
+            writeDualLlmKeepAlive?.();
+            publishDualLlmEvent?.({ kind: "qa", ...progress });
           }
         : undefined,
-      // A failed analysis fails the request closed; surface the failure
-      // inside the visible dual LLM block before the error terminates the
-      // stream, so the block explains why the turn stopped.
-      requestAdapter.isStreaming()
-        ? (message: string) => {
-            ensureStreamHeaders();
-            reply.raw.write(streamAdapter.formatTextDeltaSSE(message));
+      // A failed analysis fails the request closed. Chat renders the failure
+      // from the structured event; for other clients the message is written
+      // as a text delta — safe here because the request errors out and no
+      // model output follows that could fuse with it.
+      wantsDualLlmCallbacks
+        ? (info) => {
+            publishDualLlmEvent?.({ kind: "error", ...info });
+            if (!publishDualLlmEvent && requestAdapter.isStreaming()) {
+              ensureStreamHeaders();
+              reply.raw.write(streamAdapter.formatTextDeltaSSE(info.message));
+            }
           }
+        : undefined,
+      publishDualLlmEvent
+        ? (analysis, info) =>
+            publishDualLlmEvent({
+              kind: "complete",
+              toolCallId: analysis.toolCallId,
+              toolName: info.toolName,
+              analysis,
+              cached: info.cached,
+            })
         : undefined,
       initialUntrustedReason,
     );

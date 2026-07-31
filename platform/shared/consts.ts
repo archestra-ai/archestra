@@ -340,6 +340,19 @@ export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
 export const ANTHROPIC_THINKING_OFF_HEADER =
   "x-archestra-anthropic-thinking-off";
 
+/**
+ * Header used to pass a per-turn dual LLM progress channel id from chat → LLM
+ * proxy (loopback). When present, the proxy publishes structured dual LLM
+ * analysis events (start / Q&A / complete / failure) on the in-process
+ * progress bus under this channel instead of injecting narration text into
+ * the response stream — injected narration is indistinguishable from model
+ * output on chat-completions streams and fuses into the assistant's answer.
+ * Clients without the header receive protocol-level SSE keep-alive comments
+ * while an analysis holds the stream idle.
+ */
+export const DUAL_LLM_PROGRESS_CHANNEL_HEADER =
+  "X-Archestra-Dual-Llm-Progress-Channel";
+
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 
 export const TimeInMs = {

@@ -9,6 +9,7 @@
 import { MessageStream } from "@anthropic-ai/sdk/lib/MessageStream";
 import {
   CHAT_API_KEY_ID_HEADER,
+  DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   PROVIDER_BASE_URL_HEADER,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
@@ -21,6 +22,10 @@ import {
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import {
+  type DualLlmProgressEvent,
+  dualLlmProgressBus,
+} from "@/guardrails/dual-llm-progress-bus";
 import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
 import {
   InteractionModel,
@@ -38,7 +43,7 @@ import {
   type OpenAiStubOptions,
 } from "@/test/llm-provider-stubs";
 import type { Agent } from "@/types";
-import { ApiError } from "@/types";
+import { ApiError, DUAL_LLM_KEEPALIVE_SSE_COMMENT } from "@/types";
 
 // Mock prom-client at module level (like llm-metrics.test.ts)
 const counterInc = vi.fn();
@@ -76,6 +81,25 @@ vi.mock("@/guardrails/tool-invocation", async (importOriginal) => {
   return {
     ...original,
     evaluatePolicies: (...args: unknown[]) => mockEvaluatePolicies(...args),
+  };
+});
+
+// Wraps trusted-data so the dual-LLM progress suite can take over
+// evaluateIfContextIsTrusted and drive its callbacks. Without an
+// implementation set, calls flow through to the real function, which every
+// other suite depends on for the no-policies path.
+const mockEvaluateIfContextIsTrusted = vi.fn();
+vi.mock("@/guardrails/trusted-data", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("@/guardrails/trusted-data")>();
+  return {
+    ...original,
+    evaluateIfContextIsTrusted: (
+      ...args: Parameters<typeof original.evaluateIfContextIsTrusted>
+    ) =>
+      mockEvaluateIfContextIsTrusted.getMockImplementation()
+        ? mockEvaluateIfContextIsTrusted(...args)
+        : original.evaluateIfContextIsTrusted(...args),
   };
 });
 
@@ -2392,5 +2416,143 @@ describe("LLM Proxy Handler — team-restricted models", () => {
     });
     const allowed = await injectChatCompletionAs(insiderToken);
     expect(allowed.statusCode).toBe(200);
+  });
+});
+
+describe("LLM Proxy Handler — dual LLM progress delivery", () => {
+  let app: FastifyInstance;
+  let testAgent: Agent;
+
+  type DualLlmCallbackArgs = Parameters<
+    typeof import("@/guardrails/trusted-data")["evaluateIfContextIsTrusted"]
+  >;
+
+  // Simulates one full analysis (start → one Q&A round → completion) through
+  // whichever callbacks the handler wired up.
+  const runDualLlmCallbacks = (args: DualLlmCallbackArgs) => {
+    const [, , , , , , onStart, onProgress, , onComplete] = args;
+    onStart?.({ toolCallId: "call_1", toolName: "web_fetch" });
+    onProgress?.({
+      toolCallId: "call_1",
+      toolName: "web_fetch",
+      question: "Primary topic?",
+      options: ["security", "recipes"],
+      answer: "0",
+    });
+    onComplete?.(
+      {
+        toolCallId: "call_1",
+        conversations: [
+          { role: "assistant", content: "Primary topic?" },
+          { role: "user", content: "0" },
+        ],
+        result: "A security article.",
+      },
+      { toolName: "web_fetch", cached: false },
+    );
+  };
+
+  beforeEach(async ({ makeAgent }) => {
+    vi.clearAllMocks();
+    mockEvaluateIfContextIsTrusted.mockImplementation(async (...args) => {
+      runDualLlmCallbacks(args as DualLlmCallbackArgs);
+      return {
+        toolResultUpdates: {},
+        contextIsTrusted: true,
+        usedDualLlm: true,
+        dualLlmAnalyses: [],
+        unsafeContextBoundary: undefined,
+      };
+    });
+
+    app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient({}) as never,
+    );
+
+    testAgent = await makeAgent({ name: "Dual LLM Progress Agent" });
+    metrics.llm.initializeMetrics([]);
+    mockEvaluatePolicies.mockResolvedValue(null);
+
+    await app.register(openAiProxyRoutes);
+    await ModelModel.upsert({
+      externalId: "openai/gpt-4o",
+      provider: "openai",
+      modelId: "gpt-4o",
+      inputModalities: null,
+      outputModalities: null,
+      customPricePerMillionInput: "2.50",
+      customPricePerMillionOutput: "10.00",
+      lastSyncedAt: new Date(),
+    });
+  });
+
+  afterEach(async () => {
+    mockEvaluateIfContextIsTrusted.mockReset();
+    vi.restoreAllMocks();
+    await app.close();
+  });
+
+  const injectStreaming = (extraHeaders: Record<string, string> = {}) =>
+    app.inject({
+      method: "POST",
+      url: `/v1/openai/${testAgent.id}/chat/completions`,
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-key",
+        ...extraHeaders,
+      },
+      payload: {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: "Summarize the fetched page" }],
+        stream: true,
+      },
+    });
+
+  test("without a progress channel, analyses hold the stream open with SSE comments and never inject narration", async () => {
+    const response = await injectStreaming();
+
+    expect(response.statusCode).toBe(200);
+    // Two keep-alive comments: one per callback (start, Q&A round).
+    expect(response.body).toContain(DUAL_LLM_KEEPALIVE_SSE_COMMENT);
+    // The analysis narrative must never ride the content stream — on
+    // chat-completions it fuses into the model's answer.
+    expect(response.body).not.toContain("Analyzing with Dual LLM");
+    expect(response.body).not.toContain("Primary topic?");
+  });
+
+  test("with a progress channel, analyses publish structured events on the bus and write nothing into the stream", async () => {
+    const events: DualLlmProgressEvent[] = [];
+    const unsubscribe = dualLlmProgressBus.subscribe("chan-test-1", (event) =>
+      events.push(event),
+    );
+
+    const response = await injectStreaming({
+      [DUAL_LLM_PROGRESS_CHANNEL_HEADER]: "chan-test-1",
+    });
+    unsubscribe();
+
+    expect(response.statusCode).toBe(200);
+    expect(events.map((event) => event.kind)).toEqual([
+      "start",
+      "qa",
+      "complete",
+    ]);
+    expect(events[1]).toMatchObject({
+      toolCallId: "call_1",
+      toolName: "web_fetch",
+      question: "Primary topic?",
+      answer: "0",
+    });
+    expect(events[2]).toMatchObject({
+      cached: false,
+      analysis: { result: "A security article." },
+    });
+    // Nothing analysis-related reaches the wire — no comments, no narration.
+    expect(response.body).not.toContain("archestra dual-llm");
+    expect(response.body).not.toContain("Primary topic?");
   });
 });

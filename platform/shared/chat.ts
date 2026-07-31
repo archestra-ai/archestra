@@ -285,6 +285,48 @@ export interface SubagentToolCallPartData {
 }
 
 /**
+ * Type of the inline dual-LLM-analysis part. A `data-*` part: persisted and
+ * rendered in the chat thread as the guardrail's analysis block, but dropped
+ * from the model conversion (`convertToModelMessages`), so the analysis
+ * narrative never re-enters model context — same class as
+ * `data-subagent-tool-call`. Replaces the proxy's former narration text
+ * injection, which rode the same implicit text stream as the model's answer
+ * on chat-completions transports and fused into it. Shared so the backend
+ * (emit) and frontend (render) agree on the wire string.
+ */
+export const DUAL_LLM_ANALYSIS_PART_TYPE = "data-dual-llm-analysis";
+
+/** One interrogation round of a dual LLM analysis, as the chat UI renders it. */
+export interface DualLlmAnalysisRound {
+  question: string;
+  options: string[];
+  answer: string;
+}
+
+/**
+ * The `data` payload of a {@link DUAL_LLM_ANALYSIS_PART_TYPE} part: the live
+ * (then persisted) state of one tool result's dual LLM sanitization.
+ * `toolCallId` links it to the tool call whose result is under analysis; the
+ * part streams with that id as its chunk id, so progress updates reconcile in
+ * place. A `cached` analysis was reused from the sanitize-once cache and
+ * carries `questionCount` instead of replayable `rounds`.
+ */
+export interface DualLlmAnalysisPartData {
+  toolCallId: string;
+  toolName: string;
+  status: "analyzing" | "done" | "failed";
+  rounds: DualLlmAnalysisRound[];
+  /** Sanitized summary that replaced the raw tool result (status `done`). */
+  summary?: string;
+  /** Why the analysis failed — the request then failed closed (status `failed`). */
+  failureMessage?: string;
+  /** True when reused from the sanitize-once cache (no live rounds to show). */
+  cached?: boolean;
+  /** Interrogation round count when `rounds` is empty (cached reuse). */
+  questionCount?: number;
+}
+
+/**
  * Type of the inline MCP-task part. A `data-*` part: persisted and rendered in
  * the chat thread, but dropped from the model conversion
  * (`convertToModelMessages`), so the LLM never sees it — same class as
@@ -440,6 +482,13 @@ export function hasPersistableAssistantContent(message: {
     // nested under its delegation call); like a hook-run entry it needs no
     // pairing, so a turn carrying only subagent calls is still persistable.
     if (part.type === SUBAGENT_TOOL_CALL_PART_TYPE) {
+      return true;
+    }
+
+    // a dual-LLM analysis block is standalone renderable content — a turn
+    // that failed closed during sanitization may carry only the failed
+    // analysis, which must survive persistence to explain the stop.
+    if (part.type === DUAL_LLM_ANALYSIS_PART_TYPE) {
       return true;
     }
 

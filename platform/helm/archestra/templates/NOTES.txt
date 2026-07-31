@@ -32,22 +32,3 @@ Using internal PostgreSQL database:
   Database: {{ .Values.postgresql.auth.database }}
   Username: {{ .Values.postgresql.auth.username }}
 {{- end }}
-
-{{- if .Values.archestra.networkPolicyProbe.enabled }}
-
-Network policy enforcement:
-  Two probe pods tested whether this cluster enforces NetworkPolicy, and the
-  "[archestra] network policy check" line above carries the result. A warning
-  there means egress rules configured in Archestra are accepted and then
-  ignored.
-
-  Helm prints that line from 3.18 and 4.0 onwards. On older versions, read it
-  from the pods instead:
-
-  kubectl --namespace {{ .Release.Namespace }} logs -l app.kubernetes.io/component=netpol-probe
-
-  The pods and their deny-all policy are hook resources, so `helm uninstall`
-  leaves them behind. Remove them with:
-
-  kubectl --namespace {{ .Release.Namespace }} delete pod,networkpolicy -l app.kubernetes.io/component=netpol-probe
-{{- end }}

@@ -60,6 +60,8 @@ class McpToolCallModel {
       startDate?: Date;
       endDate?: Date;
       search?: string;
+      /** Narrow to rows attributed to this user (the own-logs log:read view). */
+      ownUserId?: string;
     },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Determine the ORDER BY clause based on sorting params
@@ -67,6 +69,9 @@ class McpToolCallModel {
 
     // Build where clauses
     const conditions: SQL[] = [];
+    if (filters?.ownUserId) {
+      conditions.push(eq(schema.mcpToolCallsTable.userId, filters.ownUserId));
+    }
 
     // Access control filter
     if (userId && !isMcpServerAdmin) {
@@ -244,10 +249,15 @@ class McpToolCallModel {
       startDate?: Date;
       endDate?: Date;
       search?: string;
+      /** Narrow to rows attributed to this user (the own-logs log:read view). */
+      ownUserId?: string;
     },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Build conditions array
     const conditions: SQL[] = [eq(schema.mcpToolCallsTable.agentId, agentId)];
+    if (filters?.ownUserId) {
+      conditions.push(eq(schema.mcpToolCallsTable.userId, filters.ownUserId));
+    }
 
     // Add any custom where clauses
     if (whereClauses && whereClauses.length > 0) {

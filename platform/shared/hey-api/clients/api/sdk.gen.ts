@@ -1251,7 +1251,7 @@ export const archestraChatCompletionsWithAgent = <ThrowOnError extends boolean =
  *
  * Authorization:
  *
- * `auditLog:read`: View the organization-wide audit log of administrative actions
+ * `auditLog:read`: View audit log records of your own administrative actions
  */
 export const getAuditLogs = <ThrowOnError extends boolean = false>(options?: Options<GetAuditLogsData, ThrowOnError>) => (options?.client ?? client).get<GetAuditLogsResponses, GetAuditLogsErrors, ThrowOnError>({ url: '/api/audit-logs', ...options });
 
@@ -1264,7 +1264,7 @@ export const getAuditLogs = <ThrowOnError extends boolean = false>(options?: Opt
  *
  * Authorization:
  *
- * `auditLog:read`: View the organization-wide audit log of administrative actions
+ * `auditLog:read`: View audit log records of your own administrative actions
  */
 export const getAuditLog = <ThrowOnError extends boolean = false>(options: Options<GetAuditLogData, ThrowOnError>) => (options.client ?? client).get<GetAuditLogResponses, GetAuditLogErrors, ThrowOnError>({ url: '/api/audit-logs/{id}', ...options });
 
@@ -3519,7 +3519,7 @@ export const deleteIncomingEmailSubscription = <ThrowOnError extends boolean = f
  *
  * Authorization:
  *
- * `log:read`: View LLM proxy and MCP tool call logs
+ * `log:read`: View your own LLM proxy and MCP tool call logs
  */
 export const getInteractions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionsData, ThrowOnError>) => (options?.client ?? client).get<GetInteractionsResponses, GetInteractionsErrors, ThrowOnError>({ url: '/api/interactions', ...options });
 
@@ -3532,7 +3532,7 @@ export const getInteractions = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authorization:
  *
- * `log:read`: View LLM proxy and MCP tool call logs
+ * `log:read`: View your own LLM proxy and MCP tool call logs
  */
 export const getInteractionSessions = <ThrowOnError extends boolean = false>(options?: Options<GetInteractionSessionsData, ThrowOnError>) => (options?.client ?? client).get<GetInteractionSessionsResponses, GetInteractionSessionsErrors, ThrowOnError>({ url: '/api/interactions/sessions', ...options });
 
@@ -3545,7 +3545,7 @@ export const getInteractionSessions = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `log:read`: View LLM proxy and MCP tool call logs
+ * `log:read`: View your own LLM proxy and MCP tool call logs
  */
 export const getUniqueExternalAgentIds = <ThrowOnError extends boolean = false>(options?: Options<GetUniqueExternalAgentIdsData, ThrowOnError>) => (options?.client ?? client).get<GetUniqueExternalAgentIdsResponses, GetUniqueExternalAgentIdsErrors, ThrowOnError>({ url: '/api/interactions/external-agent-ids', ...options });
 
@@ -3558,7 +3558,7 @@ export const getUniqueExternalAgentIds = <ThrowOnError extends boolean = false>(
  *
  * Authorization:
  *
- * `log:read`: View LLM proxy and MCP tool call logs
+ * `log:read`: View your own LLM proxy and MCP tool call logs
  */
 export const getUniqueUserIds = <ThrowOnError extends boolean = false>(options?: Options<GetUniqueUserIdsData, ThrowOnError>) => (options?.client ?? client).get<GetUniqueUserIdsResponses, GetUniqueUserIdsErrors, ThrowOnError>({ url: '/api/interactions/user-ids', ...options });
 
@@ -3571,7 +3571,7 @@ export const getUniqueUserIds = <ThrowOnError extends boolean = false>(options?:
  *
  * Authorization:
  *
- * `log:read`: View LLM proxy and MCP tool call logs
+ * `log:read`: View your own LLM proxy and MCP tool call logs
  */
 export const getInteraction = <ThrowOnError extends boolean = false>(options: Options<GetInteractionData, ThrowOnError>) => (options.client ?? client).get<GetInteractionResponses, GetInteractionErrors, ThrowOnError>({ url: '/api/interactions/{interactionId}', ...options });
 
@@ -5059,7 +5059,7 @@ export const reloadMcpServerTools = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `log:read`: View LLM proxy and MCP tool call logs
+ * `log:read`: View your own LLM proxy and MCP tool call logs
  */
 export const getMcpToolCalls = <ThrowOnError extends boolean = false>(options?: Options<GetMcpToolCallsData, ThrowOnError>) => (options?.client ?? client).get<GetMcpToolCallsResponses, GetMcpToolCallsErrors, ThrowOnError>({ url: '/api/mcp-tool-calls', ...options });
 
@@ -5072,7 +5072,7 @@ export const getMcpToolCalls = <ThrowOnError extends boolean = false>(options?: 
  *
  * Authorization:
  *
- * `log:read`: View LLM proxy and MCP tool call logs
+ * `log:read`: View your own LLM proxy and MCP tool call logs
  */
 export const getMcpToolCall = <ThrowOnError extends boolean = false>(options: Options<GetMcpToolCallData, ThrowOnError>) => (options.client ?? client).get<GetMcpToolCallResponses, GetMcpToolCallErrors, ThrowOnError>({ url: '/api/mcp-tool-calls/{mcpToolCallId}', ...options });
 

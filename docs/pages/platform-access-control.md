@@ -20,6 +20,8 @@ Permissions in Archestra are defined using a `resource:action` format, where:
 
 For example, the permission `agent:create` allows creating new agents, `mcpGateway:update` allows updating MCP gateways, whereas `llmProxy:read` would allow reading LLM proxies.
 
+Two resources distinguish an own-records view from an organization-wide one: `log:read` shows only the caller's own LLM proxy and MCP tool-call records, while `log:admin` shows every user's; `auditLog:read` and `auditLog:admin` split the audit trail the same way. This is what makes a deliberately-restricted admin role practical — its holders keep full visibility into their own activity without seeing anyone else's.
+
 ## Predefined Roles
 
 The following roles are built into Archestra and cannot be modified or deleted:
@@ -29,6 +31,12 @@ The following roles are built into Archestra and cannot be modified or deleted:
 Full access to all resources including user management, roles, and platform settings
 
 The admin role has **all permissions** on every resource.
+
+### Platform Admin
+
+Runs the platform — everything an admin can do, except reading other users' logs, reading the audit log, and impersonating users
+
+Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, and `member:impersonate` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, and impersonation stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
 
 ### Editor
 
@@ -62,7 +70,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete`, `share-org` |
 | Files | `manage` |
-| Logs | `read` |
+| Logs | `read`, `admin` |
 | API Keys | `read`, `create`, `delete` |
 | LLM Settings | `read`, `update` |
 | MCP Settings | `read`, `update` |
@@ -165,7 +173,8 @@ The following table lists all available permissions that can be assigned to cust
 | `app:team-admin` | Manage team assignments for MCP Apps |
 | `app:admin` | Full administrative control over all MCP Apps, bypassing team restrictions |
 | `app:deploy-to-restricted` | Assign MCP Apps to restricted deployment environments |
-| `auditLog:read` | View the organization-wide audit log of administrative actions |
+| `auditLog:read` | View audit log records of your own administrative actions |
+| `auditLog:admin` | View the organization-wide audit log of every member's administrative actions |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |
@@ -233,7 +242,8 @@ The following table lists all available permissions that can be assigned to cust
 | `llmVirtualKey:update` | Modify LLM virtual keys and their visibility |
 | `llmVirtualKey:delete` | Delete LLM virtual keys |
 | `llmVirtualKey:admin` | Manage all LLM virtual keys and view every scope |
-| `log:read` | View LLM proxy and MCP tool call logs |
+| `log:read` | View your own LLM proxy and MCP tool call logs |
+| `log:admin` | View every user's LLM proxy and MCP tool call logs |
 | `mcpGateway:read` | View and list MCP gateways |
 | `mcpGateway:create` | Create new MCP gateways |
 | `mcpGateway:update` | Modify MCP gateway configuration |

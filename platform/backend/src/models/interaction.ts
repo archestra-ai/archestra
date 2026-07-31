@@ -793,11 +793,16 @@ class InteractionModel {
   static async getUniqueExternalAgentIds(
     requestingUserId?: string,
     isAgentAdmin?: boolean,
+    /** Narrow to rows attributed to this user (the own-logs log:read view). */
+    ownUserId?: string,
   ): Promise<{ id: string; displayName: string }[]> {
     // Build where clause for access control
     const conditions: SQL[] = [
       isNotNull(schema.interactionsTable.externalAgentId),
     ];
+    if (ownUserId) {
+      conditions.push(eq(schema.interactionsTable.userId, ownUserId));
+    }
 
     if (requestingUserId && !isAgentAdmin) {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(

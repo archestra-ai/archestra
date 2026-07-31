@@ -31,6 +31,7 @@ import {
   SkillTeamModel,
   SkillUsageEventModel,
   SkillUserModel,
+  SkillVersionModel,
   TaskModel,
   TeamModel,
   ToolModel,
@@ -75,11 +76,14 @@ import {
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
   SelectSkillSchema,
+  SelectSkillVersionFileSchema,
+  SelectSkillVersionSchema,
   type Skill,
   SkillFileEncodingSchema,
   SkillGithubSyncIntervalSchema,
   SkillSortBy,
   SkillUsageStatisticsSchema,
+  SkillVersionMetadataSchema,
   SkillWithFilesSchema,
   UuidIdSchema,
 } from "@/types";
@@ -163,6 +167,11 @@ const SkillDetailSchema = SkillWithFilesSchema.extend({
   teams: z.array(SkillTeamSchema),
   users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
+});
+
+/** One immutable version with its resource-file snapshots. */
+const SkillVersionDetailSchema = SelectSkillVersionSchema.extend({
+  files: z.array(SelectSkillVersionFileSchema),
 });
 
 /** One crawled public-GitHub skill returned by a catalog search. */
@@ -741,6 +750,97 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           since,
         }),
       );
+    },
+  );
+
+  fastify.get(
+    "/api/skills/:id/versions",
+    {
+      schema: {
+        operationId: RouteId.GetSkillVersions,
+        description:
+          "List a skill's version history, newest first, as metadata only " +
+          "(no SKILL.md body). Version numbers are contiguous from 1. " +
+          "Paginated, unlike the app versions list.",
+        tags: ["Skills"],
+        params: z.object({ id: z.string() }),
+        querystring: PaginationQuerySchema,
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SkillVersionMetadataSchema),
+        ),
+      },
+    },
+    async ({ params: { id }, query, organizationId, user }, reply) => {
+      // Version reads don't filter soft-deletes themselves — resolving the
+      // live skill first (404 on deleted) is what keeps history unreachable.
+      const skill = await findSkillOrThrow(id, organizationId);
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
+      const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        organizationId,
+        userId: user.id,
+        skill,
+        isSkillAdmin: checker.isAdmin,
+      });
+      if (!hasAccess) {
+        throw new ApiError(404, "Skill not found");
+      }
+      return reply.send(
+        await SkillVersionModel.listForSkill({
+          skillId: skill.id,
+          pagination: query,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/skills/:id/versions/:version",
+    {
+      schema: {
+        operationId: RouteId.GetSkillVersion,
+        description:
+          "Get one immutable skill version: the SKILL.md body it captured " +
+          "plus its resource-file snapshots.",
+        tags: ["Skills"],
+        params: z.object({
+          id: z.string(),
+          version: z.coerce.number().int().positive(),
+        }),
+        response: constructResponseSchema(SkillVersionDetailSchema),
+      },
+    },
+    async ({ params: { id, version }, organizationId, user }, reply) => {
+      // Same live-skill-first resolution as the versions list (soft-deletes).
+      const skill = await findSkillOrThrow(id, organizationId);
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
+      const hasAccess = await SkillTeamModel.userHasSkillAccess({
+        organizationId,
+        userId: user.id,
+        skill,
+        isSkillAdmin: checker.isAdmin,
+      });
+      if (!hasAccess) {
+        throw new ApiError(404, "Skill not found");
+      }
+      const row = await SkillVersionModel.findBySkillAndVersion(
+        skill.id,
+        version,
+      );
+      if (!row) {
+        throw new ApiError(404, `Skill has no version ${version}`);
+      }
+      return reply.send({
+        ...row,
+        files: await SkillVersionModel.findFiles(row.id),
+      });
     },
   );
 

@@ -13,6 +13,7 @@ import {
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   RouteId,
   requiresOpenAiResponsesApi,
+  requiresPerplexityAgentApi,
   type SupportedProvider,
   supportsGeminiThoughtSummaries,
   TimeInMs,
@@ -1045,15 +1046,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
                 // Omit tools for models that can't take them (e.g. Microsoft
                 // 365 Copilot) instead of letting the provider reject the
-                // turn; an unknown capability is assumed supported. Perplexity
-                // stays hardcoded — its models don't declare capabilities and
-                // it has built-in web search instead of tool calling
-                // (https://docs.perplexity.ai/api-reference/chat-completions-post).
-                // Perplexity's tool calling (2026) exists only on its separate
-                // Agent API (/responses/create, a Responses-style wire format),
-                // not the chat-completions surface we proxy.
+                // turn; an unknown capability is assumed supported. Decided
+                // per model, never per provider: a provider-wide gate hides a
+                // tool-capable model behind its siblings, and it disagrees
+                // with the composer's "no tools" chip, which reads this same
+                // capability. Providers whose endpoint takes no tools record
+                // it as `supportsToolCalling: false` on the model row — see
+                // inferPerplexityCapabilities in services/model-sync.ts for
+                // why every `sonar*` row carries that flag.
                 const supportsToolCalling =
-                  provider !== "perplexity" &&
                   modelRow?.supportsToolCalling !== false;
 
                 const { modelMessages, preparedMessages } =
@@ -1326,6 +1327,43 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       ...(summariesUnsupported
                         ? {}
                         : { reasoningSummary: "auto" }),
+                    },
+                  };
+                }
+
+                // Perplexity Agent API models (the provider's Responses
+                // transport). The key is literally `openai` because the SDK
+                // picks that namespace from the transport rather than the
+                // provider name.
+                //
+                // `store: false` — the Agent API stores nothing, so there are
+                // no server-side item ids to point back at. The SDK's
+                // Responses converter defaults `store` to true and then
+                // replaces each earlier assistant text and tool call that
+                // carries an item id with `{ type: "item_reference", id }` —
+                // references the second turn of every conversation would send
+                // and Perplexity could not resolve.
+                //
+                // The reasoning options exist because the SDK gates its whole
+                // reasoning request path on OpenAI's own model-name heuristic
+                // (o1/o3/gpt-5*), which no vendor-prefixed Perplexity id
+                // matches: without `forceReasoning` the request carries no
+                // `reasoning` block, so reasoning models answer with their
+                // thinking withheld and chat shows none. Forcing it also
+                // flips the SDK's system-message default to the `developer`
+                // role, so `systemMessageMode` pins the plain `system` role
+                // every vendor behind this cross-vendor catalog accepts.
+                if (
+                  provider === "perplexity" &&
+                  requiresPerplexityAgentApi(selectedModel)
+                ) {
+                  streamTextConfig.providerOptions = {
+                    ...streamTextConfig.providerOptions,
+                    openai: {
+                      store: false,
+                      forceReasoning: true,
+                      reasoningSummary: "auto",
+                      systemMessageMode: "system",
                     },
                   };
                 }
@@ -1928,6 +1966,30 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  // Registered before `/conversations/:id` so the static `deleted` segment is
+  // unambiguous (find-my-way prioritizes static over parametric regardless, and
+  // `:id` is a UUID so "deleted" would 400 there anyway — this keeps it clear).
+  fastify.get(
+    "/api/chat/conversations/deleted",
+    {
+      schema: {
+        operationId: RouteId.GetDeletedChatConversations,
+        description:
+          "List the current user's soft-deleted conversations (the Trash view), newest deletion first.",
+        tags: ["Chat"],
+        response: constructResponseSchema(z.array(SelectConversationSchema)),
+      },
+    },
+    async (request, reply) => {
+      return reply.send(
+        await ConversationModel.findAllDeleted(
+          request.user.id,
+          request.organizationId,
+        ),
+      );
+    },
+  );
+
   fastify.get(
     "/api/chat/conversations/:id",
     {
@@ -2493,48 +2555,50 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Look up the conversation (owner+org-scoped) before deletion so we can
-      // capture its agent and any running active run for post-delete cleanup.
+      // Owner+org-scoped lookup; findById excludes soft-deleted rows. A miss
+      // means the conversation never existed, isn't owned by the caller, or is
+      // already deleted — nothing left for this caller to delete, so DELETE
+      // stays idempotent and returns success without touching state.
       const conversation = await ConversationModel.findById({
         id,
         userId: user.id,
         organizationId,
       });
-
-      // Capture the running run id before deletion: the cascade removes the run
-      // row, and we need its id afterward to wake the stream's stop/poll loop.
-      // Gated on the owner+org-scoped lookup above, so it never observes another
-      // tenant's run.
-      const runningRunId = conversation
-        ? ((await ActiveChatRunModel.findRunningByConversation(id))?.id ?? null)
-        : null;
-
-      // The conversation owns its no-project files, so they must die with it
-      // rather than linger as unreachable orphans (the FK is SET NULL). Purge
-      // them BEFORE the delete, while they still carry the conversation id, and
-      // only when the owner-scoped lookup above confirmed the caller owns it.
-      if (conversation) {
-        await fileStore.purgeConversationFiles({
-          organizationId,
-          conversationId: id,
-        });
+      if (!conversation) {
+        return reply.send({ success: true });
       }
 
-      // The delete is the source of truth. Do not stop the stream or tear down
-      // browser runtime before it succeeds: a failed delete must leave the
-      // conversation and its in-flight response intact.
+      // Soft-delete: stamp deleted_at so the conversation vanishes from every
+      // read path while its rows (messages, runs, shares) AND its object-storage
+      // files stay intact — soft delete must be reversible. The old hard-delete
+      // purged conversation files here; that purge is intentionally gone.
+      // Nothing reclaims these files yet — a scheduled retention job (purge
+      // files + hard-delete rows past the window) is planned as a follow-up.
+      // The delete count is ignored: a concurrent winner making it 0 is still
+      // success for an idempotent DELETE.
+      // No audit record is emitted: conversations are intentionally absent from
+      // AUDITABLE_ROUTES (see AUDIT_DECISIONS.conversationsTable).
       await ConversationModel.delete(id, user.id, organizationId);
 
-      // Post-delete best-effort cleanup; failures here must not fail the
-      // already-successful delete. The run row is now cascade-gone, so waking
-      // its stop/poll loop makes the stream observe the missing row promptly.
-      // The run_missing append path and missing-row poll remain as safety nets
-      // if this wake is lost.
-      if (runningRunId) {
-        await activeChatRunService.notifyConversationDeleted(runningRunId);
+      // Best-effort teardown of live-only resources; failures here must not fail
+      // the already-successful delete. The data stays, but an in-flight run and
+      // its browser tab are ephemeral and must not keep streaming into a hidden
+      // conversation. Soft-delete leaves the run row in place (no cascade), so
+      // request an explicit stop: this sets stopRequestedAt on the still-running
+      // row, which the stream's stop-poll observes and aborts on.
+      try {
+        await activeChatRunService.requestStop({
+          conversationId: id,
+          organizationId,
+        });
+      } catch (error) {
+        logger.warn(
+          { error, conversationId: id },
+          "Failed to stop active chat run on conversation deletion",
+        );
       }
 
-      if (conversation?.agentId && browserStreamFeature.isEnabled()) {
+      if (conversation.agentId && browserStreamFeature.isEnabled()) {
         // Close browser tab for this conversation (best effort, don't fail if it errors)
         try {
           await browserStreamFeature.closeTab(conversation.agentId, id, {
@@ -2550,6 +2614,82 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/chat/conversations/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreChatConversation,
+        description: "Restore a soft-deleted conversation",
+        tags: ["Chat"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(SelectConversationSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      // Idempotent restore: clear deleted_at (no-op / count 0 when the row is
+      // already active). Restore does not resurrect the aborted stream left by
+      // delete — history returns, the run stays stopped.
+      // No audit record is emitted: conversations are intentionally absent from
+      // AUDITABLE_ROUTES (see AUDIT_DECISIONS.conversationsTable — high-volume
+      // chat data surfaced via /llm/logs), so restore matches the sibling
+      // create/update/delete conversation routes rather than auditing alone.
+      const restored = await ConversationModel.restore(
+        id,
+        user.id,
+        organizationId,
+      );
+
+      // Both side effects below are gated on the deleted -> active transition,
+      // never on the idempotent no-op: a second restore must not reach into a
+      // conversation that is already live (and a caller who does not own the
+      // row transitions nothing, so neither touches someone else's chat).
+      if (restored > 0) {
+        // Delete only asked the run to stop. Finish it here so a row nothing is
+        // streaming into can't wedge the restored chat behind the running-run
+        // unique index until the stale reaper. Best-effort, like the teardown on
+        // delete: a restore must not fail over stream bookkeeping.
+        try {
+          await activeChatRunService.cancelRunForRestoredConversation(id);
+        } catch (error) {
+          logger.warn(
+            { error, conversationId: id },
+            "Failed to finalize the stopped chat run on conversation restore",
+          );
+        }
+
+        // Restore does NOT re-publish. Delete revokes read access for everyone
+        // holding the share link (the shares join filters on the soft-delete
+        // predicate), and deleting a chat is a plausible way to pull a share
+        // back — so silently re-granting org-wide access on the way out of
+        // trash would be a surprise with real disclosure consequences. The chat
+        // comes back private; the owner re-shares deliberately if they still
+        // want to. Not swallowed: a restore that reported success while leaving
+        // the chat shared is the exact failure this prevents.
+        await ConversationShareModel.delete({
+          conversationId: id,
+          organizationId,
+          userId: user.id,
+        });
+      }
+
+      // Full hydration, matching this route's declared conversation schema — a
+      // caller seeding its conversation cache from this response must get the
+      // history back, not an empty shell. Null means the conversation never
+      // existed, isn't owned by the caller, or was hard-deleted in a race —
+      // nothing to restore, so 404.
+      const conversation = await ConversationModel.findById({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      if (!conversation) {
+        throw new ApiError(404, "Conversation not found");
+      }
+
+      return reply.send(conversation);
     },
   );
 

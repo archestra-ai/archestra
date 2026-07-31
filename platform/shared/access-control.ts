@@ -1007,6 +1007,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatConversations]: {
     chat: ["read"],
   },
+  // Listing soft-deleted conversations (the "Trash" view) is gated on delete,
+  // not read: seeing which chats were trashed is part of the delete/restore
+  // lifecycle, so a chat:read-only role sees active chats but not the trash.
+  [RouteId.GetDeletedChatConversations]: {
+    chat: ["delete"],
+  },
   [RouteId.GetChatConversation]: {
     chat: ["read"],
   },
@@ -1042,6 +1048,10 @@ export const requiredEndpointPermissionsMap: Partial<
     chat: ["update"],
   },
   [RouteId.DeleteChatConversation]: {
+    chat: ["delete"],
+  },
+  // Restore is the inverse of delete — same gate.
+  [RouteId.RestoreChatConversation]: {
     chat: ["delete"],
   },
   // Clearing a conversation's recorded chat errors is a chat-content edit, not a
@@ -1614,6 +1624,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetSkill]: { skill: ["read"] },
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
+  [RouteId.RestoreSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: { skill: ["update"] },
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
@@ -1637,6 +1648,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateProject]: { project: ["update"] },
   [RouteId.SetProjectShare]: { project: ["update"] },
   [RouteId.DeleteProject]: { project: ["delete"] },
+  // Restore is the inverse of delete and, like the deleted-projects view, an
+  // oversight action — the handler further narrows it to `project:admin`.
+  [RouteId.RestoreProject]: { project: ["delete"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
   // Project file surfaces combine project-level access with the files gate:
   // `file:manage` covers the file operations, while project membership is
@@ -1684,6 +1698,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // an update (the handler further requires scope-modify at the app's scope).
   [RouteId.EnableApp]: { app: ["update"] },
   [RouteId.DisableApp]: { app: ["update"] },
+  [RouteId.LockApp]: { app: ["update"] },
+  [RouteId.UnlockApp]: { app: ["update"] },
   [RouteId.DeleteApp]: { app: ["delete"] },
   [RouteId.GetAppVersions]: { app: ["read"] },
   [RouteId.GetAppVersion]: { app: ["read"] },
@@ -1691,6 +1707,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.AssignToolToApp]: { app: ["update"] },
   [RouteId.UnassignToolFromApp]: { app: ["update"] },
   [RouteId.GetAppTemplates]: { app: ["read"] },
+  [RouteId.GetAppLabelKeys]: { app: ["read"] },
+  [RouteId.GetAppLabelValues]: { app: ["read"] },
   // Opens an app in chat: reads the app and creates a seeded conversation.
   [RouteId.OpenAppInChat]: { app: ["read"], chat: ["create"] },
   [RouteId.OpenExternalAppInChat]: { app: ["read"], chat: ["create"] },

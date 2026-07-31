@@ -110,11 +110,13 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   viewerRole: "owner",
   latestVersion: 1,
   enabled: true,
+  locked: false,
   teams: [],
   users: [],
   executionModel: "viewer-scoped",
   cspOrigin: "platform-pinned",
   pinnedAt: null,
+  labels: [],
 };
 
 const externalApp: Extract<AppListItem, { source: "external" }> = {
@@ -130,6 +132,7 @@ const externalApp: Extract<AppListItem, { source: "external" }> = {
   executionModel: "server-scoped",
   cspOrigin: "author-declared",
   pinnedAt: null,
+  labels: [],
   icon: null,
   requiresInput: false,
 };

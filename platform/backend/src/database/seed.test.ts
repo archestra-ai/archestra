@@ -20,6 +20,7 @@ import {
   SkillModel,
 } from "@/models";
 import AgentModel from "@/models/agent";
+import AgentVersionModel from "@/models/agent-version";
 import { DEFAULT_APPS } from "@/services/apps/default-apps";
 import {
   BUILT_IN_SKILLS,
@@ -164,6 +165,63 @@ describe("syncBuiltInAgents", () => {
     );
 
     expect(builtInAgent?.systemPrompt).toBe(customPrompt);
+  });
+
+  test("seeded built-in agents get a config version", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
+    await syncBuiltInAgents();
+
+    const builtInAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      organization.id,
+    );
+
+    // This path inserts into agentsTable directly rather than through
+    // AgentModel, so without an explicit fork built-ins would stay at version
+    // 0 and their seeded config would land in whichever user edits them first.
+    expect(builtInAgent?.latestVersion).toBe(1);
+    const head = await AgentVersionModel.findByAgentAndVersion({
+      agentId: builtInAgent?.id ?? "",
+      version: 1,
+      organizationId: organization.id,
+    });
+    expect(head?.snapshot.systemPrompt).toBe(POLICY_CONFIG_SYSTEM_PROMPT);
+  });
+
+  test("a deploy rewriting a legacy prompt forks its own version", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
+    const [existing] = await db
+      .insert(schema.agentsTable)
+      .values({
+        organizationId: organization.id,
+        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        agentType: "agent",
+        scope: "org",
+        systemPrompt: LEGACY_POLICY_CONFIG_SYSTEM_PROMPT,
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+          autoConfigureOnToolDiscovery: false,
+        },
+      })
+      .returning();
+    expect(existing.latestVersion).toBe(0);
+
+    await syncBuiltInAgents();
+
+    // The prompt rewrite is attributed to the deploy that made it, instead of
+    // being folded into the next user edit's version.
+    const head = await AgentVersionModel.findByAgentAndVersion({
+      agentId: existing.id,
+      version: 1,
+      organizationId: organization.id,
+    });
+    expect(head?.snapshot.systemPrompt).toBe(POLICY_CONFIG_SYSTEM_PROMPT);
   });
 });
 
@@ -383,6 +441,34 @@ describe("syncBuiltInSkills", () => {
       sourceRef,
     });
     expect(preserved?.content).toBe("EDITED BY USER");
+  });
+
+  test("a soft-deleted built-in stays deleted across syncs (durable opt-out)", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const sourceRef = builtInSkillSourceRef(BASE_SKILL.builtInSkillId);
+
+    await syncBuiltInSkills();
+    const seeded = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    if (!seeded) throw new Error("seed failed");
+
+    await SkillModel.delete(seeded.id);
+    await syncBuiltInSkills();
+
+    // not resurrected: no new copy, the soft-deleted row is untouched, and
+    // the skill stays invisible to reads.
+    expect(await countBuiltInSkills(org.id)).toBe(BUILT_IN_SKILLS.length);
+    const afterSync = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    expect(afterSync?.id).toBe(seeded.id);
+    expect(afterSync?.deletedAt).toBeInstanceOf(Date);
+    expect(await SkillModel.findById(seeded.id)).toBeNull();
   });
 
   test("brands the seeded skill under the org's white-label app name", async ({

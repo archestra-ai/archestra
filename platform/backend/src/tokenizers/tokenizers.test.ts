@@ -140,6 +140,71 @@ describe("Tokenizers", () => {
       expect(getTokenizer("openai")).not.toBe(getTokenizer("anthropic"));
     });
 
+    test("should count Claude served by a reseller with the Anthropic tokenizer", () => {
+      // Bedrock and OpenRouter front several vendors, so the provider id alone
+      // picks the wrong encoder for a Claude model — and that estimate is what
+      // decides when auto-compaction fires and whether a turn is let through to
+      // the provider, both measured against that model's own context window.
+      expect(getTokenizer("bedrock", "us.anthropic.claude-opus-4-8")).toBe(
+        getTokenizer("anthropic"),
+      );
+      expect(getTokenizer("bedrock", "anthropic.claude-opus-4-8")).toBe(
+        getTokenizer("anthropic"),
+      );
+      expect(
+        getTokenizer("bedrock", "global.anthropic.claude-sonnet-4-6"),
+      ).toBe(getTokenizer("anthropic"));
+      expect(getTokenizer("openrouter", "anthropic/claude-opus-4-8")).toBe(
+        getTokenizer("anthropic"),
+      );
+    });
+
+    test("should keep the provider default for non-Anthropic reseller models", () => {
+      expect(getTokenizer("bedrock", "us.amazon.nova-pro-v1:0")).toBe(
+        getTokenizer("openai"),
+      );
+      expect(getTokenizer("bedrock", "us.meta.llama3-70b-instruct-v1:0")).toBe(
+        getTokenizer("openai"),
+      );
+      expect(getTokenizer("openrouter", "openai/gpt-5.5")).toBe(
+        getTokenizer("openai"),
+      );
+      // Azure fronts a single vendor whose models cl100k_base already fits.
+      expect(getTokenizer("azure", "gpt-5.5")).toBe(getTokenizer("openai"));
+    });
+
+    test("should fall back to the provider default when no model is given", () => {
+      expect(getTokenizer("bedrock")).toBe(getTokenizer("openai"));
+      expect(getTokenizer("bedrock", null)).toBe(getTokenizer("openai"));
+    });
+
+    test("should count code-dense text differently for Claude than cl100k_base", () => {
+      // Why the reseller mapping is load-bearing rather than cosmetic: the two
+      // encoders agree on prose and diverge on the code/identifier-heavy
+      // payloads that dominate long tool-using conversations. The direction of
+      // the gap depends on the content, so what matters is that a Claude model
+      // is measured on Claude's own yardstick — the estimate is compared
+      // against that model's context window.
+      const message: ProviderMessage = {
+        role: "user",
+        content:
+          `export function resolveTargets(modelId: string) {\n  const withoutRegion = modelId.replace(REGION_PREFIX, "");\n  return withoutRegion;\n}\n`.repeat(
+            60,
+          ),
+      };
+      const claudeOnBedrock = getTokenizer(
+        "bedrock",
+        "us.anthropic.claude-opus-4-8",
+      ).countTokens(message);
+      const cl100k = getTokenizer("bedrock").countTokens(message);
+
+      expect(claudeOnBedrock).not.toBe(cl100k);
+      // Same text, same provider — only the model-aware mapping changes it.
+      expect(claudeOnBedrock).toBe(
+        getTokenizer("anthropic").countTokens(message),
+      );
+    });
+
     test("should return consistent token counts for same input", () => {
       const anthropicTokenizer = getTokenizer("anthropic");
       const openaiTokenizer = getTokenizer("openai");

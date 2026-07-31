@@ -2647,6 +2647,62 @@
       "when": 1785410080767,
       "tag": "0377_right_penance",
       "breakpoints": true
+    },
+    {
+      "idx": 378,
+      "version": "7",
+      "when": 1785435854283,
+      "tag": "0378_user_name_email_trgm_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 379,
+      "version": "7",
+      "when": 1785439348264,
+      "tag": "0379_app_labels",
+      "breakpoints": true
+    },
+    {
+      "idx": 380,
+      "version": "7",
+      "when": 1785441710552,
+      "tag": "0380_blushing_proemial_gods",
+      "breakpoints": true
+    },
+    {
+      "idx": 381,
+      "version": "7",
+      "when": 1785446888144,
+      "tag": "0381_rapid_lord_tyger",
+      "breakpoints": true
+    },
+    {
+      "idx": 382,
+      "version": "7",
+      "when": 1785449060953,
+      "tag": "0382_loose_multiple_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 383,
+      "version": "7",
+      "when": 1785450487138,
+      "tag": "0383_app_lock",
+      "breakpoints": true
+    },
+    {
+      "idx": 384,
+      "version": "7",
+      "when": 1785450512327,
+      "tag": "0384_new_app_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 385,
+      "version": "7",
+      "when": 1785455402278,
+      "tag": "0385_silky_purifiers",
+      "breakpoints": true
     }
   ]
 }

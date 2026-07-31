@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.24](https://github.com/archestra-ai/archestra/compare/platform-v1.3.23...platform-v1.3.24) (2026-07-30)
+
+
+### Features
+
+* **apps:** labels for MCP Apps ([#7008](https://github.com/archestra-ai/archestra/issues/7008)) ([80cf7b9](https://github.com/archestra-ai/archestra/commit/80cf7b9b4c0405af27805a53d83bea24401aebc8))
+* **llm-providers:** serve Perplexity's Agent API as a second transport on the perplexity provider ([#7007](https://github.com/archestra-ai/archestra/issues/7007)) ([197168b](https://github.com/archestra-ai/archestra/commit/197168ba27ff6ac0313afa662fbf54f49aa935c1))
+
+
+### Bug Fixes
+
+* **apps:** find an app by name instead of demanding its id ([#7010](https://github.com/archestra-ai/archestra/issues/7010)) ([38e3c02](https://github.com/archestra-ai/archestra/commit/38e3c028b0e021c237a4388d5d64f97a19edf4e0))
+* **chat:** recover from Anthropic-family context-overflow rejections ([#7011](https://github.com/archestra-ai/archestra/issues/7011)) ([bac92af](https://github.com/archestra-ai/archestra/commit/bac92afbd9a4d0fea4aa31eca6ee7c527313f977))
+* **mcp:** send the enterprise-managed credential from the inspector ([#7006](https://github.com/archestra-ai/archestra/issues/7006)) ([881b75c](https://github.com/archestra-ai/archestra/commit/881b75c75b9d7e3654b01f07e3c411f34dd474c7))
+* **users:** match user search per word instead of as one substring ([#7004](https://github.com/archestra-ai/archestra/issues/7004)) ([b253afc](https://github.com/archestra-ai/archestra/commit/b253afc09fc877dd5722fdb89700a0f0ff730b91))
+
+
+### Dependencies
+
+* bump the rust-dependencies group across 1 directory with 8 updates ([#7003](https://github.com/archestra-ai/archestra/issues/7003)) ([87bef2c](https://github.com/archestra-ai/archestra/commit/87bef2c29d5abc94332654755ed73666ff650802))
+
 ## [1.3.23](https://github.com/archestra-ai/archestra/compare/platform-v1.3.22...platform-v1.3.23) (2026-07-30)
 
 

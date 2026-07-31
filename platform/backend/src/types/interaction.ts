@@ -517,6 +517,17 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["perplexity:responses"]),
+    request: withReadFallback(Perplexity.API.ResponsesRequestSchema),
+    processedRequest: withReadFallback(Perplexity.API.ResponsesRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Perplexity.API.ResponsesResponseSchema),
+    requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
 ]);
 
 /**

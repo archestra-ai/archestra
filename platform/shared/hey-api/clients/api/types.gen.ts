@@ -12096,6 +12096,7 @@ export type GetAgentsResponses = {
                 name: 'app-runtime-llm-agent';
             } | null;
             builtIn: boolean | null;
+            latestVersion: number;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -12347,6 +12348,7 @@ export type CreateAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -12561,6 +12563,7 @@ export type GetAllAgentsResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -12750,6 +12753,7 @@ export type GetDefaultMcpGatewayResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -12939,6 +12943,7 @@ export type GetDefaultLlmProxyResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -13207,6 +13212,7 @@ export type ImportAgentResponses = {
                 name: 'app-runtime-llm-agent';
             } | null;
             builtIn: boolean | null;
+            latestVersion: number;
             createdAt: string;
             updatedAt: string;
             deletedAt: string | null;
@@ -13489,6 +13495,7 @@ export type GetAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -13733,6 +13740,7 @@ export type UpdateAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -13933,6 +13941,7 @@ export type CloneAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -14647,6 +14656,7 @@ export type RestoreAgentResponses = {
             name: 'app-runtime-llm-agent';
         } | null;
         builtIn: boolean | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -17629,6 +17639,10 @@ export type GetAppsData = {
         scope?: 'personal' | 'team' | 'org';
         authorIds?: Array<string>;
         excludeAuthorIds?: Array<string>;
+        /**
+         * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
+         */
+        labels?: string;
     };
     url: '/api/apps';
 };
@@ -17709,6 +17723,12 @@ export type GetAppsResponses = {
             executionModel: 'viewer-scoped' | 'server-scoped';
             cspOrigin: 'platform-pinned' | 'author-declared';
             pinnedAt: string | null;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
             source: 'owned';
             id: string;
             slug: string | null;
@@ -17718,6 +17738,7 @@ export type GetAppsResponses = {
             viewerRole: 'owner' | 'shared' | 'admin';
             latestVersion: number;
             enabled: boolean;
+            locked: boolean;
             teams: Array<{
                 id: string;
                 name: string;
@@ -17732,6 +17753,12 @@ export type GetAppsResponses = {
             executionModel: 'viewer-scoped' | 'server-scoped';
             cspOrigin: 'platform-pinned' | 'author-declared';
             pinnedAt: string | null;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
             source: 'external';
             catalogId: string;
             mcpServerId: string;
@@ -17776,6 +17803,12 @@ export type CreateAppData = {
             };
         };
         environmentId?: string | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         teamIds?: Array<string>;
         openInChat?: boolean;
     };
@@ -17886,11 +17919,18 @@ export type CreateAppResponses = {
         } | null;
         latestVersion: number;
         enabled: boolean;
+        locked: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         warnings?: Array<string>;
         conversationId?: string;
     };
@@ -18000,6 +18040,173 @@ export type GetExternalAppResponses = {
 };
 
 export type GetExternalAppResponse = GetExternalAppResponses[keyof GetExternalAppResponses];
+
+export type GetAppLabelKeysData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/apps/labels/keys';
+};
+
+export type GetAppLabelKeysErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppLabelKeysError = GetAppLabelKeysErrors[keyof GetAppLabelKeysErrors];
+
+export type GetAppLabelKeysResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetAppLabelKeysResponse = GetAppLabelKeysResponses[keyof GetAppLabelKeysResponses];
+
+export type GetAppLabelValuesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter values by label key
+         */
+        key?: string;
+    };
+    url: '/api/apps/labels/values';
+};
+
+export type GetAppLabelValuesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppLabelValuesError = GetAppLabelValuesErrors[keyof GetAppLabelValuesErrors];
+
+export type GetAppLabelValuesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type GetAppLabelValuesResponse = GetAppLabelValuesResponses[keyof GetAppLabelValuesResponses];
 
 export type GetAppTemplatesData = {
     body?: never;
@@ -18803,11 +19010,18 @@ export type GetAppResponses = {
         } | null;
         latestVersion: number;
         enabled: boolean;
+        locked: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         teams: Array<{
             id: string;
             name: string;
@@ -18846,6 +19060,12 @@ export type UpdateAppData = {
             };
         };
         environmentId?: string | null;
+        labels?: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         teamIds?: Array<string>;
         userIds?: Array<string>;
     };
@@ -18958,11 +19178,18 @@ export type UpdateAppResponses = {
         } | null;
         latestVersion: number;
         enabled: boolean;
+        locked: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         warnings?: Array<string>;
     };
 };
@@ -19080,11 +19307,18 @@ export type EnableAppResponses = {
         } | null;
         latestVersion: number;
         enabled: boolean;
+        locked: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         teams: Array<{
             id: string;
             name: string;
@@ -19212,11 +19446,18 @@ export type DisableAppResponses = {
         } | null;
         latestVersion: number;
         enabled: boolean;
+        locked: boolean;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
         scope: 'personal' | 'team' | 'org';
         environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
         teams: Array<{
             id: string;
             name: string;
@@ -19232,6 +19473,284 @@ export type DisableAppResponses = {
 };
 
 export type DisableAppResponse = DisableAppResponses[keyof DisableAppResponses];
+
+export type LockAppData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/lock';
+};
+
+export type LockAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type LockAppError = LockAppErrors[keyof LockAppErrors];
+
+export type LockAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        name: string;
+        slug: string | null;
+        description: string | null;
+        templateId: string | null;
+        mcpServerId: string | null;
+        spec: {
+            /**
+             * One-line summary of what the app is for.
+             */
+            summary: string;
+            /**
+             * Concrete capabilities the app should provide.
+             */
+            features: Array<string>;
+            /**
+             * What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.
+             */
+            data?: string | null;
+            /**
+             * UI / style direction as a free-form prose string, not a structured object.
+             */
+            ui?: string | null;
+            /**
+             * Full names of the MCP tools the app calls through window.archestra.
+             */
+            tools: Array<string>;
+        } | null;
+        latestVersion: number;
+        enabled: boolean;
+        locked: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        authorName: string | null;
+    };
+};
+
+export type LockAppResponse = LockAppResponses[keyof LockAppResponses];
+
+export type UnlockAppData = {
+    body?: never;
+    path: {
+        appId: string;
+    };
+    query?: never;
+    url: '/api/apps/{appId}/unlock';
+};
+
+export type UnlockAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnlockAppError = UnlockAppErrors[keyof UnlockAppErrors];
+
+export type UnlockAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        name: string;
+        slug: string | null;
+        description: string | null;
+        templateId: string | null;
+        mcpServerId: string | null;
+        spec: {
+            /**
+             * One-line summary of what the app is for.
+             */
+            summary: string;
+            /**
+             * Concrete capabilities the app should provide.
+             */
+            features: Array<string>;
+            /**
+             * What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.
+             */
+            data?: string | null;
+            /**
+             * UI / style direction as a free-form prose string, not a structured object.
+             */
+            ui?: string | null;
+            /**
+             * Full names of the MCP tools the app calls through window.archestra.
+             */
+            tools: Array<string>;
+        } | null;
+        latestVersion: number;
+        enabled: boolean;
+        locked: boolean;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        scope: 'personal' | 'team' | 'org';
+        environmentId: string | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        authorName: string | null;
+    };
+};
+
+export type UnlockAppResponse = UnlockAppResponses[keyof UnlockAppResponses];
 
 export type GetAppVersionsData = {
     body?: never;
@@ -20159,7 +20678,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.restored' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -20267,7 +20786,7 @@ export type GetAuditLogsResponses = {
             actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
             actorName: string | null;
             actorEmail: string | null;
-            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.restored' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -20387,7 +20906,7 @@ export type GetAuditLogResponses = {
         actorType: 'user' | 'api_key' | 'service_account' | 'system' | 'sso';
         actorName: string | null;
         actorEmail: string | null;
-        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'apiKey.created' | 'apiKey.deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmProviderApiKey.created' | 'llmProviderApiKey.deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.reinstalled' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'role.created' | 'role.updated' | 'role.deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'skill.created' | 'skill.updated' | 'skill.deleted' | 'skill.restored' | 'skill.imported' | 'team.created' | 'team.updated' | 'team.deleted' | 'teamToken.rotated' | 'tool.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -26543,6 +27062,7 @@ export type GetChatConversationsResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -26707,6 +27227,7 @@ export type CreateChatConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -26765,6 +27286,165 @@ export type CreateChatConversationResponses = {
 };
 
 export type CreateChatConversationResponse = CreateChatConversationResponses[keyof CreateChatConversationResponses];
+
+export type GetDeletedChatConversationsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chat/conversations/deleted';
+};
+
+export type GetDeletedChatConversationsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDeletedChatConversationsError = GetDeletedChatConversationsErrors[keyof GetDeletedChatConversationsErrors];
+
+export type GetDeletedChatConversationsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        modelId: string | null;
+        hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        projectId: string | null;
+        origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
+        pinnedAt: string | null;
+        lastMessageAt: string;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
+            llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
+        projectName?: string | null;
+        projectIcon?: string | null;
+        unread?: boolean;
+        messages: Array<unknown>;
+        chatErrors: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
+            createdAt: string;
+        }>;
+    }>;
+};
+
+export type GetDeletedChatConversationsResponse = GetDeletedChatConversationsResponses[keyof GetDeletedChatConversationsResponses];
 
 export type DeleteChatConversationData = {
     body?: never;
@@ -26952,6 +27632,7 @@ export type GetChatConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -27119,6 +27800,7 @@ export type UpdateChatConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -27719,6 +28401,7 @@ export type ForkChatConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -27866,6 +28549,167 @@ export type GetChatAgentMcpToolsResponses = {
 };
 
 export type GetChatAgentMcpToolsResponse = GetChatAgentMcpToolsResponses[keyof GetChatAgentMcpToolsResponses];
+
+export type RestoreChatConversationData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/chat/conversations/{id}/restore';
+};
+
+export type RestoreChatConversationErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RestoreChatConversationError = RestoreChatConversationErrors[keyof RestoreChatConversationErrors];
+
+export type RestoreChatConversationResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        userId: string;
+        organizationId: string;
+        agentId: string | null;
+        chatApiKeyId: string | null;
+        title: string | null;
+        selectedModel: string;
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+        modelId: string | null;
+        hasCustomToolSelection: boolean;
+        hooksDebugEnabled: boolean;
+        todoList: string | number | boolean | null | {
+            [key: string]: unknown;
+        } | Array<unknown> | null;
+        artifact: string | null;
+        projectId: string | null;
+        origin: 'user' | 'schedule_trigger' | 'app_open';
+        titleIsPlaceholder: boolean;
+        pinnedAt: string | null;
+        lastMessageAt: string;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        agent: {
+            id: string;
+            name: string;
+            systemPrompt: string | null;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            toolExposureMode: 'full' | 'search_and_run_only';
+            llmApiKeyId: string | null;
+        } | null;
+        share: {
+            id: string;
+            visibility: 'organization' | 'team' | 'user';
+        } | null;
+        projectName?: string | null;
+        projectIcon?: string | null;
+        unread?: boolean;
+        messages: Array<unknown>;
+        chatErrors: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        compactions: Array<{
+            id: string;
+            conversationId: string;
+            summary: string;
+            compactedThroughMessageId: string | null;
+            trigger: 'auto' | 'manual';
+            provider: string;
+            model: string;
+            originalTokenEstimate: number;
+            compactedTokenEstimate: number;
+            createdAt: string;
+        }>;
+    };
+};
+
+export type RestoreChatConversationResponse = RestoreChatConversationResponses[keyof RestoreChatConversationResponses];
 
 export type ClearChatConversationErrorsData = {
     body?: never;
@@ -28068,6 +28912,7 @@ export type CompactChatConversationResponses = {
             lastMessageAt: string;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
             agent: {
                 id: string;
                 name: string;
@@ -28502,6 +29347,7 @@ export type GetSharedConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -28665,6 +29511,7 @@ export type ForkSharedConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -28830,6 +29677,7 @@ export type GenerateChatConversationTitleResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -28994,6 +29842,7 @@ export type UpdateChatMessageResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -42070,6 +42919,203 @@ export type GetInteractionsResponses = {
             connectorName?: string | null;
             requestType?: 'main' | 'subagent';
             externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            executionId: string | null;
+            userId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            request: {
+                model: string;
+                input?: string | Array<{
+                    type?: string;
+                    [key: string]: unknown;
+                }>;
+                instructions?: string | null;
+                max_output_tokens?: number | null;
+                metadata?: {
+                    [key: string]: string;
+                } | null;
+                previous_response_id?: string | null;
+                stream?: boolean | null;
+                temperature?: number | null;
+                text?: unknown;
+                tool_choice?: unknown;
+                tools?: Array<{
+                    type: 'function';
+                    name: string;
+                    description?: string | null;
+                    parameters?: {
+                        [key: string]: unknown;
+                    } | null;
+                    strict?: boolean | null;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
+                }>;
+                top_p?: number | null;
+                user?: string;
+                [key: string]: unknown;
+            } | {
+                [key: string]: unknown;
+            };
+            processedRequest?: {
+                model: string;
+                input?: string | Array<{
+                    type?: string;
+                    [key: string]: unknown;
+                }>;
+                instructions?: string | null;
+                max_output_tokens?: number | null;
+                metadata?: {
+                    [key: string]: string;
+                } | null;
+                previous_response_id?: string | null;
+                stream?: boolean | null;
+                temperature?: number | null;
+                text?: unknown;
+                tool_choice?: unknown;
+                tools?: Array<{
+                    type: 'function';
+                    name: string;
+                    description?: string | null;
+                    parameters?: {
+                        [key: string]: unknown;
+                    } | null;
+                    strict?: boolean | null;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
+                }>;
+                top_p?: number | null;
+                user?: string;
+                [key: string]: unknown;
+            } | {
+                [key: string]: unknown;
+            } | null;
+            response: {
+                id: string;
+                object: 'response';
+                created_at: number;
+                model: string;
+                output: Array<{
+                    id: string;
+                    type: 'message';
+                    role: 'assistant';
+                    status: string;
+                    content: Array<{
+                        type: 'output_text';
+                        text: string;
+                        [key: string]: unknown;
+                    } | {
+                        type: 'refusal';
+                        refusal: string;
+                        [key: string]: unknown;
+                    }>;
+                    [key: string]: unknown;
+                } | {
+                    type: 'function_call';
+                    id?: string;
+                    call_id: string;
+                    name: string;
+                    arguments: string;
+                    status?: string;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
+                }>;
+                status: string;
+                /**
+                 * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+                 */
+                usage?: {
+                    input_tokens: number;
+                    output_tokens: number;
+                    total_tokens: number;
+                    [key: string]: unknown;
+                };
+                [key: string]: unknown;
+            } | {
+                error: string;
+            };
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
+            type: 'perplexity:responses';
+            model: string | null;
+            baselineModel: string | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            toonTokensBefore: number | null;
+            toonTokensAfter: number | null;
+            toonCostSavings: string | null;
+            toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -48042,6 +49088,203 @@ export type GetInteractionResponses = {
             toolName: string;
         } | null;
         type: 'azure:responses';
+        model: string | null;
+        baselineModel: string | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        toonTokensBefore: number | null;
+        toonTokensAfter: number | null;
+        toonCostSavings: string | null;
+        toonSkipReason?: 'not_enabled' | 'not_effective' | 'no_tool_results';
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        executionId: string | null;
+        userId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        request: {
+            model: string;
+            input?: string | Array<{
+                type?: string;
+                [key: string]: unknown;
+            }>;
+            instructions?: string | null;
+            max_output_tokens?: number | null;
+            metadata?: {
+                [key: string]: string;
+            } | null;
+            previous_response_id?: string | null;
+            stream?: boolean | null;
+            temperature?: number | null;
+            text?: unknown;
+            tool_choice?: unknown;
+            tools?: Array<{
+                type: 'function';
+                name: string;
+                description?: string | null;
+                parameters?: {
+                    [key: string]: unknown;
+                } | null;
+                strict?: boolean | null;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            top_p?: number | null;
+            user?: string;
+            [key: string]: unknown;
+        } | {
+            [key: string]: unknown;
+        };
+        processedRequest?: {
+            model: string;
+            input?: string | Array<{
+                type?: string;
+                [key: string]: unknown;
+            }>;
+            instructions?: string | null;
+            max_output_tokens?: number | null;
+            metadata?: {
+                [key: string]: string;
+            } | null;
+            previous_response_id?: string | null;
+            stream?: boolean | null;
+            temperature?: number | null;
+            text?: unknown;
+            tool_choice?: unknown;
+            tools?: Array<{
+                type: 'function';
+                name: string;
+                description?: string | null;
+                parameters?: {
+                    [key: string]: unknown;
+                } | null;
+                strict?: boolean | null;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            top_p?: number | null;
+            user?: string;
+            [key: string]: unknown;
+        } | {
+            [key: string]: unknown;
+        } | null;
+        response: {
+            id: string;
+            object: 'response';
+            created_at: number;
+            model: string;
+            output: Array<{
+                id: string;
+                type: 'message';
+                role: 'assistant';
+                status: string;
+                content: Array<{
+                    type: 'output_text';
+                    text: string;
+                    [key: string]: unknown;
+                } | {
+                    type: 'refusal';
+                    refusal: string;
+                    [key: string]: unknown;
+                }>;
+                [key: string]: unknown;
+            } | {
+                type: 'function_call';
+                id?: string;
+                call_id: string;
+                name: string;
+                arguments: string;
+                status?: string;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
+            }>;
+            status: string;
+            /**
+             * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+             */
+            usage?: {
+                input_tokens: number;
+                output_tokens: number;
+                total_tokens: number;
+                [key: string]: unknown;
+            };
+            [key: string]: unknown;
+        } | {
+            error: string;
+        };
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
+        type: 'perplexity:responses';
         model: string | null;
         baselineModel: string | null;
         inputTokens: number | null;
@@ -60850,7 +62093,7 @@ export type GetMembersData = {
         limit?: number;
         offset?: number;
         /**
-         * Search by user name or email (case-insensitive partial match)
+         * Search by user name or email. Case-insensitive: every whitespace-separated word must appear in the name or the email, in any order, so "Ada Lovelace" also matches "Lovelace, Ada M."
          */
         name?: string;
         /**
@@ -67390,6 +68633,8 @@ export type GetOrganizationResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -67689,6 +68934,8 @@ export type UpdateAppearanceSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -67700,6 +68947,8 @@ export type UpdateSecuritySettingsData = {
         defaultDiscoveredToolResultPolicy?: 'block_always' | 'mark_as_trusted' | 'mark_as_untrusted' | 'sanitize_with_dual_llm';
         allowChatFileUploads?: boolean;
         appsHackathonRecorderEnabled?: boolean;
+        newAppsDisabledByDefault?: boolean;
+        newAppsLockedByDefault?: boolean;
         allowToolAutoAssignment?: boolean;
     };
     path?: never;
@@ -67862,6 +69111,8 @@ export type UpdateSecuritySettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -68032,6 +69283,8 @@ export type UpdateLlmSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -68201,6 +69454,8 @@ export type UpdateMcpSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -68370,6 +69625,8 @@ export type UpdateSkillsSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -68541,6 +69798,8 @@ export type UpdateAgentSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -68723,6 +69982,8 @@ export type UpdateConnectionSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -68903,6 +70164,8 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -69074,6 +70337,8 @@ export type UpdateAuthSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -69246,6 +70511,8 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -69413,6 +70680,8 @@ export type DropEmbeddingConfigResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -69756,6 +71025,8 @@ export type CompleteOnboardingResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         appsHackathonRecorderEnabled: boolean;
+        newAppsDisabledByDefault: boolean;
+        newAppsLockedByDefault: boolean;
     };
 };
 
@@ -70381,6 +71652,346 @@ export type PerplexityChatCompletionsWithAgentResponses = {
 
 export type PerplexityChatCompletionsWithAgentResponse = PerplexityChatCompletionsWithAgentResponses[keyof PerplexityChatCompletionsWithAgentResponses];
 
+export type PerplexityResponsesWithDefaultAgentData = {
+    /**
+     * https://developers.openai.com/api/reference/resources/responses/methods/create
+     */
+    body: {
+        model: string;
+        input?: string | Array<{
+            type?: string;
+            [key: string]: unknown;
+        }>;
+        instructions?: string | null;
+        max_output_tokens?: number | null;
+        metadata?: {
+            [key: string]: string;
+        } | null;
+        previous_response_id?: string | null;
+        stream?: boolean | null;
+        temperature?: number | null;
+        text?: unknown;
+        tool_choice?: unknown;
+        tools?: Array<{
+            type: 'function';
+            name: string;
+            description?: string | null;
+            parameters?: {
+                [key: string]: unknown;
+            } | null;
+            strict?: boolean | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        top_p?: number | null;
+        user?: string;
+        [key: string]: unknown;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for the Perplexity Agent API
+         */
+        authorization?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/perplexity/responses';
+};
+
+export type PerplexityResponsesWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PerplexityResponsesWithDefaultAgentError = PerplexityResponsesWithDefaultAgentErrors[keyof PerplexityResponsesWithDefaultAgentErrors];
+
+export type PerplexityResponsesWithDefaultAgentResponses = {
+    /**
+     * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
+     */
+    200: {
+        id: string;
+        object: 'response';
+        created_at: number;
+        model: string;
+        output: Array<{
+            id: string;
+            type: 'message';
+            role: 'assistant';
+            status: string;
+            content: Array<{
+                type: 'output_text';
+                text: string;
+                [key: string]: unknown;
+            } | {
+                type: 'refusal';
+                refusal: string;
+                [key: string]: unknown;
+            }>;
+            [key: string]: unknown;
+        } | {
+            type: 'function_call';
+            id?: string;
+            call_id: string;
+            name: string;
+            arguments: string;
+            status?: string;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        status: string;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+         */
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type PerplexityResponsesWithDefaultAgentResponse = PerplexityResponsesWithDefaultAgentResponses[keyof PerplexityResponsesWithDefaultAgentResponses];
+
+export type PerplexityResponsesWithAgentData = {
+    /**
+     * https://developers.openai.com/api/reference/resources/responses/methods/create
+     */
+    body: {
+        model: string;
+        input?: string | Array<{
+            type?: string;
+            [key: string]: unknown;
+        }>;
+        instructions?: string | null;
+        max_output_tokens?: number | null;
+        metadata?: {
+            [key: string]: string;
+        } | null;
+        previous_response_id?: string | null;
+        stream?: boolean | null;
+        temperature?: number | null;
+        text?: unknown;
+        tool_choice?: unknown;
+        tools?: Array<{
+            type: 'function';
+            name: string;
+            description?: string | null;
+            parameters?: {
+                [key: string]: unknown;
+            } | null;
+            strict?: boolean | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        top_p?: number | null;
+        user?: string;
+        [key: string]: unknown;
+    };
+    headers?: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for the Perplexity Agent API
+         */
+        authorization?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/perplexity/{agentId}/responses';
+};
+
+export type PerplexityResponsesWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PerplexityResponsesWithAgentError = PerplexityResponsesWithAgentErrors[keyof PerplexityResponsesWithAgentErrors];
+
+export type PerplexityResponsesWithAgentResponses = {
+    /**
+     * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response%20%3E%20(schema)
+     */
+    200: {
+        id: string;
+        object: 'response';
+        created_at: number;
+        model: string;
+        output: Array<{
+            id: string;
+            type: 'message';
+            role: 'assistant';
+            status: string;
+            content: Array<{
+                type: 'output_text';
+                text: string;
+                [key: string]: unknown;
+            } | {
+                type: 'refusal';
+                refusal: string;
+                [key: string]: unknown;
+            }>;
+            [key: string]: unknown;
+        } | {
+            type: 'function_call';
+            id?: string;
+            call_id: string;
+            name: string;
+            arguments: string;
+            status?: string;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
+        }>;
+        status: string;
+        /**
+         * https://developers.openai.com/api/reference/resources/responses#(resource)%20responses%20%3E%20(model)%20response_usage%20%3E%20(schema)
+         */
+        usage?: {
+            input_tokens: number;
+            output_tokens: number;
+            total_tokens: number;
+            [key: string]: unknown;
+        };
+        [key: string]: unknown;
+    };
+};
+
+export type PerplexityResponsesWithAgentResponse = PerplexityResponsesWithAgentResponses[keyof PerplexityResponsesWithAgentResponses];
+
 export type GetProjectsData = {
     body?: never;
     path?: never;
@@ -70399,6 +72010,10 @@ export type GetProjectsData = {
          * Exclude owner user IDs (comma-separated). Admin-only; used with scope=personal.
          */
         excludeAuthorIds?: Array<string>;
+        /**
+         * Lifecycle slice: `active` (default) or `deleted` (project admins only; org-wide soft-deleted projects for the restore view).
+         */
+        status?: 'active' | 'deleted';
     };
     url: '/api/projects';
 };
@@ -70485,6 +72100,7 @@ export type GetProjectsResponses = {
         shareUserNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
+        deletedAt: string | null;
     }>;
 };
 
@@ -70583,6 +72199,7 @@ export type CreateProjectResponses = {
         shareUserNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
+        deletedAt: string | null;
     };
 };
 
@@ -70682,6 +72299,7 @@ export type CreateProjectFromConversationResponses = {
         shareUserNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
+        deletedAt: string | null;
     };
 };
 
@@ -70863,6 +72481,7 @@ export type GetProjectResponses = {
         shareUserNames: Array<string> | null;
         pinnedAt: string | null;
         createdAt: string;
+        deletedAt: string | null;
         shareTeamIds: Array<string> | null;
         shareUserIds: Array<string> | null;
     };
@@ -71047,6 +72666,110 @@ export type SetProjectShareResponses = {
 };
 
 export type SetProjectShareResponse = SetProjectShareResponses[keyof SetProjectShareResponses];
+
+export type RestoreProjectData = {
+    body: {
+        /**
+         * Rename the project as it is restored. Use this when its original name was taken while it was deleted.
+         */
+        name?: string;
+    } | null;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/projects/{id}/restore';
+};
+
+export type RestoreProjectErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RestoreProjectError = RestoreProjectErrors[keyof RestoreProjectErrors];
+
+export type RestoreProjectResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        description: string | null;
+        icon: string | null;
+        viewerRole: 'owner' | 'shared' | 'admin';
+        ownerName: string | null;
+        conversationCount: number;
+        visibility: 'organization' | 'team' | 'user';
+        shareTeamNames: Array<string> | null;
+        shareUserNames: Array<string> | null;
+        pinnedAt: string | null;
+        createdAt: string;
+        deletedAt: string | null;
+        shareTeamIds: Array<string> | null;
+        shareUserIds: Array<string> | null;
+    };
+};
+
+export type RestoreProjectResponse = RestoreProjectResponses[keyof RestoreProjectResponses];
 
 export type GetProjectFilesData = {
     body?: never;
@@ -72826,6 +74549,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         lastMessageAt: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         agent: {
             id: string;
             name: string;
@@ -74381,6 +76105,10 @@ export type GetSkillsData = {
          * Hide personal skills owned by other users. Admin-only; no-op for non-admins.
          */
         excludeOtherPersonalSkills?: boolean;
+        /**
+         * Which skills to list: active (default) or the soft-deleted trash. `deleted` is restricted to admins and team-admins.
+         */
+        status?: 'active' | 'deleted';
         sortBy?: 'usageCount' | 'lastUsedAt' | 'name' | 'createdAt';
         sortDirection?: 'asc' | 'desc';
     };
@@ -74487,6 +76215,7 @@ export type GetSkillsResponses = {
             lastUsedAt: string | null;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
             fileCount: number;
             teams: Array<{
                 id: string;
@@ -74650,6 +76379,7 @@ export type CreateSkillResponses = {
         lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         files: Array<{
             id: string;
             skillId: string;
@@ -74789,6 +76519,7 @@ export type ConvertAgentToSkillResponses = {
             lastUsedAt: string | null;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
             files: Array<{
                 id: string;
                 skillId: string;
@@ -75106,6 +76837,7 @@ export type GetSkillResponses = {
         lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         files: Array<{
             id: string;
             skillId: string;
@@ -75268,6 +77000,7 @@ export type UpdateSkillResponses = {
         lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         files: Array<{
             id: string;
             skillId: string;
@@ -75473,6 +77206,142 @@ export type GetSkillSourceReposResponses = {
 
 export type GetSkillSourceReposResponse = GetSkillSourceReposResponses[keyof GetSkillSourceReposResponses];
 
+export type RestoreSkillData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/skills/{id}/restore';
+};
+
+export type RestoreSkillErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RestoreSkillError = RestoreSkillErrors[keyof RestoreSkillErrors];
+
+export type RestoreSkillResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        organizationId: string;
+        authorId: string | null;
+        scope: 'personal' | 'team' | 'org';
+        name: string;
+        description: string;
+        content: string;
+        latestVersion: number;
+        license: string | null;
+        compatibility: string | null;
+        allowedTools: string | null;
+        agentName: string | null;
+        templated: boolean;
+        metadata: {
+            [key: string]: string;
+        };
+        sourceType: 'manual' | 'github' | 'built_in';
+        sourceRef: string | null;
+        sourceCommit: string | null;
+        githubSyncInterval: '15m' | '1h' | '1d' | null;
+        githubSyncRef: string | null;
+        githubAppConfigId: string | null;
+        githubPatId: string | null;
+        lastSyncedAt: string | null;
+        lastSyncError: string | null;
+        usageCount: number;
+        lastUsedAt: string | null;
+        createdAt: string;
+        updatedAt: string;
+        deletedAt: string | null;
+        files: Array<{
+            id: string;
+            skillId: string;
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            kind: 'reference' | 'script' | 'asset';
+            createdAt: string;
+        }>;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+            name: string;
+            email: string;
+        }>;
+        environments: Array<{
+            id: string;
+            name: string;
+        }>;
+    };
+};
+
+export type RestoreSkillResponse = RestoreSkillResponses[keyof RestoreSkillResponses];
+
 export type ResetSkillData = {
     body?: never;
     path: {
@@ -75581,6 +77450,7 @@ export type ResetSkillResponses = {
         lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         files: Array<{
             id: string;
             skillId: string;
@@ -75729,6 +77599,7 @@ export type UpdateSkillGithubSyncResponses = {
         lastUsedAt: string | null;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         files: Array<{
             id: string;
             skillId: string;
@@ -76269,6 +78140,7 @@ export type ImportGithubSkillsResponses = {
             lastUsedAt: string | null;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
         }>;
         skipped: Array<string>;
         /**

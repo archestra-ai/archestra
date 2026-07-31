@@ -5,13 +5,13 @@ import {
   desc,
   eq,
   getTableColumns,
-  ilike,
   inArray,
   or,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { softDelete } from "@/database/soft-delete";
+import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import { ApiError } from "@/types";
 import {
   APP_NAME_MAX_LENGTH,
@@ -19,10 +19,11 @@ import {
   type InsertApp,
   isReservedAppSlug,
 } from "@/types/app";
+import type { AgentLabelWithDetails } from "@/types/label";
 import { isUniqueConstraintError } from "@/utils/db";
-import { escapeLikePattern } from "@/utils/sql-search";
 import { isUuid } from "@/utils/uuid";
 import AppAccessModel from "./app-access";
+import AppLabelModel from "./app-label";
 import AppToolModel from "./app-tool";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -63,10 +64,14 @@ function buildOrgFilters(params: {
   accessibleAppIds?: string[];
   enabled?: boolean;
 }) {
-  const normalizedSearch = params.search?.trim();
-  const searchPattern = normalizedSearch
-    ? `%${escapeLikePattern(normalizedSearch)}%`
-    : undefined;
+  // Per-token rather than one whole-string substring: an app is usually named
+  // from memory ("merge queue take a number" for "Merge Queue — Take a Number"),
+  // and a single LIKE makes the match hinge on reproducing the saved word order
+  // and punctuation exactly. Still a conjunction, so extra words keep narrowing.
+  const searchFilter = buildTokenizedSearchFilter({
+    query: params.search,
+    columns: [schema.appsTable.name, schema.appsTable.description],
+  });
   return [
     eq(schema.appsTable.organizationId, params.organizationId),
     notDeleted(schema.appsTable),
@@ -76,15 +81,34 @@ function buildOrgFilters(params: {
     ...(params.enabled !== undefined
       ? [eq(schema.appsTable.enabled, params.enabled)]
       : []),
-    ...(searchPattern
-      ? [
-          or(
-            ilike(schema.appsTable.name, searchPattern),
-            ilike(schema.appsTable.description, searchPattern),
-          ),
-        ]
-      : []),
+    ...(searchFilter ? [searchFilter] : []),
   ];
+}
+
+/**
+ * Attach labels to a batch of app rows in one query (no N+1). `App` carries
+ * `labels` as a required field, so every read path funnels through here.
+ */
+async function withLabels<T extends { id: string }>(
+  rows: T[],
+): Promise<(T & { labels: AgentLabelWithDetails[] })[]> {
+  if (rows.length === 0) return [];
+  const labelsByApp = await AppLabelModel.getLabelsForApps(
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) => ({
+    ...row,
+    labels: labelsByApp.get(row.id) ?? [],
+  }));
+}
+
+/** Single-row convenience wrapper around {@link withLabels}. */
+async function withLabelsOne<T extends { id: string }>(
+  row: T | undefined,
+): Promise<(T & { labels: AgentLabelWithDetails[] }) | null> {
+  if (!row) return null;
+  const [hydrated] = await withLabels([row]);
+  return hydrated ?? null;
 }
 
 /**
@@ -117,7 +141,7 @@ class AppModel {
 
     if (params.limit !== undefined) query = query.limit(params.limit);
     if (params.offset !== undefined) query = query.offset(params.offset);
-    return await query;
+    return await withLabels(await query);
   }
 
   static async countByOrganization(params: {
@@ -137,7 +161,7 @@ class AppModel {
     const [result] = await appWithCatalogQuery().where(
       and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)),
     );
-    return result ?? null;
+    return await withLabelsOne(result);
   }
 
   /**
@@ -215,7 +239,7 @@ class AppModel {
         notDeleted(schema.appsTable),
       ),
     );
-    return result ?? null;
+    return await withLabelsOne(result);
   }
 
   /** A single active app scoped to an org. */
@@ -230,7 +254,7 @@ class AppModel {
         notDeleted(schema.appsTable),
       ),
     );
-    return result ?? null;
+    return await withLabelsOne(result);
   }
 
   /**
@@ -417,6 +441,20 @@ class AppModel {
     const [row] = await db
       .update(schema.appsTable)
       .set({ enabled })
+      .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)))
+      .returning({ id: schema.appsTable.id });
+    return row ? await AppModel.findById(id) : null;
+  }
+
+  /**
+   * Flip an app's locked state. A pure boolean on the app row, like
+   * `setEnabled`: locked refuses every agent-driven mutation until unlocked,
+   * while viewing and running stay unaffected.
+   */
+  static async setLocked(id: string, locked: boolean): Promise<App | null> {
+    const [row] = await db
+      .update(schema.appsTable)
+      .set({ locked })
       .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)))
       .returning({ id: schema.appsTable.id });
     return row ? await AppModel.findById(id) : null;
@@ -636,8 +674,17 @@ class AppModel {
     // Tool assignments live in appToolsTable (audited:false, "parent carries the
     // signal"), so include them here — otherwise assigning/removing a tool via
     // /api/apps/:appId/tools/:toolId → app.updated would show no diff.
-    const tools = await AppToolModel.getToolsForApp(id);
-    return { ...row, tools: tools.map((t) => t.name).sort() };
+    // Labels live in appLabelsTable (audited:false, "parent carries the
+    // signal") for the same reason, so a label-only edit still shows a diff.
+    const [tools, labels] = await Promise.all([
+      AppToolModel.getToolsForApp(id),
+      AppLabelModel.getLabelsForApp(id),
+    ]);
+    return {
+      ...row,
+      tools: tools.map((t) => t.name).sort(),
+      labels: labels.map((label) => `${label.key}:${label.value}`).sort(),
+    };
   }
 }
 

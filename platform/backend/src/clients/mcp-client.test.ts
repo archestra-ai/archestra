@@ -403,6 +403,46 @@ describe("McpClient", () => {
     expect(mockCallTool).toHaveBeenCalledTimes(1);
   });
 
+  // Regression: inspectServer built its transport without the enterprise
+  // credential, so an enterprise-managed catalog was inspected with no auth
+  // header at all and the configured injection mode was never applied.
+  test("inspectServer puts the enterprise credential on the outgoing request", async () => {
+    const catalogItem = await InternalMcpCatalogModel.findById(catalogId);
+    if (!catalogItem) throw new Error("expected catalog item");
+
+    mockListTools.mockResolvedValueOnce({ tools: [] });
+    mockClose.mockResolvedValueOnce(undefined);
+
+    await mcpClient.inspectServer({
+      catalogItem: {
+        ...catalogItem,
+        serverType: "remote",
+        serverUrl: "https://internal.example.com/mcp",
+      },
+      mcpServerId,
+      secrets: {},
+      method: "tools/list",
+      enterpriseTransportCredential: {
+        headerName: "x-provider-api-token",
+        headerValue: "exchanged-inspect-token",
+        expiresInSeconds: null,
+      },
+    });
+
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+    const [, options] =
+      vi.mocked(StreamableHTTPClientTransport).mock.calls.at(-1) ?? [];
+    const headers =
+      options?.requestInit?.headers instanceof Headers
+        ? options.requestInit.headers
+        : new Headers(options?.requestInit?.headers);
+
+    expect(headers.get("x-provider-api-token")).toBe("exchanged-inspect-token");
+    expect(headers.get("authorization")).toBeNull();
+  });
+
   test("connectAndGetTools synthesizes read-resource tools when upstream has no tools/list", async () => {
     mockListTools.mockRejectedValueOnce(new Error("Method not found"));
     mockListResources.mockResolvedValueOnce({

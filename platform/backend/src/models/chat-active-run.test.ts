@@ -1,7 +1,6 @@
 import type { UIMessageChunk } from "ai";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
-import { ConversationModel } from "@/models";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import { expect, test } from "@/test";
 
@@ -162,7 +161,11 @@ test("readStatusAndEventsAfter returns null when the run row is gone", async ({
     organizationId: organization.id,
   });
 
-  await ConversationModel.delete(conversation.id, user.id, organization.id);
+  // Remove the run row directly. Conversation deletion is a soft delete now and
+  // no longer cascades to the run row, so exercise the run-row-gone path here.
+  await db
+    .delete(schema.chatActiveRunsTable)
+    .where(eq(schema.chatActiveRunsTable.id, run?.id ?? ""));
 
   await expect(
     ActiveChatRunModel.readStatusAndEventsAfter({
@@ -411,7 +414,7 @@ test("markRunningAsFailedByIds is a no-op for an empty id list", async () => {
   ).toBe(0);
 });
 
-test("appendEvents reports run_missing after the run row is cascade-deleted (non-touch path)", async ({
+test("appendEvents reports run_missing after the run row is deleted (non-touch path)", async ({
   makeAgent,
   makeConversation,
   makeOrganization,
@@ -430,11 +433,15 @@ test("appendEvents reports run_missing after the run row is cascade-deleted (non
     organizationId: organization.id,
   });
 
-  await ConversationModel.delete(conversation.id, user.id, organization.id);
+  // Remove the run row directly. Conversation deletion is a soft delete now and
+  // no longer cascades to the run row, so exercise the run-row-gone path here.
+  await db
+    .delete(schema.chatActiveRunsTable)
+    .where(eq(schema.chatActiveRunsTable.id, run?.id ?? ""));
 
-  // The run row is gone via cascade, so the insert hits the run_id FK. The model
-  // must report this lifecycle race rather than throw a raw FK error that would
-  // escape as an unhandled rejection.
+  // The run row is gone, so the insert hits the run_id FK. The model must report
+  // this lifecycle race rather than throw a raw FK error that would escape as an
+  // unhandled rejection.
   await expect(
     ActiveChatRunModel.appendEvents({
       runId: run?.id ?? "",
@@ -444,7 +451,7 @@ test("appendEvents reports run_missing after the run row is cascade-deleted (non
   ).resolves.toBe("run_missing");
 });
 
-test("appendEvents reports run_missing after the run row is cascade-deleted (touchRun path)", async ({
+test("appendEvents reports run_missing after the run row is deleted (touchRun path)", async ({
   makeAgent,
   makeConversation,
   makeOrganization,
@@ -463,7 +470,11 @@ test("appendEvents reports run_missing after the run row is cascade-deleted (tou
     organizationId: organization.id,
   });
 
-  await ConversationModel.delete(conversation.id, user.id, organization.id);
+  // Remove the run row directly. Conversation deletion is a soft delete now and
+  // no longer cascades to the run row, so exercise the run-row-gone path here.
+  await db
+    .delete(schema.chatActiveRunsTable)
+    .where(eq(schema.chatActiveRunsTable.id, run?.id ?? ""));
 
   // The transaction path (insert + run touch) must classify the FK identically.
   await expect(

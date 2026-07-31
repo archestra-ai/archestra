@@ -49,6 +49,7 @@ import { ollamaNativeAdapterFactory } from "../adapters/ollama-native";
 import { openaiAdapterFactory } from "../adapters/openai";
 import { openrouterAdapterFactory } from "../adapters/openrouter";
 import { perplexityAdapterFactory } from "../adapters/perplexity";
+import { perplexityResponsesAdapterFactory } from "../adapters/perplexity-responses";
 import { vllmAdapterFactory } from "../adapters/vllm";
 import { xaiAdapterFactory } from "../adapters/xai";
 import { zhipuaiAdapterFactory } from "../adapters/zhipuai";
@@ -79,7 +80,9 @@ import zhipuaiProxyRoutes from "./zhipuai";
 type ProviderFamily =
   | "openai"
   | "zhipuai"
-  | "azure-responses"
+  // Transport-shaped, not provider-shaped: shared by every Responses-style
+  // provider (Azure Responses, Perplexity Agent).
+  | "responses"
   | "anthropic"
   | "gemini"
   | "cohere"
@@ -536,7 +539,7 @@ function createOpenAiLikeHarness(options: HarnessOptions = {}) {
   };
 }
 
-function createAzureResponsesHarness(options: HarnessOptions = {}) {
+function createResponsesHarness(options: HarnessOptions = {}) {
   const requests: Record<string, unknown>[] = [];
   const usage = options.usage ?? DEFAULT_USAGE;
   const model = options.model ?? "test-model";
@@ -1399,8 +1402,8 @@ function createHarness(family: ProviderFamily, options: HarnessOptions = {}) {
       return createOpenAiLikeHarness(options);
     case "zhipuai":
       return createZhipuaiHarness(options);
-    case "azure-responses":
-      return createAzureResponsesHarness(options);
+    case "responses":
+      return createResponsesHarness(options);
     case "anthropic":
       return createAnthropicHarness(options);
     case "gemini":
@@ -2038,11 +2041,38 @@ const providerConfigsByProvider = {
   }),
 } satisfies Record<SupportedProvider, ProviderTestConfig>;
 
+const perplexityResponsesConfig = makeConfig({
+  providerName: "Perplexity Responses",
+  providerSlug: "perplexity-responses",
+  provider: "perplexity",
+  family: "responses",
+  routePlugin: perplexityProxyRoutes,
+  adapterFactory: perplexityResponsesAdapterFactory,
+  endpoint: (agentId) => `/v1/perplexity/${agentId}/responses`,
+  headers: () => ({
+    Authorization: "Bearer test-key",
+    "Content-Type": "application/json",
+  }),
+  requestBuilder: makeAzureResponsesBuilder("anthropic/claude-opus-5"),
+  model: "anthropic/claude-opus-5",
+  optimizedModel: "perplexity/glm-5.2",
+  supportsDeclaredTools: true,
+  supportsStreamingToolCalls: true,
+  // TOON compression rewrites tool-result message content, which the
+  // Responses transport carries as `function_call_output` items rather than
+  // the tool-role messages the compressor understands.
+  supportsCompression: false,
+  assertStreamingToolCall(body) {
+    expect(body).toContain("response.completed");
+    expect(body).toContain("read_file");
+  },
+});
+
 const azureResponsesConfig = makeConfig({
   providerName: "Azure Responses",
   providerSlug: "azure-responses",
   provider: "azure",
-  family: "azure-responses",
+  family: "responses",
   routePlugin: azureProxyRoutes,
   adapterFactory: azureResponsesAdapterFactory,
   endpoint: (agentId) => `/v1/azure/${agentId}/responses`,
@@ -2070,6 +2100,7 @@ const providerConfigs = [
     (config) => config.provider !== "ollama-native",
   ),
   azureResponsesConfig,
+  perplexityResponsesConfig,
 ] satisfies ProviderTestConfig[];
 
 describe("LLM proxy provider matrix", () => {

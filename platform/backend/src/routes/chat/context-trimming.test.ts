@@ -40,6 +40,46 @@ describe("parseContextLengthError", () => {
     });
   });
 
+  test("parses the Anthropic over-length shape relayed by Bedrock", () => {
+    // Shape the chat sees: an APICallError whose responseBody is the proxy's
+    // JSON envelope wrapping Bedrock's relay of the model's own message.
+    const error = new Error(
+      JSON.stringify({
+        error: {
+          message:
+            "Bedrock API error (400): The model returned the following errors: prompt is too long: 1000034 tokens > 1000000 maximum",
+          type: "api_validation_error",
+        },
+      }),
+    );
+    expect(parseContextLengthError(error)).toEqual({
+      maxInputTokens: 1000000,
+      requestedTokens: 1000034,
+    });
+  });
+
+  test("parses the Anthropic over-length shape from the native API", () => {
+    const error = new Error(
+      '{"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 219974 tokens > 199999 maximum"}}',
+    );
+    expect(parseContextLengthError(error)).toEqual({
+      maxInputTokens: 199999,
+      requestedTokens: 219974,
+    });
+  });
+
+  test("subtracts the output reservation when it is what overflows the window", () => {
+    const error = new Error(
+      "input length and max_tokens exceed context limit: 190000 + 20000 > 200000",
+    );
+    // Trimming to the bare 200000 window would be rejected again, because the
+    // 20000-token output reservation is counted against it too.
+    expect(parseContextLengthError(error)).toEqual({
+      maxInputTokens: 180000,
+      requestedTokens: 190000,
+    });
+  });
+
   test("returns null for unrelated errors", () => {
     expect(
       parseContextLengthError(new Error("rate limit exceeded")),
@@ -61,6 +101,40 @@ describe("shouldProbeTextStreamForContextTrimRetry", () => {
   test("keeps the textStream probe enabled for OpenAI-compatible flows", () => {
     expect(shouldProbeTextStreamForContextTrimRetry("openai")).toBe(true);
     expect(shouldProbeTextStreamForContextTrimRetry("vllm")).toBe(true);
+  });
+});
+
+describe("Bedrock context-overflow recovery", () => {
+  test("a rejected over-length Bedrock turn trims down to something that fits", () => {
+    // A conversation whose real token count the provider put just over a 1M
+    // window. The retry has to bring it under the reported limit, keep the
+    // user's latest request, and leave the payload structurally valid.
+    const history: ModelMessage[] = Array.from({ length: 40 }, (_, i) =>
+      msg(i % 2 === 0 ? "user" : "assistant", `turn ${i} ${"x".repeat(2000)}`),
+    );
+    const messages = [...history, msg("user", "now use the reporting tool")];
+
+    const parsed = parseContextLengthError(
+      new Error(
+        "Bedrock API error (400): The model returned the following errors: prompt is too long: 1000034 tokens > 1000000 maximum",
+      ),
+    );
+    expect(parsed).not.toBeNull();
+
+    const trimmed = trimMessagesToTokenLimit({
+      messages,
+      maxTokens: parsed?.maxInputTokens ?? 0,
+      requestedTokens: parsed?.requestedTokens,
+    });
+
+    // The provider counted the original at ~1.00M tokens against a 1M limit, so
+    // the retry must be strictly smaller than what was rejected.
+    const charsOf = (list: ModelMessage[]) =>
+      list.reduce((sum, m) => sum + JSON.stringify(m.content).length, 0);
+    expect(charsOf(trimmed)).toBeLessThan(charsOf(messages));
+    expect(trimmed[trimmed.length - 1].content).toBe(
+      "now use the reporting tool",
+    );
   });
 });
 

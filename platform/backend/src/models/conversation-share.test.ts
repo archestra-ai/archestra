@@ -221,6 +221,57 @@ describe("ConversationShareModel", () => {
     expect(sharedConversation?.sharedByUserId).toBe(user.id);
   });
 
+  test("a soft-deleted conversation stops resolving on its share link", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      name: "Test Agent",
+      teams: [],
+      organizationId: org.id,
+    });
+    await makeMember(user.id, org.id);
+
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+    });
+    const share = await ConversationShareModel.upsert({
+      conversationId: conversation.id,
+      organizationId: org.id,
+      createdByUserId: user.id,
+      visibility: "organization",
+      teamIds: [],
+      userIds: [],
+    });
+
+    // Resolves while active...
+    expect(
+      (
+        await ConversationShareModel.getSharedConversation({
+          shareId: share.id,
+          organizationId: org.id,
+          userId: user.id,
+        })
+      )?.id,
+    ).toBe(conversation.id);
+
+    // ...and returns null once the owner deletes it (the public link 404s).
+    await ConversationModel.delete(conversation.id, user.id, org.id);
+    expect(
+      await ConversationShareModel.getSharedConversation({
+        shareId: share.id,
+        organizationId: org.id,
+        userId: user.id,
+      }),
+    ).toBeNull();
+  });
+
   test("includes persisted chat errors in shared conversations", async ({
     makeUser,
     makeOrganization,
@@ -318,7 +369,7 @@ describe("ConversationShareModel", () => {
     expect(result).toBeNull();
   });
 
-  test("share is deleted when conversation is deleted (cascade)", async ({
+  test("soft-deleting a conversation keeps its share row but kills the link", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -351,12 +402,20 @@ describe("ConversationShareModel", () => {
 
     await ConversationModel.delete(conversation.id, user.id, org.id);
 
+    // Soft delete does NOT cascade — the share row is kept (data preserved)...
     const found = await ConversationShareModel.findByShareId({
       shareId: share.id,
       organizationId: org.id,
     });
+    expect(found).not.toBeNull();
 
-    expect(found).toBeNull();
+    // ...but the link no longer resolves the (now-hidden) conversation.
+    const shared = await ConversationShareModel.getSharedConversation({
+      shareId: share.id,
+      organizationId: org.id,
+      userId: user.id,
+    });
+    expect(shared).toBeNull();
   });
 
   test("updates an existing share and replaces its targets", async ({

@@ -1,7 +1,8 @@
 import type { AnyRoleName } from "@archestra/shared";
-import { and, count, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, count, eq, inArray, or } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
+import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import logger from "@/logging";
 
 class MemberModel {
@@ -280,19 +281,18 @@ class MemberModel {
     role?: string;
   }) {
     const { organizationId, pagination, name, role } = params;
-    const searchPattern = name ? `%${name}%` : null;
+    // Every token has to land somewhere, but not necessarily in the same
+    // field or the order it was typed — so "Ada Lovelace" still finds a
+    // directory-synced "Lovelace, Ada M.".
+    const searchFilter = buildTokenizedSearchFilter({
+      query: name,
+      columns: [schema.usersTable.name, schema.usersTable.email],
+    });
 
     const filters = [
       eq(schema.membersTable.organizationId, organizationId),
       ...(role ? [eq(schema.membersTable.role, role)] : []),
-      ...(searchPattern
-        ? [
-            or(
-              ilike(schema.usersTable.name, searchPattern),
-              ilike(schema.usersTable.email, searchPattern),
-            ),
-          ]
-        : []),
+      ...(searchFilter ? [searchFilter] : []),
     ];
 
     const [data, totalResult] = await Promise.all([

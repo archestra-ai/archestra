@@ -4,12 +4,14 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 const {
   updateMutateAsync,
   setEnabledMutateAsync,
+  setLockedMutateAsync,
   assignMutateAsync,
   unassignMutateAsync,
   useAppToolsMock,
 } = vi.hoisted(() => ({
   updateMutateAsync: vi.fn(),
   setEnabledMutateAsync: vi.fn(),
+  setLockedMutateAsync: vi.fn(),
   assignMutateAsync: vi.fn(),
   unassignMutateAsync: vi.fn(),
   useAppToolsMock: vi.fn(),
@@ -20,6 +22,10 @@ vi.mock("@/lib/app.query", () => ({
   useUpdateApp: () => ({ mutateAsync: updateMutateAsync, isPending: false }),
   useSetAppEnabled: () => ({
     mutateAsync: setEnabledMutateAsync,
+    isPending: false,
+  }),
+  useSetAppLocked: () => ({
+    mutateAsync: setLockedMutateAsync,
     isPending: false,
   }),
   useAssignToolToApp: () => ({
@@ -86,8 +92,10 @@ const APP = {
   description: "Team budget tracker",
   scope: "personal",
   enabled: true,
+  locked: false,
   teams: [],
   users: [],
+  labels: [],
   environmentId: null,
 } as unknown as Parameters<typeof AppSettingsForm>[0]["app"];
 
@@ -162,6 +170,9 @@ describe("AppSettingsForm save", () => {
         name: "Budget v2",
         description: "Team budget tracker",
         environmentId: null,
+        // Labels are replaced wholesale too, so the full current set rides
+        // every save — here the fixture's empty one.
+        labels: [],
       },
     });
     expect(assignMutateAsync).not.toHaveBeenCalled();

@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-07-30
+lastUpdated: 2026-07-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -37,6 +37,28 @@ Disabling an app (in App settings) pulls it back without deleting it. It leaves 
 The `/apps` gallery lists everything the viewer can reach in two sections: apps you own, and the interactive apps exposed by your installed external [MCP servers](./platform-mcp). Each `ui://` resource is its own card, titled by the server's display name (*Task Tracker*); when one server exposes several UIs, the title carries the tool — *Task Tracker / show_board*. A card opens the app in a new chat. That chat stays out of your conversation list until you write into it. An owned card carries **Open in new tab** and **Delete** in its overflow menu; an external card carries **Open in new tab** (the standalone runtime) and a link to the backing **MCP server** page (where the server — and its uninstall — lives).
 
 While the feature is enabled, newly created agents get the full app tool set assigned by default — the staged flow (`refine_app`, `scaffold_app`, `read_app`, `edit_app`, `validate_app`, `publish_app`) plus the supporting `preview_app_tool`, `get_app_diagnostics`, `render_app`, `list_apps`, and `delete_app` — so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
+
+## Locking an App
+
+A locked app is immutable. Agents refuse every change to it — edits, tool assignments, deletion — until it is unlocked. Viewing and running are unaffected. An agent may unlock an app only when you directly ask it to; it never unlocks one on its own. Lock or unlock an app in App settings, or ask an agent in chat.
+
+## Defaults for New Apps
+
+Two settings in **Settings → Chat** govern how new apps start. Both are off by default. Flipping them never touches existing apps.
+
+**New apps are disabled by default** creates every new app disabled. The app stays author-only and invisible to agents until you enable it in App settings.
+
+**New apps are locked by default** creates every new app [locked](#locking-an-app). No agent can edit it until a user unlocks it.
+
+## Labels
+
+Labels are key-value tags that organize your apps — `env: prod`, for example. You add them in App settings.
+
+The `/apps` gallery filters by label. Pick a key, then the values you want. Choosing values under two keys narrows the list to apps carrying both. Choosing several values under one key widens it to apps carrying any of them.
+
+Apps from installed MCP servers show their server's labels, so one filter covers the whole gallery. You edit those on the server's page in the [MCP registry](./platform-mcp).
+
+Agents can read and set labels through the built-in app tools, so you can ask one in chat to tag an app.
 
 ## External MCP clients
 

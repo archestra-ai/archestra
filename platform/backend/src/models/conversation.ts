@@ -8,9 +8,12 @@ import {
   isNotNull,
   isNull,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeletedConversation } from "@/database/schemas/conversation";
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import type {
   Conversation,
   ConversationOrigin,
@@ -79,6 +82,7 @@ class ConversationModel {
 
     // Build WHERE conditions
     const conditions = [
+      notDeletedConversation,
       eq(schema.conversationsTable.userId, userId),
       eq(schema.conversationsTable.organizationId, organizationId),
       // App-opened chats are drafts until the user writes: opening an app
@@ -294,6 +298,39 @@ class ConversationModel {
     }
   }
 
+  /**
+   * List a user's soft-deleted conversations (owner + org scoped), newest
+   * deletion first — the read backing a future "Trash" view. Same sidebar-row
+   * shape as the active list (no messages loaded), but selects rows where
+   * `deleted_at IS NOT NULL`.
+   *
+   * The active-list partial index (`conversations_active_owner_last_message_idx`,
+   * `WHERE deleted_at IS NULL`) does not cover these rows, so this is an
+   * owner-filtered scan — acceptable while the soft-deleted set stays small; a
+   * retention job (and, if needed, a trash index) will bound it.
+   */
+  static async findAllDeleted(
+    userId: string,
+    organizationId: string,
+  ): Promise<Conversation[]> {
+    return ConversationModel.selectListRows({
+      conditions: [
+        isNotNull(schema.conversationsTable.deletedAt),
+        eq(schema.conversationsTable.userId, userId),
+        eq(schema.conversationsTable.organizationId, organizationId),
+        // Same app-open draft filter as the active list: a chat seeded by
+        // opening an app stays a draft until the user writes into it, so a
+        // never-written draft must not surface in trash either.
+        sql`(${schema.conversationsTable.origin} != 'app_open' OR EXISTS (
+          SELECT 1 FROM ${schema.messagesTable}
+          WHERE ${schema.messagesTable.conversationId} = ${schema.conversationsTable.id}
+          AND ${schema.messagesTable.role} = 'user'
+        ))`,
+      ],
+      orderBy: desc(schema.conversationsTable.deletedAt),
+    });
+  }
+
   static async findById({
     id,
     userId,
@@ -339,6 +376,7 @@ class ConversationModel {
       )
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, id),
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),
@@ -391,6 +429,7 @@ class ConversationModel {
       .from(schema.conversationsTable)
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, params.id),
           eq(schema.conversationsTable.userId, params.userId),
           eq(schema.conversationsTable.organizationId, params.organizationId),
@@ -426,6 +465,7 @@ class ConversationModel {
       .from(schema.conversationsTable)
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, params.id),
           eq(schema.conversationsTable.userId, params.userId),
           eq(schema.conversationsTable.organizationId, params.organizationId),
@@ -482,7 +522,12 @@ class ConversationModel {
         organizationId: schema.conversationsTable.organizationId,
       })
       .from(schema.conversationsTable)
-      .where(eq(schema.conversationsTable.id, params.id));
+      .where(
+        and(
+          notDeletedConversation,
+          eq(schema.conversationsTable.id, params.id),
+        ),
+      );
     if (
       !bare ||
       !bare.projectId ||
@@ -548,6 +593,7 @@ class ConversationModel {
       )
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, params.id),
           eq(schema.conversationsTable.organizationId, params.organizationId),
         ),
@@ -659,6 +705,7 @@ class ConversationModel {
       .set(patch)
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, id),
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),
@@ -697,6 +744,7 @@ class ConversationModel {
       .set({ hooksDebugEnabled: params.enabled })
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, params.id),
           eq(schema.conversationsTable.userId, params.userId),
           eq(schema.conversationsTable.organizationId, params.organizationId),
@@ -733,6 +781,7 @@ class ConversationModel {
       })
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, params.id),
           eq(schema.conversationsTable.userId, params.userId),
           eq(schema.conversationsTable.organizationId, params.organizationId),
@@ -752,36 +801,103 @@ class ConversationModel {
         organizationId: schema.conversationsTable.organizationId,
       })
       .from(schema.conversationsTable)
-      .where(eq(schema.conversationsTable.id, id))
+      .where(and(notDeletedConversation, eq(schema.conversationsTable.id, id)))
       .limit(1);
     return row ?? null;
   }
 
+  /**
+   * Soft-delete a conversation (owner + org scoped): stamps `deleted_at` so it
+   * vanishes from every read path while its rows (messages, files, runs) stay
+   * intact. Idempotent — returns the number of rows that transitioned from
+   * active to deleted, so the caller can distinguish a first delete (1) from an
+   * already-deleted conversation (0) and answer 404 on the latter.
+   */
   static async delete(
     id: string,
     userId: string,
     organizationId: string,
-  ): Promise<void> {
-    await db
-      .delete(schema.conversationsTable)
-      .where(
-        and(
-          eq(schema.conversationsTable.id, id),
-          eq(schema.conversationsTable.userId, userId),
-          eq(schema.conversationsTable.organizationId, organizationId),
-        ),
-      );
+  ): Promise<number> {
+    return softDelete(
+      db,
+      schema.conversationsTable,
+      and(
+        eq(schema.conversationsTable.id, id),
+        eq(schema.conversationsTable.userId, userId),
+        eq(schema.conversationsTable.organizationId, organizationId),
+      ),
+    );
+  }
+
+  /**
+   * Physically remove a conversation (owner + org scoped). Reserved for rows
+   * that were never real user data and must leave no trace — e.g. an orphan
+   * conversation created then abandoned when a scheduled-run race is lost.
+   * Ordinary user deletes must use `delete` (soft) so the data stays
+   * recoverable. Returns the number of rows removed.
+   */
+  static async hardDelete(
+    id: string,
+    userId: string,
+    organizationId: string,
+  ): Promise<number> {
+    return hardDelete(
+      db,
+      schema.conversationsTable,
+      and(
+        eq(schema.conversationsTable.id, id),
+        eq(schema.conversationsTable.userId, userId),
+        eq(schema.conversationsTable.organizationId, organizationId),
+      ),
+    );
+  }
+
+  /**
+   * Restore a soft-deleted conversation (owner + org scoped): clears
+   * `deleted_at` so it reappears in every read path with its messages, files,
+   * and runs intact. Idempotent — returns the number of rows that transitioned
+   * from deleted to active, so 0 means the conversation was already active,
+   * never existed, or is not owned by the caller. That count is also what the
+   * route gates its one-shot side effects on (finalizing the stopped run,
+   * revoking the share), since a non-zero count proves both the transition and
+   * the caller's ownership.
+   *
+   * Restore intentionally does NOT resurrect a live stream: the delete path
+   * leaves the run row and stamps `stopRequestedAt`, and a restored
+   * conversation keeps that finished run — the user starts a fresh one.
+   */
+  static async restore(
+    id: string,
+    userId: string,
+    organizationId: string,
+  ): Promise<number> {
+    return restore(
+      db,
+      schema.conversationsTable,
+      and(
+        eq(schema.conversationsTable.id, id),
+        eq(schema.conversationsTable.userId, userId),
+        eq(schema.conversationsTable.organizationId, organizationId),
+      ),
+    );
   }
 
   /**
    * Get the agentId for a conversation (without user context checks)
-   * Used by internal services that need to look up conversation -> agent mapping
+   * Used by internal services that need to look up conversation -> agent mapping.
+   * Excludes soft-deleted conversations, so late/in-flight callers resolve null
+   * (and degrade to a clean not-found) once a conversation is deleted.
    */
   static async getAgentId(conversationId: string): Promise<string | null> {
     const result = await db
       .select({ agentId: schema.conversationsTable.agentId })
       .from(schema.conversationsTable)
-      .where(eq(schema.conversationsTable.id, conversationId))
+      .where(
+        and(
+          notDeletedConversation,
+          eq(schema.conversationsTable.id, conversationId),
+        ),
+      )
       .limit(1);
 
     return result[0]?.agentId ?? null;
@@ -801,6 +917,7 @@ class ConversationModel {
       .from(schema.conversationsTable)
       .where(
         and(
+          notDeletedConversation,
           eq(schema.conversationsTable.id, conversationId),
           eq(schema.conversationsTable.userId, userId),
           eq(schema.conversationsTable.organizationId, organizationId),
@@ -809,6 +926,67 @@ class ConversationModel {
       .limit(1);
 
     return result[0]?.agentId ?? null;
+  }
+
+  /**
+   * SELECT for conversation "list rows" — the sidebar-row shape (agent/share/
+   * project columns joined, no messages/errors/compactions loaded) backing
+   * {@link findAllDeleted}. The hot active-list path ({@link findAll}) keeps
+   * its own inline copy of this query on purpose, so this helper is not on
+   * that path. Callers own the WHERE conditions and the ordering.
+   */
+  private static async selectListRows(params: {
+    conditions: SQL[];
+    orderBy: SQL;
+  }): Promise<Conversation[]> {
+    const rows = await db
+      .select({
+        conversation: getTableColumns(schema.conversationsTable),
+        share: {
+          id: schema.conversationSharesTable.id,
+          visibility: schema.conversationSharesTable.visibility,
+        },
+        projectName: schema.projectsTable.name,
+        projectIcon: schema.projectsTable.icon,
+        agent: {
+          id: schema.agentsTable.id,
+          name: schema.agentsTable.name,
+          systemPrompt: schema.agentsTable.systemPrompt,
+          agentType: schema.agentsTable.agentType,
+          toolExposureMode: schema.agentsTable.toolExposureMode,
+          llmApiKeyId: schema.agentsTable.llmApiKeyId,
+          deletedAt: schema.agentsTable.deletedAt,
+        },
+      })
+      .from(schema.conversationsTable)
+      .leftJoin(
+        schema.agentsTable,
+        eq(schema.conversationsTable.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
+        schema.conversationSharesTable,
+        eq(
+          schema.conversationsTable.id,
+          schema.conversationSharesTable.conversationId,
+        ),
+      )
+      .leftJoin(
+        schema.projectsTable,
+        eq(schema.conversationsTable.projectId, schema.projectsTable.id),
+      )
+      .where(and(...params.conditions))
+      .orderBy(params.orderBy);
+
+    return rows.map((row) => ({
+      ...withVisibleAgent(row.conversation, row.agent),
+      share: row.share?.id ? row.share : null,
+      projectName: row.projectName ?? null,
+      projectIcon: listProjectIcon(row.projectIcon),
+      unread: isConversationUnread(row.conversation),
+      messages: [],
+      chatErrors: [],
+      compactions: [],
+    }));
   }
 }
 

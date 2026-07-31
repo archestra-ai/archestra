@@ -305,6 +305,10 @@ export const InsertAgentSchemaBase = createInsertSchema(
     updatedAt: true,
     authorId: true,
     isPersonalGateway: true,
+    // Server-managed head pointer into agent_versions — forked by
+    // AgentVersionModel, never client-settable (a supplied value would corrupt
+    // the version counter and can collide on the (agent_id, version) index).
+    latestVersion: true,
   });
 
 // Full schema with validation refinement
@@ -336,6 +340,10 @@ export const UpdateAgentSchemaBase = createUpdateSchema(
     updatedAt: true,
     authorId: true,
     isPersonalGateway: true,
+    // Server-managed head pointer into agent_versions — forked by
+    // AgentVersionModel, never client-settable (a supplied value would corrupt
+    // the version counter and can collide on the (agent_id, version) index).
+    latestVersion: true,
   });
 
 // Full schema with validation refinement

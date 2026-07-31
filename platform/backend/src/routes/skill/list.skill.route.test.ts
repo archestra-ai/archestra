@@ -316,4 +316,62 @@ describe("GET /api/skills", () => {
       "my-personal-skill",
     ]);
   });
+
+  test("status=deleted returns only the trash for an admin and exposes deletedAt", async ({
+    makeMember,
+  }) => {
+    const active = (
+      await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: manifestNamed("active-skill") },
+      })
+    ).json();
+    const trashed = (
+      await ctx.app.inject({
+        method: "POST",
+        url: "/api/skills",
+        payload: { content: manifestNamed("trashed-skill") },
+      })
+    ).json();
+    await ctx.app.inject({
+      method: "DELETE",
+      url: `/api/skills/${trashed.id}`,
+    });
+
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const trash = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills?status=deleted",
+    });
+    expect(trash.statusCode).toBe(200);
+    const ids = trash.json().data.map((s: { id: string }) => s.id);
+    expect(ids).toEqual([trashed.id]);
+    // the trash view needs deletedAt to show when a skill was removed
+    expect(trash.json().data[0].deletedAt).toEqual(expect.any(String));
+
+    // the default (active) view still excludes the deleted skill
+    const activeList = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills",
+    });
+    const activeIds = activeList.json().data.map((s: { id: string }) => s.id);
+    expect(activeIds).toContain(active.id);
+    expect(activeIds).not.toContain(trashed.id);
+  });
+
+  test("members cannot view the deleted-skills trash", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills?status=deleted",
+    });
+    expect(response.statusCode).toBe(403);
+  });
 });

@@ -418,6 +418,7 @@ const baseAgent = {
   incomingEmailSecurityMode: "public" as const,
   incomingEmailAllowedDomain: null,
   slug: null,
+  latestVersion: 0,
 };
 
 const targetAgent = {
@@ -631,6 +632,7 @@ describe.skip("AgentDialog", () => {
           incomingEmailSecurityMode: "public",
           incomingEmailAllowedDomain: null,
           slug: null,
+          latestVersion: 0,
         }}
       />,
     );

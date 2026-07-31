@@ -447,6 +447,43 @@ describe("runAgentStream", () => {
     expect(await result.text).toBe("hi");
   });
 
+  test("trims and retries when Bedrock relays the model's over-length rejection", async () => {
+    // The failure this guards: a long Claude-on-Bedrock conversation is
+    // rejected mid-turn, and because the message never matched the shapes the
+    // retry knew about, the run surfaced a hard 400 to the user instead of
+    // recovering. The body is the proxy envelope the chat actually receives.
+    const messages: ModelMessage[] = [
+      { role: "user", content: "a".repeat(400) },
+      { role: "assistant", content: "b".repeat(400) },
+      { role: "user", content: "c".repeat(400) },
+    ];
+    const model = modelFor(
+      errorChunks(
+        new Error(
+          '{"error":{"message":"Bedrock API error (400): The model returned the following errors: prompt is too long: 1000034 tokens > 1000000 maximum","type":"api_validation_error"}}',
+        ),
+      ),
+      renderableChunks(),
+    );
+
+    const { result } = await runAgentStream({
+      config: { model, messages },
+    });
+    await drain(result);
+
+    expect(model.doStreamCalls).toHaveLength(2);
+    // The provider reports both counts here, so the retry sizes itself from the
+    // payload's real chars-per-token ratio rather than the 4-chars default.
+    // Message count is not the signal — a trim note replaces what it drops — so
+    // compare what the retry actually weighs.
+    const promptChars = (call: (typeof model.doStreamCalls)[number]) =>
+      JSON.stringify(call.prompt).length;
+    expect(promptChars(model.doStreamCalls[1])).toBeLessThan(
+      promptChars(model.doStreamCalls[0]),
+    );
+    expect(await result.text).toBe("hi");
+  });
+
   test("strips reasoningSummary and retries when the OpenAI org is not verified for summaries", async () => {
     const model = modelFor(
       errorChunks(reasoningSummaryVerificationError()),

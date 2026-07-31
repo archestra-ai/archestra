@@ -385,6 +385,8 @@ class OptimizationRuleModel {
         cerebras: [],
         mistral: [],
         perplexity: [], // Perplexity optimization rules - no defaults (no tool support)
+        // No defaults: the Agent API's catalog spans several vendors, so there
+        // is no single cheaper sibling to fall back to.
         groq: [], // Groq optimization rules - no defaults
         xai: [], // xAI optimization rules - no defaults
         openrouter: [], // OpenRouter optimization rules - no defaults

@@ -1,4 +1,6 @@
 import { ChatErrorCode } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import ConversationModel from "@/models/conversation";
 import ConversationChatErrorModel from "@/models/conversation-chat-error";
 import InteractionModel from "@/models/interaction";
@@ -70,6 +72,63 @@ test("createAndLinkRunConversation makes a project-scoped, schedule-origin chat 
 
   const all = await ConversationModel.findAll(actor.id, org.id);
   expect(all.filter((c) => c.projectId === project.id)).toHaveLength(1);
+});
+
+test("createAndLinkRunConversation hard-deletes the losing orphan (no soft-deleted leftover)", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  makeScheduleTrigger,
+  makeScheduleTriggerRun,
+}) => {
+  const org = await makeOrganization();
+  const actor = await makeUser();
+  await makeMember(actor.id, org.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: org.id, authorId: actor.id });
+  const trigger = await makeScheduleTrigger({
+    organizationId: org.id,
+    actorUserId: actor.id,
+    agentId: agent.id,
+  });
+  const run = await makeScheduleTriggerRun(trigger.id, {
+    organizationId: org.id,
+    runKind: "due",
+  });
+
+  // First call wins the CAS and links the winner conversation.
+  const winner = await createAndLinkRunConversation({
+    run,
+    trigger,
+    ownerUserId: actor.id,
+    organizationId: org.id,
+  });
+
+  // A racing second call (stale run object, still unlinked in memory) creates a
+  // fresh conversation, loses the CAS, discards its orphan, and returns the
+  // winner — never a second conversation.
+  const again = await createAndLinkRunConversation({
+    run,
+    trigger,
+    ownerUserId: actor.id,
+    organizationId: org.id,
+  });
+  expect(again.id).toBe(winner.id);
+
+  // The orphan must be PHYSICALLY gone, not soft-deleted. A raw read (bypassing
+  // the soft-delete filter that findAll applies) sees only the winner row and
+  // nothing with deletedAt stamped; a soft delete here would leak a hidden row
+  // forever, since nothing reclaims soft-deleted conversations.
+  const rows = await db
+    .select({
+      id: schema.conversationsTable.id,
+      deletedAt: schema.conversationsTable.deletedAt,
+    })
+    .from(schema.conversationsTable)
+    .where(eq(schema.conversationsTable.organizationId, org.id));
+  expect(rows).toHaveLength(1);
+  expect(rows[0].id).toBe(winner.id);
+  expect(rows[0].deletedAt).toBeNull();
 });
 
 test("backfillRunConversationMessages materializes chat messages from a run's interactions, once", async ({

@@ -1,5 +1,5 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import { AppVersionModel } from "@/models";
+import { AppVersionModel, OrganizationModel } from "@/models";
 import EnvironmentModel from "@/models/environment";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -423,5 +423,32 @@ describe("POST /api/apps — slug", () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+
+  test("honors the org's new-app defaults (disabled/locked) at creation", async () => {
+    await OrganizationModel.patch(organizationId, {
+      newAppsDisabledByDefault: true,
+      newAppsLockedByDefault: true,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Governed", scope: "org" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ enabled: false, locked: true });
+  });
+
+  test("without the org defaults, a new app starts enabled and unlocked", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/apps",
+      payload: { name: "Ungoverned", scope: "org" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ enabled: true, locked: false });
   });
 });

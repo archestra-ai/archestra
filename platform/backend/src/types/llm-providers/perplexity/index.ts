@@ -1,16 +1,23 @@
 /**
  * Perplexity LLM Provider Types - OpenAI-compatible
  *
- * Perplexity uses an OpenAI-compatible API at https://api.perplexity.ai
- *
- * Key differences from OpenAI:
- * - No external tool calling support
- * - Returns search_results field with web search citations
- * - Has Perplexity-specific usage metrics
+ * Perplexity serves two surfaces off one key namespace at
+ * https://api.perplexity.ai:
+ * - Chat completions for the `sonar*` models — no external tool calling
+ *   (see inferPerplexityCapabilities in services/model-sync.ts), plus
+ *   search_results citations and Perplexity-specific usage metrics
+ * - The Responses-shaped Agent API at `/v1` for the vendor-prefixed models,
+ *   the surface that accepts tools
  *
  * @see https://docs.perplexity.ai/api-reference/chat-completions-post
+ * @see https://docs.perplexity.ai/api-reference/agent-post
  */
 import type OpenAIProvider from "openai";
+import type {
+  Response,
+  ResponseCreateParams,
+  ResponseStreamEvent,
+} from "openai/resources/responses/responses";
 import type { z } from "zod";
 import * as PerplexityAPI from "./api";
 import * as PerplexityMessages from "./messages";
@@ -40,6 +47,18 @@ namespace Perplexity {
     // Use OpenAI's stream chunk type since Perplexity is OpenAI-compatible
     export type ChatCompletionChunk =
       OpenAIProvider.Chat.Completions.ChatCompletionChunk;
+
+    // The Agent API surface, typed off the OpenAI Responses SDK types it is
+    // wire-compatible with.
+    export type ResponsesHeaders = z.infer<
+      typeof PerplexityAPI.ResponsesHeadersSchema
+    >;
+    export type ResponsesRequest = ResponseCreateParams & { model: string };
+    export type ResponsesResponse = Response;
+    export type ResponsesUsage = z.infer<
+      typeof PerplexityAPI.ResponsesUsageSchema
+    >;
+    export type ResponseChunk = ResponseStreamEvent;
   }
 }
 

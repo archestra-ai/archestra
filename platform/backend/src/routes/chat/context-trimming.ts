@@ -42,6 +42,16 @@ export interface ContextLengthError {
  * - vLLM/LiteLLM: "You passed 8193 input tokens ... maximum input length of 8192 tokens"
  * - OpenRouter-style gateways: "maximum context length is 262144 tokens.
  *   However, you requested about 285869 tokens"
+ * - Anthropic family: "prompt is too long: 1000034 tokens > 1000000 maximum"
+ * - Anthropic family: "input length and max_tokens exceed context limit:
+ *   190000 + 20000 > 200000"
+ *
+ * The Anthropic shapes arrive both from the native API and from resellers that
+ * relay the model's own message verbatim — Bedrock wraps it as "The model
+ * returned the following errors: prompt is too long: …". Matching on the
+ * message rather than the envelope therefore covers every host of a Claude
+ * model at once, which is what makes the trim-and-retry recovery reachable for
+ * Bedrock at all.
  */
 export function parseContextLengthError(
   error: unknown,
@@ -75,6 +85,35 @@ export function parseContextLengthError(
       requestedTokens: requested
         ? Number.parseInt(requested[1], 10)
         : undefined,
+    };
+  }
+
+  const anthropicPromptMatch = body.match(
+    /prompt is too long:\s*(\d+)\s*tokens\s*>\s*(\d+)\s*maximum/i,
+  );
+  if (anthropicPromptMatch) {
+    return {
+      maxInputTokens: Number.parseInt(anthropicPromptMatch[2], 10),
+      requestedTokens: Number.parseInt(anthropicPromptMatch[1], 10),
+    };
+  }
+
+  // The output reservation is counted against the window alongside the input,
+  // so the budget the retry has to fit into is the window minus that
+  // reservation — trimming to the bare window would be rejected again.
+  const anthropicMaxTokensMatch = body.match(
+    /input length and max_tokens exceed context limit:\s*(\d+)\s*\+\s*(\d+)\s*>\s*(\d+)/i,
+  );
+  if (anthropicMaxTokensMatch) {
+    const inputTokens = Number.parseInt(anthropicMaxTokensMatch[1], 10);
+    const reservedOutputTokens = Number.parseInt(
+      anthropicMaxTokensMatch[2],
+      10,
+    );
+    const contextLimit = Number.parseInt(anthropicMaxTokensMatch[3], 10);
+    return {
+      maxInputTokens: Math.max(contextLimit - reservedOutputTokens, 1),
+      requestedTokens: inputTokens,
     };
   }
 

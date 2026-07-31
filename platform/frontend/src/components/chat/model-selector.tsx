@@ -7,6 +7,7 @@ import {
   isOpenRouterLatestAlias,
   type ModelInputModality,
   providerDisplayNames,
+  requiresPerplexityAgentApi,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -40,6 +41,7 @@ import {
   ConnectAccountBadge,
   FreeModelBadge,
   LatestModelBadge,
+  NoToolsBadge,
   OldModelBadge,
   UnknownCapabilitiesBadge,
 } from "@/components/model-badges";
@@ -152,6 +154,48 @@ function compareLlmModels(a: LlmModel, b: LlmModel): number {
   );
 }
 
+type ProviderModelSection = {
+  key: string;
+  heading: string;
+  models: LlmModel[];
+};
+
+/**
+ * A provider that serves more than one API splits its group into one section
+ * per backing API, so the list reads as what each model actually speaks.
+ *
+ * Perplexity: the chat-completions `sonar*` family leads — it is the
+ * provider's default surface — and the vendor-prefixed Agent API catalog
+ * (the tool-calling one) follows. The section keys reuse the interaction-type
+ * strings that name these transports everywhere else.
+ */
+const PROVIDER_MODEL_SECTIONERS: Partial<
+  Record<SupportedProvider, (models: LlmModel[]) => ProviderModelSection[]>
+> = {
+  perplexity: (models) => [
+    {
+      key: "perplexity:chatCompletions",
+      heading: `${providerDisplayNames.perplexity} — Chat Completions`,
+      models: models.filter((model) => !requiresPerplexityAgentApi(model.id)),
+    },
+    {
+      key: "perplexity:responses",
+      heading: `${providerDisplayNames.perplexity} — Agent API`,
+      models: models.filter((model) => requiresPerplexityAgentApi(model.id)),
+    },
+  ],
+};
+
+function providerModelSections(
+  provider: SupportedProvider,
+  models: LlmModel[],
+): ProviderModelSection[] {
+  const sections = PROVIDER_MODEL_SECTIONERS[provider]?.(models) ?? [
+    { key: provider, heading: providerDisplayNames[provider], models },
+  ];
+  return sections.filter((section) => section.models.length > 0);
+}
+
 /**
  * Capability icon component - matches Vercel AI Elements style.
  * Small, compact icons that show model capabilities.
@@ -199,12 +243,26 @@ function ModelCapabilityBadges({
   const hasPdf = capabilities?.inputModalities?.includes("pdf");
   const hasToolCalling = capabilities?.supportsToolCalling;
 
+  // An explicit false, as opposed to null/undefined ("unknown"): the model is
+  // known to take no tools, which gets its own marker below.
+  const lacksToolCalling = capabilities?.supportsToolCalling === false;
+
   const hasAnyCapability =
     hasVision || hasAudio || hasVideo || hasPdf || hasToolCalling;
 
-  // Show "unknown" badge if no capabilities data at all
-  if (!capabilities || !hasAnyCapability) {
+  // "Unknown" strictly means no capability data was recorded. An explicit
+  // `supportsToolCalling: false` or a recorded modality list is known data —
+  // a text-only, tool-less model (e.g. the Perplexity sonar family) is marked
+  // as such rather than claiming ignorance.
+  const hasCapabilityData =
+    capabilities != null &&
+    (capabilities.inputModalities != null ||
+      capabilities.supportsToolCalling != null);
+  if (!hasCapabilityData) {
     return <UnknownCapabilitiesBadge />;
+  }
+  if (!hasAnyCapability && !lacksToolCalling) {
+    return null;
   }
 
   return (
@@ -220,6 +278,7 @@ function ModelCapabilityBadges({
         {hasPdf && (
           <CapabilityIcon icon={FileText} label="Supports PDF input" />
         )}
+        {lacksToolCalling && <NoToolsBadge />}
         {hasToolCalling && (
           <CapabilityIcon icon={Settings2} label="Supports tool calling" />
         )}
@@ -889,73 +948,73 @@ function ModelSelectorDialogBody({
           </ModelSelectorGroup>
         )}
 
-        {filteredProviders.map((provider) => (
-          <ModelSelectorGroup
-            key={provider}
-            heading={providerDisplayNames[provider]}
-          >
-            {(sortedModelsByProvider[provider] ?? []).map((model) => {
-              // Use provider:modelId format for unique keys/values
-              // This prevents issues when different providers have models with the same ID
-              const modelValue = createModelValue(provider, model.dbId);
-              return (
-                <ModelSelectorItem
-                  key={modelValue}
-                  value={modelValue}
-                  // value is provider:dbId (a UUID) for stable selection,
-                  // so search must match human-readable terms via keywords
-                  keywords={[
-                    model.displayName,
-                    model.id,
-                    providerDisplayNames[provider],
-                  ]}
-                  onSelect={() => onSelectModel(modelValue)}
-                  className="group"
-                >
-                  <ModelSelectorLogo
-                    provider={providerToLogoProvider[provider]}
-                  />
-                  <ModelSelectorName>
-                    {model.displayName}{" "}
-                    <span className="text-xs text-muted-foreground font-mono">
-                      ({model.id})
-                    </span>
-                    <CopyModelIdButton modelId={model.id} />
-                  </ModelSelectorName>
-                  {model.isFree && <FreeModelBadge />}
-                  {model.requiresUserConnection && !model.isConnected && (
-                    <ConnectAccountBadge />
-                  )}
-                  {isOpenRouterLatestAlias(provider, model.id) && (
-                    <LatestModelBadge />
-                  )}
-                  {provider === "gemini" && isLegacyGeminiModel(model.id) && (
-                    <OldModelBadge />
-                  )}
-                  <div className="ml-auto flex items-center gap-2">
-                    <ModelCapabilityBadges capabilities={model.capabilities} />
-                    <ContextLengthIndicator
-                      contextLength={model.capabilities?.contextLength}
+        {filteredProviders.flatMap((provider) =>
+          providerModelSections(
+            provider,
+            sortedModelsByProvider[provider] ?? [],
+          ).map((section) => (
+            <ModelSelectorGroup key={section.key} heading={section.heading}>
+              {section.models.map((model) => {
+                // Use provider:modelId format for unique keys/values
+                // This prevents issues when different providers have models with the same ID
+                const modelValue = createModelValue(provider, model.dbId);
+                return (
+                  <ModelSelectorItem
+                    key={modelValue}
+                    value={modelValue}
+                    // value is provider:dbId (a UUID) for stable selection,
+                    // so search must match human-readable terms via keywords
+                    keywords={[model.displayName, model.id, section.heading]}
+                    onSelect={() => onSelectModel(modelValue)}
+                    className="group"
+                  >
+                    <ModelSelectorLogo
+                      provider={providerToLogoProvider[provider]}
                     />
-                    <PricingIndicator
-                      pricePerMillionInput={
-                        model.capabilities?.pricePerMillionInput
-                      }
-                      pricePerMillionOutput={
-                        model.capabilities?.pricePerMillionOutput
-                      }
-                    />
-                    {selectedModel === model.dbId ? (
-                      <CheckIcon className="size-4" />
-                    ) : (
-                      <div className="size-4" />
+                    <ModelSelectorName>
+                      {model.displayName}{" "}
+                      <span className="text-xs text-muted-foreground font-mono">
+                        ({model.id})
+                      </span>
+                      <CopyModelIdButton modelId={model.id} />
+                    </ModelSelectorName>
+                    {model.isFree && <FreeModelBadge />}
+                    {model.requiresUserConnection && !model.isConnected && (
+                      <ConnectAccountBadge />
                     )}
-                  </div>
-                </ModelSelectorItem>
-              );
-            })}
-          </ModelSelectorGroup>
-        ))}
+                    {isOpenRouterLatestAlias(provider, model.id) && (
+                      <LatestModelBadge />
+                    )}
+                    {provider === "gemini" && isLegacyGeminiModel(model.id) && (
+                      <OldModelBadge />
+                    )}
+                    <div className="ml-auto flex items-center gap-2">
+                      <ModelCapabilityBadges
+                        capabilities={model.capabilities}
+                      />
+                      <ContextLengthIndicator
+                        contextLength={model.capabilities?.contextLength}
+                      />
+                      <PricingIndicator
+                        pricePerMillionInput={
+                          model.capabilities?.pricePerMillionInput
+                        }
+                        pricePerMillionOutput={
+                          model.capabilities?.pricePerMillionOutput
+                        }
+                      />
+                      {selectedModel === model.dbId ? (
+                        <CheckIcon className="size-4" />
+                      ) : (
+                        <div className="size-4" />
+                      )}
+                    </div>
+                  </ModelSelectorItem>
+                );
+              })}
+            </ModelSelectorGroup>
+          )),
+        )}
       </ModelSelectorList>
     </>
   );

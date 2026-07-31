@@ -44,6 +44,66 @@ describe("SearchableSelect", () => {
     expect(onValueChange).toHaveBeenCalledWith("available");
   });
 
+  it("finds an item whose stored order differs from the typed one", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <SearchableSelect
+        value=""
+        onValueChange={vi.fn()}
+        placeholder="Select a user"
+        items={[
+          {
+            value: "u-ada",
+            label: "Lovelace, Ada M.",
+            searchText: "Lovelace, Ada M. ada@example.com",
+          },
+          {
+            value: "u-charles",
+            label: "Babbage, Charles",
+            searchText: "Babbage, Charles charles@example.com",
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.type(screen.getByPlaceholderText("Search..."), "Ada Lovelace");
+
+    expect(
+      screen.getByRole("button", { name: /Lovelace, Ada M./i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Babbage, Charles/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("narrows rather than widens when another token is typed", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <SearchableSelect
+        value=""
+        onValueChange={vi.fn()}
+        placeholder="Select a user"
+        items={[
+          { value: "u-ada", label: "Lovelace, Ada M." },
+          { value: "u-charles", label: "Babbage, Charles" },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.type(screen.getByPlaceholderText("Search..."), "Ada Babbage");
+
+    expect(
+      screen.queryByRole("button", { name: /Lovelace, Ada M./i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Babbage, Charles/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("respects a custom popover side", async () => {
     const user = userEvent.setup();
 

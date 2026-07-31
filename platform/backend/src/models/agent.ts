@@ -65,6 +65,7 @@ import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
 import AgentUserModel from "./agent-user";
+import AgentVersionModel from "./agent-version";
 import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
@@ -564,6 +565,16 @@ class AgentModel {
       if (flipped) {
         Object.assign(createdAgent, flipped);
       }
+    }
+
+    // Fork version 1 now that the full config of this create (row, junctions,
+    // auto-assigned tools, exclusion pre-fill) is in place. Best-effort: a
+    // versioning failure must never fail the create itself.
+    const fork = await AgentVersionModel.forkIfChangedBestEffort(
+      createdAgent.id,
+    );
+    if (fork) {
+      createdAgent.latestVersion = fork.version;
     }
 
     // Get team details and tools for the created agent
@@ -2444,6 +2455,16 @@ class AgentModel {
       await AgentSuggestedPromptModel.syncForAgent(id, suggestedPrompts);
     }
 
+    // Any write above may have changed the canonical config — fork a version
+    // if so. Deliberately after the junction syncs (the snapshot must capture
+    // this mutation's final state), and unconditionally: a relational-only
+    // update skips the agents-row write yet still changes config. Best-effort:
+    // a versioning failure must never fail the update itself.
+    const fork = await AgentVersionModel.forkIfChangedBestEffort(id);
+    if (fork && updatedAgent) {
+      updatedAgent.latestVersion = fork.version;
+    }
+
     const [
       toolRows,
       currentTeams,
@@ -3210,6 +3231,14 @@ class AgentModel {
           { skipExclusionPrefill: true },
         );
       }
+
+      // Fork last, once the copied assignments and exclusions are in place.
+      // create() already forked a version 1 that predates them, and neither
+      // cloneAssignments nor replaceForAgent forks; without this a clone of a
+      // Custom-mode agent (which skips the update above) would leave version 1
+      // — a snapshot with no tools — as the permanent head of a fully
+      // configured agent.
+      await AgentVersionModel.forkIfChangedBestEffort(created.id);
 
       const clonedAgent = await AgentModel.findById(created.id, userId, true);
       if (!clonedAgent) {

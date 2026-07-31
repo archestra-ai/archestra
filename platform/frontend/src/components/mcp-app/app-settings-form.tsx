@@ -8,6 +8,11 @@ import { Globe, User, UserRound, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +34,7 @@ import {
   useAppTools,
   useAssignToolToApp,
   useSetAppEnabled,
+  useSetAppLocked,
   useUnassignToolFromApp,
   useUpdateApp,
 } from "@/lib/app.query";
@@ -81,6 +87,7 @@ export function AppSettingsForm({
 
   const updateApp = useUpdateApp();
   const setEnabled = useSetAppEnabled();
+  const setLocked = useSetAppLocked();
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
   const appToolsQuery = useAppTools(app.id);
@@ -100,6 +107,9 @@ export function AppSettingsForm({
   const [enabledStatus, setEnabledStatus] = useState<"disabled" | "enabled">(
     app.enabled ? "enabled" : "disabled",
   );
+  const [lockedStatus, setLockedStatus] = useState<"unlocked" | "locked">(
+    app.locked ? "locked" : "unlocked",
+  );
   // The form's fourth option. On the wire an app shared with named people stays
   // `personal` and carries grants, so "user" is a UI-side reading of
   // (scope, users) — see the save path below, which maps it back.
@@ -108,6 +118,10 @@ export function AppSettingsForm({
   );
   const [teamIds, setTeamIds] = useState<string[]>(app.teams.map((t) => t.id));
   const [userIds, setUserIds] = useState<string[]>(app.users.map((u) => u.id));
+  const [labels, setLabels] = useState<ProfileLabel[]>(
+    app.labels.map(({ key, value }) => ({ key, value })),
+  );
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -160,6 +174,23 @@ export function AppSettingsForm({
   ];
   const selectedEnabledDescription = enabledOptions.find(
     (option) => option.value === enabledStatus,
+  )?.description;
+
+  const lockedOptions = [
+    {
+      value: "unlocked" as const,
+      label: "Unlocked",
+      description: "Agents (and you) can modify the app normally",
+    },
+    {
+      value: "locked" as const,
+      label: "Locked",
+      description:
+        "Agents refuse every change to this app, and it can't be deleted, until you unlock it",
+    },
+  ];
+  const selectedLockedDescription = lockedOptions.find(
+    (option) => option.value === lockedStatus,
   )?.description;
 
   const options: VisibilityOption<AppVisibilityChoice>[] = [
@@ -217,6 +248,7 @@ export function AppSettingsForm({
   const saving =
     updateApp.isPending ||
     setEnabled.isPending ||
+    setLocked.isPending ||
     assignTool.isPending ||
     unassignTool.isPending;
 
@@ -256,6 +288,16 @@ export function AppSettingsForm({
       });
       if (!result) return;
     }
+    // Lock/unlock is a lifecycle transition like enable/disable, committed via
+    // its own endpoint before the PATCH.
+    const locked = lockedStatus === "locked";
+    if (locked !== app.locked) {
+      const result = await setLocked.mutateAsync({
+        appId: app.id,
+        locked,
+      });
+      if (!result) return;
+    }
     // Visibility is editable on its own permissions; identity + environment only
     // when the caller can update the app, so omit those fields otherwise (mirrors
     // the field-limited bodies the old publish popover / rename dialog sent).
@@ -272,6 +314,10 @@ export function AppSettingsForm({
       body.name = values.name.trim();
       body.description = values.description.trim() || null;
       body.environmentId = environmentId;
+      // Flush a label typed into the picker but not yet committed, so a save
+      // doesn't silently drop it.
+      const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+      body.labels = finalLabels.map(({ key, value }) => ({ key, value }));
       // Sent only when it actually changed, so a save that touches other fields
       // never re-sends the slug and 409s against the app's own row. Blank is
       // "leave it alone", not "clear it" — there is no way to unset a URL.
@@ -424,6 +470,12 @@ export function AppSettingsForm({
                 </p>
               ) : null}
             </div>
+
+            <ProfileLabels
+              ref={labelsRef}
+              labels={labels}
+              onLabelsChange={setLabels}
+            />
           </>
         )}
 
@@ -495,6 +547,36 @@ export function AppSettingsForm({
             {selectedEnabledDescription ? (
               <p className="text-xs text-muted-foreground">
                 {selectedEnabledDescription}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Modification</Label>
+            <Select
+              value={lockedStatus}
+              onValueChange={(next) =>
+                setLockedStatus(next as "unlocked" | "locked")
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {lockedOptions.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    description={option.description}
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedLockedDescription ? (
+              <p className="text-xs text-muted-foreground">
+                {selectedLockedDescription}
               </p>
             ) : null}
           </div>

@@ -1,0 +1,14 @@
+name: Setup uv
+description: Wrapper around astral-sh/setup-uv pinned to a vetted version.
+inputs:
+  version:
+    description: Version of uv to install. Defaults to the version in pyproject.toml, or latest.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Setup uv
+      uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      with:
+        version: ${{ inputs.version }}

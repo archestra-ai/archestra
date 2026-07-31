@@ -293,27 +293,6 @@ class FileStore {
   }
 
   /**
-   * Delete the stored bytes of every file in a project. Deleting the project row
-   * cascade-deletes the `files` rows, but external bytes live outside Postgres,
-   * so the caller must purge them around the delete. Inline (`db`) rows are a
-   * no-op. Best-effort per file.
-   */
-  async purgeProjectBytes(params: {
-    organizationId: string;
-    projectId: string;
-  }): Promise<void> {
-    const rows = await FileModel.listByProject(params);
-    await Promise.all(
-      rows.map((row) =>
-        deleteRowBytes({
-          provider: row.storageProvider,
-          objectKey: row.objectKey,
-        }).catch(() => {}),
-      ),
-    );
-  }
-
-  /**
    * Delete a conversation's no-project files — both rows and external bytes —
    * when the conversation is deleted. No-project files belong to their
    * conversation, so they must not outlive it as unreachable orphans (the

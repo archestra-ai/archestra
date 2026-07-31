@@ -19,6 +19,8 @@ import {
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_SET_APP_LABELS_SHORT_NAME,
+  TOOL_SET_APP_LOCK_SHORT_NAME,
   TOOL_SET_APP_TOOLS_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
@@ -31,6 +33,7 @@ import {
 } from "@/clients/chat-mcp-elicitation";
 import {
   AppAccessModel,
+  AppLabelModel,
   AppModel,
   AppRenderDiagnosticsModel,
   AppRenderScreenshotModel,
@@ -39,6 +42,7 @@ import {
   EnvironmentModel,
   InternalMcpCatalogModel,
   McpServerModel,
+  OrganizationModel,
   ToolModel,
 } from "@/models";
 import { buildValidatedVersionPayload } from "@/services/apps/app-ui-policy";
@@ -99,12 +103,14 @@ describe("app tool execution", () => {
     // The model hands this link to the user. The scaffolded template is not
     // rendered inline (only the first edit_app is); the standalone page stays
     // reachable via the returned link. It is a name-labeled markdown link to the
-    // absolute /a/<id> path — never a bare path the model turns into a raw-UUID
-    // label or a leading-slash-dropped relative href.
+    // absolute /a/<slug> path — never a bare path the model turns into a
+    // raw-UUID label or a leading-slash-dropped relative href.
     expect(structured(created).id).toMatch(/^[0-9a-f-]{36}$/);
     expect((created.content[0] as any).text).toContain(
-      `[Dashboard](/a/${appId})`,
+      "[Dashboard](/a/dashboard)",
     );
+    // The raw id is never the link target once the app has a slug.
+    expect((created.content[0] as any).text).not.toContain(`/a/${appId}`);
 
     const listed = await executeArchestraTool(
       getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
@@ -346,16 +352,79 @@ describe("app tool execution", () => {
     const second = await scaffold({ name: "Dup", scope: "org" });
     expect(second.isError).toBe(true);
     const text = (second.content[0] as any).text as string;
-    // The duplicate error names the existing app and points at edit_app so the
-    // model stops re-scaffolding.
+    // The duplicate error names the existing app but must NOT command editing
+    // it — the existing app may serve a different purpose, and steering the
+    // model onto it is how a same-name request hijacks another conversation's
+    // app. It steers to confirming with the user or picking a different name.
     expect(text).toContain(firstId);
-    expect(text).toContain("edit_app");
+    expect(text).not.toContain("do not re-scaffold");
+    expect(text).toContain("different name");
+    expect(text).toContain("confirm");
   });
 
   test("scaffold rejects team scope", async () => {
     const result = await scaffold({ name: "TeamApp", scope: "team" });
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("Team-scoped");
+  });
+
+  describe("finding an app by name", () => {
+    async function listByName(name: string) {
+      const listed = await executeArchestraTool(
+        getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+        { name },
+        context,
+      );
+      return structured(listed).apps.map((a: any) => a.name) as string[];
+    }
+
+    test("matches each word separately, so word order and punctuation need not be reproduced", async () => {
+      await scaffold({ name: "Merge Queue — Take a Number" });
+
+      // How a user names it in chat: same words, none of the saved
+      // punctuation. A single whole-string LIKE misses every one of these.
+      expect(await listByName("merge queue take a number")).toEqual([
+        "Merge Queue — Take a Number",
+      ]);
+      expect(await listByName("queue merge")).toEqual([
+        "Merge Queue — Take a Number",
+      ]);
+      expect(await listByName("Merge Queue")).toEqual([
+        "Merge Queue — Take a Number",
+      ]);
+    });
+
+    test("extra words still narrow rather than widen", async () => {
+      await scaffold({ name: "Deploy Dashboard" });
+      await scaffold({ name: "Revenue Dashboard" });
+
+      expect(await listByName("dashboard")).toHaveLength(2);
+      expect(await listByName("deploy dashboard")).toEqual([
+        "Deploy Dashboard",
+      ]);
+      // Every token must appear: no app carries both product words.
+      expect(await listByName("deploy revenue")).toEqual([]);
+    });
+
+    test("passing a name where an id belongs steers to list_apps instead of the user", async () => {
+      await scaffold({ name: "Deploy Dashboard" });
+
+      const rendered = await executeArchestraTool(
+        getArchestraToolFullName(TOOL_RENDER_APP_SHORT_NAME),
+        { appId: "Deploy Dashboard" },
+        context,
+      );
+
+      expect(rendered.isError).toBe(true);
+      const text = (rendered.content[0] as any).text as string;
+      // The recovery path has to be in the message: bare "Invalid UUID" is what
+      // sends a model back to the user asking them to paste an id.
+      expect(text).toContain(
+        getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+      );
+      expect(text).toContain("not an app name");
+      expect(text).toContain("Do not ask the user for the id");
+    });
   });
 });
 
@@ -633,41 +702,227 @@ describe("read_app / edit_app", () => {
     expect(edit.isError).toBe(true);
   });
 
-  test("publish_app enables a disabled app so its new audience can see it", async ({
-    makeUser,
-    makeMember,
-  }) => {
+  test("publish_app cannot reach a disabled app; re-enabling first restores it", async () => {
     const created = await executeArchestraTool(
       getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
       { name: "Shareable", scope: "personal" },
       context,
     );
     const appId = structured(created).id as string;
-    // Disable it so this test genuinely exercises publish_app's enable step.
     await AppModel.setEnabled(appId, false);
 
-    // A disabled personal app: another member cannot see it yet.
-    const member = await makeUser();
-    await makeMember(member.id, organizationId, { role: "member" });
-    const memberCtx: ArchestraContext = { ...context, userId: member.id };
-    const readAppAs = (ctx: ArchestraContext) =>
-      executeArchestraTool(
-        getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
-        { appId },
-        ctx,
-      );
-    expect((await readAppAs(memberCtx)).isError).toBe(true);
-
-    const result = await executeArchestraTool(
+    // A disabled app does not exist for chat — publish_app included, so a
+    // model refused an edit cannot re-enable (and widen!) the app instead.
+    const whileDisabled = await executeArchestraTool(
       getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
       { appId, scope: "org" },
       context,
     );
-    expect(result.isError).toBe(false);
-    // publish_app flips the app enabled, not just its scope...
-    expect((await AppModel.findById(appId))?.enabled).toBe(true);
-    // ...so the org audience can now see it.
-    expect((await readAppAs(memberCtx)).isError).toBe(false);
+    expect(whileDisabled.isError).toBe(true);
+    expect((whileDisabled.content[0] as any).text).toContain("No app found");
+    expect((await AppModel.findById(appId))?.enabled).toBe(false);
+
+    // The user re-enables on the Apps page (REST); publishing then works.
+    await AppModel.setEnabled(appId, true);
+    const afterEnable = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_PUBLISH_APP_SHORT_NAME),
+      { appId, scope: "org" },
+      context,
+    );
+    expect(afterEnable.isError).toBe(false);
+  });
+
+  // A parallel chat of the same author rediscovered a just-disabled app and
+  // edited it ("better use that App instead of creating a new one"). The
+  // contract these tests pin: from chat, a disabled app is indistinguishable
+  // from one that does not exist — for its author too. list_apps omits it,
+  // and every id-scoped tool (reads, writes, publish_app, delete_app alike)
+  // reports "No app found", so a conversation holding a pre-disable snapshot
+  // learns nothing and cannot re-enable the app itself. The one irreducible
+  // trace is the reserved name: a same-name scaffold is told the name is
+  // taken and nothing else. The author sees and re-enables the app on the
+  // Apps page (REST), which is deliberately unaffected.
+  describe("disabled apps in chat tools", () => {
+    function scaffold(args: Record<string, unknown>, ctx = context) {
+      return executeArchestraTool(
+        getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+        args,
+        ctx,
+      );
+    }
+
+    test("list_apps hides the author's own disabled app", async () => {
+      const live = await scaffold({ name: "Live App" });
+      const liveId = structured(live).id as string;
+      const paused = await scaffold({ name: "Paused App" });
+      const pausedId = structured(paused).id as string;
+      await AppModel.setEnabled(pausedId, false);
+
+      const listed = await executeArchestraTool(
+        getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+        {},
+        context,
+      );
+      const rows = structured(listed).apps as Array<{ id: string }>;
+      // Not listed even for the author: a disabled app must never be offered
+      // as something to reuse from chat. The author finds it on the Apps page.
+      expect(rows.find((a) => a.id === pausedId)).toBeUndefined();
+      expect(rows.find((a) => a.id === liveId)).toBeDefined();
+    });
+
+    test("scaffold_app's name-conflict steer names the disabled state instead of commanding reuse", async () => {
+      const created = await scaffold({ name: "Trip Planner" });
+      const appId = structured(created).id as string;
+
+      // Live app: the plain "edit that id" steer is right.
+      const liveConflict = await scaffold({ name: "Trip Planner" });
+      expect(liveConflict.isError).toBe(true);
+      expect((liveConflict.content[0] as any).text).toContain(appId);
+      expect((liveConflict.content[0] as any).text).not.toContain("disabled");
+
+      await AppModel.setEnabled(appId, false);
+
+      // Disabled app: "name taken" is the only fact the conflict may reveal —
+      // no id, no state, no steer toward the app (the steer is what made a
+      // parallel chat rebuild a pulled-back app in the incident).
+      const disabledConflict = await scaffold({ name: "Trip Planner" });
+      expect(disabledConflict.isError).toBe(true);
+      const text = (disabledConflict.content[0] as any).text as string;
+      expect(text).toContain("Trip Planner");
+      expect(text).not.toContain(appId);
+      expect(text).not.toContain("disabled");
+      expect(text).toContain("not available from chat");
+      expect(text).toContain("different name");
+    });
+
+    test("every id-scoped tool reports a disabled app as not found — its author included", async () => {
+      const { appId, version } = await scaffoldWithHtml("<h1>Paused</h1>");
+      await AppModel.setEnabled(appId, false);
+
+      const attempts: Array<[string, Record<string, unknown>]> = [
+        [TOOL_READ_APP_SHORT_NAME, { appId }],
+        [TOOL_RENDER_APP_SHORT_NAME, { appId }],
+        [
+          TOOL_EDIT_APP_SHORT_NAME,
+          {
+            appId,
+            baseVersion: version,
+            edits: [{ old_str: "Paused", new_str: "Reworked" }],
+          },
+        ],
+        [
+          TOOL_REFINE_APP_SHORT_NAME,
+          {
+            appId,
+            spec: {
+              summary: "A paused app being reworked.",
+              features: ["one feature"],
+              tools: [],
+            },
+          },
+        ],
+        [TOOL_SET_APP_TOOLS_SHORT_NAME, { appId, tools: [] }],
+        // The lifecycle verbs too: a model refused an edit must not be able
+        // to delete the app or re-enable it (publish widens the audience!).
+        [TOOL_DELETE_APP_SHORT_NAME, { appId }],
+        [TOOL_PUBLISH_APP_SHORT_NAME, { appId, scope: "org" }],
+      ];
+      for (const [tool, args] of attempts) {
+        const result = await executeArchestraTool(
+          getArchestraToolFullName(
+            tool as Parameters<typeof getArchestraToolFullName>[0],
+          ),
+          args,
+          context,
+        );
+        expect(result.isError, tool).toBe(true);
+        expect((result.content[0] as any).text, tool).toContain(
+          `No app found with id ${appId}.`,
+        );
+      }
+      // Nothing was written, deleted, or re-enabled.
+      const after = await AppModel.findById(appId);
+      expect(after?.latestVersion).toBe(version);
+      expect(after?.enabled).toBe(false);
+    });
+
+    test("list_apps hides a disabled org app from everyone, its author included", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await scaffold({ name: "Org Wide", scope: "org" });
+      const appId = structured(created).id as string;
+
+      const member = await makeUser();
+      await makeMember(member.id, organizationId, { role: "member" });
+      const otherAdmin = await makeUser();
+      await makeMember(otherAdmin.id, organizationId, {
+        role: ADMIN_ROLE_NAME,
+      });
+      const listAs = async (userId: string) => {
+        const listed = await executeArchestraTool(
+          getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+          {},
+          { ...context, userId },
+        );
+        return structured(listed).apps.map((a: any) => a.id) as string[];
+      };
+
+      // Enabled: the org scope reaches both of them.
+      expect(await listAs(member.id)).toContain(appId);
+      expect(await listAs(otherAdmin.id)).toContain(appId);
+
+      await AppModel.setEnabled(appId, false);
+
+      // Disabled: gone from chat listings for everyone — scope, the app:admin
+      // bypass, and authorship all lose to the lifecycle state.
+      expect(await listAs(member.id)).not.toContain(appId);
+      expect(await listAs(otherAdmin.id)).not.toContain(appId);
+      expect(await listAs(context.userId as string)).not.toContain(appId);
+    });
+
+    test("edit_app on a disabled org app is refused for everyone, its author included", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const created = await scaffold({ name: "Org Editable", scope: "org" });
+      const appId = structured(created).id as string;
+      const otherAdmin = await makeUser();
+      await makeMember(otherAdmin.id, organizationId, {
+        role: ADMIN_ROLE_NAME,
+      });
+      const adminCtx: ArchestraContext = { ...context, userId: otherAdmin.id };
+
+      // Enabled: an org app is modifiable by any app admin.
+      const seeded = await AppVersionModel.findByAppAndVersion(appId, 1);
+      const preDisable = await editApp(
+        appId,
+        1,
+        // biome-ignore lint/style/noNonNullAssertion: seeded head exists
+        [{ old_str: seeded!.html, new_str: "<h1>v2</h1>" }],
+        adminCtx,
+      );
+      expect(preDisable.isError).toBe(false);
+
+      await AppModel.setEnabled(appId, false);
+
+      // Disabled: not found for chat authoring, no matter the caller's
+      // standing — admin and author get the identical answer.
+      const asAdmin = await editApp(
+        appId,
+        2,
+        [{ old_str: "v2", new_str: "v3" }],
+        adminCtx,
+      );
+      expect(asAdmin.isError).toBe(true);
+
+      const asAuthor = await editApp(appId, 2, [
+        { old_str: "v2", new_str: "v3" },
+      ]);
+      expect(asAuthor.isError).toBe(true);
+      expect((asAuthor.content[0] as any).text).toContain("No app found");
+      expect((await AppModel.findById(appId))?.latestVersion).toBe(2);
+    });
   });
 
   test("a single edit forks exactly one version", async () => {
@@ -973,9 +1228,11 @@ describe("read_app / edit_app", () => {
       expect.arrayContaining(["edits", "replacementHtml"]),
     );
     expect(schema.required).toContain("appId");
-    // baseVersion defaults to the head, so it is an optional concurrency guard,
-    // not a required field; the two edit modes are runtime-exclusive optionals.
-    expect(schema.required).not.toContain("baseVersion");
+    // baseVersion is required (like edit_skill's): every mutation result names
+    // the head to echo back, and requiring it is what arms the CAS against a
+    // concurrent edit from another conversation. The two edit modes stay
+    // runtime-exclusive optionals.
+    expect(schema.required).toContain("baseVersion");
     expect(schema.required).not.toContain("edits");
     expect(schema.required).not.toContain("replacementHtml");
 
@@ -1101,36 +1358,71 @@ describe("read_app / edit_app", () => {
     expect((result.content[0] as any).text).toContain("no new version");
   });
 
-  test("a stale baseVersion is rejected for replacementHtml", async () => {
+  test("a stale rewrite that conflicts with the head is refused with the head's content", async () => {
     const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
     await editApp(appId, version, [{ old_str: "v1", new_str: "v2" }]);
+    // Both sides rewrote the same line: no mechanical merge exists, so the
+    // call fails carrying what the head has — never a bare "re-read and
+    // retry", which steers a model into resubmitting the same document.
     const stale = await executeArchestraTool(
       getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
       { appId, baseVersion: version, replacementHtml: "<h1>other</h1>" },
       context,
     );
     expect(stale.isError).toBe(true);
+    expect((stale.content[0] as any).text).toContain("INCORPORATES");
+    expect((stale.content[0] as any).text).toContain("<h1>v2</h1>");
     expect((await AppModel.findById(appId))?.latestVersion).toBe(version + 1);
   });
 
-  test("edit_app without baseVersion applies to the current head", async () => {
-    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
-    // Advance the head so a default-to-head edit must target v2, not the v1 the
-    // scaffold produced — proving the default resolves the live head, not 1.
-    await editApp(appId, version, [{ old_str: "v1", new_str: "v2" }]);
-    const head = version + 1;
+  test("a stale rewrite merges with disjoint changes another chat made since", async () => {
+    const baseHtml =
+      '<html>\n<head></head>\n<body>\n<div id="a">alpha</div>\n<div id="b">beta</div>\n</body>\n</html>';
+    const { appId, version } = await scaffoldWithHtml(baseHtml);
 
+    // Another conversation adds a feature (a reset button) below region b.
+    const other = await editApp(appId, version, [
+      {
+        old_str: '<div id="b">beta</div>',
+        new_str: '<div id="b">beta</div>\n<button id="reset">Reset</button>',
+      },
+    ]);
+    expect(other.isError).toBe(false);
+
+    // This conversation, still based on `version`, rewrites region a — its
+    // document knows nothing of the reset button. The edit is a delta from
+    // its declared base, so the merge keeps both changes.
+    const rewrite = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: version,
+        replacementHtml: baseHtml.replace("alpha", "ALPHA"),
+      },
+      context,
+    );
+    expect(rewrite.isError).toBe(false);
+    expect((rewrite.content[0] as any).text).toContain("merged");
+    const head = structured(rewrite).latestVersion as number;
+    expect(head).toBe(version + 2);
+    const merged = await AppVersionModel.findByAppAndVersion(appId, head);
+    expect(merged?.html).toContain('<div id="a">ALPHA</div>');
+    expect(merged?.html).toContain('<button id="reset">Reset</button>');
+  });
+
+  test("edit_app without baseVersion is rejected without saving", async () => {
+    const { appId, version } = await scaffoldWithHtml("<h1>v1</h1>");
+
+    // No baseVersion means no freshness proof — refused, never applied to
+    // whatever the head happens to be at call time.
     const result = await executeArchestraTool(
       getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
-      { appId, replacementHtml: "<h1>v3</h1>" },
+      { appId, replacementHtml: "<h1>v2</h1>" },
       context,
     );
 
-    expect(result.isError).toBe(false);
-    expect(structured(result).latestVersion).toBe(head + 1);
-    expect(
-      (await AppVersionModel.findByAppAndVersion(appId, head + 1))?.html,
-    ).toBe("<h1>v3</h1>");
+    expect(result.isError).toBe(true);
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(version);
   });
 
   test("success text excerpts each applied edit from the final document", async () => {
@@ -1325,6 +1617,335 @@ describe("read_app / edit_app", () => {
     expect(
       await AppVersionModel.findByAppAndVersion(appId, version + 2),
     ).toBeNull();
+  });
+});
+
+describe("cross-conversation concurrent app editing (T-979)", () => {
+  // Two chats of the same user working on one app: chat A built it, chat B
+  // forked the head, and chat A keeps editing from its now-stale context.
+  // baseVersion is the only concurrency guard and models are told to pass it
+  // "only to guard against a concurrent edit" — which a chat can never know
+  // about — so today these stale writes land silently on top of work the
+  // editor never saw. These tests pin the required behavior: an edit that
+  // does not prove freshness against the head must surface a conflict, not
+  // silently supersede another conversation's work.
+  let context: ArchestraContext;
+  let organizationId: string;
+  let userId: string;
+  let agent: { id: string; name: string };
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const made = await makeAgent({ name: "Concurrent Editing Agent" });
+    organizationId = made.organizationId;
+    const user = await makeUser();
+    userId = user.id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    agent = { id: made.id, name: made.name };
+    context = { agent, organizationId, userId };
+  });
+
+  // Scaffold a fresh app in `ctx` and rewrite its seeded HTML to `html`
+  // (one full-document edit off version 1), returning the id and the head.
+  async function scaffoldTo(
+    ctx: ArchestraContext,
+    html: string,
+  ): Promise<{ appId: string; version: number }> {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: `App ${crypto.randomUUID().slice(0, 8)}` },
+      ctx,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+    const rewrite = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 1, replacementHtml: html },
+      ctx,
+    );
+    expect(rewrite.isError).toBe(false);
+    return { appId, version: structured(rewrite).latestVersion as number };
+  }
+
+  test("a stale full rewrite from another chat must not silently replace the head", async ({
+    makeConversation,
+  }) => {
+    const convA = await makeConversation(agent.id, { userId, organizationId });
+    const convB = await makeConversation(agent.id, { userId, organizationId });
+    const chatA: ArchestraContext = { ...context, conversationId: convA.id };
+    const chatB: ArchestraContext = { ...context, conversationId: convB.id };
+
+    // Chat A builds the app; its context now holds this version.
+    const { appId } = await scaffoldTo(
+      chatA,
+      "<html><head></head><body><h1>chat A build</h1></body></html>",
+    );
+
+    // Chat B legitimately continues from the head it just read.
+    const read = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
+      { appId },
+      chatB,
+    );
+    const chatBHtml =
+      "<html><head></head><body><h1>chat B rework</h1></body></html>";
+    const chatBEdit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: structured(read).version as number,
+        replacementHtml: chatBHtml,
+      },
+      chatB,
+    );
+    expect(chatBEdit.isError).toBe(false);
+    const headAfterB = structured(chatBEdit).latestVersion as number;
+
+    // Chat A rewrites from its stale context without baseVersion — exactly
+    // what a model does, since nothing in its conversation says the head
+    // moved. This must surface a conflict instead of saving.
+    const stale = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        replacementHtml:
+          "<html><head></head><body><h1>chat A follow-up</h1></body></html>",
+      },
+      chatA,
+    );
+    expect(stale.isError).toBe(true);
+
+    // Chat B's work is still the live head.
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(headAfterB);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, headAfterB))?.html,
+    ).toBe(chatBHtml);
+  });
+
+  test("stale str_replace edits that still match the moved head must not land blind", async ({
+    makeConversation,
+  }) => {
+    const convA = await makeConversation(agent.id, { userId, organizationId });
+    const convB = await makeConversation(agent.id, { userId, organizationId });
+    const chatA: ArchestraContext = { ...context, conversationId: convA.id };
+    const chatB: ArchestraContext = { ...context, conversationId: convB.id };
+
+    // Two independent regions, so a stale old_str can keep matching after the
+    // other chat rewrites its region.
+    const { appId, version } = await scaffoldTo(
+      chatA,
+      '<html><head></head><body><p id="title">Alpha</p><p id="status">Draft</p></body></html>',
+    );
+
+    const chatBHtml =
+      '<html><head></head><body><p id="title">Alpha</p><p id="status">Final</p></body></html>';
+    const chatBEdit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        baseVersion: version,
+        edits: [
+          {
+            old_str: '<p id="status">Draft</p>',
+            new_str: '<p id="status">Final</p>',
+          },
+        ],
+      },
+      chatB,
+    );
+    expect(chatBEdit.isError).toBe(false);
+    const headAfterB = structured(chatBEdit).latestVersion as number;
+
+    // Chat A patches its region from stale context, no baseVersion. The
+    // old_str still matches the moved head, so today this lands on content
+    // chat A never saw, producing a blend neither conversation intended.
+    const stale = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      {
+        appId,
+        edits: [
+          {
+            old_str: '<p id="title">Alpha</p>',
+            new_str: '<p id="title">Beta</p>',
+          },
+        ],
+      },
+      chatA,
+    );
+    expect(stale.isError).toBe(true);
+
+    // The head is exactly what chat B wrote — no silent interleave.
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(headAfterB);
+    expect(
+      (await AppVersionModel.findByAppAndVersion(appId, headAfterB))?.html,
+    ).toBe(chatBHtml);
+  });
+});
+
+describe("app lock (set_app_lock)", () => {
+  let context: ArchestraContext;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({ name: "Lock Agent" });
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+  });
+
+  test("a locked app refuses every mutation until unlocked; viewing still works", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Guarded" },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+
+    const locked = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SET_APP_LOCK_SHORT_NAME),
+      { appId, locked: true },
+      context,
+    );
+    expect(locked.isError).toBe(false);
+    expect(structured(locked).locked).toBe(true);
+
+    // Every mutating verb is refused with the lock named — including delete.
+    const mutations: Array<[string, Record<string, unknown>]> = [
+      [
+        TOOL_EDIT_APP_SHORT_NAME,
+        { appId, baseVersion: 1, replacementHtml: "<h1>nope</h1>" },
+      ],
+      [TOOL_SET_APP_TOOLS_SHORT_NAME, { appId, tools: [] }],
+      [
+        TOOL_REFINE_APP_SHORT_NAME,
+        { appId, spec: { summary: "s", features: [], tools: [] } },
+      ],
+      [TOOL_DELETE_APP_SHORT_NAME, { appId }],
+    ];
+    for (const [tool, args] of mutations) {
+      const result = await executeArchestraTool(
+        getArchestraToolFullName(
+          tool as Parameters<typeof getArchestraToolFullName>[0],
+        ),
+        args,
+        context,
+      );
+      expect(result.isError, tool).toBe(true);
+      expect((result.content[0] as any).text, tool).toContain("locked");
+    }
+    expect((await AppModel.findById(appId))?.latestVersion).toBe(1);
+
+    // Viewing is unaffected.
+    const read = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
+      { appId },
+      context,
+    );
+    expect(read.isError).toBe(false);
+
+    // Unlock (the tool must reach the locked app), then edits work again.
+    const unlocked = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SET_APP_LOCK_SHORT_NAME),
+      { appId, locked: false },
+      context,
+    );
+    expect(unlocked.isError).toBe(false);
+    const edit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 1, replacementHtml: "<h1>again</h1>" },
+      context,
+    );
+    expect(edit.isError).toBe(false);
+    expect(structured(edit).latestVersion).toBe(2);
+  });
+});
+
+describe("org new-app defaults (disabled/locked by default)", () => {
+  let context: ArchestraContext;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({ name: "Defaults Agent" });
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+  });
+
+  test("scaffold honors locked-by-default: the app is born locked and the result says so", async () => {
+    await OrganizationModel.patch(organizationId, {
+      newAppsLockedByDefault: true,
+    });
+
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Born Locked" },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+    expect((await AppModel.findById(appId))?.locked).toBe(true);
+    // The model is warned in the result, so it reports the lock instead of
+    // walking into a refusal it cannot explain.
+    expect((created.content[0] as any).text).toContain("locked");
+
+    const edit = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
+      { appId, baseVersion: 1, replacementHtml: "<h1>nope</h1>" },
+      context,
+    );
+    expect(edit.isError).toBe(true);
+    expect((edit.content[0] as any).text).toContain("locked");
+  });
+
+  test("scaffold honors disabled-by-default: the app is born disabled and invisible to chat", async () => {
+    await OrganizationModel.patch(organizationId, {
+      newAppsDisabledByDefault: true,
+    });
+
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Born Disabled" },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+    expect((await AppModel.findById(appId))?.enabled).toBe(false);
+    expect((created.content[0] as any).text).toContain("disabled");
+
+    // The T-980 contract applies from birth: the disabled app reads as
+    // nonexistent to chat tools.
+    const read = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_READ_APP_SHORT_NAME),
+      { appId },
+      context,
+    );
+    expect(read.isError).toBe(true);
+  });
+
+  test("with both settings off, scaffold creates a live, unlocked app with no lifecycle note", async () => {
+    const created = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      { name: "Born Free" },
+      context,
+    );
+    expect(created.isError).toBe(false);
+    const appId = structured(created).id as string;
+    const row = await AppModel.findById(appId);
+    expect(row?.enabled).toBe(true);
+    expect(row?.locked).toBe(false);
+    expect((created.content[0] as any).text).not.toContain(
+      "This organization creates new apps",
+    );
   });
 });
 
@@ -2215,19 +2836,19 @@ describe("set_app_tools", () => {
       environmentId: env.id,
     });
 
-    // Succeeds only because resolution fences on app.environmentId (env), not the
-    // org default (null) scaffold_app uses — a default-env resolve would reject it.
+    // Succeeds only because resolution fences on app.environmentId (env): a
+    // resolve against a different non-default environment would reject it.
     const res = await setTools({ appId: app.id, tools: [envToolName] });
     expect(res.isError).toBe(false);
     expect(structured(res).tools).toEqual([envToolName]);
   });
 
-  test("rejects a default-env tool for an env-bound app, leaving it unchanged", async ({
+  test("accepts a default-env tool for an env-bound app (the Default baseline)", async ({
     makeApp,
   }) => {
     // toolName (beforeEach) lives in the org-default environment (null); the app
-    // is bound to a non-default environment — the counterfactual of the test
-    // above. A resolve against the org default would wrongly accept it.
+    // is bound to a non-default environment. Default-environment tools are the
+    // org baseline every app may draw from, so the resolve accepts it.
     const env = await EnvironmentModel.create({
       organizationId,
       name: `Env ${crypto.randomUUID().slice(0, 8)}`,
@@ -2240,6 +2861,44 @@ describe("set_app_tools", () => {
     });
 
     const res = await setTools({ appId: app.id, tools: [toolName] });
+    expect(res.isError).toBe(false);
+    expect(structured(res).tools).toEqual([toolName]);
+    expect(
+      (await AppToolModel.getToolsForApp(app.id)).map((tool) => tool.name),
+    ).toEqual([toolName]);
+  });
+
+  test("rejects a tool from a different non-default environment, leaving the app unchanged", async ({
+    makeApp,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    // Two sibling non-default environments stay isolated: only the Default
+    // baseline crosses environment lines.
+    const appEnv = await EnvironmentModel.create({
+      organizationId,
+      name: `Env ${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const otherEnv = await EnvironmentModel.create({
+      organizationId,
+      name: `Env ${crypto.randomUUID().slice(0, 8)}`,
+    });
+    const otherCatalog = await makeInternalMcpCatalog({
+      organizationId,
+      environmentId: otherEnv.id,
+    });
+    await makeMcpServer({ catalogId: otherCatalog.id, scope: "org" });
+    const otherToolName = `other__tool_${crypto.randomUUID().slice(0, 8)}`;
+    await makeTool({ name: otherToolName, catalogId: otherCatalog.id });
+    const app = await makeApp({
+      organizationId,
+      scope: "personal",
+      authorId: userId,
+      environmentId: appEnv.id,
+    });
+
+    const res = await setTools({ appId: app.id, tools: [otherToolName] });
     expect(res.isError).toBe(true);
     expect((res.content[0] as any).text).toContain("Unknown tool name");
     expect(await AppToolModel.getToolsForApp(app.id)).toEqual([]);
@@ -2636,10 +3295,10 @@ describe("publish_app", () => {
     expect(result.isError).toBe(false);
     expect(structured(result).scope).toBe("org");
     // Structured field stays a raw path for machine consumers…
-    expect(structured(result).runUrl).toBe(`/a/${app.id}`);
+    expect(structured(result).runUrl).toBe(`/a/${app.slug}`);
     // …while the model-facing text carries a name-labeled markdown link.
     expect((result.content[0] as any).text).toContain(
-      `[${app.name}](/a/${app.id})`,
+      `[${app.name}](/a/${app.slug})`,
     );
     expect((await AppModel.findById(app.id))?.scope).toBe("org");
   });
@@ -2998,7 +3657,7 @@ describe("scaffoldPartialToolFailureResult", () => {
     expect(structured(result).status).toBe("partial");
     // Even on partial failure the user still gets the working app link.
     expect((result.content[0] as any).text).toContain(
-      `[${app.name}](/a/${app.id})`,
+      `[${app.name}](/a/${app.slug})`,
     );
   });
 });
@@ -3171,7 +3830,8 @@ describe("edit_app replacementHtmlSource", () => {
   function editFromSource(appId: string, fileId: string, ctx = context) {
     return executeArchestraTool(
       getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
-      { appId, replacementHtmlSource: { fileId } },
+      // Apps here are freshly scaffolded, so the scaffolded head is the base.
+      { appId, baseVersion: 1, replacementHtmlSource: { fileId } },
       ctx,
     );
   }
@@ -3376,6 +4036,7 @@ describe("edit_app replacementHtmlSource", () => {
       getArchestraToolFullName(TOOL_EDIT_APP_SHORT_NAME),
       {
         appId,
+        baseVersion: 1,
         edits: [{ old_str: "a", new_str: "b" }],
         replacementHtmlSource: { fileId: file.id },
       },
@@ -3387,5 +4048,127 @@ describe("edit_app replacementHtmlSource", () => {
     expect(text).toContain("exactly one");
     // Names what actually collided rather than a generic mode complaint.
     expect(text).toContain("edits and replacementHtmlSource");
+  });
+});
+
+describe("set_app_labels", () => {
+  let context: ArchestraContext;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAgent, makeUser, makeMember }) => {
+    const agent = await makeAgent({
+      name: "Label Agent",
+      accessAllTools: true,
+    });
+    organizationId = agent.organizationId;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    context = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId,
+      userId: user.id,
+    };
+  });
+
+  function scaffold(args: Record<string, unknown>) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      args,
+      context,
+    );
+  }
+
+  function setLabels(args: Record<string, unknown>) {
+    return executeArchestraTool(
+      getArchestraToolFullName(TOOL_SET_APP_LABELS_SHORT_NAME),
+      args,
+      context,
+    );
+  }
+
+  test("scaffold_app persists labels given at creation", async () => {
+    const created = await scaffold({
+      name: "Labelled At Birth",
+      labels: [{ key: "env", value: "prod" }],
+    });
+    const appId = structured(created).id as string;
+
+    expect(await AppLabelModel.getLabelsForApp(appId)).toEqual([
+      expect.objectContaining({ key: "env", value: "prod" }),
+    ]);
+    expect(structured(created).labels).toEqual([{ key: "env", value: "prod" }]);
+  });
+
+  test("replaces the app's labels wholesale", async () => {
+    const created = await scaffold({
+      name: "Relabel Me",
+      labels: [{ key: "env", value: "prod" }],
+    });
+    const appId = structured(created).id as string;
+
+    const res = await setLabels({
+      appId,
+      labels: [{ key: "tier", value: "gold" }],
+    });
+
+    expect(res.isError).toBe(false);
+    expect(structured(res).labels).toEqual([{ key: "tier", value: "gold" }]);
+    const persisted = await AppLabelModel.getLabelsForApp(appId);
+    expect(persisted.map((label) => label.key)).toEqual(["tier"]);
+  });
+
+  test("an empty list clears the labels", async () => {
+    const created = await scaffold({
+      name: "Clear Me",
+      labels: [{ key: "env", value: "prod" }],
+    });
+    const appId = structured(created).id as string;
+
+    const res = await setLabels({ appId, labels: [] });
+
+    expect(res.isError).toBe(false);
+    expect(structured(res).labels).toEqual([]);
+    expect(await AppLabelModel.getLabelsForApp(appId)).toEqual([]);
+  });
+
+  test("collapses a repeated key to its last value", async () => {
+    const created = await scaffold({ name: "Deduped" });
+    const appId = structured(created).id as string;
+
+    const res = await setLabels({
+      appId,
+      labels: [
+        { key: "env", value: "staging" },
+        { key: "env", value: "prod" },
+      ],
+    });
+
+    expect(res.isError).toBe(false);
+    const persisted = await AppLabelModel.getLabelsForApp(appId);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]?.value).toBe("prod");
+  });
+
+  test("list_apps filters by labels and returns them", async () => {
+    const matching = await scaffold({
+      name: "Matching",
+      labels: [{ key: "env", value: "prod" }],
+    });
+    await scaffold({
+      name: "Other",
+      labels: [{ key: "env", value: "dev" }],
+    });
+
+    const res = await executeArchestraTool(
+      getArchestraToolFullName(TOOL_LIST_APPS_SHORT_NAME),
+      { labels: [{ key: "env", value: "prod" }] },
+      context,
+    );
+
+    const apps = structured(res).apps as { id: string; labels: unknown }[];
+    expect(apps.map((entry) => entry.id)).toEqual([
+      structured(matching).id as string,
+    ]);
+    expect(apps[0]?.labels).toEqual([{ key: "env", value: "prod" }]);
   });
 });

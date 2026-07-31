@@ -1190,4 +1190,66 @@ describe("team routes", () => {
       expect(mineIds).not.toContain(teamB.id);
     });
   });
+
+  /**
+   * Creating a team used to leave the creator outside it: `created_by` was set
+   * but no `team_member` row was written, and every team-scoped check reads
+   * membership. A caller without organization-level team management could
+   * therefore create a team and then not read it, manage its members, or see it
+   * under "my teams". These tests hold the creator's own access open, so they
+   * drop `team: ["update"]` — the only remaining route to access is being the
+   * team's admin.
+   */
+  describe("team creator access without organization-level team management", () => {
+    const createTeam = (name: string) =>
+      app.inject({ method: "POST", url: "/api/teams", payload: { name } });
+
+    beforeEach(() => {
+      vi.mocked(hasPermission).mockResolvedValue({
+        success: false,
+        error: null,
+      });
+    });
+
+    test("the creator can read the team they just created", async () => {
+      const created = await createTeam("Engineering");
+      expect(created.statusCode).toBe(200);
+      const teamId = created.json().id as string;
+
+      const read = await app.inject({
+        method: "GET",
+        url: `/api/teams/${teamId}`,
+      });
+      expect(read.statusCode).toBe(200);
+      expect(read.json().id).toBe(teamId);
+    });
+
+    test("the creator can manage members of the team they just created", async ({
+      makeUser,
+    }) => {
+      const created = await createTeam("Engineering");
+      const teamId = created.json().id as string;
+      const teammate = await makeUser();
+
+      const added = await app.inject({
+        method: "POST",
+        url: `/api/teams/${teamId}/members`,
+        payload: { userId: teammate.id, role: "member" },
+      });
+      expect(added.statusCode).toBe(200);
+    });
+
+    test("the created team appears under the creator's own teams", async () => {
+      const created = await createTeam("Engineering");
+      const teamId = created.json().id as string;
+
+      const mine = await app.inject({
+        method: "GET",
+        url: "/api/teams?mine=true",
+      });
+      expect(mine.statusCode).toBe(200);
+      const mineIds = (mine.json().data as { id: string }[]).map((t) => t.id);
+      expect(mineIds).toContain(teamId);
+    });
+  });
 });

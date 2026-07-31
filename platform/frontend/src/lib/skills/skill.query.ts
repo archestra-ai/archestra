@@ -17,6 +17,7 @@ const {
   updateSkill,
   updateSkillGithubSync,
   deleteSkill,
+  restoreSkill,
   resetSkill,
   discoverGithubSkills,
   searchSkillCatalog,
@@ -40,6 +41,7 @@ type SkillsPaginatedParams = Pick<
   | "authorIds"
   | "excludeAuthorIds"
   | "excludeOtherPersonalSkills"
+  | "status"
   | "sortBy"
   | "sortDirection"
 >;
@@ -186,6 +188,25 @@ export function useDeleteSkill() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill deleted");
+    },
+  });
+}
+
+export function useRestoreSkill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await restoreSkill({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      toast.success("Skill restored");
     },
   });
 }

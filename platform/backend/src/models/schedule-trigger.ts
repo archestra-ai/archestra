@@ -23,6 +23,7 @@ import {
   normalizeTimezone,
 } from "@/utils/schedule-trigger";
 import { escapeLikePattern } from "@/utils/sql-search";
+import { belongsToLiveProject } from "./project";
 
 type ScheduleTriggerListFilters = {
   organizationId: string;
@@ -191,7 +192,16 @@ class ScheduleTriggerModel {
           notDeleted(schema.agentsTable),
         ),
       )
-      .where(eq(schema.scheduleTriggersTable.enabled, true));
+      .where(
+        and(
+          eq(schema.scheduleTriggersTable.enabled, true),
+          // A soft-deleted project pauses its scheduled tasks: the trigger row
+          // is retained (hidden with the project) but never picked up — the
+          // same stance as the notDeleted(agents) join above. Filtered in SQL,
+          // so hidden triggers never enter the fetch-and-iterate set below.
+          belongsToLiveProject(schema.scheduleTriggersTable.projectId),
+        ),
+      );
 
     const dueTriggers: ScheduleTrigger[] = [];
     for (const trigger of enabledTriggers) {
@@ -273,6 +283,10 @@ function buildListFilters(
       WHERE ${schema.agentsTable.id} = ${schema.scheduleTriggersTable.agentId}
         AND ${schema.agentsTable.deletedAt} IS NULL
     )`,
+    // Triggers of a soft-deleted project are hidden with it, like the deleted
+    // agents above. Direct-by-id access (incl. run-now) is closed off separately
+    // in `findAccessibleTriggerOrThrow` (routes/schedule-trigger.ts).
+    belongsToLiveProject(schema.scheduleTriggersTable.projectId),
   ];
 
   if (params.enabled !== undefined) {

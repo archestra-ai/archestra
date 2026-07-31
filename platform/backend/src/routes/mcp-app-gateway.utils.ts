@@ -51,10 +51,11 @@ import type { CommonToolCall } from "@/types";
 import { appOwner } from "@/types";
 import { APP_LAUNCH_TOOL_NAME, type App } from "@/types/app";
 import type { McpServerCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
+import { RESOURCE_NOT_FOUND_ERROR_CODE } from "./mcp-gateway/protocol";
 import {
   deriveAuthMethod,
   normalizeToolInputSchema,
-} from "./mcp-gateway.utils";
+} from "./mcp-gateway/utils";
 
 type McpListTool = ListToolsResult["tools"][number];
 
@@ -125,7 +126,7 @@ export async function createAppServer(
       // a foreign URI (keeps listed == served and avoids mislabeled caching).
       if (uri !== getArchestraAppResourceUri(appId)) {
         throw {
-          code: -32002,
+          code: RESOURCE_NOT_FOUND_ERROR_CODE,
           message: `Resource not found: ${uri}`,
         };
       }
@@ -135,7 +136,7 @@ export async function createAppServer(
 
   server.setRequestHandler(
     CallToolRequestSchema,
-    async ({ params: { name, arguments: args } }) => {
+    async ({ params: { name, arguments: args } }, extra) => {
       // The synthetic launch tool just points the host at the app's UI resource.
       if (name === APP_LAUNCH_TOOL_NAME) {
         return {
@@ -167,6 +168,10 @@ export async function createAppServer(
           userId: tokenAuth.userId,
           organizationId: tokenAuth.organizationId,
           tokenAuth,
+          // Aborts when the caller gives up on the request (the route closes
+          // the transport on client disconnect), so a long dispatch — the LLM
+          // completion in particular — stops instead of running unobserved.
+          abortSignal: extra.signal,
         });
         try {
           await McpToolCallModel.create({
@@ -199,6 +204,7 @@ export async function createAppServer(
         toolCall,
         appOwner(appId),
         tokenAuth,
+        { abortSignal: extra.signal },
       );
       return {
         content: Array.isArray(result.content)
@@ -232,7 +238,10 @@ export async function buildAppUiResource(
     ? await AppVersionModel.findByAppAndVersion(appId, current.latestVersion)
     : null;
   if (!head) {
-    throw { code: -32002, message: `App resource not found for ${appId}` };
+    throw {
+      code: RESOURCE_NOT_FOUND_ERROR_CODE,
+      message: `App resource not found for ${appId}`,
+    };
   }
   const viewer = tokenAuth.userId
     ? await UserModel.getById(tokenAuth.userId)
@@ -425,11 +434,11 @@ function buildAppLaunchTool(appId: string, app: App): McpListTool {
 
 async function buildAppToolList(appId: string): Promise<McpListTool[]> {
   const upstream = await AppToolModel.getToolsForApp(appId);
-  // Trim the runtime list to the app's bound environment so it never offers a
-  // tool the call-time gate would refuse. UX hygiene only — the hard fence is
-  // gateAppToolCall.
+  // Trim the runtime list to the app's bound environment (plus the Default
+  // baseline) so it never offers a tool the call-time gate would refuse. UX
+  // hygiene only — the hard fence is gateAppToolCall.
   const app = await AppModel.findById(appId);
-  const inEnvIds = await ToolModel.filterToolIdsInEnvironment(
+  const inEnvIds = await ToolModel.filterToolIdsInEnvironmentOrDefault(
     upstream.map((tool) => tool.id),
     app?.environmentId ?? null,
   );

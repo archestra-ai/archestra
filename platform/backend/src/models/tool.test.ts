@@ -551,6 +551,15 @@ describe("ToolModel", () => {
         catalogName: "github-mcp-server",
         credentialResolutionMode: "static",
         meta: null,
+        // Input schema now rides the assignment so the call path can read
+        // x-mcp-header annotations without a second lookup.
+        parameters: {
+          type: "object",
+          properties: {
+            repo: { type: "string" },
+            count: { type: "number" },
+          },
+        },
       });
     });
 

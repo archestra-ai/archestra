@@ -8,6 +8,11 @@ import { Globe, User, UserRound, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AppToolsEditor } from "@/app/apps/_parts/app-tools-editor";
+import {
+  type ProfileLabel,
+  ProfileLabels,
+  type ProfileLabelsRef,
+} from "@/components/agent-labels";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +34,7 @@ import {
   useAppTools,
   useAssignToolToApp,
   useSetAppEnabled,
+  useSetAppLocked,
   useUnassignToolFromApp,
   useUpdateApp,
 } from "@/lib/app.query";
@@ -38,7 +44,11 @@ import { useAssignableTeams } from "@/lib/teams/team.query";
 
 type App = archestraApiTypes.GetAppResponses["200"];
 
-type FormValues = { name: string; description: string };
+type FormValues = { name: string; slug: string; description: string };
+
+// Mirrors the backend's AppSlugSchema so a malformed URL is caught before the
+// round-trip. Uniqueness is only knowable server-side and comes back as a 409.
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
  * What the visibility control offers. Wider than the stored scope: an app
@@ -77,13 +87,18 @@ export function AppSettingsForm({
 
   const updateApp = useUpdateApp();
   const setEnabled = useSetAppEnabled();
+  const setLocked = useSetAppLocked();
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
   const appToolsQuery = useAppTools(app.id);
   const assignedTools = appToolsQuery.data;
 
   const form = useForm<FormValues>({
-    defaultValues: { name: app.name, description: app.description ?? "" },
+    defaultValues: {
+      name: app.name,
+      slug: app.slug ?? "",
+      description: app.description ?? "",
+    },
   });
 
   const [environmentId, setEnvironmentId] = useState<string | null>(
@@ -91,6 +106,9 @@ export function AppSettingsForm({
   );
   const [enabledStatus, setEnabledStatus] = useState<"disabled" | "enabled">(
     app.enabled ? "enabled" : "disabled",
+  );
+  const [lockedStatus, setLockedStatus] = useState<"unlocked" | "locked">(
+    app.locked ? "locked" : "unlocked",
   );
   // The form's fourth option. On the wire an app shared with named people stays
   // `personal` and carries grants, so "user" is a UI-side reading of
@@ -100,6 +118,10 @@ export function AppSettingsForm({
   );
   const [teamIds, setTeamIds] = useState<string[]>(app.teams.map((t) => t.id));
   const [userIds, setUserIds] = useState<string[]>(app.users.map((u) => u.id));
+  const [labels, setLabels] = useState<ProfileLabel[]>(
+    app.labels.map(({ key, value }) => ({ key, value })),
+  );
+  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -154,6 +176,23 @@ export function AppSettingsForm({
     (option) => option.value === enabledStatus,
   )?.description;
 
+  const lockedOptions = [
+    {
+      value: "unlocked" as const,
+      label: "Unlocked",
+      description: "Agents (and you) can modify the app normally",
+    },
+    {
+      value: "locked" as const,
+      label: "Locked",
+      description:
+        "Agents refuse every change to this app, and it can't be deleted, until you unlock it",
+    },
+  ];
+  const selectedLockedDescription = lockedOptions.find(
+    (option) => option.value === lockedStatus,
+  )?.description;
+
   const options: VisibilityOption<AppVisibilityChoice>[] = [
     {
       value: "personal",
@@ -188,6 +227,7 @@ export function AppSettingsForm({
       description: "Anyone in your org can use this app",
       icon: Globe,
       disabled: scope !== "org" && !isAppAdmin,
+      disabledLabel: !isAppAdmin ? "Requires permission" : undefined,
       disabledReason: !isAppAdmin
         ? "You need app:admin permission to make this available org-wide"
         : undefined,
@@ -208,6 +248,7 @@ export function AppSettingsForm({
   const saving =
     updateApp.isPending ||
     setEnabled.isPending ||
+    setLocked.isPending ||
     assignTool.isPending ||
     unassignTool.isPending;
 
@@ -247,6 +288,16 @@ export function AppSettingsForm({
       });
       if (!result) return;
     }
+    // Lock/unlock is a lifecycle transition like enable/disable, committed via
+    // its own endpoint before the PATCH.
+    const locked = lockedStatus === "locked";
+    if (locked !== app.locked) {
+      const result = await setLocked.mutateAsync({
+        appId: app.id,
+        locked,
+      });
+      if (!result) return;
+    }
     // Visibility is editable on its own permissions; identity + environment only
     // when the caller can update the app, so omit those fields otherwise (mirrors
     // the field-limited bodies the old publish popover / rename dialog sent).
@@ -263,6 +314,17 @@ export function AppSettingsForm({
       body.name = values.name.trim();
       body.description = values.description.trim() || null;
       body.environmentId = environmentId;
+      // Flush a label typed into the picker but not yet committed, so a save
+      // doesn't silently drop it.
+      const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+      body.labels = finalLabels.map(({ key, value }) => ({ key, value }));
+      // Sent only when it actually changed, so a save that touches other fields
+      // never re-sends the slug and 409s against the app's own row. Blank is
+      // "leave it alone", not "clear it" — there is no way to unset a URL.
+      const slug = values.slug.trim();
+      if (slug !== "" && slug !== app.slug) {
+        body.slug = slug;
+      }
     }
     const result = await updateApp.mutateAsync({ appId: app.id, body });
     if (!result) return;
@@ -343,6 +405,54 @@ export function AppSettingsForm({
             </div>
 
             <div className="flex flex-col gap-1.5">
+              <Label htmlFor="app-settings-slug">URL</Label>
+              <div className="flex items-center gap-1">
+                <span className="shrink-0 text-sm text-muted-foreground">
+                  /a/
+                </span>
+                <Input
+                  id="app-settings-slug"
+                  placeholder="sales-dashboard"
+                  aria-invalid={!!form.formState.errors.slug}
+                  // Only one of the two is rendered at a time, so point at
+                  // whichever is actually in the DOM or the message goes
+                  // unannounced (same wiring as components/ui/form.tsx).
+                  aria-describedby={
+                    form.formState.errors.slug
+                      ? "app-settings-slug-error"
+                      : "app-settings-slug-help"
+                  }
+                  {...form.register("slug", {
+                    maxLength: {
+                      value: 100,
+                      message: "URL must be 100 characters or fewer.",
+                    },
+                    validate: (value) =>
+                      value.trim() === "" ||
+                      SLUG_PATTERN.test(value.trim()) ||
+                      "Use lowercase letters, numbers and single hyphens.",
+                  })}
+                />
+              </div>
+              {form.formState.errors.slug?.message ? (
+                <p
+                  id="app-settings-slug-error"
+                  className="text-xs text-destructive"
+                >
+                  {form.formState.errors.slug.message}
+                </p>
+              ) : (
+                <p
+                  id="app-settings-slug-help"
+                  className="text-xs text-muted-foreground"
+                >
+                  Where this app opens. Changing it breaks links that used the
+                  old URL.
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="app-settings-description">Description</Label>
               <Textarea
                 id="app-settings-description"
@@ -360,6 +470,12 @@ export function AppSettingsForm({
                 </p>
               ) : null}
             </div>
+
+            <ProfileLabels
+              ref={labelsRef}
+              labels={labels}
+              onLabelsChange={setLabels}
+            />
           </>
         )}
 
@@ -434,6 +550,36 @@ export function AppSettingsForm({
               </p>
             ) : null}
           </div>
+
+          <div className="space-y-2">
+            <Label>Modification</Label>
+            <Select
+              value={lockedStatus}
+              onValueChange={(next) =>
+                setLockedStatus(next as "unlocked" | "locked")
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {lockedOptions.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    description={option.description}
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedLockedDescription ? (
+              <p className="text-xs text-muted-foreground">
+                {selectedLockedDescription}
+              </p>
+            ) : null}
+          </div>
         </VisibilitySelector>
 
         {canUpdate && (
@@ -442,7 +588,7 @@ export function AppSettingsForm({
               value={environmentId}
               onChange={setEnvironmentId}
               resource="app"
-              helpText="The app can only be assigned and call MCP tools in this environment."
+              helpText="The app can be assigned and call MCP tools from this environment plus the Default environment."
             />
 
             <div className="space-y-2">

@@ -11,6 +11,7 @@ import {
   classifyTimelineGesture,
   consolidatedTranscript,
   deferThirdPartyStylesheets,
+  defuseDomPaintPayload,
   dominantViewport,
   keptTimelineRanges,
   neutralizeAppScripts,
@@ -22,6 +23,7 @@ import {
   revealSchedule,
   trimCutsToExportLimit,
   uncutRecording,
+  widenReplayImageCsp,
 } from "./app-session-player";
 
 type Recording = Parameters<typeof buildPlayback>[0];
@@ -1182,6 +1184,76 @@ describe("neutralizeAppScripts", () => {
   });
 });
 
+describe("replay navigation guard", () => {
+  it("injects a live navigation guard that survives the retype pass", () => {
+    const out = neutralizeAppScripts("<div>app</div>");
+    expect(out).toContain("<script data-archestra-replay-guard>");
+    expect(out).not.toContain("data-archestra-replay-guard type=");
+    expect(out).toContain("addEventListener('submit'");
+  });
+
+  it("empties inline handlers that navigate — a replayed click must not reload the document", () => {
+    const html =
+      '<button onclick="window.location.reload()">I connected it, reload page</button>';
+    const out = neutralizeAppScripts(html);
+    expect(out).not.toContain("location.reload");
+    expect(out).toContain('<button onclick="">');
+  });
+
+  it("empties other navigation shapes (assign, href, history, window.open)", () => {
+    const html =
+      "<a onclick=\"location.assign('/x')\">a</a>" +
+      "<b onclick=\"window.location.href = '/y'\">b</b>" +
+      '<i onclick="history.back()">c</i>' +
+      "<u onclick=\"window.open('https://e.com')\">d</u>";
+    const out = neutralizeAppScripts(html);
+    expect(out).not.toContain("location.assign");
+    expect(out).not.toContain("location.href");
+    expect(out).not.toContain("history.back");
+    expect(out).not.toContain("window.open");
+  });
+
+  it("keeps harmless inline handlers (dead app functions just throw quietly)", () => {
+    const html = `<button onclick="changePreset('all')">All</button>`;
+    expect(neutralizeAppScripts(html)).toContain(
+      `onclick="changePreset('all')"`,
+    );
+  });
+
+  it("drops meta refresh but keeps other meta tags", () => {
+    const html =
+      '<meta http-equiv="refresh" content="1;url=/restart">' +
+      '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'">';
+    const out = neutralizeAppScripts(html);
+    expect(out).not.toContain("refresh");
+    expect(out).toContain("Content-Security-Policy");
+  });
+});
+
+describe("defuseDomPaintPayload", () => {
+  it("defuses navigation handlers re-inserted by replayed DOM mutations, wherever they nest", () => {
+    const event = {
+      kind: "dom",
+      op: "html",
+      sel: "body",
+      html: '<button onclick="window.location.reload()">reload</button>',
+      nested: [{ value: '<a onclick="history.back()">b</a>' }],
+    };
+    const out = defuseDomPaintPayload(event);
+    expect(JSON.stringify(out)).not.toContain("location.reload");
+    expect(JSON.stringify(out)).not.toContain("history.back");
+    expect(out.sel).toBe("body");
+  });
+
+  it("passes non-string payloads through untouched", () => {
+    const blob = new Blob(["x"]);
+    const event = { kind: "video-chunk", data: blob, t: 5 };
+    const out = defuseDomPaintPayload(event);
+    expect(out.data).toBe(blob);
+    expect(out.t).toBe(5);
+  });
+});
+
 describe("deferThirdPartyStylesheets", () => {
   it("parks a remote stylesheet on media=print and remembers what to restore", () => {
     // A render-blocking third-party sheet has no browser timeout: until it
@@ -1267,6 +1339,40 @@ describe("relocalizeSandboxAssets", () => {
   it("returns the html unchanged when there is no base to point at", () => {
     const recorded = `<script src="https://a.dev/_sandbox/x.js"></script>`;
     expect(relocalizeSandboxAssets(recorded, "")).toBe(recorded);
+  });
+});
+
+describe("widenReplayImageCsp", () => {
+  // The exact meta shape the serve path bakes into every segment — with the
+  // fixed platform allowlist that blocks any other image host (the GitHub
+  // avatars of a recorded PR-dashboard app being the case that surfaced this).
+  const cspMeta =
+    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; ` +
+    `script-src 'unsafe-inline' https://a.dev/_sandbox/ext-apps-app.js; ` +
+    `img-src data: blob: cdn.jsdelivr.net fonts.gstatic.com; font-src data:">`;
+
+  it("admits any https image host in the replayed segment's CSP", () => {
+    const html = widenReplayImageCsp(
+      `${cspMeta}<img src="https://avatars.example.com/u/1">`,
+    );
+    expect(html).toContain(
+      "img-src https: data: blob: cdn.jsdelivr.net fonts.gstatic.com;",
+    );
+  });
+
+  it("touches only img-src — the script allowlist stays as recorded", () => {
+    const html = widenReplayImageCsp(cspMeta);
+    expect(html).toContain(
+      "script-src 'unsafe-inline' https://a.dev/_sandbox/ext-apps-app.js;",
+    );
+    expect(html.match(/https:/g)?.length).toBe(
+      (cspMeta.match(/https:/g)?.length ?? 0) + 1,
+    );
+  });
+
+  it("leaves a segment without a CSP meta unchanged", () => {
+    const html = `<body><img src="https://x.dev/a.png"> img-src </body>`;
+    expect(widenReplayImageCsp(html)).toBe(html);
   });
 });
 

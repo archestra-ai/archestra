@@ -4,7 +4,6 @@ import {
   index,
   integer,
   jsonb,
-  pgTable,
   text,
   timestamp,
   uniqueIndex,
@@ -14,6 +13,7 @@ import type { SkillGithubSyncInterval, SkillSourceType } from "@/types/skill";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import githubAppConfigsTable from "./github-app-config";
 import githubPatsTable from "./github-pat";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
 /**
@@ -29,7 +29,7 @@ import usersTable from "./user";
  *
  * @see https://agentskills.io/specification
  */
-const skillsTable = pgTable(
+const skillsTable = softDeletablePgTable(
   "skills",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -161,12 +161,15 @@ const skillsTable = pgTable(
     // those who can see the skill. Personal skills are visible to their author
     // alone, so they are unique per (org, author); team/org skills are shared,
     // so they are unique per org to keep activation by name unambiguous.
+    // Soft-deleted rows are excluded so deleting a skill frees its name.
     uniqueIndex("skills_org_personal_name_idx")
       .on(table.organizationId, table.authorId, table.name)
-      .where(sql`${table.scope} = 'personal'`),
+      .where(sql`${table.scope} = 'personal' AND ${table.deletedAt} IS NULL`),
     uniqueIndex("skills_org_shared_name_idx")
       .on(table.organizationId, table.name)
-      .where(sql`${table.scope} in ('team', 'org')`),
+      .where(
+        sql`${table.scope} in ('team', 'org') AND ${table.deletedAt} IS NULL`,
+      ),
   ],
 );
 

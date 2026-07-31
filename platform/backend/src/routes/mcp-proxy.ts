@@ -14,7 +14,7 @@ import {
   createAgentServer,
   createStatelessTransport,
   ensureRequestSocketDestroySoon,
-} from "./mcp-gateway.utils";
+} from "./mcp-gateway/utils";
 
 /**
  * MCP Proxy routes for frontend AppRenderer

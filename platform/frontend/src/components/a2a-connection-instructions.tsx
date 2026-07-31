@@ -93,6 +93,7 @@ export function A2AConnectionInstructions({
   const [streamExampleMessageId] = useState(() => generateUuid());
   const [replyExampleMessageId] = useState(() => generateUuid());
   const [approvalExampleMessageId] = useState(() => generateUuid());
+  const [backgroundExampleMessageId] = useState(() => generateUuid());
 
   // Mirror the /connection page's base-URL fallback chain so the A2A panel
   // honors the same admin curation (descriptions, default flag, hidden URLs).
@@ -301,6 +302,84 @@ curl -X POST "${a2aEndpoint}" \\
     }
   }'`,
     [a2aEndpoint, tokenForDisplay, approvalExampleMessageId],
+  );
+
+  // cURL example for background execution: get the task handle immediately,
+  // then poll it. Useful for runs that outlive a request timeout.
+  const backgroundTaskCurlCode = useMemo(
+    () => `# Start the run in the background — returns a task straight away
+curl -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 5,
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "${backgroundExampleMessageId}",
+        "role": "ROLE_USER",
+        "parts": [{"text": "Summarize every open PR in the repo."}]
+      },
+      "configuration": {"returnImmediately": true}
+    }
+  }'
+
+# Poll it until status.state is TASK_STATE_COMPLETED.
+# The answer arrives in artifacts[]; historyLength: 0 keeps the reply small.
+curl -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 6,
+    "method": "GetTask",
+    "params": {"id": "<task.id from the reply>", "historyLength": 0}
+  }'`,
+    [a2aEndpoint, tokenForDisplay, backgroundExampleMessageId],
+  );
+
+  // cURL example for re-joining a running task's event stream.
+  const subscribeCurlCode = useMemo(
+    () => `# Re-join a running task — after a dropped stream, for example.
+# A disconnect never cancels the run, so the task keeps going without you.
+# The first frame is the task snapshot; live events follow until it settles.
+curl -N -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 7,
+    "method": "SubscribeToTask",
+    "params": {"id": "<task.id>"}
+  }'`,
+    [a2aEndpoint, tokenForDisplay],
+  );
+
+  // cURL example for listing and cancelling tasks.
+  const manageTasksCurlCode = useMemo(
+    () => `# List this agent's tasks, newest status change first
+curl -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 8,
+    "method": "ListTasks",
+    "params": {"pageSize": 20, "status": "TASK_STATE_WORKING"}
+  }'
+
+# Stop one. The task settles as TASK_STATE_CANCELED right away.
+curl -X POST "${a2aEndpoint}" \\
+  -H "Authorization: Bearer ${tokenForDisplay}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 9,
+    "method": "CancelTask",
+    "params": {"id": "<task.id>"}
+  }'`,
+    [a2aEndpoint, tokenForDisplay],
   );
 
   const chatDeepLinkBlock = (
@@ -633,9 +712,63 @@ curl -X POST "${a2aEndpoint}" \\
               />
             </CollapsibleContent>
           </Collapsible>
+          <Collapsible className="rounded-lg border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
+              Run in the background (long tasks)
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-4">
+              <CurlExampleSection
+                key={`background-${effectiveTokenId}`}
+                code={backgroundTaskCurlCode}
+                tokenForDisplay={tokenForDisplay}
+                isPersonalTokenSelected={isPersonalTokenSelected}
+                hasAdminPermission={hasAdminPermission ?? false}
+                selectedTeamToken={selectedTeamToken ?? null}
+                fetchUserTokenMutation={fetchUserTokenMutation}
+                fetchTeamTokenMutation={fetchTeamTokenMutation}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+          <Collapsible className="rounded-lg border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
+              Reconnect to a running task
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-4">
+              <CurlExampleSection
+                key={`subscribe-${effectiveTokenId}`}
+                code={subscribeCurlCode}
+                tokenForDisplay={tokenForDisplay}
+                isPersonalTokenSelected={isPersonalTokenSelected}
+                hasAdminPermission={hasAdminPermission ?? false}
+                selectedTeamToken={selectedTeamToken ?? null}
+                fetchUserTokenMutation={fetchUserTokenMutation}
+                fetchTeamTokenMutation={fetchTeamTokenMutation}
+              />
+            </CollapsibleContent>
+          </Collapsible>
+          <Collapsible className="rounded-lg border">
+            <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
+              List and cancel tasks
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="px-4 pb-4">
+              <CurlExampleSection
+                key={`manage-${effectiveTokenId}`}
+                code={manageTasksCurlCode}
+                tokenForDisplay={tokenForDisplay}
+                isPersonalTokenSelected={isPersonalTokenSelected}
+                hasAdminPermission={hasAdminPermission ?? false}
+                selectedTeamToken={selectedTeamToken ?? null}
+                fetchUserTokenMutation={fetchUserTokenMutation}
+                fetchTeamTokenMutation={fetchTeamTokenMutation}
+              />
+            </CollapsibleContent>
+          </Collapsible>
           <p className="text-xs text-muted-foreground">
-            Full protocol reference — streaming, multi-turn conversations, and
-            tool approvals — in the{" "}
+            Every method — streaming, background tasks, cancellation, artifacts,
+            and tool approvals — is covered in the{" "}
             <a
               href={getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}
               target="_blank"

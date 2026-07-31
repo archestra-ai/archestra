@@ -715,6 +715,17 @@ async function findAccessibleTriggerOrThrow(params: {
     throw new ApiError(404, "Schedule trigger not found");
   }
 
+  // A trigger of a soft-deleted project is hidden and paused with it — 404 for
+  // everyone (actor and scheduledTask:admin included), or run-now could still
+  // execute into the hidden project past the due-picker's pause. `findById`
+  // excludes soft-deleted projects, so a retained trigger resolves to no project.
+  const project = trigger.projectId
+    ? await ProjectModel.findById(trigger.projectId)
+    : null;
+  if (trigger.projectId && !project) {
+    throw new ApiError(404, "Schedule trigger not found");
+  }
+
   // The actor the trigger runs as always has access
   if (trigger.actorUserId === params.userId) {
     return trigger;
@@ -735,15 +746,13 @@ async function findAccessibleTriggerOrThrow(params: {
   // their runs). Reuses the same ProjectShareModel.userCanAccessProject check
   // that backs GET /api/projects/:id (via projectService.requireViewable).
   // Deliberately read-only — see ScheduleTriggerAccess.
-  if (params.access === "read" && trigger.projectId) {
-    const project = await ProjectModel.findById(trigger.projectId);
+  if (params.access === "read" && project) {
     if (
-      project &&
-      (await ProjectShareModel.userCanAccessProject({
+      await ProjectShareModel.userCanAccessProject({
         project,
         userId: params.userId,
         organizationId: params.organizationId,
-      }))
+      })
     ) {
       return trigger;
     }

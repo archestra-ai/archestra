@@ -9,6 +9,7 @@ const k8sCapabilitiesRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetK8sCapabilities,
+        // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
         description: "Inspect Kubernetes capabilities available to Archestra.",
         tags: ["Organization"],
         response: constructResponseSchema(K8sCapabilitiesSchema),

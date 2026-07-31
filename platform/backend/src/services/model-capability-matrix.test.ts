@@ -8,7 +8,10 @@ import type {
   ModelOutputModality,
   PriceSource,
 } from "@/types";
+import { resolveDiscoveredModelRegistryEntry } from "./cross-provider-pricing";
+import { enrichDiscoveredModel } from "./discovered-model-enrichment";
 import { buildModelsToUpsert } from "./model-sync";
+import { lookupVendorPublishedPrices } from "./vendor-published-pricing";
 
 /**
  * Black-box matrix over model metadata resolution: given a provider, a model id
@@ -145,6 +148,15 @@ const MODELS_DEV: ModelsDevApiResponse = {
         modalities: { input: ["text", "image", "video"], output: ["text"] },
         tool_call: true,
       },
+      // Sub-cent prices, the magnitude where cent-rounding is lossy.
+      "amazon.nova-micro-v1:0": {
+        id: "amazon.nova-micro-v1:0",
+        name: "Nova Micro",
+        cost: { input: 0.035, output: 0.14, cache_read: 0.00875 },
+        limit: { context: 128000, output: 5120 },
+        modalities: { input: ["text"], output: ["text"] },
+        tool_call: true,
+      },
       // No cache prices, so both directions fall to the bedrock multiplier.
       "deepseek.r1-v1:0": {
         id: "deepseek.r1-v1:0",
@@ -172,6 +184,30 @@ const MODELS_DEV: ModelsDevApiResponse = {
           input: ["text", "image", "audio", "video", "pdf"],
           output: ["text"],
         },
+        tool_call: true,
+      },
+      // Carried by the registry with an empty cost: Google publishes a rate for
+      // Gemma, models.dev has not recorded it.
+      "gemma-4-26b-a4b-it": {
+        id: "gemma-4-26b-a4b-it",
+        name: "Gemma 4 26B",
+        cost: {},
+        limit: { context: 262144, output: 32768 },
+        modalities: { input: ["text", "image"], output: ["text"] },
+      },
+    },
+  },
+  // A first-party vendor entry for a model vLLM commonly serves.
+  meta: {
+    id: "meta",
+    name: "Meta",
+    models: {
+      "llama-4-maverick": {
+        id: "llama-4-maverick",
+        name: "Llama 4 Maverick",
+        cost: { input: 0.22, output: 0.85 },
+        limit: { context: 1048576, output: 16384 },
+        modalities: { input: ["text", "image"], output: ["text"] },
         tool_call: true,
       },
     },
@@ -270,6 +306,13 @@ interface MatrixRow {
   modelId: string;
   underlyingModelName?: string;
   fetched?: FetchedModelCapabilities;
+  /**
+   * Route the row through the LLM proxy's discovery path instead of a sync.
+   * A model the proxy names is written bare under the *endpoint's* provider and
+   * is never revisited by a sync, so it resolves through a different path and
+   * belongs in the same table rather than a private one.
+   */
+  discovered?: true;
   expected: ExpectedCapabilities;
 }
 
@@ -285,8 +328,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "2.50",
-      pricePerMillionOutput: "10.00",
+      pricePerMillionInput: "2.5",
+      pricePerMillionOutput: "10",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "1.25",
       pricePerMillionCacheWrite: "0",
@@ -304,7 +347,7 @@ const MATRIX: MatrixRow[] = [
       outputModalities: ["text"],
       supportsToolCalling: true,
       pricePerMillionInput: "0.15",
-      pricePerMillionOutput: "0.60",
+      pricePerMillionOutput: "0.6",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.075",
       pricePerMillionCacheWrite: "0",
@@ -321,8 +364,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "0.10",
-      pricePerMillionOutput: "0.40",
+      pricePerMillionInput: "0.1",
+      pricePerMillionOutput: "0.4",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.025",
       pricePerMillionCacheWrite: "0",
@@ -339,8 +382,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "2.50",
-      pricePerMillionOutput: "15.00",
+      pricePerMillionInput: "2.5",
+      pricePerMillionOutput: "15",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.25",
       pricePerMillionCacheWrite: "0",
@@ -357,8 +400,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "2.50",
-      pricePerMillionOutput: "15.00",
+      pricePerMillionInput: "2.5",
+      pricePerMillionOutput: "15",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.25",
       pricePerMillionCacheWrite: "0",
@@ -375,8 +418,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text"],
       outputModalities: ["text"],
       supportsToolCalling: false,
-      pricePerMillionInput: "0.50",
-      pricePerMillionOutput: "1.50",
+      pricePerMillionInput: "0.5",
+      pricePerMillionOutput: "1.5",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0",
       pricePerMillionCacheWrite: "0",
@@ -412,12 +455,53 @@ const MATRIX: MatrixRow[] = [
       outputModalities: ["text"],
       supportsToolCalling: false,
       pricePerMillionInput: "0.02",
-      pricePerMillionOutput: "0.00",
+      pricePerMillionOutput: "0",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.005",
       pricePerMillionCacheWrite: "0",
       cachePriceSource: "derived_multiplier",
       embeddingDimensions: 1536,
+    },
+  },
+
+  // --- OpenAI: models the registry omits, priced from OpenAI's own list ----
+  {
+    name: "openai/gpt-5.1-codex — absent from the registry, so the published map fills it",
+    provider: "openai",
+    modelId: "gpt-5.1-codex",
+    expected: {
+      contextLength: null,
+      outputLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      pricePerMillionInput: "1.25",
+      pricePerMillionOutput: "10",
+      priceSource: "models_dev",
+      pricePerMillionCacheRead: "0.125",
+      // OpenAI bills nothing to write to the cache, so the derived write is 0.
+      pricePerMillionCacheWrite: "0",
+      cachePriceSource: "models_dev",
+    },
+  },
+  {
+    name: "openai/gpt-5.1-codex-mini — priced apart from the model its name contains",
+    provider: "openai",
+    modelId: "gpt-5.1-codex-mini",
+    expected: {
+      contextLength: null,
+      outputLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      // A fifth of `gpt-5.1-codex`: deriving one from the other by stripping
+      // the suffix would bill this at five times its published rate.
+      pricePerMillionInput: "0.25",
+      pricePerMillionOutput: "2",
+      priceSource: "models_dev",
+      pricePerMillionCacheRead: "0.025",
+      pricePerMillionCacheWrite: "0",
+      cachePriceSource: "models_dev",
     },
   },
 
@@ -432,8 +516,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "5.00",
-      pricePerMillionOutput: "25.00",
+      pricePerMillionInput: "5",
+      pricePerMillionOutput: "25",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.5",
       pricePerMillionCacheWrite: "6.25",
@@ -450,8 +534,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "1.00",
-      pricePerMillionOutput: "5.00",
+      pricePerMillionInput: "1",
+      pricePerMillionOutput: "5",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.1",
       pricePerMillionCacheWrite: "1.25",
@@ -468,11 +552,95 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "3.00",
-      pricePerMillionOutput: "15.00",
+      pricePerMillionInput: "3",
+      pricePerMillionOutput: "15",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.3",
       pricePerMillionCacheWrite: "3.75",
+      cachePriceSource: "models_dev",
+    },
+  },
+
+  // --- Proxy discovery: model recorded under the endpoint's provider -------
+  {
+    name: "discovered/bedrock:gpt-4o — a vendor model that reached a mismatched endpoint",
+    provider: "bedrock",
+    modelId: "gpt-4o",
+    discovered: true,
+    expected: {
+      contextLength: 128000,
+      outputLength: 16384,
+      // Enrichment deliberately writes no modalities: validating them against
+      // the column schema lives in the sync path.
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: true,
+      pricePerMillionInput: "2.5",
+      pricePerMillionOutput: "10",
+      priceSource: "models_dev",
+      pricePerMillionCacheRead: "1.25",
+      // The registry entry carries no cache-write price, so it derives from the
+      // input price rather than being synced.
+      pricePerMillionCacheWrite: "3.125",
+      cachePriceSource: "models_dev",
+    },
+  },
+  {
+    name: "discovered/bedrock:us.amazon.nova-lite — still resolves through the provider-scoped path",
+    provider: "bedrock",
+    modelId: "us.amazon.nova-lite-v1:0",
+    discovered: true,
+    expected: {
+      contextLength: 300000,
+      outputLength: 8192,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: true,
+      pricePerMillionInput: "0.06",
+      pricePerMillionOutput: "0.24",
+      // The AWS snapshot lists this model at the same rate, so the stored price
+      // matches it and the provenance reads as AWS.
+      priceSource: "aws",
+      pricePerMillionCacheRead: "0.015",
+      pricePerMillionCacheWrite: "0.075",
+      cachePriceSource: "models_dev",
+    },
+  },
+  {
+    name: "discovered/bedrock:unlisted — no first-party vendor lists it, so no price is asserted",
+    provider: "bedrock",
+    modelId: "us.anthropic.claude-notarealmodel-v1:0",
+    discovered: true,
+    expected: {
+      contextLength: null,
+      outputLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      pricePerMillionInput: "50.00",
+      pricePerMillionOutput: "50.00",
+      priceSource: "default",
+      pricePerMillionCacheRead: "5",
+      pricePerMillionCacheWrite: "62.5",
+      cachePriceSource: "derived_multiplier",
+    },
+  },
+  {
+    name: "discovered/bedrock:gpt-5.1-codex — no registry provider carries it, so the published map does",
+    provider: "bedrock",
+    modelId: "gpt-5.1-codex",
+    discovered: true,
+    expected: {
+      contextLength: null,
+      outputLength: null,
+      inputModalities: null,
+      outputModalities: null,
+      supportsToolCalling: null,
+      pricePerMillionInput: "1.25",
+      pricePerMillionOutput: "10",
+      priceSource: "models_dev",
+      pricePerMillionCacheRead: "0.125",
+      pricePerMillionCacheWrite: "1.5625",
       cachePriceSource: "models_dev",
     },
   },
@@ -488,8 +656,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "3.00",
-      pricePerMillionOutput: "15.00",
+      pricePerMillionInput: "3",
+      pricePerMillionOutput: "15",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.3",
       pricePerMillionCacheWrite: "3.75",
@@ -497,7 +665,7 @@ const MATRIX: MatrixRow[] = [
     },
   },
   {
-    name: "bedrock/global.anthropic.claude-sonnet-4-5 — a different region prefix resolves identically",
+    name: "bedrock/global.anthropic.claude-sonnet-4-5 — the registry prices every endpoint tier the same",
     provider: "bedrock",
     modelId: "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
     expected: {
@@ -506,9 +674,9 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "3.00",
-      pricePerMillionOutput: "15.00",
-      priceSource: "models_dev",
+      pricePerMillionInput: "3",
+      pricePerMillionOutput: "15",
+      priceSource: "aws",
       pricePerMillionCacheRead: "0.3",
       pricePerMillionCacheWrite: "3.75",
       cachePriceSource: "models_dev",
@@ -526,7 +694,7 @@ const MATRIX: MatrixRow[] = [
       supportsToolCalling: true,
       pricePerMillionInput: "0.06",
       pricePerMillionOutput: "0.24",
-      priceSource: "models_dev",
+      priceSource: "aws",
       pricePerMillionCacheRead: "0.015",
       pricePerMillionCacheWrite: "0.075",
       cachePriceSource: "models_dev",
@@ -543,8 +711,8 @@ const MATRIX: MatrixRow[] = [
       outputModalities: ["text"],
       supportsToolCalling: true,
       pricePerMillionInput: "1.35",
-      pricePerMillionOutput: "5.40",
-      priceSource: "models_dev",
+      pricePerMillionOutput: "5.4",
+      priceSource: "aws",
       pricePerMillionCacheRead: "0.135",
       pricePerMillionCacheWrite: "1.6875",
       cachePriceSource: "derived_multiplier",
@@ -561,8 +729,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "3.00",
-      pricePerMillionOutput: "15.00",
+      pricePerMillionInput: "3",
+      pricePerMillionOutput: "15",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.3",
       pricePerMillionCacheWrite: "3.75",
@@ -579,8 +747,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "1.00",
-      pricePerMillionOutput: "5.00",
+      pricePerMillionInput: "1",
+      pricePerMillionOutput: "5",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.1",
       pricePerMillionCacheWrite: "1.25",
@@ -588,7 +756,7 @@ const MATRIX: MatrixRow[] = [
     },
   },
   {
-    name: "bedrock/us.anthropic.claude-3-sonnet — retired from the registry, so nothing can price it",
+    name: "bedrock/us.anthropic.claude-3-sonnet — retired from the registry, priced by AWS",
     provider: "bedrock",
     modelId: "us.anthropic.claude-3-sonnet-20240229-v1:0",
     expected: {
@@ -597,16 +765,16 @@ const MATRIX: MatrixRow[] = [
       inputModalities: null,
       outputModalities: null,
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
-      priceSource: "default",
-      pricePerMillionCacheRead: "5",
-      pricePerMillionCacheWrite: "62.5",
+      pricePerMillionInput: "3",
+      pricePerMillionOutput: "15",
+      priceSource: "aws",
+      pricePerMillionCacheRead: "0.3",
+      pricePerMillionCacheWrite: "3.75",
       cachePriceSource: "derived_multiplier",
     },
   },
   {
-    name: "bedrock/amazon.titan-embed-text-v1 — retired from the registry",
+    name: "bedrock/amazon.titan-embed-text-v1 — embedding, priced by AWS on input alone",
     provider: "bedrock",
     modelId: "amazon.titan-embed-text-v1",
     expected: {
@@ -615,16 +783,16 @@ const MATRIX: MatrixRow[] = [
       inputModalities: null,
       outputModalities: null,
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
-      priceSource: "default",
-      pricePerMillionCacheRead: "5",
-      pricePerMillionCacheWrite: "62.5",
+      pricePerMillionInput: "0.1",
+      pricePerMillionOutput: "0",
+      priceSource: "aws",
+      pricePerMillionCacheRead: "0.01",
+      pricePerMillionCacheWrite: "0.125",
       cachePriceSource: "derived_multiplier",
     },
   },
   {
-    name: "bedrock/us.meta.llama3-2-90b — retired from the registry",
+    name: "bedrock/us.meta.llama3-2-90b — retired from the registry, priced by AWS",
     provider: "bedrock",
     modelId: "us.meta.llama3-2-90b-instruct-v1:0",
     expected: {
@@ -633,16 +801,16 @@ const MATRIX: MatrixRow[] = [
       inputModalities: null,
       outputModalities: null,
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
-      priceSource: "default",
-      pricePerMillionCacheRead: "5",
-      pricePerMillionCacheWrite: "62.5",
+      pricePerMillionInput: "0.72",
+      pricePerMillionOutput: "0.72",
+      priceSource: "aws",
+      pricePerMillionCacheRead: "0.072",
+      pricePerMillionCacheWrite: "0.9",
       cachePriceSource: "derived_multiplier",
     },
   },
   {
-    name: "bedrock/us.anthropic.claude-3-haiku — unpriced '-haiku' id falls to the $30 tier",
+    name: 'bedrock/us.anthropic.claude-3-haiku — a real price replaces the "-haiku" $30 tier',
     provider: "bedrock",
     modelId: "us.anthropic.claude-3-haiku-20240307-v1:0",
     expected: {
@@ -651,12 +819,35 @@ const MATRIX: MatrixRow[] = [
       inputModalities: null,
       outputModalities: null,
       supportsToolCalling: null,
-      pricePerMillionInput: "30.00",
-      pricePerMillionOutput: "30.00",
-      priceSource: "default",
-      pricePerMillionCacheRead: "3",
-      pricePerMillionCacheWrite: "37.5",
+      pricePerMillionInput: "0.25",
+      pricePerMillionOutput: "1.25",
+      priceSource: "aws",
+      pricePerMillionCacheRead: "0.025",
+      pricePerMillionCacheWrite: "0.3125",
       cachePriceSource: "derived_multiplier",
+    },
+  },
+
+  {
+    name: "bedrock/amazon.nova-micro — a sub-cent price survives to the cent and beyond",
+    provider: "bedrock",
+    modelId: "amazon.nova-micro-v1:0",
+    expected: {
+      contextLength: 128000,
+      outputLength: 5120,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      // AWS and the registry both publish $0.035. Rounded to the cent this
+      // reads as 0.04 and every cost computed from it is 14% too high.
+      pricePerMillionInput: "0.035",
+      pricePerMillionOutput: "0.14",
+      // The AWS snapshot lists the same rate, so the stored value matches it
+      // and the provenance reads as AWS.
+      priceSource: "aws",
+      pricePerMillionCacheRead: "0.00875",
+      pricePerMillionCacheWrite: "0.04375",
+      cachePriceSource: "models_dev",
     },
   },
 
@@ -672,8 +863,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "2.50",
-      pricePerMillionOutput: "10.00",
+      pricePerMillionInput: "2.5",
+      pricePerMillionOutput: "10",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "1.25",
       pricePerMillionCacheWrite: null,
@@ -690,8 +881,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "2.50",
-      pricePerMillionOutput: "10.00",
+      pricePerMillionInput: "2.5",
+      pricePerMillionOutput: "10",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "1.25",
       pricePerMillionCacheWrite: null,
@@ -710,7 +901,7 @@ const MATRIX: MatrixRow[] = [
       outputModalities: [],
       supportsToolCalling: false,
       pricePerMillionInput: "0.02",
-      pricePerMillionOutput: "0.00",
+      pricePerMillionOutput: "0",
       priceSource: "models_dev",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
@@ -753,8 +944,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: null,
       outputModalities: null,
       supportsToolCalling: true,
-      pricePerMillionInput: "0.00",
-      pricePerMillionOutput: "0.00",
+      pricePerMillionInput: "0",
+      pricePerMillionOutput: "0",
       priceSource: "models_dev",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
@@ -777,8 +968,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text"],
       outputModalities: ["text"],
       supportsToolCalling: false,
-      pricePerMillionInput: "1.00",
-      pricePerMillionOutput: "2.00",
+      pricePerMillionInput: "1",
+      pricePerMillionOutput: "2",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.13",
       pricePerMillionCacheWrite: null,
@@ -804,7 +995,78 @@ const MATRIX: MatrixRow[] = [
     },
   },
 
-  // --- Ollama: local models, absent from models.dev entirely --------------
+  {
+    name: "gemini/gemma-4-26b-a4b-it-maas — Vertex's serverless id, priced from Google's own list",
+    provider: "gemini",
+    modelId: "gemma-4-26b-a4b-it-maas",
+    expected: {
+      // Limits and modalities come from the registry entry, which resolves once
+      // the `-maas` suffix is off; only its cost was missing.
+      contextLength: 262144,
+      outputLength: 32768,
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      // The registry entry states no tool support either way, and unknown is
+      // reported rather than assumed.
+      supportsToolCalling: null,
+      pricePerMillionInput: "0.15",
+      pricePerMillionOutput: "0.6",
+      priceSource: "models_dev",
+      // A tenth of the input price, as Google publishes it. Gemini's fallback
+      // multiplier is a quarter, which would read 0.0375.
+      pricePerMillionCacheRead: "0.015",
+      pricePerMillionCacheWrite: "0",
+      cachePriceSource: "models_dev",
+    },
+  },
+
+  // --- vLLM: the operator runs the server, so it reports its own window and
+  // bills nothing per token ---
+  {
+    name: "vllm/a vendor model served under its HuggingFace path",
+    provider: "vllm",
+    modelId: "meta-llama/Llama-4-Maverick",
+    // What the vLLM fetcher reads out of `max_model_len`.
+    fetched: { contextLength: 200000 },
+    expected: {
+      // The server's own window, not the vendor's 1M: this deployment was
+      // launched with less, and only it can say so.
+      contextLength: 200000,
+      outputLength: null,
+      // Proves the modalities are read rather than assumed to be text.
+      inputModalities: ["text", "image"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
+      priceSource: "default",
+      pricePerMillionCacheRead: null,
+      pricePerMillionCacheWrite: null,
+      cachePriceSource: null,
+    },
+  },
+  {
+    name: "vllm/an operator alias no vendor publishes",
+    provider: "vllm",
+    modelId: "our-finetune-v3",
+    fetched: { contextLength: 32768 },
+    expected: {
+      contextLength: 32768,
+      outputLength: null,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: null,
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
+      priceSource: "default",
+      pricePerMillionCacheRead: null,
+      pricePerMillionCacheWrite: null,
+      cachePriceSource: null,
+    },
+  },
+
+  // --- Ollama: local models, absent from models.dev entirely, and billed
+  // no per-token rate on either transport (zero, not the generic estimate) ---
   {
     name: "ollama/a Modelfile num_ctx caps the window below the architectural one",
     provider: "ollama",
@@ -819,8 +1081,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text"],
       outputModalities: ["text"],
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
       priceSource: "default",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
@@ -838,8 +1100,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text"],
       outputModalities: ["text"],
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
       priceSource: "default",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
@@ -857,8 +1119,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text"],
       outputModalities: [],
       supportsToolCalling: null,
-      pricePerMillionInput: "50.00",
-      pricePerMillionOutput: "50.00",
+      pricePerMillionInput: "0.00",
+      pricePerMillionOutput: "0.00",
       priceSource: "default",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
@@ -878,8 +1140,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image", "audio", "video", "pdf"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "0.30",
-      pricePerMillionOutput: "2.50",
+      pricePerMillionInput: "0.3",
+      pricePerMillionOutput: "2.5",
       priceSource: "models_dev",
       pricePerMillionCacheRead: "0.03",
       pricePerMillionCacheWrite: "0",
@@ -917,8 +1179,8 @@ const MATRIX: MatrixRow[] = [
       inputModalities: ["text", "image"],
       outputModalities: ["text"],
       supportsToolCalling: true,
-      pricePerMillionInput: "0.50",
-      pricePerMillionOutput: "1.50",
+      pricePerMillionInput: "0.5",
+      pricePerMillionOutput: "1.5",
       priceSource: "models_dev",
       pricePerMillionCacheRead: null,
       pricePerMillionCacheWrite: null,
@@ -1007,24 +1269,48 @@ const MATRIX: MatrixRow[] = [
  * the guard below fails until someone updates this number, which is the moment
  * to ask whether that model should really be unpriced.
  */
-const EXPECTED_DEFAULT_PRICED_ROWS = 11;
+const EXPECTED_DEFAULT_PRICED_ROWS = 10;
+
+/**
+ * Reproduce what the LLM proxy does the first time it sees a model: write the
+ * bare row under the endpoint's provider, then enrich it from the registry.
+ */
+async function discoverAndEnrich(row: MatrixRow) {
+  const created = await ModelModel.ensureModelExists(row.modelId, row.provider);
+  if (!created) {
+    throw new Error(`expected ${row.provider}/${row.modelId} to be created`);
+  }
+  await enrichDiscoveredModel({ model: created, modelsDevData: MODELS_DEV });
+  const model = await ModelModel.findByProviderAndModelId(
+    row.provider,
+    row.modelId,
+  );
+  if (!model) {
+    throw new Error(`expected ${row.provider}/${row.modelId} to be readable`);
+  }
+  return model;
+}
 
 describe("model capability matrix", () => {
   for (const row of MATRIX) {
     test(row.name, async () => {
-      const [model] = await ModelModel.bulkUpsert(
-        buildModelsToUpsert({
-          provider: row.provider,
-          models: [
-            {
-              id: row.modelId,
-              capabilities: row.fetched,
-              underlyingModelName: row.underlyingModelName ?? null,
-            },
-          ],
-          modelsDevData: MODELS_DEV,
-        }),
-      );
+      const model = row.discovered
+        ? await discoverAndEnrich(row)
+        : (
+            await ModelModel.bulkUpsert(
+              buildModelsToUpsert({
+                provider: row.provider,
+                models: [
+                  {
+                    id: row.modelId,
+                    capabilities: row.fetched,
+                    underlyingModelName: row.underlyingModelName ?? null,
+                  },
+                ],
+                modelsDevData: MODELS_DEV,
+              }),
+            )
+          )[0];
 
       const capabilities = ModelModel.toCapabilities(model);
 
@@ -1049,6 +1335,19 @@ describe("model capability matrix", () => {
 
   test("only the known-unpriced models fall through to the estimate", () => {
     const unpriced = MATRIX.filter((row) => {
+      // Each row is judged by the path it actually takes. Running a discovered
+      // row through the sync builder would report it unpriced for a resolution
+      // it never performs, hiding the estimate this guard exists to surface.
+      if (row.discovered) {
+        return (
+          resolveDiscoveredModelRegistryEntry({
+            provider: row.provider,
+            modelId: row.modelId,
+            modelsDevData: MODELS_DEV,
+          })?.prices?.promptPricePerToken == null &&
+          lookupVendorPublishedPrices(row.modelId) == null
+        );
+      }
       const [built] = buildModelsToUpsert({
         provider: row.provider,
         models: [

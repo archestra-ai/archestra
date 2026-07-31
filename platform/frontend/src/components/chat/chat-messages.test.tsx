@@ -34,11 +34,17 @@ vi.mock("@/components/ai-elements/reasoning", () => ({
   Reasoning: ({
     children,
     isStreaming,
+    keepOpen,
   }: {
     children: React.ReactNode;
     isStreaming?: boolean;
+    keepOpen?: boolean;
   }) => (
-    <div data-testid="reasoning" data-streaming={String(Boolean(isStreaming))}>
+    <div
+      data-testid="reasoning"
+      data-streaming={String(Boolean(isStreaming))}
+      data-keep-open={String(Boolean(keepOpen))}
+    >
       {children}
     </div>
   ),
@@ -205,6 +211,7 @@ vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/chat/chat.query", () => ({
   useProfileToolsWithIds: () => ({ data: [] }),
+  useCancelChatMcpTask: () => ({ mutateAsync: vi.fn() }),
 }));
 
 vi.mock("@/lib/chat/chat-message.query", () => ({
@@ -312,6 +319,180 @@ describe("ChatMessages", () => {
 
     expect(screen.getAllByTestId("reasoning")).toHaveLength(1);
     expect(screen.getByText("weighing the options")).toBeInTheDocument();
+  });
+
+  it("folds thinking blocks that touch on screen into one accordion", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "reasoning", text: "first pass" },
+          { type: "reasoning", text: "second pass" },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getAllByTestId("reasoning")).toHaveLength(1);
+    expect(screen.getByText(/first pass/)).toBeInTheDocument();
+    expect(screen.getByText(/second pass/)).toBeInTheDocument();
+  });
+
+  it("keeps thinking split when narration comes between", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "reasoning", text: "first pass" },
+          { type: "reasoning", text: "second pass" },
+          { type: "text", text: "Here are the tasks." },
+          { type: "reasoning", text: "third pass" },
+        ],
+      },
+    ] as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(screen.getAllByTestId("reasoning")).toHaveLength(2);
+  });
+
+  it("keeps thinking below the MCP App panel it follows", () => {
+    // The compact row swallows both tool calls, but the app announcement stays
+    // put and renders the panel. Thinking that came after the app must not be
+    // folded into the accordion above it.
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "reasoning", text: "first pass" },
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "input-available",
+            input: { q: "weather" },
+          },
+          {
+            type: "tool-google__search",
+            toolCallId: "call_1",
+            state: "output-available",
+            input: { q: "weather" },
+            output: "sunny",
+          },
+          { type: "reasoning", text: "second pass" },
+          {
+            type: "tool-charts__render",
+            toolCallId: "call_2",
+            state: "input-available",
+            input: {},
+          },
+          {
+            type: "data-tool-ui-start",
+            data: {
+              toolCallId: "call_2",
+              toolName: "charts__render",
+              uiResourceUri: "ui://chart",
+            },
+          },
+          {
+            type: "tool-charts__render",
+            toolCallId: "call_2",
+            state: "output-available",
+            input: {},
+            output: { _meta: { ui: { resourceUri: "ui://chart" } } },
+          },
+          { type: "reasoning", text: "third pass" },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    const { container } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="streaming"
+      />,
+    );
+
+    expect(screen.getAllByTestId("reasoning")).toHaveLength(3);
+
+    // Document order: the app's card must precede the thinking that followed it.
+    const landmarks = [...container.querySelectorAll("*")].flatMap((el) => {
+      if (el.getAttribute("data-testid") === "reasoning") return ["thinking"];
+      if (
+        el.children.length === 0 &&
+        el.textContent === "tool-charts__render"
+      ) {
+        return ["app"];
+      }
+      return [];
+    });
+
+    expect(landmarks.indexOf("app")).toBeLessThan(
+      landmarks.lastIndexOf("thinking"),
+    );
+  });
+
+  it("holds a still-growable run open and releases it once narration lands", () => {
+    const growable = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [{ type: "reasoning", text: "first pass" }],
+      },
+    ] as UIMessage[];
+
+    const { rerender } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={growable}
+        status="streaming"
+      />,
+    );
+
+    expect(screen.getByTestId("reasoning")).toHaveAttribute(
+      "data-keep-open",
+      "true",
+    );
+
+    const settled = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          { type: "reasoning", text: "first pass" },
+          { type: "text", text: "Here are the tasks." },
+        ],
+      },
+    ] as UIMessage[];
+
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={settled}
+        status="streaming"
+      />,
+    );
+
+    expect(screen.getByTestId("reasoning")).toHaveAttribute(
+      "data-keep-open",
+      "false",
+    );
   });
 
   it("marks the last reasoning part of the last message as streaming", () => {

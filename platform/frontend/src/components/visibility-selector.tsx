@@ -4,12 +4,6 @@ import type { LucideIcon } from "lucide-react";
 import { CheckIcon, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { Label } from "@/components/ui/label";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 export type VisibilityOption<Value extends string> = {
   value: Value;
@@ -17,7 +11,9 @@ export type VisibilityOption<Value extends string> = {
   description: string;
   icon?: LucideIcon;
   disabled?: boolean;
+  /** Short inline note beside the label, e.g. "No teams available". */
   disabledLabel?: string;
+  /** The full explanation, shown in place of the description while disabled. */
   disabledReason?: string;
 };
 
@@ -124,7 +120,13 @@ export function VisibilitySelector<Value extends string>({
                           : "text-muted-foreground"
                       }`}
                     >
-                      {option.description}
+                      {/* Why an option can't be picked belongs in the row that
+                          can't be picked. A tooltip hides it behind a hover the
+                          reader has no reason to try, and anchors to whichever
+                          row it feels like when several are disabled. */}
+                      {option.disabled && option.disabledReason
+                        ? option.disabledReason
+                        : option.description}
                     </div>
                   </div>
                   <div
@@ -139,18 +141,7 @@ export function VisibilitySelector<Value extends string>({
                 </button>
               );
 
-              if (!option.disabledReason) {
-                return button;
-              }
-
-              return (
-                <TooltipProvider key={option.value}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>{button}</TooltipTrigger>
-                    <TooltipContent>{option.disabledReason}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              );
+              return button;
             })}
           </div>
         ) : (

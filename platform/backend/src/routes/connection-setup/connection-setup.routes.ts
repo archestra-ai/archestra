@@ -95,6 +95,17 @@ const CreateConnectionSetupBodySchema = z.object({
    * silently skipped when the caller lacks llmVirtualKey:create.
    */
   attributePassthrough: z.boolean().default(true),
+  /**
+   * Explicit model for the Copilot CLI's provider wiring — the CLI refuses to
+   * launch a BYOK provider without one, so the wizard's review step picks it.
+   * The script applies it as COPILOT_MODEL. copilot-cli setups only.
+   */
+  model: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[\x20-\x7E]+$/, "must be printable ASCII")
+    .optional(),
   skills: z
     .object({
       skillIds: z.array(z.string().uuid()).min(1).max(200),
@@ -256,6 +267,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         provider,
         proxyAuth,
         attributePassthrough,
+        model,
         skills,
       } = body;
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
@@ -276,6 +288,12 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(
           400,
           `${provider} is not supported for ${clientId} setups`,
+        );
+      }
+      if (model && clientId !== "copilot-cli") {
+        throw new ApiError(
+          400,
+          "model is only supported for copilot-cli setups",
         );
       }
 
@@ -346,12 +364,14 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // attribute requests to the user via X-Archestra-Virtual-Key, reusing
           // the (otherwise-null) virtualApiKeyId column to carry the passthrough
           // key id. Applies to Claude Code (Anthropic subscription or the user's
-          // own Bedrock credentials) and Codex (the user's own OpenAI key).
+          // own Bedrock credentials), Codex (the user's own OpenAI key), and the
+          // Copilot CLI (GitHub Copilot subscription, via COPILOT_PROVIDER_HEADERS).
           // Best-effort: silently skipped without llmVirtualKey:create.
           attributePassthrough &&
           ((clientId === "claude-code" &&
             (provider === "anthropic" || provider === "bedrock")) ||
-            (clientId === "codex" && provider === "openai"))
+            (clientId === "codex" && provider === "openai") ||
+            (clientId === "copilot-cli" && provider === "github-copilot"))
         ) {
           const canCreateVirtualKey = await userHasPermission(
             user.id,
@@ -387,6 +407,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         llmProxyId: llmProxyId ?? null,
         provider: provider ?? null,
         proxyAuth,
+        model: model ?? null,
         virtualApiKeyId,
         includeSkills: Boolean(skills),
         skillLinkTtlDays: skills?.ttlDays ?? null,
@@ -729,6 +750,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       virtualKey: virtualKeyValue,
       virtualKeyName,
       passthroughVirtualKey,
+      model: setup.model,
       // Passthrough Copilot setups run the GitHub device flow inside the
       // script; virtual-key setups resolve the stored token server-side.
       githubCopilot:

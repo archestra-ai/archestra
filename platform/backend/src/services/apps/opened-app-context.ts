@@ -58,7 +58,9 @@ export async function resolveOpenedApp(params: {
       userId,
       isAppAdmin: await callerIsAppAdmin(userId, organizationId),
     });
-    if (!app) return undefined;
+    // A disabled app must not reach the model at all (T-980) — dropping the
+    // injection here matches the chat tools, which report it as not found.
+    if (!app || !app.enabled) return undefined;
     const name = promptSafe(app.name);
     // A name that sanitizes away leaves nothing to call the app by, so there is
     // no block worth writing.

@@ -49,6 +49,7 @@ import config, {
   parseK8sResourceQuantity,
   parseLogFormat,
   parseMetricsPort,
+  parseNonNegativeInt,
   parseOptionalPort,
   parseProcessType,
   parseRefreshTokenReuseGraceSeconds,
@@ -1327,14 +1328,18 @@ describe("chat active run config", () => {
     expect(cfg.chat.activeRun.pollingCompatibilityEnabled).toBe(false);
   });
 
-  test("uses short stop polling default in polling compatibility mode", async () => {
+  test("keeps one stop polling default regardless of compatibility mode", async () => {
+    // The interval no longer encodes whether notifications work. It is the
+    // fallback a stream wants when they do; the notify hub tightens its own
+    // fallback when they do not, so an operator does not tune this to match
+    // their database endpoint.
     delete process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS;
     process.env.ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED =
       "true";
 
     const { default: cfg } = await import("./config");
 
-    expect(cfg.chat.activeRun.stopPollIntervalMs).toBe(500);
+    expect(cfg.chat.activeRun.stopPollIntervalMs).toBe(30_000);
   });
 });
 
@@ -2828,5 +2833,24 @@ describe("parseHackathonRecorderMaxFinalCutMs", () => {
   test("refuses a limit so small nothing could ever be submitted", () => {
     expect(() => parseHackathonRecorderMaxFinalCutMs("10")).toThrow();
     expect(parseHackathonRecorderMaxFinalCutMs("5000")).toBe(5_000);
+  });
+});
+
+describe("parseNonNegativeInt", () => {
+  test("falls back when unset or unparseable", () => {
+    expect(parseNonNegativeInt(undefined, 90)).toBe(90);
+    expect(parseNonNegativeInt("", 90)).toBe(90);
+    expect(parseNonNegativeInt("not-a-number", 90)).toBe(90);
+  });
+
+  test("accepts zero, which parsePositiveInt would reject", () => {
+    // 0 is a real setting here — a retention window of zero means "keep
+    // forever" — so it must not collapse to the default.
+    expect(parseNonNegativeInt("0", 90)).toBe(0);
+  });
+
+  test("accepts positive values and rejects negative ones", () => {
+    expect(parseNonNegativeInt("30", 90)).toBe(30);
+    expect(parseNonNegativeInt("-5", 90)).toBe(90);
   });
 });

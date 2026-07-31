@@ -1,7 +1,7 @@
 name: Benchmark
 
 # Runs archestra-bench once per day against staging-grade infrastructure: the currently-deployed
-# platform image, an ephemeral Postgres sidecar, and the shared staging managed Dagger engine. Never
+# platform image, an ephemeral Postgres sidecar, and a short-lived benchmark-owned Dagger engine. Never
 # mutates the live staging Deployment, its DB, or its data. See .github/bench/README.md for the
 # one-time prerequisites (GCS bucket + IAM, ZAI_API_KEY / Slack secrets).
 
@@ -35,7 +35,7 @@ jobs:
       id-token: write # Workload Identity Federation + GKE credentials
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -58,9 +58,8 @@ jobs:
           gcloud container clusters get-credentials "${GKE_CLUSTER}" \
             --zone "${GKE_ZONE}" --project "${GKE_PROJECT}"
 
-      # Since CI releases at the fail-fast window, a prior run's pod outlives its GitHub job — the
-      # Actions-level concurrency group no longer prevents two pods sharing the Dagger engine. Refuse to
-      # start if a benchmark Job is still active, before spending a build on it.
+      # Since CI releases at the fail-fast window, a prior run's pod outlives its GitHub job. Refuse to
+      # start if a benchmark Job is still active, before spending a build on another run.
       - name: Guard against an overlapping run
         run: |
           set -euo pipefail
@@ -72,6 +71,9 @@ jobs:
             echo "::error::a benchmark Job is still active in archestra; refusing to start an overlapping run"
             exit 1
           fi
+          # No benchmark is active, so any prior engine pod is stale (node loss or interrupted cleanup).
+          kubectl delete pods -n archestra -l app=archestra-bench-dagger \
+            --ignore-not-found --wait=false
 
       - name: Resolve staging deployment facts
         id: resolve
@@ -81,22 +83,15 @@ jobs:
           PLATFORM_IMAGE=$(get '{.spec.template.spec.containers[0].image}')
           PLATFORM_SA=$(get '{.spec.template.spec.serviceAccountName}')
           [ -n "${PLATFORM_SA}" ] || PLATFORM_SA=default
-          DAGGER_RUNNER_HOST=$(get '{range .spec.template.spec.containers[0].env[?(@.name=="ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST")]}{.value}{end}')
-          if [ -z "${PLATFORM_IMAGE}" ] || [ -z "${DAGGER_RUNNER_HOST}" ]; then
-            echo "::error::could not resolve platform image / dagger host from the live Deployment (is the dagger host a literal env .value on containers[0], not a valueFrom/envFrom ref?)"
+          if [ -z "${PLATFORM_IMAGE}" ]; then
+            echo "::error::could not resolve the platform image from the live Deployment"
             exit 1
           fi
-          # Dagger namespace for the RBAC preflight: the namespace= query param of the kube-pod:// host,
-          # defaulting to archestra when absent.
-          DAGGER_NS=$(printf '%s' "${DAGGER_RUNNER_HOST}" | sed -n 's/.*[?&]namespace=\([^&]*\).*/\1/p')
-          [ -n "${DAGGER_NS}" ] || DAGGER_NS=archestra
           {
             echo "platform_image=${PLATFORM_IMAGE}"
             echo "platform_sa=${PLATFORM_SA}"
-            echo "dagger_runner_host=${DAGGER_RUNNER_HOST}"
-            echo "dagger_ns=${DAGGER_NS}"
           } >> "${GITHUB_OUTPUT}"
-          echo "Resolved image=${PLATFORM_IMAGE} sa=${PLATFORM_SA} dagger_ns=${DAGGER_NS}"
+          echo "Resolved image=${PLATFORM_IMAGE} sa=${PLATFORM_SA}"
 
       - name: Assert native sidecar support (control plane >= 1.29)
         run: |
@@ -111,17 +106,21 @@ jobs:
       - name: RBAC preflight (platform SA can exec into the Dagger pod)
         env:
           PLATFORM_SA: ${{ steps.resolve.outputs.platform_sa }}
-          DAGGER_NS: ${{ steps.resolve.outputs.dagger_ns }}
         run: |
           set -euo pipefail
           RC=0
           VERDICT=$(kubectl auth can-i create pods/exec \
-            --as="system:serviceaccount:archestra:${PLATFORM_SA}" -n "${DAGGER_NS}" 2>&1) || RC=$?
-          echo "can-i create pods/exec in ${DAGGER_NS}: ${VERDICT} (rc=${RC})"
+            --as="system:serviceaccount:archestra:${PLATFORM_SA}" -n archestra 2>&1) || RC=$?
+          echo "can-i create pods/exec in archestra: ${VERDICT} (rc=${RC})"
+          DELETE_RC=0
+          DELETE_VERDICT=$(kubectl auth can-i delete pods \
+            --as="system:serviceaccount:archestra:${PLATFORM_SA}" -n archestra 2>&1) || DELETE_RC=$?
+          echo "can-i delete pods in archestra: ${DELETE_VERDICT} (rc=${DELETE_RC})"
           # Fail closed: only an explicit allow proceeds. An API/impersonation error or a "no - <reason>"
           # response must not slip through as if permitted.
-          if [ "${RC}" -ne 0 ] || [ "${VERDICT}" != "yes" ]; then
-            echo "::error::platform SA ${PLATFORM_SA} cannot create pods/exec in ${DAGGER_NS} (verdict: ${VERDICT}); Dagger calls will fail"
+          if [ "${RC}" -ne 0 ] || [ "${VERDICT}" != "yes" ] || \
+             [ "${DELETE_RC}" -ne 0 ] || [ "${DELETE_VERDICT}" != "yes" ]; then
+            echo "::error::platform SA ${PLATFORM_SA} needs create pods/exec and delete pods in archestra"
             exit 1
           fi
 
@@ -142,6 +141,26 @@ jobs:
             --cache-to "type=registry,ref=${CACHE_REF},mode=max" \
             -t "${BENCH_IMAGE}" .
           echo "bench_image=${BENCH_IMAGE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Start benchmark Dagger engine
+        id: dagger
+        run: |
+          set -euo pipefail
+          RUN_NUMBER="${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          POD="archestra-bench-dagger-${RUN_NUMBER}"
+          export RUN_NUMBER
+          envsubst '${RUN_NUMBER}' < .github/bench/dagger-job.yaml | kubectl apply -f -
+          echo "pod_name=${POD}" >> "${GITHUB_OUTPUT}"
+
+          if ! kubectl wait --for=condition=Ready "pod/${POD}" -n archestra --timeout=5m; then
+            kubectl describe "pod/${POD}" -n archestra || true
+            kubectl logs "${POD}" -n archestra -c dagger-engine --tail=80 || true
+            exit 1
+          fi
+          {
+            echo "run_number=${RUN_NUMBER}"
+            echo "runner_host=kube-pod://${POD}?namespace=archestra&container=dagger-engine"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Create bench secret
         env:
@@ -164,20 +183,21 @@ jobs:
         env:
           BENCH_IMAGE: ${{ steps.image.outputs.bench_image }}
           PLATFORM_SA: ${{ steps.resolve.outputs.platform_sa }}
-          DAGGER_RUNNER_HOST: ${{ steps.resolve.outputs.dagger_runner_host }}
+          DAGGER_RUNNER_HOST: ${{ steps.dagger.outputs.runner_host }}
+          DAGGER_ENGINE_POD: ${{ steps.dagger.outputs.pod_name }}
+          RUN_NUMBER: ${{ steps.dagger.outputs.run_number }}
         run: |
           set -euo pipefail
-          RUN_NUMBER="${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
           RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           # An ephemeral, localhost-only sidecar password (the DB dies with the pod); alphanumeric so it
           # is safe in the bench .env URL.
           POSTGRES_PASSWORD=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
-          export BENCH_IMAGE PLATFORM_SA DAGGER_RUNNER_HOST RUN_NUMBER POSTGRES_PASSWORD
+          export BENCH_IMAGE PLATFORM_SA DAGGER_RUNNER_HOST DAGGER_ENGINE_POD RUN_NUMBER POSTGRES_PASSWORD
           export GCS_BUCKET RUN_URL GITHUB_RUN_NUMBER GITHUB_RUN_ATTEMPT
           echo "run_number=${RUN_NUMBER}" >> "${GITHUB_OUTPUT}"
           # The single-quoted list is envsubst's allowlist of vars to expand (not shell expansion).
           # shellcheck disable=SC2016
-          envsubst '${BENCH_IMAGE} ${PLATFORM_SA} ${DAGGER_RUNNER_HOST} ${RUN_NUMBER} ${POSTGRES_PASSWORD} ${GCS_BUCKET} ${RUN_URL} ${GITHUB_RUN_NUMBER} ${GITHUB_RUN_ATTEMPT}' \
+          envsubst '${BENCH_IMAGE} ${PLATFORM_SA} ${DAGGER_RUNNER_HOST} ${DAGGER_ENGINE_POD} ${RUN_NUMBER} ${POSTGRES_PASSWORD} ${GCS_BUCKET} ${RUN_URL} ${GITHUB_RUN_NUMBER} ${GITHUB_RUN_ATTEMPT}' \
             < .github/bench/job.yaml | kubectl apply -f -
 
       # The pod runs the full benchmark and reports its own results (GCS + Slack), so CI does not wait
@@ -228,3 +248,12 @@ jobs:
           done
           echo "::error::pod ${POD} never cleared the fast-fail window (stuck Pending / slow pull?)"
           exit 1
+
+      - name: Clean up Dagger after CI failure
+        if: ${{ always() && steps.dagger.outputs.pod_name != '' && job.status != 'success' }}
+        env:
+          DAGGER_ENGINE_POD: ${{ steps.dagger.outputs.pod_name }}
+        run: |
+          RUN_NUMBER="${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          kubectl delete "job/archestra-bench-${RUN_NUMBER}" "pod/${DAGGER_ENGINE_POD}" \
+            -n archestra --ignore-not-found --wait=false

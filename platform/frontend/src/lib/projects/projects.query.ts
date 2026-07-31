@@ -13,6 +13,7 @@ import {
   type UploadOutcome,
   validateUploadFile,
 } from "@/lib/files/file-upload";
+import { scheduleTriggerKeys } from "@/lib/schedule-trigger.query";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -272,12 +273,17 @@ export function useSetProjectShare() {
   return useMutation({
     mutationFn: async (params: {
       id: string;
-      visibility: "organization" | "team" | "none";
+      visibility: "organization" | "team" | "user" | "none";
       teamIds: string[];
+      userIds: string[];
     }) => {
       const { error } = await setProjectShare({
         path: { id: params.id },
-        body: { visibility: params.visibility, teamIds: params.teamIds },
+        body: {
+          visibility: params.visibility,
+          teamIds: params.teamIds,
+          userIds: params.userIds,
+        },
       });
       if (error) {
         handleApiError(error);
@@ -315,6 +321,10 @@ export function useDeleteProject() {
       // queries (`["projects", id, …]`), which are still mounted for the instant
       // before we navigate away and would 404 on the now-gone id.
       queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
+      // The project's scheduled tasks are retained but hidden (paused) with it,
+      // so drop them from any open scheduled-tasks list. Chats detach rather
+      // than hide, so the conversations list needs no invalidation here.
+      queryClient.invalidateQueries({ queryKey: scheduleTriggerKeys.all });
     },
   });
 }

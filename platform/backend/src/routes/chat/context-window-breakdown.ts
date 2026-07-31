@@ -44,7 +44,7 @@ export function buildContextWindowBreakdown(params: {
   tools?: Record<string, unknown>;
   messages: ChatMessage[];
 }): ContextWindowBreakdown {
-  const tokenizer = getTokenizer(params.provider);
+  const tokenizer = getTokenizer(params.provider, params.model);
   const accumulators = emptyAccumulators();
 
   if (params.systemPrompt) {

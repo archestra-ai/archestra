@@ -128,6 +128,33 @@ describe("SkillShareLinkModel.validate", () => {
     expect(result?.skills.map((s) => s.id)).toEqual([skill.id]);
   });
 
+  test("excludes soft-deleted skills from the link's skills", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const kept = await seedSkill({ organizationId: org.id, name: "kept" });
+    const removed = await seedSkill({
+      organizationId: org.id,
+      name: "removed",
+    });
+
+    const { rawToken } = await SkillShareLinkModel.create({
+      organizationId: org.id,
+      createdByUserId: user.id,
+      skillIds: [kept.id, removed.id],
+      marketplaceName: "org-12345678-skills",
+    });
+
+    await SkillModel.delete(removed.id);
+
+    const result = await SkillShareLinkModel.validate({ rawToken });
+    expect(result?.skills.map((s) => s.id)).toEqual([kept.id]);
+  });
+
   test("orders same-named skills deterministically by id", async ({
     makeOrganization,
     makeUser,

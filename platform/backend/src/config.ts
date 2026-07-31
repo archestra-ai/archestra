@@ -849,6 +849,22 @@ const parsePositiveInt = (
   return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
 };
 
+/**
+ * Like {@link parsePositiveInt} but accepts 0, for knobs where zero is a
+ * meaningful setting rather than a missing one — a retention window of 0
+ * means "keep forever", not "use the default".
+ *
+ * @public — exported for testability
+ */
+export const parseNonNegativeInt = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!envValue) return defaultValue;
+  const parsed = Number.parseInt(envValue, 10);
+  return !Number.isNaN(parsed) && parsed >= 0 ? parsed : defaultValue;
+};
+
 /** @public — exported for testability */
 export const parseSampleRate = (
   envValue: string | undefined,
@@ -1474,9 +1490,10 @@ export function betaFeatureEnabled(envValue: string | undefined): boolean {
  * deployment needs no third switch of its own.
  *
  * `enterpriseOverride` is the single escape hatch: it turns the recorder on for
- * Archestra's own licensed staging AND bypasses the date window. It is
- * documented nowhere and named as an enterprise override on purpose, so no
- * customer stumbles onto the enterprise path.
+ * Archestra's own licensed staging. It affects this deployment gate only — the
+ * date window and the organization toggle still apply. It is documented
+ * nowhere and named as an enterprise override on purpose, so no customer
+ * stumbles onto the enterprise path.
  *
  * This is the DEPLOYMENT gate only. Two more gates sit above it at request
  * time — the organization's own toggle, and the hackathon date window —
@@ -1728,6 +1745,16 @@ const config = {
   },
   a2aV2Gateway: {
     endpoint: "/v2/a2a",
+    /**
+     * How long a terminal A2A task is retained before the reaper deletes it
+     * (with its artifacts and stream events). Its messages are detached
+     * first, so the conversation history they belong to is never affected.
+     * 0 keeps tasks forever.
+     */
+    taskRetentionDays: parseNonNegativeInt(
+      process.env.ARCHESTRA_A2A_TASK_RETENTION_DAYS,
+      90,
+    ),
   },
   agents: {
     incomingEmail: {
@@ -2144,13 +2171,13 @@ const config = {
         defaultValue: 500,
         envName: "ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS",
       }),
+      // One value, not one per mode: this is the fallback a stream wants when
+      // notifications are being delivered. When they are not, the notify hub
+      // tightens its own fallback, so nothing here has to know whether the
+      // database endpoint can hold a listener.
       stopPollIntervalMs: parseActiveChatRunPollIntervalMs({
         value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS,
-        defaultValue:
-          process.env
-            .ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED === "true"
-            ? 500
-            : 30_000,
+        defaultValue: 30_000,
         envName: "ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS",
       }),
       pollingCompatibilityEnabled:
@@ -2206,14 +2233,6 @@ const config = {
       enterpriseOverride:
         process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
     }),
-    /**
-     * The staging override is active. It forces the recorder on for Archestra's
-     * own licensed staging (see parseHackathonRecorderEnabled) AND bypasses the
-     * hackathon date window, so staging can exercise the feature before it
-     * opens and after it closes. Undocumented, same as the override itself.
-     */
-    overrideActive:
-      process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE === "true",
     /**
      * Offering the offline VIDEO export (the player's download button and the
      * render endpoints behind it). Off unless a deployment opts in: a render
@@ -2356,9 +2375,15 @@ const config = {
       process.env.ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT,
       256 * 1024,
     ),
+    /**
+     * Per-file byte cap at the sandbox boundary: attachment staging, uploads,
+     * saves/edits, inline reads, and artifact export. Defaults to the chat
+     * attachment storage cap so any stored attachment can be staged for the
+     * agent; tune independently via env.
+     */
     artifactBytesLimit: parsePositiveInt(
       process.env.ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT,
-      16 * 1024 * 1024,
+      DEFAULT_CHAT_ATTACHMENT_STORAGE_BYTES,
     ),
   },
   /**

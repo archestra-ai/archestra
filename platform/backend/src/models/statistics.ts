@@ -324,8 +324,8 @@ class StatisticsModel {
         teamName: schema.teamsTable.name,
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-        inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
-        outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
+        inputTokens: tokenSum(schema.interactionsTable.inputTokens),
+        outputTokens: tokenSum(schema.interactionsTable.outputTokens),
         // Billed spend: subscription-fulfilled traffic incurs no per-token
         // charge, so its list-price `cost` is excluded from the reported total.
         cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
@@ -493,9 +493,9 @@ class StatisticsModel {
         teamName: schema.teamsTable.name,
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-        inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
-        outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
-        cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
+        inputTokens: tokenSum(schema.interactionsTable.inputTokens),
+        outputTokens: tokenSum(schema.interactionsTable.outputTokens),
+        cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
         // Billed spend: subscription-fulfilled traffic incurs no per-token
         // charge, so its list-price `cost` is excluded from the reported total.
         cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
@@ -633,9 +633,9 @@ class StatisticsModel {
         model: schema.interactionsTable.model,
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-        inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
-        outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
-        cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
+        inputTokens: tokenSum(schema.interactionsTable.inputTokens),
+        outputTokens: tokenSum(schema.interactionsTable.outputTokens),
+        cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
         // Billed spend: subscription-fulfilled traffic incurs no per-token
         // charge, so its list-price `cost` is excluded from the reported total.
         cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
@@ -840,10 +840,10 @@ class StatisticsModel {
           userName: schema.usersTable.name,
           userEmail: schema.usersTable.email,
           requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-          inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
-          outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
-          cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
-          totalTokens: sql<number>`CAST(${totalTokensExpr} AS INTEGER)`,
+          inputTokens: tokenSum(schema.interactionsTable.inputTokens),
+          outputTokens: tokenSum(schema.interactionsTable.outputTokens),
+          cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
+          totalTokens: sql<number>`CAST(${totalTokensExpr} AS DOUBLE PRECISION)`,
           billedCost: billedCostExpr,
           subscriptionCost: subscriptionCostSum("DOUBLE PRECISION"),
           activeDays: sql<number>`CAST(COUNT(DISTINCT DATE(${schema.interactionsTable.createdAt})) AS INTEGER)`,
@@ -1236,8 +1236,8 @@ class StatisticsModel {
         userId: schema.interactionsTable.userId,
         timeBucket: sql<string>`DATE_TRUNC(${sql.raw(`'${timeBucket}'`)}, ${schema.interactionsTable.createdAt})`,
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-        inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
-        outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
+        inputTokens: tokenSum(schema.interactionsTable.inputTokens),
+        outputTokens: tokenSum(schema.interactionsTable.outputTokens),
         cost: billedSum(schema.interactionsTable.cost, "DOUBLE PRECISION"),
       })
       .from(schema.interactionsTable)
@@ -1285,9 +1285,9 @@ class StatisticsModel {
         userId: schema.interactionsTable.userId,
         model: schema.interactionsTable.model,
         requests: sql<number>`CAST(COUNT(*) AS INTEGER)`,
-        inputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.inputTokens}), 0) AS INTEGER)`,
-        outputTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.outputTokens}), 0) AS INTEGER)`,
-        cacheReadTokens: sql<number>`CAST(COALESCE(SUM(${schema.interactionsTable.cacheReadTokens}), 0) AS INTEGER)`,
+        inputTokens: tokenSum(schema.interactionsTable.inputTokens),
+        outputTokens: tokenSum(schema.interactionsTable.outputTokens),
+        cacheReadTokens: tokenSum(schema.interactionsTable.cacheReadTokens),
         billedCost: billedSum(
           schema.interactionsTable.cost,
           "DOUBLE PRECISION",
@@ -1335,6 +1335,16 @@ class StatisticsModel {
 // billing_mode. billing_mode is intentionally not in the statistics covering
 // index (adding it would require a write-blocking rebuild on a huge table — see
 // the interactions schema), so the FILTER reads it from the heap.
+
+/**
+ * SUM of an interaction token-count column, returned as a JS number.
+ * Cast to DOUBLE PRECISION rather than INTEGER or BIGINT: org-wide token
+ * sums exceed int32 ("integer out of range"), and node-postgres returns
+ * BIGINT as a string. float8 keeps integer sums exact up to 2^53 tokens.
+ */
+function tokenSum(column: AnyColumn): SQL<number> {
+  return sql<number>`CAST(COALESCE(SUM(${column}), 0) AS DOUBLE PRECISION)`;
+}
 
 /** SUM of an interaction cost column restricted to metered rows (billed spend). */
 function billedSum(

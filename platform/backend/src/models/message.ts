@@ -1,5 +1,6 @@
 import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
+import { notDeletedConversation } from "@/database/schemas/conversation";
 import { ApiError, type InsertMessage, type Message } from "@/types";
 import { isUuid, uuidv7 } from "@/utils/uuid";
 
@@ -31,7 +32,14 @@ class MessageModel {
         // shifting the stamp by the host's UTC offset on non-UTC hosts.
         lastMessageAt: sql`GREATEST(now()::timestamp, ${schema.conversationsTable.lastReadAt} + interval '1 millisecond')`,
       })
-      .where(eq(schema.conversationsTable.id, conversationId));
+      // A late message that lands in the mid-stream window after a delete must
+      // not resurrect the conversation's activity timestamp; no-op if deleted.
+      .where(
+        and(
+          notDeletedConversation,
+          eq(schema.conversationsTable.id, conversationId),
+        ),
+      );
   }
 
   static async create(data: InsertMessage): Promise<Message> {

@@ -58,6 +58,29 @@ describe("azureResponsesAdapterFactory", () => {
     expect(client._options?.defaultQuery).toBeUndefined();
   });
 
+  test("reads messages that omit `type` (the AI SDK's easy input message shape)", () => {
+    // The Responses API defaults an input item's `type` to "message", and the AI
+    // SDK relies on that, sending bare `{role, content}`. Dropping those left
+    // getMessages() empty, so trusted-data / Dual LLM policy evaluation ran
+    // against an empty conversation instead of the user's actual prompt.
+    const adapter = azureResponsesAdapterFactory.createRequestAdapter({
+      model: "gpt-4.1",
+      input: [
+        { role: "user", content: "what is my account balance?" },
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "checking" }],
+        },
+      ],
+    } as never);
+
+    expect(adapter.getMessages()).toEqual([
+      { role: "user", content: "what is my account balance?" },
+      { role: "assistant", content: "checking" },
+    ]);
+  });
+
   test("maps response tools and tool outputs from the request", () => {
     const adapter = azureResponsesAdapterFactory.createRequestAdapter({
       model: "gpt-4.1",
@@ -105,6 +128,7 @@ describe("azureResponsesAdapterFactory", () => {
       {
         id: "call_123",
         name: "read_file",
+        arguments: { file_path: "/tmp/test" },
         content: '{"value":1}',
         isError: false,
       },
@@ -320,5 +344,35 @@ describe("azureResponsesAdapterFactory", () => {
         name: "read_file",
       }),
     ]);
+  });
+
+  test("keeps accumulated output when the completed envelope carries none", () => {
+    // Reasoning turns finish with an empty `output` even though the text
+    // arrived over `response.output_text.delta`. Persisting the envelope
+    // verbatim dropped the whole assistant side, leaving LLM Logs with
+    // "No message" to render.
+    const adapter = azureResponsesAdapterFactory.createStreamAdapter();
+
+    adapter.processChunk({
+      type: "response.output_text.delta",
+      delta: "the answer",
+    } as never);
+    adapter.processChunk({
+      type: "response.completed",
+      response: {
+        id: "resp_1",
+        object: "response",
+        created_at: 1,
+        model: "gpt-4.1",
+        status: "completed",
+        output: [],
+      },
+    } as never);
+
+    const persisted = adapter.toProviderResponse();
+
+    expect(persisted.id).toBe("resp_1");
+    expect(persisted.output).toHaveLength(1);
+    expect(JSON.stringify(persisted.output)).toContain("the answer");
   });
 });

@@ -1,9 +1,18 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { Project, ProjectShare, ProjectShareVisibility } from "@/types";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import type {
+  Project,
+  ProjectLifecycle,
+  ProjectShare,
+  ProjectShareVisibility,
+} from "@/types";
 
 /** A project's share row with its team targets resolved. */
-type ProjectShareWithTeams = ProjectShare & { teamIds: string[] };
+type ProjectShareWithTeams = ProjectShare & {
+  teamIds: string[];
+  userIds: string[];
+};
 
 /**
  * Sharing for projects — one share row per project, mirroring the
@@ -19,6 +28,8 @@ class ProjectShareModel {
     createdByUserId: string;
     visibility: ProjectShareVisibility;
     teamIds: string[];
+    /** Named individuals for a `user` share; ignored for other visibilities. */
+    userIds?: string[];
   }): Promise<void> {
     await db.transaction(async (tx) => {
       const [share] = await tx
@@ -46,6 +57,20 @@ class ProjectShareModel {
           })),
         );
       }
+      // Rewritten on every upsert like the team set, so switching visibility
+      // away from `user` revokes the grants it left behind.
+      await tx
+        .delete(schema.projectShareUsersTable)
+        .where(eq(schema.projectShareUsersTable.shareId, share.id));
+      const userIds = params.userIds ?? [];
+      if (params.visibility === "user" && userIds.length > 0) {
+        await tx.insert(schema.projectShareUsersTable).values(
+          userIds.map((userId) => ({
+            shareId: share.id,
+            userId,
+          })),
+        );
+      }
     });
   }
 
@@ -67,7 +92,15 @@ class ProjectShareModel {
       .select({ teamId: schema.projectShareTeamsTable.teamId })
       .from(schema.projectShareTeamsTable)
       .where(eq(schema.projectShareTeamsTable.shareId, share.id));
-    return { ...share, teamIds: teams.map((t) => t.teamId) };
+    const users = await db
+      .select({ userId: schema.projectShareUsersTable.userId })
+      .from(schema.projectShareUsersTable)
+      .where(eq(schema.projectShareUsersTable.shareId, share.id));
+    return {
+      ...share,
+      teamIds: teams.map((t) => t.teamId),
+      userIds: users.map((u) => u.userId),
+    };
   }
 
   /**
@@ -88,6 +121,19 @@ class ProjectShareModel {
     const share = await ProjectShareModel.findByProjectId(project.id);
     if (!share || share.organizationId !== params.organizationId) return false;
     if (share.visibility === "organization") return true;
+    if (share.visibility === "user") {
+      const [grant] = await db
+        .select({ userId: schema.projectShareUsersTable.userId })
+        .from(schema.projectShareUsersTable)
+        .where(
+          and(
+            eq(schema.projectShareUsersTable.shareId, share.id),
+            eq(schema.projectShareUsersTable.userId, params.userId),
+          ),
+        )
+        .limit(1);
+      return grant !== undefined;
+    }
     if (share.teamIds.length === 0) return false;
 
     const memberships = await db
@@ -113,6 +159,7 @@ class ProjectShareModel {
         and(
           eq(schema.projectsTable.userId, params.userId),
           eq(schema.projectsTable.organizationId, params.organizationId),
+          notDeleted(schema.projectsTable),
         ),
       );
 
@@ -127,6 +174,7 @@ class ProjectShareModel {
         and(
           eq(schema.projectsTable.organizationId, params.organizationId),
           eq(schema.projectSharesTable.visibility, "organization"),
+          notDeleted(schema.projectsTable),
         ),
       );
 
@@ -156,12 +204,33 @@ class ProjectShareModel {
               and(
                 eq(schema.projectsTable.organizationId, params.organizationId),
                 inArray(schema.projectShareTeamsTable.teamId, teamIds),
+                notDeleted(schema.projectsTable),
               ),
             );
 
+    // Projects shared with this person by name.
+    const userShared = await db
+      .select({ project: schema.projectsTable })
+      .from(schema.projectsTable)
+      .innerJoin(
+        schema.projectSharesTable,
+        eq(schema.projectsTable.id, schema.projectSharesTable.projectId),
+      )
+      .innerJoin(
+        schema.projectShareUsersTable,
+        eq(schema.projectSharesTable.id, schema.projectShareUsersTable.shareId),
+      )
+      .where(
+        and(
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          eq(schema.projectShareUsersTable.userId, params.userId),
+          notDeleted(schema.projectsTable),
+        ),
+      );
+
     const byId = new Map<string, Project>();
     for (const p of own) byId.set(p.id, p);
-    for (const { project } of [...orgShared, ...teamShared]) {
+    for (const { project } of [...orgShared, ...teamShared, ...userShared]) {
       if (!byId.has(project.id)) byId.set(project.id, project);
     }
     const projects = [...byId.values()];
@@ -182,11 +251,23 @@ class ProjectShareModel {
    */
   static async listAllOrgProjects(params: {
     organizationId: string;
+    // `active` (default) hides soft-deleted rows; `deleted` returns ONLY them
+    // for the project:admin oversight view. There is no "both" slice.
+    lifecycle?: ProjectLifecycle;
   }): Promise<(Project & { visibility: ProjectShareVisibility | null })[]> {
+    const lifecycleFilter =
+      params.lifecycle === "deleted"
+        ? isNotNull(schema.projectsTable.deletedAt)
+        : notDeleted(schema.projectsTable);
     const projects = await db
       .select()
       .from(schema.projectsTable)
-      .where(eq(schema.projectsTable.organizationId, params.organizationId));
+      .where(
+        and(
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          lifecycleFilter,
+        ),
+      );
     return (await ProjectShareModel.attachVisibility(projects)).sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     );
@@ -221,6 +302,40 @@ class ProjectShareModel {
     for (const { projectId, teamId, teamName } of rows) {
       const list = byProject.get(projectId) ?? [];
       list.push({ id: teamId, name: teamName });
+      byProject.set(projectId, list);
+    }
+    return byProject;
+  }
+
+  /**
+   * People (id + name) each project is shared with by name, keyed by project id
+   * (user-shared projects only). One query, so the visibility badge can say who
+   * a project reaches rather than showing it as private.
+   */
+  static async getShareUsersForProjects(
+    projectIds: string[],
+  ): Promise<Map<string, { id: string; name: string }[]>> {
+    if (projectIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        projectId: schema.projectSharesTable.projectId,
+        userId: schema.usersTable.id,
+        userName: schema.usersTable.name,
+      })
+      .from(schema.projectSharesTable)
+      .innerJoin(
+        schema.projectShareUsersTable,
+        eq(schema.projectSharesTable.id, schema.projectShareUsersTable.shareId),
+      )
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.projectShareUsersTable.userId, schema.usersTable.id),
+      )
+      .where(inArray(schema.projectSharesTable.projectId, projectIds));
+    const byProject = new Map<string, { id: string; name: string }[]>();
+    for (const { projectId, userId, userName } of rows) {
+      const list = byProject.get(projectId) ?? [];
+      list.push({ id: userId, name: userName });
       byProject.set(projectId, list);
     }
     return byProject;

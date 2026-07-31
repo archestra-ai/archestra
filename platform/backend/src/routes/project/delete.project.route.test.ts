@@ -9,8 +9,8 @@ import { projectService } from "@/services/project";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { describe, expect, test } from "@/test";
 
-describe("projectService.delete (file cascade)", () => {
-  test("deleting a project deletes its files", async ({
+describe("projectService.delete (files retained + hidden)", () => {
+  test("deleting a project retains its file rows and bytes but hides them", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -34,11 +34,14 @@ describe("projectService.delete (file cascade)", () => {
       data: Buffer.from("abc"),
     });
 
-    // sanity: the file is owned by the project before deletion
-    expect(await FileModel.findById(file.id)).not.toBeNull();
+    // sanity: the file is readable through the project before deletion
     expect(
-      await FileModel.listByProject({ organizationId, projectId: project.id }),
-    ).toHaveLength(1);
+      await fileStore.get({
+        ref: file.id,
+        organizationId,
+        userId: owner.id,
+      }),
+    ).not.toBeNull();
 
     await projectService.delete({
       id: project.id,
@@ -46,16 +49,39 @@ describe("projectService.delete (file cascade)", () => {
       userId: owner.id,
     });
 
-    // the FK cascade takes the project's files with it
-    expect(await FileModel.findById(file.id)).toBeNull();
+    // the file ROW is RETAINED (recoverable on restore) — soft-deleting the
+    // project stops the FK cascade, and nothing purges the bytes anymore.
+    expect(await FileModel.findById(file.id)).not.toBeNull();
+
+    // ...but it is HIDDEN: every file access resolves the project first, and the
+    // project is now soft-deleted, so the read returns null.
     expect(
-      await FileModel.listByProject({ organizationId, projectId: project.id }),
-    ).toEqual([]);
+      await fileStore.get({
+        ref: file.id,
+        organizationId,
+        userId: owner.id,
+      }),
+    ).toBeNull();
+
+    // the project itself is gone from the API...
+    expect(await ProjectModel.findById(project.id)).toBeNull();
+    await expect(
+      projectService.get({ id: project.id, organizationId, userId: owner.id }),
+    ).rejects.toMatchObject({ statusCode: 404 });
+
+    // ...but the row is retained (soft-deleted), so it can be restored.
+    const { default: db, schema } = await import("@/database");
+    const { eq } = await import("drizzle-orm");
+    const [raw] = await db
+      .select()
+      .from(schema.projectsTable)
+      .where(eq(schema.projectsTable.id, project.id));
+    expect(raw.deletedAt).not.toBeNull();
   });
 });
 
-describe("projectService.delete (schedule cascade)", () => {
-  test("deleting a project deletes its scheduled tasks and their runs", async ({
+describe("projectService.delete (schedules retained + paused)", () => {
+  test("deleting a project retains its scheduled tasks and runs but pauses them", async ({
     makeOrganization,
     makeUser,
     makeScheduleTrigger,
@@ -76,10 +102,13 @@ describe("projectService.delete (schedule cascade)", () => {
       projectId: project.id,
     });
     const run = await makeScheduleTriggerRun(trigger.id);
+    // Five minutes ahead: an every-minute trigger is comfortably due by then.
+    const soon = new Date(Date.now() + 5 * 60_000);
 
-    // sanity: the scheduled task and its run belong to the project beforehand
-    expect(await ScheduleTriggerModel.findById(trigger.id)).not.toBeNull();
-    expect(await ScheduleTriggerRunModel.findById(run.id)).not.toBeNull();
+    // sanity: the trigger is due (would fire) while the project is live
+    expect(
+      (await ScheduleTriggerModel.findDueTriggers(soon)).map((t) => t.id),
+    ).toContain(trigger.id);
 
     await projectService.delete({
       id: project.id,
@@ -87,11 +116,16 @@ describe("projectService.delete (schedule cascade)", () => {
       userId: owner.id,
     });
 
-    // the FK cascade takes the project's scheduled tasks (and their runs) with
-    // it, rather than leaving them orphaned with a null project_id where they
-    // keep firing but no longer surface in any project.
-    expect(await ScheduleTriggerModel.findById(trigger.id)).toBeNull();
-    expect(await ScheduleTriggerRunModel.findById(run.id)).toBeNull();
+    // the trigger and its run are RETAINED (recoverable on restore), NOT deleted:
+    // soft-deleting the project stops the FK cascade and nothing removes them.
+    expect(await ScheduleTriggerModel.findById(trigger.id)).not.toBeNull();
+    expect(await ScheduleTriggerRunModel.findById(run.id)).not.toBeNull();
+
+    // ...but the trigger is PAUSED: a soft-deleted project's triggers never come
+    // due, so the scheduler skips them (belongsToLiveProject, in SQL).
+    expect(
+      (await ScheduleTriggerModel.findDueTriggers(soon)).map((t) => t.id),
+    ).not.toContain(trigger.id);
   });
 });
 

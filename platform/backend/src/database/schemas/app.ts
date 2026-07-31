@@ -37,6 +37,13 @@ const appsTable = softDeletablePgTable(
     }),
     /** Display name surfaced in the apps list and the model's app tools. */
     name: text("name").notNull(),
+    /**
+     * URL-safe handle the standalone run page is addressed by (`/a/<slug>`),
+     * unique per organization. Null only on rows the backfill could not reach;
+     * `apps.id` stays valid in that URL either way, and stays the sole serving
+     * and isolation key — the slug never reaches the runtime or the connector.
+     */
+    slug: text("slug"),
     /** Optional one-line summary the model uses when listing apps. */
     description: text("description"),
     /** Id of the starter template the app was created from, for provenance. */
@@ -75,6 +82,13 @@ const appsTable = softDeletablePgTable(
      * the backing catalog and answers *who* the audience is once enabled).
      */
     enabled: boolean("enabled").notNull().default(true),
+    /**
+     * Whether the app is locked against modification. A locked app refuses
+     * every agent-driven mutation (html edits, spec, tools, delete) until
+     * unlocked; viewing and running are unaffected. Orthogonal to `enabled`
+     * (which controls who can consume the app at all).
+     */
+    locked: boolean("locked").notNull().default(false),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()
@@ -92,6 +106,12 @@ const appsTable = softDeletablePgTable(
     uniqueIndex("apps_org_author_name_uidx")
       .on(table.organizationId, table.authorId, table.name)
       .where(sql`${table.deletedAt} IS NULL`),
+    // Org-wide (not per-author, unlike the display name) because the slug is a
+    // URL segment: two authors cannot both own /a/dashboard. Soft-deleted rows
+    // are excluded so deleting an app frees its slug, as it frees its name.
+    uniqueIndex("apps_org_slug_uidx")
+      .on(table.organizationId, table.slug)
+      .where(sql`${table.slug} IS NOT NULL AND ${table.deletedAt} IS NULL`),
   ],
 );
 

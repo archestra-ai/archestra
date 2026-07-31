@@ -101,6 +101,15 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/config/public", publicConfigSeed),
   ...getJson("/health", healthSeed),
   ...getJson("/api/organization", organizationSeed),
+  // The roster behind owner pickers and the scope filter's "member" facet —
+  // the seeded admin, mirroring the session identity.
+  ...getJson("/api/organization/members", [
+    {
+      id: sessionSeed.user.id,
+      name: sessionSeed.user.name,
+      email: sessionSeed.user.email,
+    },
+  ]),
   ...getJson("/api/organization/appearance-settings", appearanceSettingsSeed),
   // Onboarding nudges: everything already seen / nothing eligible, so neither
   // the red dots nor the survey/feedback dialogs interfere with other tests.

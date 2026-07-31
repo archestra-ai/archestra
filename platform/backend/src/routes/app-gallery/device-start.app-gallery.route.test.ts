@@ -1,6 +1,7 @@
+import { APPS_HACKATHON_OPENS_AT_MS } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import appGalleryRoutes from "./app-gallery.routes";
 
@@ -15,15 +16,20 @@ describe("POST /api/app-gallery/device/start", () => {
   beforeEach(() => {
     // This file uses vi.mock, so it runs in the isolated project where config
     // is NOT auto-restored between tests; every case must set the baseline it
-    // needs. The override bypasses the hackathon date window so these cases
-    // don't depend on the wall clock.
+    // needs. The date gate reads the wall clock and has no bypass, so pin the
+    // clock inside the hackathon window.
     config.hackathonRecorder.enabled = true;
-    config.hackathonRecorder.overrideActive = true;
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(APPS_HACKATHON_OPENS_AT_MS);
     config.hackathonRecorder.gallery.githubClientId = "Iv1.test-gallery";
     config.hackathonRecorder.gallery.repo = {
       owner: "archestra-ai",
       name: "app-gallery",
     };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   test("requests a device code from GitHub with the gallery client id and public_repo scope", async () => {

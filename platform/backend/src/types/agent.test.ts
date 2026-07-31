@@ -1,6 +1,11 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { describe, expect, test } from "@/test";
-import { BuiltInAgentConfigSchema, PassthroughHeadersSchema } from "./agent";
+import {
+  BuiltInAgentConfigSchema,
+  InsertAgentSchemaBase,
+  PassthroughHeadersSchema,
+  UpdateAgentSchemaBase,
+} from "./agent";
 
 describe("BuiltInAgentConfigSchema", () => {
   test("requires maxRounds to be an integer for dual LLM main agent config", () => {
@@ -65,5 +70,28 @@ describe("PassthroughHeadersSchema", () => {
   test("rejects empty header names", () => {
     const result = PassthroughHeadersSchema.safeParse([""]);
     expect(result.success).toBe(false);
+  });
+});
+
+describe("latestVersion is server-managed, not client-settable", () => {
+  // Regression: latestVersion is the head pointer into agent_versions, forked
+  // by AgentVersionModel. If it leaked into the create/update request bodies a
+  // client could rewind or skip the counter and collide on the
+  // (agent_id, version) unique index, bricking the agent's update path.
+  test("InsertAgentSchemaBase omits latestVersion", () => {
+    expect(InsertAgentSchemaBase.shape).not.toHaveProperty("latestVersion");
+  });
+
+  test("UpdateAgentSchemaBase omits latestVersion", () => {
+    expect(UpdateAgentSchemaBase.shape).not.toHaveProperty("latestVersion");
+  });
+
+  test("a client-supplied latestVersion is stripped from an update body", () => {
+    const parsed = UpdateAgentSchemaBase.partial().parse({
+      description: "edited",
+      latestVersion: 999,
+    });
+    expect(parsed).not.toHaveProperty("latestVersion");
+    expect(parsed.description).toBe("edited");
   });
 });

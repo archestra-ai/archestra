@@ -64,6 +64,8 @@ import AgentLabelModel from "./agent-label";
 import AgentSuggestedPromptModel from "./agent-suggested-prompt";
 import AgentTeamModel from "./agent-team";
 import AgentToolModel from "./agent-tool";
+import AgentUserModel from "./agent-user";
+import AgentVersionModel from "./agent-version";
 import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
@@ -388,6 +390,7 @@ class AgentModel {
   static async create(
     {
       teams,
+      users,
       labels,
       knowledgeBaseIds,
       connectorIds,
@@ -453,6 +456,12 @@ class AgentModel {
     // Assign teams to the agent if provided
     if (teams && teams.length > 0) {
       await AgentTeamModel.assignTeamsToAgent(createdAgent.id, teams);
+    }
+
+    // Share with named individuals if provided. Additive to the scope, so a
+    // personal agent can reach a colleague without being published wider.
+    if (users && users.length > 0) {
+      await AgentUserModel.syncAgentUsers(createdAgent.id, users);
     }
 
     // Assign labels to the agent if provided
@@ -558,6 +567,16 @@ class AgentModel {
       }
     }
 
+    // Fork version 1 now that the full config of this create (row, junctions,
+    // auto-assigned tools, exclusion pre-fill) is in place. Best-effort: a
+    // versioning failure must never fail the create itself.
+    const fork = await AgentVersionModel.forkIfChangedBestEffort(
+      createdAgent.id,
+    );
+    if (fork) {
+      createdAgent.latestVersion = fork.version;
+    }
+
     // Get team details and tools for the created agent
     const [teamDetails, assignedTools] = await Promise.all([
       teams && teams.length > 0
@@ -577,6 +596,7 @@ class AgentModel {
       ...createdAgent,
       tools: assignedTools.map((row) => row.tool),
       teams: teamDetails,
+      users: [],
       labels: await AgentLabelModel.getLabelsForAgent(createdAgent.id),
       knowledgeBaseIds: knowledgeBaseIds ?? [],
       connectorIds: connectorIds ?? [],
@@ -685,6 +705,7 @@ class AgentModel {
           ...agent,
           tools: [],
           teams: [] as Array<{ id: string; name: string }>,
+          users: [] as Array<{ id: string; name: string; email: string }>,
           labels: [],
           knowledgeBaseIds: [],
           connectorIds: [],
@@ -702,14 +723,16 @@ class AgentModel {
     const agentIds = agents.map((agent) => agent.id);
 
     // Populate teams and labels for all agents with bulk queries to avoid N+1
-    const [teamsMap, labelsMap] = await Promise.all([
+    const [teamsMap, usersMap, labelsMap] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
 
-    // Assign teams and labels to each agent
+    // Assign teams, grantees, and labels to each agent
     for (const agent of agents) {
       agent.teams = teamsMap.get(agent.id) || [];
+      agent.users = usersMap.get(agent.id) || [];
       agent.labels = labelsMap.get(agent.id) || [];
     }
 
@@ -756,6 +779,7 @@ class AgentModel {
 
     const [
       teamsMap,
+      usersMap,
       labelsMap,
       kbMap,
       connectorMap,
@@ -763,6 +787,7 @@ class AgentModel {
       toolsResult,
     ] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
       AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
       AgentConnectorAssignmentModel.getConnectorIdsForAgents(agentIds),
@@ -795,6 +820,7 @@ class AgentModel {
       ...agent,
       tools: toolsByAgent.get(agent.id) || [],
       teams: teamsMap.get(agent.id) || [],
+      users: usersMap.get(agent.id) || [],
       labels: labelsMap.get(agent.id) || [],
       knowledgeBaseIds: kbMap.get(agent.id) || [],
       connectorIds: connectorMap.get(agent.id) || [],
@@ -843,6 +869,7 @@ class AgentModel {
 
     const [
       teamsMap,
+      usersMap,
       labelsMap,
       kbMap,
       connectorMap,
@@ -850,6 +877,7 @@ class AgentModel {
       toolsResult,
     ] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
       AgentKnowledgeBaseModel.getKnowledgeBaseIdsForAgents(agentIds),
       AgentConnectorAssignmentModel.getConnectorIdsForAgents(agentIds),
@@ -882,6 +910,7 @@ class AgentModel {
       ...agent,
       tools: toolsByAgent.get(agent.id) || [],
       teams: teamsMap.get(agent.id) || [],
+      users: usersMap.get(agent.id) || [],
       labels: labelsMap.get(agent.id) || [],
       knowledgeBaseIds: kbMap.get(agent.id) || [],
       connectorIds: connectorMap.get(agent.id) || [],
@@ -891,6 +920,45 @@ class AgentModel {
     AgentModel.filterUnavailableKnowledgeTools(results);
 
     return results;
+  }
+
+  /**
+   * Candidates for the A2A registry: every internal agent in the organization
+   * that could have an Agent Card, with only the fields a card needs.
+   *
+   * This is deliberately *not* an authorization query. It answers "which
+   * agents belong in the catalog", and the caller then runs the ordinary
+   * per-agent gateway check against each one. Keeping the two apart means the
+   * registry cannot disagree with what a direct card fetch would allow.
+   *
+   * Built-in agents are left out: title generation, context compaction and the
+   * dual-LLM pair are machinery this platform runs on, not collaborators
+   * anyone would address over A2A. Personal agents stay in — one belongs to
+   * somebody, and the per-agent check decides whether that is the caller.
+   */
+  static async findA2ARegistryCandidates(
+    organizationId: string,
+  ): Promise<
+    Pick<Agent, "id" | "name" | "description" | "systemPrompt" | "updatedAt">[]
+  > {
+    return db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        description: schema.agentsTable.description,
+        systemPrompt: schema.agentsTable.systemPrompt,
+        updatedAt: schema.agentsTable.updatedAt,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.builtIn, false),
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .orderBy(asc(schema.agentsTable.name));
   }
 
   /**
@@ -1310,6 +1378,7 @@ class AgentModel {
           ...agent,
           tools: [],
           teams: [] as Array<{ id: string; name: string }>,
+          users: [] as Array<{ id: string; name: string; email: string }>,
           labels: [],
           knowledgeBaseIds: [],
           connectorIds: [],
@@ -1327,14 +1396,16 @@ class AgentModel {
     const agentIds = agents.map((agent) => agent.id);
 
     // Populate teams and labels for all agents with bulk queries to avoid N+1
-    const [teamsMap, labelsMap] = await Promise.all([
+    const [teamsMap, usersMap, labelsMap] = await Promise.all([
       AgentTeamModel.getTeamDetailsForAgents(agentIds),
+      AgentUserModel.getUserDetailsForAgents(agentIds),
       AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
 
-    // Assign teams and labels to each agent
+    // Assign teams, grantees, and labels to each agent
     for (const agent of agents) {
       agent.teams = teamsMap.get(agent.id) || [];
+      agent.users = usersMap.get(agent.id) || [];
       agent.labels = labelsMap.get(agent.id) || [];
     }
 
@@ -1593,14 +1664,27 @@ class AgentModel {
           eq(schema.teamMembersTable.userId, userId),
         ),
       )
+      .leftJoin(
+        schema.agentUsersTable,
+        and(
+          eq(schema.agentsTable.id, schema.agentUsersTable.agentId),
+          eq(schema.agentUsersTable.userId, userId),
+        ),
+      )
       .where(
         and(
           notDeleted(schema.agentsTable),
           or(
             eq(schema.agentsTable.scope, "org"),
+            // A personal agent reaches its author, and anyone it has been
+            // shared with individually. The grant sits beside the scope rather
+            // than replacing it, so no scope enum has to learn a new value.
             and(
               eq(schema.agentsTable.scope, "personal"),
-              eq(schema.agentsTable.authorId, userId),
+              or(
+                eq(schema.agentsTable.authorId, userId),
+                eq(schema.agentUsersTable.userId, userId),
+              ),
             ),
             and(
               eq(schema.agentsTable.scope, "team"),
@@ -1729,6 +1813,10 @@ class AgentModel {
    * Returns a Map of agentId -> { agentType, scope, authorId, teamIds }.
    * Much lighter than findById (no tool/label/knowledgeBase/connector joins).
    */
+  /**
+   * Includes `environmentId` so callers can apply the environment fence beside
+   * the permission checks, without a second round-trip per target.
+   */
   static async findByIdsForPermissionCheck(ids: string[]): Promise<
     Map<
       string,
@@ -1737,6 +1825,7 @@ class AgentModel {
         scope: AgentScope;
         authorId: string | null;
         teamIds: string[];
+        environmentId: string | null;
       }
     >
   > {
@@ -1751,6 +1840,7 @@ class AgentModel {
           agentType: schema.agentsTable.agentType,
           scope: schema.agentsTable.scope,
           authorId: schema.agentsTable.authorId,
+          environmentId: schema.agentsTable.environmentId,
         })
         .from(schema.agentsTable)
         .where(
@@ -1769,6 +1859,7 @@ class AgentModel {
         scope: AgentScope;
         authorId: string | null;
         teamIds: string[];
+        environmentId: string | null;
       }
     >();
     for (const agent of agents) {
@@ -1778,6 +1869,7 @@ class AgentModel {
         scope: agent.scope,
         authorId: agent.authorId,
         teamIds: teams.map((t) => t.id),
+        environmentId: agent.environmentId,
       });
     }
 
@@ -1858,6 +1950,9 @@ class AgentModel {
       ...agent,
       tools,
       teams,
+      users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
+        (map) => map.get(agent.id) ?? [],
+      ),
       labels,
       knowledgeBaseIds,
       connectorIds,
@@ -2006,6 +2101,9 @@ class AgentModel {
       ...agent,
       tools,
       teams,
+      users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
+        (map) => map.get(agent.id) ?? [],
+      ),
       labels,
       knowledgeBaseIds,
       connectorIds,
@@ -2069,6 +2167,9 @@ class AgentModel {
       ...agent,
       tools,
       teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
+      users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
+        (map) => map.get(agent.id) ?? [],
+      ),
       labels: await AgentLabelModel.getLabelsForAgent(agent.id),
       knowledgeBaseIds: await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
         agent.id,
@@ -2147,6 +2248,9 @@ class AgentModel {
         ...agent,
         tools,
         teams: await AgentTeamModel.getTeamDetailsForAgent(agent.id),
+        users: await AgentUserModel.getUserDetailsForAgents([agent.id]).then(
+          (map) => map.get(agent.id) ?? [],
+        ),
         labels: await AgentLabelModel.getLabelsForAgent(agent.id),
         knowledgeBaseIds: await AgentKnowledgeBaseModel.getKnowledgeBaseIds(
           agent.id,
@@ -2184,6 +2288,7 @@ class AgentModel {
     id: string,
     {
       teams,
+      users,
       labels,
       knowledgeBaseIds,
       connectorIds,
@@ -2325,6 +2430,11 @@ class AgentModel {
       await AgentTeamModel.syncAgentTeams(id, teams);
     }
 
+    // Sync individual grants; `[]` revokes them all, omitted leaves them alone.
+    if (users !== undefined) {
+      await AgentUserModel.syncAgentUsers(id, users);
+    }
+
     // Sync label assignments if labels is provided
     if (labels !== undefined) {
       await AgentLabelModel.syncAgentLabels(id, labels);
@@ -2343,6 +2453,16 @@ class AgentModel {
     // Sync suggested prompts if provided
     if (suggestedPrompts !== undefined) {
       await AgentSuggestedPromptModel.syncForAgent(id, suggestedPrompts);
+    }
+
+    // Any write above may have changed the canonical config — fork a version
+    // if so. Deliberately after the junction syncs (the snapshot must capture
+    // this mutation's final state), and unconditionally: a relational-only
+    // update skips the agents-row write yet still changes config. Best-effort:
+    // a versioning failure must never fail the update itself.
+    const fork = await AgentVersionModel.forkIfChangedBestEffort(id);
+    if (fork && updatedAgent) {
+      updatedAgent.latestVersion = fork.version;
     }
 
     const [
@@ -3111,6 +3231,14 @@ class AgentModel {
           { skipExclusionPrefill: true },
         );
       }
+
+      // Fork last, once the copied assignments and exclusions are in place.
+      // create() already forked a version 1 that predates them, and neither
+      // cloneAssignments nor replaceForAgent forks; without this a clone of a
+      // Custom-mode agent (which skips the update above) would leave version 1
+      // — a snapshot with no tools — as the permanent head of a fully
+      // configured agent.
+      await AgentVersionModel.forkIfChangedBestEffort(created.id);
 
       const clonedAgent = await AgentModel.findById(created.id, userId, true);
       if (!clonedAgent) {

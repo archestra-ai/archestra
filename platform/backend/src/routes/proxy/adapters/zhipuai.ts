@@ -25,7 +25,10 @@ import type {
   UsageView,
   Zhipuai,
 } from "@/types";
-import { extractCommonMessageText } from "@/types";
+import {
+  extractCommonMessageText,
+  extractCommonToolCallArguments,
+} from "@/types";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
 // =============================================================================
@@ -246,7 +249,7 @@ class ZhipuaiRequestAdapter
 
     for (const message of this.request.messages) {
       if (message.role === "tool") {
-        const toolName = this.findToolNameInMessages(
+        const toolCall = this.findToolCallInMessages(
           this.request.messages,
           message.tool_call_id,
         );
@@ -264,7 +267,8 @@ class ZhipuaiRequestAdapter
 
         results.push({
           id: message.tool_call_id,
-          name: toolName ?? "unknown",
+          name: toolCall?.name ?? "unknown",
+          arguments: toolCall?.arguments,
           content,
           isError: false,
         });
@@ -356,10 +360,10 @@ class ZhipuaiRequestAdapter
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private findToolNameInMessages(
+  private findToolCallInMessages(
     messages: ZhipuaiMessages,
     toolCallId: string,
-  ): string | null {
+  ): { name: string; arguments?: Record<string, unknown> } | null {
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
 
@@ -367,7 +371,12 @@ class ZhipuaiRequestAdapter
         for (const toolCall of message.tool_calls) {
           if (toolCall.id === toolCallId) {
             if (toolCall.type === "function") {
-              return toolCall.function.name;
+              return {
+                name: toolCall.function.name,
+                arguments: extractCommonToolCallArguments(
+                  toolCall.function.arguments,
+                ),
+              };
             }
           }
         }
@@ -391,14 +400,14 @@ class ZhipuaiRequestAdapter
       };
 
       if (message.role === "tool") {
-        const toolName = this.findToolNameInMessages(
+        const toolCall = this.findToolCallInMessages(
           messages,
           message.tool_call_id,
         );
 
-        if (toolName) {
+        if (toolCall) {
           logger.debug(
-            { toolCallId: message.tool_call_id, toolName },
+            { toolCallId: message.tool_call_id, toolName: toolCall.name },
             "[ZhipuaiAdapter] toCommonFormat: found tool message",
           );
           let toolResult: unknown;
@@ -415,7 +424,8 @@ class ZhipuaiRequestAdapter
           commonMessage.toolCalls = [
             {
               id: message.tool_call_id,
-              name: toolName,
+              name: toolCall.name,
+              arguments: toolCall.arguments,
               content: toolResult,
               isError: false,
             },

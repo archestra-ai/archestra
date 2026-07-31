@@ -397,6 +397,25 @@ const organizationsTable = pgTable("organization", {
     .default(true),
 
   /**
+   * When true, every newly created app starts disabled (author-only, invisible
+   * to chat and every agent surface) until its author enables it in App
+   * settings. Applies at creation time only — flipping it never touches
+   * existing apps.
+   */
+  newAppsDisabledByDefault: boolean("new_apps_disabled_by_default")
+    .notNull()
+    .default(false),
+
+  /**
+   * When true, every newly created app starts locked: immutable to agents (all
+   * chat-driven modification refused) until a user unlocks it. Applies at
+   * creation time only — flipping it never touches existing apps.
+   */
+  newAppsLockedByDefault: boolean("new_apps_locked_by_default")
+    .notNull()
+    .default(false),
+
+  /**
    * Legacy preset column (feature removed) — retained inert. Held a validation
    * regex (no delimiters/flags) applied to default-scoped field values at
    * install time. No longer read or written.

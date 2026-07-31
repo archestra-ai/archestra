@@ -110,8 +110,10 @@ export async function createAndLinkRunConversation(params: {
     return created;
   }
 
-  // Lost the race: another path linked first. Drop our orphan and return theirs.
-  await ConversationModel.delete(created.id, ownerUserId, organizationId);
+  // Lost the race: another path linked first. This orphan was never real user
+  // data, so hard-delete it — a soft delete would leave a hidden row (and any
+  // seeded files) lingering forever with no reclamation path.
+  await ConversationModel.hardDelete(created.id, ownerUserId, organizationId);
   const fresh = await ScheduleTriggerRunModel.findById(run.id);
   const existing = fresh?.chatConversationId
     ? await ConversationModel.findByIdInOrganization({

@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { resolveRunToolDispatch } from "@/archestra-mcp-server/run-tool-target";
 import logger from "@/logging";
 import { TrustedDataPolicyModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
@@ -91,17 +92,31 @@ export async function evaluateIfContextIsTrusted(
   const allToolCalls: Array<{
     toolCallId: string;
     toolName: string;
+    isRunToolDispatchTarget: boolean;
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolResult: any;
     isPlatformAuthoredResult: boolean;
+    isUnresolvedDispatch: boolean;
   }> = [];
 
   for (const message of messages) {
     if (message.toolCalls && message.toolCalls.length > 0) {
       for (const toolCall of message.toolCalls) {
+        // A run_tool call carries the *target* tool's output (progressive
+        // tool loading routes every third-party call through it). Evaluate
+        // the target's trusted-data policies — the wrapper's built-in name
+        // would be auto-trusted and the target's "sensitive" policy would
+        // never fire. A dispatch whose target cannot be recovered from the
+        // call's arguments is flagged to fail closed below.
+        const dispatch = resolveRunToolDispatch(
+          toolCall.name,
+          toolCall.arguments,
+        );
         allToolCalls.push({
           toolCallId: toolCall.id,
-          toolName: toolCall.name,
+          toolName:
+            dispatch.kind === "target" ? dispatch.toolName : toolCall.name,
+          isRunToolDispatchTarget: dispatch.kind === "target",
           toolResult: toolCall.content,
           // Results the platform itself authored carry no external data and
           // must not flip the context to untrusted:
@@ -113,6 +128,7 @@ export async function evaluateIfContextIsTrusted(
           isPlatformAuthoredResult:
             extractMcpToolError(toolCall)?.type === "tool_state" ||
             isSeededAppRenderToolResult(toolCall.content),
+          isUnresolvedDispatch: dispatch.kind === "unresolved",
         });
       }
     }
@@ -144,9 +160,10 @@ export async function evaluateIfContextIsTrusted(
   );
   const evaluationResults = await TrustedDataPolicyModel.evaluateBulk(
     agentId,
-    allToolCalls.map(({ toolName, toolResult }) => ({
+    allToolCalls.map(({ toolName, toolResult, isRunToolDispatchTarget }) => ({
       toolName,
       toolOutput: toolResult,
+      isRunToolDispatchTarget,
     })),
     policyContext,
   );
@@ -158,13 +175,30 @@ export async function evaluateIfContextIsTrusted(
 
   // Process evaluation results
   for (let i = 0; i < allToolCalls.length; i++) {
-    const { toolCallId, toolResult, toolName, isPlatformAuthoredResult } =
-      allToolCalls[i];
+    const {
+      toolCallId,
+      toolResult,
+      toolName,
+      isPlatformAuthoredResult,
+      isUnresolvedDispatch,
+    } = allToolCalls[i];
     // A platform-authored result (dispatch error or seeded app render) never
     // carries upstream data. Skip it — otherwise it has no trusted-data
     // evaluation (or no matching policy) and falls through to the untrusted
     // branch below, poisoning the session over a benign platform message.
     if (isPlatformAuthoredResult) {
+      continue;
+    }
+    // A run_tool call whose target tool cannot be recovered: we cannot know
+    // which tool produced this data, so its policies cannot be consulted —
+    // fail closed rather than inherit the wrapper's built-in auto-trust.
+    if (isUnresolvedDispatch) {
+      hasUntrustedData = true;
+      unsafeContextBoundary ??= createToolResultBoundary({
+        reason: "tool_result_marked_untrusted",
+        toolCallId,
+        toolName,
+      });
       continue;
     }
     // evaluateBulk() returns a Map keyed by the stringified input index, so we

@@ -485,8 +485,24 @@ export function AppSessionPlayer({
         ? {
             ...validBundle.recording,
             // Frame payloads leave base64 exactly once, here at bundle-open;
-            // every path after this handles Blobs/bytes only.
-            events: reviveRecordingEvents(validBundle.recording.events),
+            // every path after this handles Blobs/bytes only. DOM paints get
+            // the same treatment as the segments: document-killing markup is
+            // defused (a replayed paint re-inserts the app's own navigation
+            // handlers), and the img-src widening applies to re-inserted CSP
+            // metas — a recorded head repaint carries the live session's CSP
+            // meta, and a meta inserted by a replayed paint is enforced on top
+            // of the segment's policy — un-widened, it re-blocks every image
+            // the widening just allowed.
+            events: reviveRecordingEvents(validBundle.recording.events).map(
+              (event) => {
+                if (event.kind !== "dom") return event;
+                return defuseDomPaintPayload(
+                  typeof event.html === "string"
+                    ? { ...event, html: widenReplayImageCsp(event.html) }
+                    : event,
+                );
+              },
+            ),
             // The replayed chat is the capture seen through the viewer's
             // presentation edits: the AI consolidation (unless disabled),
             // minus removed messages, with manual user-text overrides.
@@ -2629,7 +2645,9 @@ function PlayerSurface({
   const replayHtml = useMemo(
     () =>
       neutralizeAppScripts(
-        relocalizeSandboxAssets(segment?.html ?? "", sandboxResult.baseUrl),
+        widenReplayImageCsp(
+          relocalizeSandboxAssets(segment?.html ?? "", sandboxResult.baseUrl),
+        ),
         // Deferring a remote stylesheet trades font fidelity for a fast first
         // paint — the right trade for someone watching, the wrong one for an
         // export. Nobody is waiting on the offline renderer, and its output is
@@ -6354,6 +6372,30 @@ export const replaySandboxPrefix = (conversationId: string | undefined) =>
   `archestra-app-replay-${conversationId}`;
 
 /**
+ * Let a replay show the images the recorded session referenced.
+ *
+ * The live app runs under the platform's fixed CSP allowlist, whose `img-src`
+ * admits only the bundled CDN and font hosts — an app that hotlinks any other
+ * image host (GitHub avatars, say) renders broken images, and the recorder
+ * captures markup, not pixels, so every replay inherits the same blanks. In a
+ * replay that strictness buys nothing: the app's scripts are neutralized
+ * ({@link neutralizeAppScripts}), the document is fixed recorded content, and
+ * an image fetch can neither run code nor read the page. So the segment's CSP
+ * meta gets `https:` added to `img-src`, and the replay shows what the app
+ * meant to show. Only the serialized segment the player is about to mount is
+ * rewritten — a live app's CSP is untouched. A segment without a CSP meta
+ * passes through unchanged (its frame has no CSP to widen).
+ *
+ * @public — exported for testability
+ */
+export function widenReplayImageCsp(html: string): string {
+  return html.replace(
+    /(<meta[^>]*Content-Security-Policy[^>]*\bimg-src)(?= )/i,
+    "$1 https:",
+  );
+}
+
+/**
  * Stop the app's own code from running in a replay.
  *
  * A recorded session is replayed from what the app produced, not by running it
@@ -6369,26 +6411,116 @@ export function neutralizeAppScripts(
   html: string,
   { deferRemoteStylesheets = true }: { deferRemoteStylesheets?: boolean } = {},
 ): string {
+  const retyped = (
+    deferRemoteStylesheets ? deferThirdPartyStylesheets(html) : html
+  ).replace(/<script\b([^>]*)>/gi, (tag: string, attrs: string) => {
+    if (/data-archestra-app-(sdk|bootstrap)/i.test(attrs)) return tag;
+    // Any `type` the app set must be REMOVED, not merely followed by the
+    // replay type: the HTML parser drops duplicate attributes and keeps the
+    // FIRST, so `<script type="module" type="application/…">` still parses
+    // as a module — and executes. That is how a module-based app re-ran
+    // itself inside its own replay, rolling fresh Math.random state and
+    // repainting its canvas over the recorded frames.
+    const rest = attrs.replace(
+      /\stype(\s*=\s*("[^"]*"|'[^']*'|[^\s]*))?(?=\s|$)/gi,
+      "",
+    );
+    return `<script${rest} type="application/archestra-replayed-script">`;
+  });
   return (
-    REPLAY_CHROME_CSS +
-    (deferRemoteStylesheets ? deferThirdPartyStylesheets(html) : html).replace(
-      /<script\b([^>]*)>/gi,
-      (tag: string, attrs: string) => {
-        if (/data-archestra-app-(sdk|bootstrap)/i.test(attrs)) return tag;
-        // Any `type` the app set must be REMOVED, not merely followed by the
-        // replay type: the HTML parser drops duplicate attributes and keeps the
-        // FIRST, so `<script type="module" type="application/…">` still parses
-        // as a module — and executes. That is how a module-based app re-ran
-        // itself inside its own replay, rolling fresh Math.random state and
-        // repainting its canvas over the recorded frames.
-        const rest = attrs.replace(
-          /\stype(\s*=\s*("[^"]*"|'[^']*'|[^\s]*))?(?=\s|$)/gi,
-          "",
-        );
-        return `<script${rest} type="application/archestra-replayed-script">`;
-      },
-    )
+    REPLAY_CHROME_CSS + REPLAY_NAVIGATION_GUARD + defuseDocumentKillers(retyped)
   );
+}
+
+/**
+ * Cancel navigation-capable DEFAULT actions inside the replay document.
+ *
+ * The replay driver re-drives recorded clicks as real events, and real events
+ * carry real default actions: a click on a PR-row `<a href>` follows the link,
+ * and a click on a `<button>` inside a `<form>` (buttons default to
+ * type="submit") submits and navigates — each destroying the replay document,
+ * whose successor announces itself, gets a full catch-up including the same
+ * click, and dies again: an endless reload flicker, even while paused.
+ * Attribute-level defusal can't reach these (they need no handler at all), so
+ * this always-live guard cancels the defaults at capture phase, ahead of any
+ * target. Replay is output-driven — the recorded DOM paints already show what
+ * every navigation produced — so no replayed interaction may navigate for
+ * real. Injected before the app markup; the retype pass in
+ * `neutralizeAppScripts` never sees it.
+ */
+const REPLAY_NAVIGATION_GUARD = `<script data-archestra-replay-guard>
+  (function () {
+    var cancel = function (event) { event.preventDefault(); };
+    addEventListener('click', cancel, true);
+    addEventListener('auxclick', cancel, true);
+    addEventListener('submit', function (event) { event.preventDefault(); event.stopImmediatePropagation(); }, true);
+  })();
+</script>`;
+
+/**
+ * Retyping `<script>` tags does not touch inline `on*="…"` handler attributes.
+ * Most of those reference app functions that no longer exist and just throw
+ * quietly when the replay driver re-drives the recorded clicks — but
+ * navigation calls are self-contained and DESTROY the replay document: a
+ * recorded click on a "reload page" button re-executes
+ * `window.location.reload()` for real, the fresh document announces itself,
+ * catch-up re-drives the same click, and the frame reloads in a loop
+ * (observed live as a flickering replay). Empty the body of any quoted inline
+ * handler that touches navigation — the recorded DOM paints already show what
+ * the navigation produced — and drop `<meta http-equiv="refresh">`, the same
+ * killer without a click. Handlers with unquoted values are left alone:
+ * generated app HTML always quotes.
+ */
+function defuseDocumentKillers(html: string): string {
+  const NAVIGATES = /\b(?:location|history)\b|window\s*\.\s*open/i;
+  return html
+    .replace(
+      /(\son\w+\s*=\s*")([^"]*)(")/gi,
+      (all, pre: string, body: string, post: string) =>
+        NAVIGATES.test(body) ? `${pre}${post}` : all,
+    )
+    .replace(
+      /(\son\w+\s*=\s*')([^']*)(')/gi,
+      (all, pre: string, body: string, post: string) =>
+        NAVIGATES.test(body) ? `${pre}${post}` : all,
+    )
+    .replace(/<meta\b[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "");
+}
+
+/** Cheap pre-filter so the payload walk below only pays the full regex pass on
+ * strings that could possibly contain an inline handler or a meta refresh. */
+const MAYBE_KILLER = /\son\w+\s*=|http-equiv/i;
+
+/**
+ * Defuse document-killing markup inside a replayed DOM paint's payload.
+ *
+ * Neutralizing the segment HTML is not enough: recorded mutations re-insert
+ * the app's own markup — up to full-document snapshots — and with it the very
+ * inline handlers the segment pass removed. Replaying a click on a re-inserted
+ * "reload page" button then destroys the document all over again (observed as
+ * an endless reload flicker, even paused). Every string in a `dom` event is
+ * swept with the same defusal before the event is ever posted into the app
+ * frame. Runs once at bundle-open.
+ *
+ * @public — exported for testability
+ */
+export function defuseDomPaintPayload<T>(value: T): T {
+  if (typeof value === "string") {
+    return (MAYBE_KILLER.test(value)
+      ? defuseDocumentKillers(value)
+      : value) as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => defuseDomPaintPayload(item)) as unknown as T;
+  }
+  if (value && typeof value === "object" && value.constructor === Object) {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value))
+      out[key] = defuseDomPaintPayload(item);
+    return out as unknown as T;
+  }
+  // Blobs, byte arrays, numbers, etc. pass through untouched.
+  return value;
 }
 
 /**

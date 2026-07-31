@@ -1,5 +1,6 @@
 import {
   APP_RECORDING_MAX_BUNDLE_BYTES,
+  GITHUB_MAX_FILE_BYTES,
   RouteId,
   validateRecordingBundle,
 } from "@archestra/shared";
@@ -30,11 +31,13 @@ const REVIEW_BUNDLE_HOST = "raw.githubusercontent.com";
 /** Give up on a slow GitHub fetch rather than holding the request open. */
 const REVIEW_FETCH_TIMEOUT_MS = 15_000;
 /**
- * Cap the fetched body well below the recorder's own bundle ceiling: a review
- * recording is already trimmed for submission, and a reviewer's request must
- * not buffer an unbounded response an attacker points `src` at.
+ * Cap the fetched body at GitHub's own file ceiling — the same bound the
+ * gallery submission gate enforces. The cap exists so a reviewer's request
+ * cannot buffer an unbounded response an attacker points `src` at; it must
+ * never be tighter than what the gallery accepts, or a submission the gallery
+ * took becomes one the review player refuses to even load.
  */
-const REVIEW_BUNDLE_MAX_BYTES = 15 * 1024 * 1024;
+const REVIEW_BUNDLE_MAX_BYTES = GITHUB_MAX_FILE_BYTES;
 
 /** The four endpoints that make up one video render's lifecycle. */
 const VIDEO_ROUTE_IDS = new Set<string | undefined>([

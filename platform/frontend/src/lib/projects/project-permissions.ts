@@ -26,7 +26,7 @@ export function canManageProject(
  */
 export function canDeleteProject(params: {
   viewerRole: ProjectViewerRole;
-  visibility: "organization" | "team" | null;
+  visibility: "organization" | "team" | "user" | null;
   isProjectAdmin: boolean;
   canShareOrg: boolean;
 }): boolean {

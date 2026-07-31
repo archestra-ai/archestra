@@ -1,11 +1,12 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  BlockedToolPart,
-  DualLlmPart,
-  PartialUIMessage,
-  PolicyDeniedPart,
+import {
+  type archestraApiTypes,
+  type BlockedToolPart,
+  type DualLlmPart,
+  extractMcpToolError,
+  type PartialUIMessage,
+  type PolicyDeniedPart,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
 import {
@@ -477,11 +478,15 @@ const MessageThread = ({
                                 <ToolHeader
                                   type={`tool-${toolName}`}
                                   state={
-                                    dualLlmPart
-                                      ? "output-available-dual-llm"
-                                      : toolResultPart
-                                        ? "output-available"
-                                        : part.state
+                                    isCancelledToolOutput(
+                                      toolResultPart?.output ?? part.output,
+                                    )
+                                      ? "output-cancelled"
+                                      : dualLlmPart
+                                        ? "output-available-dual-llm"
+                                        : toolResultPart
+                                          ? "output-available"
+                                          : part.state
                                   }
                                   icon={getIcon()}
                                 />
@@ -493,11 +498,15 @@ const MessageThread = ({
                                   {toolResultPart && (
                                     <ToolOutput
                                       label={
-                                        toolResultPart.errorText
-                                          ? "Error"
-                                          : dualLlmPart
-                                            ? "Unsafe result"
-                                            : "Result"
+                                        isCancelledToolOutput(
+                                          toolResultPart.output,
+                                        )
+                                          ? "Cancelled"
+                                          : toolResultPart.errorText
+                                            ? "Error"
+                                            : dualLlmPart
+                                              ? "Unsafe result"
+                                              : "Result"
                                       }
                                       output={toolResultPart.output as unknown}
                                       errorText={toolResultPart.errorText}
@@ -506,11 +515,13 @@ const MessageThread = ({
                                   {!toolResultPart && Boolean(part.output) && (
                                     <ToolOutput
                                       label={
-                                        part.errorText
-                                          ? "Error"
-                                          : dualLlmPart
-                                            ? "Unsafe result"
-                                            : "Result"
+                                        isCancelledToolOutput(part.output)
+                                          ? "Cancelled"
+                                          : part.errorText
+                                            ? "Error"
+                                            : dualLlmPart
+                                              ? "Unsafe result"
+                                              : "Result"
                                       }
                                       output={part.output as unknown}
                                       errorText={part.errorText}
@@ -542,6 +553,14 @@ const MessageThread = ({
                             if (isBlankReasoningPart(part)) {
                               return null;
                             }
+                            // One accordion per part, deliberately. Chat folds
+                            // adjacent thinking into runs, but that helper
+                            // models chat's visible-part set, which this view
+                            // does not share — it draws blocked-tool, dual-LLM
+                            // and policy-denied blocks the helper would treat
+                            // as invisible and merge across, reordering the
+                            // transcript. Tool cards here separate thinking
+                            // anyway, so the folding has little to do.
                             return (
                               <Reasoning
                                 key={partKey}
@@ -626,11 +645,15 @@ const MessageThread = ({
                                   <ToolHeader
                                     type={part.type}
                                     state={
-                                      dualLlmPart
-                                        ? "output-available-dual-llm"
-                                        : toolResultPart
-                                          ? "output-available"
-                                          : part.state
+                                      isCancelledToolOutput(
+                                        toolResultPart?.output ?? part.output,
+                                      )
+                                        ? "output-cancelled"
+                                        : dualLlmPart
+                                          ? "output-available-dual-llm"
+                                          : toolResultPart
+                                            ? "output-available"
+                                            : part.state
                                     }
                                   />
                                   <ToolContent>
@@ -644,11 +667,15 @@ const MessageThread = ({
                                     {toolResultPart && (
                                       <ToolOutput
                                         label={
-                                          toolResultPart.errorText
-                                            ? "Error"
-                                            : dualLlmPart
-                                              ? "Unsafe result"
-                                              : "Result"
+                                          isCancelledToolOutput(
+                                            toolResultPart.output,
+                                          )
+                                            ? "Cancelled"
+                                            : toolResultPart.errorText
+                                              ? "Error"
+                                              : dualLlmPart
+                                                ? "Unsafe result"
+                                                : "Result"
                                         }
                                         output={
                                           toolResultPart.output as unknown
@@ -664,11 +691,13 @@ const MessageThread = ({
                                       Boolean(part.output) && (
                                         <ToolOutput
                                           label={
-                                            part.errorText
-                                              ? "Error"
-                                              : dualLlmPart
-                                                ? "Unsafe result"
-                                                : "Result"
+                                            isCancelledToolOutput(part.output)
+                                              ? "Cancelled"
+                                              : part.errorText
+                                                ? "Error"
+                                                : dualLlmPart
+                                                  ? "Unsafe result"
+                                                  : "Result"
                                           }
                                           output={part.output as unknown}
                                           errorText={
@@ -1038,4 +1067,13 @@ function getPartSignature(part: PartialUIMessage["parts"][number]): string {
       }
       return `part:${JSON.stringify(part)}`;
   }
+}
+
+/**
+ * A tool result the run's user cancelled mid-flight (stopped run or cancelled
+ * background task), detected through the shared schema-validated extractor —
+ * rendered as its own Cancelled state, neither a success nor an error.
+ */
+function isCancelledToolOutput(output: unknown): boolean {
+  return extractMcpToolError(output)?.type === "cancelled";
 }

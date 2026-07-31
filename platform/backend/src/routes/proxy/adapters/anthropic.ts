@@ -32,7 +32,10 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { extractCommonMessageText } from "@/types";
+import {
+  extractCommonMessageText,
+  extractCommonToolCallArguments,
+} from "@/types";
 import { isAnthropicBillingBlock } from "@/utils/anthropic-billing-error";
 import {
   hasImageContent,
@@ -112,8 +115,11 @@ class AnthropicRequestAdapter
       if (message.role === "user" && Array.isArray(message.content)) {
         for (const contentBlock of message.content) {
           if (contentBlock.type === "tool_result") {
-            // Find tool name from previous assistant messages
-            const toolName = this.findToolName(contentBlock.tool_use_id);
+            // Find the paired tool_use from previous assistant messages
+            const toolUse = this.findToolUse(
+              this.request.messages,
+              contentBlock.tool_use_id,
+            );
 
             let content: unknown;
             if (typeof contentBlock.content === "string") {
@@ -128,7 +134,8 @@ class AnthropicRequestAdapter
 
             results.push({
               id: contentBlock.tool_use_id,
-              name: toolName ?? "unknown",
+              name: toolUse?.name ?? "unknown",
+              arguments: toolUse?.arguments,
               content,
               isError: contentBlock.is_error ?? false,
             });
@@ -268,9 +275,12 @@ class AnthropicRequestAdapter
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private findToolName(toolUseId: string): string | null {
-    for (let i = this.request.messages.length - 1; i >= 0; i--) {
-      const message = this.request.messages[i];
+  private findToolUse(
+    messages: AnthropicMessages,
+    toolUseId: string,
+  ): { name: string; arguments?: Record<string, unknown> } | null {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
       if (
         message.role === "assistant" &&
         Array.isArray(message.content) &&
@@ -278,7 +288,10 @@ class AnthropicRequestAdapter
       ) {
         for (const content of message.content) {
           if (content.type === "tool_use" && content.id === toolUseId) {
-            return content.name;
+            return {
+              name: content.name,
+              arguments: extractCommonToolCallArguments(content.input),
+            };
           }
         }
       }
@@ -308,15 +321,15 @@ class AnthropicRequestAdapter
 
         for (const contentBlock of message.content) {
           if (contentBlock.type === "tool_result") {
-            // Find the tool name from previous assistant messages
-            const toolName = this.findToolNameInMessages(
+            // Find the paired tool_use from previous assistant messages
+            const toolUse = this.findToolUse(
               messages,
               contentBlock.tool_use_id,
             );
 
-            if (toolName) {
+            if (toolUse) {
               logger.debug(
-                { toolUseId: contentBlock.tool_use_id, toolName },
+                { toolUseId: contentBlock.tool_use_id, toolName: toolUse.name },
                 "[AnthropicAdapter] toCommonFormat: found tool result",
               );
               // Parse the tool result
@@ -333,7 +346,8 @@ class AnthropicRequestAdapter
 
               toolCalls.push({
                 id: contentBlock.tool_use_id,
-                name: toolName,
+                name: toolUse.name,
+                arguments: toolUse.arguments,
                 content: toolResult,
                 isError: false,
               });
@@ -358,31 +372,6 @@ class AnthropicRequestAdapter
       "[AnthropicAdapter] toCommonFormat: conversion complete",
     );
     return commonMessages;
-  }
-
-  /**
-   * Extract tool name from messages by finding the assistant message
-   * that contains the tool_use_id
-   */
-  private findToolNameInMessages(
-    messages: AnthropicMessages,
-    toolUseId: string,
-  ): string | null {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const message = messages[i];
-      if (
-        message.role === "assistant" &&
-        Array.isArray(message.content) &&
-        message.content.length > 0
-      ) {
-        for (const content of message.content) {
-          if (content.type === "tool_use" && content.id === toolUseId) {
-            return content.name;
-          }
-        }
-      }
-    }
-    return null;
   }
 
   /**

@@ -30,6 +30,7 @@ import {
   SkillModel,
   SkillTeamModel,
   SkillUsageEventModel,
+  SkillUserModel,
   TaskModel,
   TeamModel,
   ToolModel,
@@ -82,7 +83,10 @@ import {
   SkillWithFilesSchema,
   UuidIdSchema,
 } from "@/types";
-import { isForeignKeyConstraintError } from "@/utils/db";
+import {
+  isForeignKeyConstraintError,
+  isUniqueConstraintError,
+} from "@/utils/db";
 
 /**
  * Shared fields identifying a GitHub skill source. Authentication is optional
@@ -126,6 +130,17 @@ const GithubSkillSourceSchema = z
 /** A team a skill is assigned to (for `scope = 'team'` skills). */
 const SkillTeamSchema = z.object({ id: z.string(), name: z.string() });
 
+/**
+ * Someone a personal skill has been shared with by name. Such a skill stays
+ * `scope = 'personal'` and carries grants beside it, so this is what tells a
+ * shared skill apart from a private one.
+ */
+const SkillUserSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+});
+
 /** An environment a skill is restricted to (empty = every environment). */
 const SkillEnvironmentSchema = z.object({ id: z.string(), name: z.string() });
 
@@ -133,6 +148,7 @@ const SkillEnvironmentSchema = z.object({ id: z.string(), name: z.string() });
 const SkillListItemSchema = SelectSkillSchema.extend({
   fileCount: z.number(),
   teams: z.array(SkillTeamSchema),
+  users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
   authorName: z.string().nullable(),
   /**
@@ -145,6 +161,7 @@ const SkillListItemSchema = SelectSkillSchema.extend({
 /** A skill with its resource files, team, and environment assignments. */
 const SkillDetailSchema = SkillWithFilesSchema.extend({
   teams: z.array(SkillTeamSchema),
+  users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
 });
 
@@ -210,6 +227,8 @@ const SkillManifestInputSchema = z
     files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
     scope: ResourceVisibilityScopeSchema.optional(),
     teamIds: z.array(z.string()).optional(),
+    /** Only meaningful for `scope = 'personal'`; ignored for team/org skills. */
+    userIds: z.array(z.string()).optional(),
     environmentIds: z
       .array(UuidIdSchema)
       .optional()
@@ -282,6 +301,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Hide personal skills owned by other users. Admin-only; no-op for non-admins.",
             ),
+          status: z
+            .enum(["active", "deleted"])
+            .optional()
+            .default("active")
+            .describe(
+              "Which skills to list: active (default) or the soft-deleted " +
+                "trash. `deleted` is restricted to admins and team-admins.",
+            ),
         }).merge(createSortingQuerySchema(SkillSortBy)),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillListItemSchema),
@@ -301,6 +328,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorIds,
           excludeAuthorIds,
           excludeOtherPersonalSkills,
+          status,
           ...sorting
         },
         organizationId,
@@ -312,6 +340,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
+
+      // Viewing the trash is an admin/team-admin surface. Skills have no
+      // checker-level delete capability (delete is authorized per-skill), so
+      // this gates on the broader manage roles rather than a `skill:delete`.
+      if (status === "deleted" && !(checker.isAdmin || checker.isTeamAdmin)) {
+        throw new ApiError(403, "Forbidden");
+      }
 
       // Skills are environment-scoped; `forAgentId` narrows the list to what
       // that agent can actually see (used by the chat slash-command menu).
@@ -340,6 +375,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         excludeAuthorIds: checker.isAdmin ? excludeAuthorIds : undefined,
         excludeOtherPersonalForUserId:
           checker.isAdmin && excludeOtherPersonalSkills ? user.id : undefined,
+        status,
       };
 
       const [skills, total] = await Promise.all([
@@ -375,12 +411,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const [
         fileCounts,
         teamsBySkill,
+        usersBySkill,
         environmentsBySkill,
         authorNames,
         usageUserCounts,
       ] = await Promise.all([
         SkillFileModel.countBySkillIds(skillIds),
         SkillTeamModel.getTeamDetailsForSkills(skillIds),
+        SkillUserModel.getUserDetailsForSkills(skillIds),
         SkillEnvironmentModel.getEnvironmentDetailsForSkills(skillIds),
         UserModel.getNamesByIds(skillAuthorIds),
         SkillUsageEventModel.countDistinctUsersBySkillIds(skillIds),
@@ -393,6 +431,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SKILL.md (stored in the skills row) so the count matches the catalog.
           fileCount: (fileCounts.get(skill.id) ?? 0) + 1,
           teams: teamsBySkill.get(skill.id) ?? [],
+          users: usersBySkill.get(skill.id) ?? [],
           environments: environmentsBySkill.get(skill.id) ?? [],
           authorName: skill.authorId
             ? (authorNames.get(skill.authorId) ?? null)
@@ -419,6 +458,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const parsed = parseManifestOrThrow(body.content);
       const scope = body.scope ?? "personal";
       const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
+      // Sharing with named people keeps the skill personal, so grants only
+      // apply to that scope; a team/org skill is already reachable more widely.
+      const userIds = scope === "personal" ? dedupe(body.userIds ?? []) : [];
 
       const environmentIds = dedupe(body.environmentIds ?? []);
 
@@ -455,6 +497,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       if (!skill) {
         throw skillNameConflict(parsed.name);
+      }
+      if (userIds.length > 0) {
+        await SkillUserModel.syncSkillUsers(skill.id, userIds);
       }
 
       return reply.send(await loadSkillDetail(skill));
@@ -758,6 +803,18 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // Sharing with named people keeps the skill personal, so grants live only
+      // on that scope; widening to team or org clears them rather than leaving
+      // grants stranded on a skill whose visibility now says something else.
+      const existingGrantees =
+        (await SkillUserModel.getUserDetailsForSkills([existing.id])).get(
+          existing.id,
+        ) ?? [];
+      const existingUserIds = existingGrantees.map((grantee) => grantee.id);
+      const newUserIds =
+        newScope === "personal" ? dedupe(body.userIds ?? existingUserIds) : [];
+      const usersChanged = !sameIdSet(newUserIds, existingUserIds);
+
       // Changing a skill's environment assignments is gated like assigning
       // them: every environment in the new set must be assignable by this user.
       const existingEnvironmentIds =
@@ -811,6 +868,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!updated) {
         throw new ApiError(404, "Skill not found");
+      }
+      if (usersChanged) {
+        await SkillUserModel.syncSkillUsers(id, newUserIds);
       }
 
       return reply.send(await loadSkillDetail(updated));
@@ -871,6 +931,58 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Skill not found");
       }
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.post(
+    "/api/skills/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreSkill,
+        description: "Restore a soft-deleted skill",
+        tags: ["Skills"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(SkillDetailSchema),
+      },
+    },
+    async ({ params: { id }, organizationId, user }, reply) => {
+      // The soft-deleted row: findById/findSkillOrThrow filter deleted rows and
+      // would 404 every restore. Authorize this object directly — junction
+      // rows survive soft-delete, so its scope/team lookups still resolve.
+      const skill = await SkillModel.findDeletedById(id, organizationId);
+      if (!skill) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      await authorizeSkillModify({ skill, userId: user.id, organizationId });
+
+      const conflictMessage = await SkillModel.getRestoreConflictMessage(skill);
+      if (conflictMessage) {
+        throw new ApiError(409, conflictMessage);
+      }
+
+      let success: boolean;
+      try {
+        success = await SkillModel.restore(id);
+      } catch (error) {
+        // The pre-check is advisory; the partial unique index is the real
+        // guard. A create can claim the freed name between the check and this
+        // UPDATE — map that violation to a 409 rather than a 500.
+        if (
+          isUniqueConstraintError(error, "skills_org_personal_name_idx") ||
+          isUniqueConstraintError(error, "skills_org_shared_name_idx")
+        ) {
+          throw skillNameConflict(skill.name);
+        }
+        throw error;
+      }
+      if (!success) {
+        throw new ApiError(404, "Skill not found");
+      }
+
+      // The row is active again, so the normal detail path is safe.
+      const restored = await findSkillOrThrow(id, organizationId);
+      return reply.send(await loadSkillDetail(restored));
     },
   );
 
@@ -1222,6 +1334,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             skillPaths: z.array(z.string()).min(1),
             scope: ResourceVisibilityScopeSchema.optional(),
             teamIds: z.array(z.string()).optional(),
+            /** Only meaningful for `scope = 'personal'`. */
+            userIds: z.array(z.string()).optional(),
             sync: z
               .object({ interval: SkillGithubSyncIntervalSchema })
               .default({ interval: "1d" })
@@ -1265,6 +1379,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // silently published org-wide.
       const scope = body.scope ?? "personal";
       const teamIds = scope === "team" ? dedupe(body.teamIds ?? []) : [];
+      // Sharing with named people keeps a skill personal, so grants only apply
+      // to that scope; every skill in this import gets the same set.
+      const userIds = scope === "personal" ? dedupe(body.userIds ?? []) : [];
 
       await authorizeSkillCreate({
         userId: user.id,
@@ -1318,6 +1435,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         if (!skill) {
           skipped.push(item.parsed.name);
           continue;
+        }
+        if (userIds.length > 0) {
+          await SkillUserModel.syncSkillUsers(skill.id, userIds);
         }
         created.push(skill);
         if (item.skippedFiles.length > 0) {
@@ -1476,15 +1596,18 @@ async function findSkillOrThrow(id: string, organizationId: string) {
 
 /** A skill with its files, team, and environment assignments, for detail responses. */
 async function loadSkillDetail(skill: Skill) {
-  const [files, teamsBySkill, environmentsBySkill] = await Promise.all([
-    SkillFileModel.findBySkillId(skill.id),
-    SkillTeamModel.getTeamDetailsForSkills([skill.id]),
-    SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
-  ]);
+  const [files, teamsBySkill, usersBySkill, environmentsBySkill] =
+    await Promise.all([
+      SkillFileModel.findBySkillId(skill.id),
+      SkillTeamModel.getTeamDetailsForSkills([skill.id]),
+      SkillUserModel.getUserDetailsForSkills([skill.id]),
+      SkillEnvironmentModel.getEnvironmentDetailsForSkills([skill.id]),
+    ]);
   return {
     ...skill,
     files,
     teams: teamsBySkill.get(skill.id) ?? [],
+    users: usersBySkill.get(skill.id) ?? [],
     environments: environmentsBySkill.get(skill.id) ?? [],
   };
 }

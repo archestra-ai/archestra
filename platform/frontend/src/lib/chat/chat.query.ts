@@ -50,6 +50,7 @@ const {
   getMcpServer,
   getInternalMcpCatalogTools,
   bulkAssignTools,
+  cancelChatMcpTask,
   stopChatStream,
   getMemberDefaultModel,
   resolveChatMcpElicitation,
@@ -106,6 +107,8 @@ export function mergeUpdatedConversationIntoCache(
 
   if (variables.title !== undefined) {
     merged.title = updatedConversation.title;
+    // A rename makes the title real, so the server dropped the placeholder flag.
+    merged.titleIsPlaceholder = updatedConversation.titleIsPlaceholder;
   }
   if (variables.modelId !== undefined || variables.agentId !== undefined) {
     merged.modelId = updatedConversation.modelId;
@@ -673,6 +676,13 @@ export function useStopChatStream() {
   });
 }
 
+export function useCancelChatMcpTask() {
+  return useMutation({
+    mutationFn: (taskId: string) =>
+      callApi(() => cancelChatMcpTask({ path: { taskId } }), null),
+  });
+}
+
 export function useResolveChatMcpElicitation() {
   type ResolveChatMcpElicitationBody = NonNullable<
     archestraApiTypes.ResolveChatMcpElicitationData["body"]
@@ -725,13 +735,25 @@ export function useGenerateConversationTitle() {
       queryClient.setQueryData(
         ["conversation", variables.id],
         (old: archestraApiTypes.GetChatConversationResponses["200"] | null) =>
-          old ? { ...old, title: data.title } : old,
+          old
+            ? {
+                ...old,
+                title: data.title,
+                titleIsPlaceholder: data.titleIsPlaceholder,
+              }
+            : old,
       );
       queryClient.setQueriesData<
         archestraApiTypes.GetChatConversationsResponses["200"]
       >({ queryKey: ["conversations"] }, (old) =>
         old?.map((c) =>
-          c.id === variables.id ? { ...c, title: data.title } : c,
+          c.id === variables.id
+            ? {
+                ...c,
+                title: data.title,
+                titleIsPlaceholder: data.titleIsPlaceholder,
+              }
+            : c,
         ),
       );
     },

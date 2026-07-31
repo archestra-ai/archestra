@@ -365,7 +365,92 @@ describe("ConversationModel", () => {
     expect(Array.isArray(updated?.messages)).toBe(true);
   });
 
-  test("can delete a conversation", async ({
+  test("an ordinary conversation is not born with a placeholder title", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    // Only app-open seeding opts in; if the column default flipped, every chat
+    // would become eligible to be retitled behind the user's back.
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Default Agent", teams: [] });
+
+    const created = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Hand-picked title",
+    });
+
+    expect(created.titleIsPlaceholder).toBe(false);
+  });
+
+  test("a title write clears the placeholder flag", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    // This is what stops automatic generation from overwriting a name the user
+    // typed, so it has to hold for every title write, not just the rename route.
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Placeholder Agent", teams: [] });
+
+    const created = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Expense Tracker",
+      titleIsPlaceholder: true,
+      origin: "app_open",
+    });
+    expect(created.titleIsPlaceholder).toBe(true);
+
+    const renamed = await ConversationModel.update(
+      created.id,
+      user.id,
+      org.id,
+      {
+        title: "Q3 budget planning",
+      },
+    );
+
+    expect(renamed?.title).toBe("Q3 budget planning");
+    expect(renamed?.titleIsPlaceholder).toBe(false);
+  });
+
+  test("an update that does not touch the title keeps the placeholder flag", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Placeholder Agent", teams: [] });
+
+    const created = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Expense Tracker",
+      titleIsPlaceholder: true,
+      origin: "app_open",
+    });
+
+    const updated = await ConversationModel.update(
+      created.id,
+      user.id,
+      org.id,
+      {
+        pinnedAt: new Date(),
+      },
+    );
+
+    expect(updated?.titleIsPlaceholder).toBe(true);
+  });
+
+  test("delete soft-deletes: row survives with deletedAt, hidden from reads", async ({
     makeUser,
     makeOrganization,
     makeAgent,
@@ -381,14 +466,47 @@ describe("ConversationModel", () => {
       title: "To Be Deleted",
     });
 
-    await ConversationModel.delete(created.id, user.id, org.id);
+    const deleted = await ConversationModel.delete(created.id, user.id, org.id);
+    expect(deleted).toBe(1);
 
+    // Hidden from every read path...
     const found = await ConversationModel.findById({
       id: created.id,
       userId: user.id,
       organizationId: org.id,
     });
     expect(found).toBeNull();
+    const list = await ConversationModel.findAll(user.id, org.id);
+    expect(list.map((c) => c.id)).not.toContain(created.id);
+
+    // ...but the row is preserved (soft delete), with deletedAt stamped.
+    const [row] = await db
+      .select()
+      .from(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, created.id));
+    expect(row).toBeDefined();
+    expect(row.deletedAt).toBeInstanceOf(Date);
+    expect(row.title).toBe("To Be Deleted");
+  });
+
+  test("delete is idempotent: re-deleting an already-deleted conversation returns 0", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Redelete Agent", teams: [] });
+
+    const created = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Delete Twice",
+    });
+
+    expect(await ConversationModel.delete(created.id, user.id, org.id)).toBe(1);
+    expect(await ConversationModel.delete(created.id, user.id, org.id)).toBe(0);
   });
 
   test("returns conversations ordered by updatedAt descending", async ({
@@ -1982,7 +2100,9 @@ describe("ConversationModel", () => {
       created.id,
       user.id,
       org.id,
-      { pinnedAt: pinnedDate },
+      {
+        pinnedAt: pinnedDate,
+      },
     );
 
     expect(updated).toBeDefined();
@@ -2024,7 +2144,9 @@ describe("ConversationModel", () => {
       created.id,
       user.id,
       org.id,
-      { pinnedAt: null },
+      {
+        pinnedAt: null,
+      },
     );
 
     expect(unpinned).toBeDefined();
@@ -2233,6 +2355,107 @@ describe("ConversationModel", () => {
       });
 
       expect(found).toBeNull();
+    });
+  });
+
+  describe("soft-delete restore and trash listing", () => {
+    test("restore is idempotent and returns the transition count", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Restore Agent", teams: [] });
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "restore me",
+      });
+
+      await ConversationModel.delete(conversation.id, user.id, org.id);
+
+      // First restore flips deleted -> active (1); a second restore is a no-op
+      // (0) because the row is already active.
+      expect(
+        await ConversationModel.restore(conversation.id, user.id, org.id),
+      ).toBe(1);
+      expect(
+        await ConversationModel.restore(conversation.id, user.id, org.id),
+      ).toBe(0);
+
+      // The conversation is readable again through the owner-scoped read path.
+      const found = await ConversationModel.findById({
+        id: conversation.id,
+        userId: user.id,
+        organizationId: org.id,
+      });
+      expect(found).not.toBeNull();
+      expect(found?.deletedAt).toBeNull();
+    });
+
+    test("restore is owner + org scoped: another user cannot restore it", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const owner = await makeUser();
+      const stranger = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Scoped Agent", teams: [] });
+      const conversation = await ConversationModel.create({
+        userId: owner.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "not yours",
+      });
+
+      await ConversationModel.delete(conversation.id, owner.id, org.id);
+
+      // A different user in the same org cannot restore it (0 rows matched),
+      // and the row stays soft-deleted.
+      expect(
+        await ConversationModel.restore(conversation.id, stranger.id, org.id),
+      ).toBe(0);
+      const [row] = await db
+        .select()
+        .from(schema.conversationsTable)
+        .where(eq(schema.conversationsTable.id, conversation.id));
+      expect(row.deletedAt).toBeInstanceOf(Date);
+    });
+
+    test("findAllDeleted returns only the owner's soft-deleted conversations", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "Trash Agent", teams: [] });
+
+      const active = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "still here",
+      });
+      const deleted = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "in the trash",
+      });
+      await ConversationModel.delete(deleted.id, user.id, org.id);
+
+      const trash = await ConversationModel.findAllDeleted(user.id, org.id);
+      const ids = trash.map((c) => c.id);
+      expect(ids).toContain(deleted.id);
+      expect(ids).not.toContain(active.id);
+      // No messages are hydrated for the list shape.
+      const deletedRow = trash.find((c) => c.id === deleted.id);
+      expect(deletedRow?.messages).toEqual([]);
+      expect(deletedRow?.deletedAt).toBeInstanceOf(Date);
     });
   });
 });

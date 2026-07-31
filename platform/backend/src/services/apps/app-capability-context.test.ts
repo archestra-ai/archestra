@@ -111,7 +111,7 @@ describe("buildAppCapabilityContext", () => {
     ]);
   });
 
-  test("grounds in the app's environment, not the authoring agent's", async ({
+  test("grounds in the app's environment plus the Default baseline", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -156,9 +156,10 @@ describe("buildAppCapabilityContext", () => {
     });
 
     const names = context.tools.map((tool) => tool.name);
-    // Grounds the app-env tool, not the agent-env one.
+    // Grounds the app-env tool AND the Default-environment baseline every app
+    // may draw from.
     expect(names).toContain("prod__deploy");
-    expect(names).not.toContain("default__thing");
+    expect(names).toContain("default__thing");
   });
 
   test("describes the window.archestra SDK surface", async ({

@@ -25,6 +25,7 @@ import OpenAiEmbeddingInteraction from "./llmProviders/openai-embedding";
 import OpenAiResponsesInteraction from "./llmProviders/openai-responses";
 import OpenrouterChatCompletionInteraction from "./llmProviders/openrouter";
 import PerplexityChatCompletionInteraction from "./llmProviders/perplexity";
+import PerplexityResponsesInteraction from "./llmProviders/perplexity-responses";
 import VllmChatCompletionInteraction from "./llmProviders/vllm";
 import XaiChatCompletionInteraction from "./llmProviders/xai";
 import ZhipuaiChatCompletionInteraction from "./llmProviders/zhipuai";
@@ -35,6 +36,7 @@ type InteractionFactory = (interaction: Interaction) => InteractionUtils;
 const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "openai:chatCompletions": (i) => new OpenAiChatCompletionInteraction(i),
   "openai:responses": (i) => new OpenAiResponsesInteraction(i),
+  "perplexity:responses": (i) => new PerplexityResponsesInteraction(i),
   "openai:embeddings": (i) => new OpenAiEmbeddingInteraction(i),
   // Gemini embeddings use the OpenAI-compatible embedding shape.
   "gemini:embeddings": (i) => new OpenAiEmbeddingInteraction(i),

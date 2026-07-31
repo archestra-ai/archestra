@@ -23,7 +23,10 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
-import { extractCommonMessageText } from "@/types";
+import {
+  extractCommonMessageText,
+  extractCommonToolCallArguments,
+} from "@/types";
 import type { ToolCompressionStats as CompressionStats } from "../utils/toon-conversion";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
@@ -90,14 +93,15 @@ class CohereRequestAdapter
       // Cohere uses "tool" role for tool results (similar to OpenAI)
       if (message.role === "tool") {
         const toolMsg = message as Cohere.Types.ToolMessage;
-        const toolName = this.findToolName(toolMsg.tool_call_id);
+        const toolCall = this.findToolCall(toolMsg.tool_call_id);
 
         const parsed = safeJsonParse(toolMsg.content);
         const content = parsed.ok ? parsed.value : toolMsg.content;
 
         results.push({
           id: toolMsg.tool_call_id,
-          name: toolName ?? "unknown",
+          name: toolCall?.name ?? "unknown",
+          arguments: toolCall?.arguments,
           content,
           isError: false,
         });
@@ -195,7 +199,9 @@ class CohereRequestAdapter
   // Private Helpers
   // ---------------------------------------------------------------------------
 
-  private findToolName(toolCallId: string): string | null {
+  private findToolCall(
+    toolCallId: string,
+  ): { name: string; arguments?: Record<string, unknown> } | null {
     for (let i = this.request.messages.length - 1; i >= 0; i--) {
       const message = this.request.messages[i];
       if (message.role === "assistant") {
@@ -203,7 +209,12 @@ class CohereRequestAdapter
         if (assistantMsg.tool_calls) {
           for (const toolCall of assistantMsg.tool_calls) {
             if (toolCall.id === toolCallId) {
-              return toolCall.function.name;
+              return {
+                name: toolCall.function.name,
+                arguments: extractCommonToolCallArguments(
+                  toolCall.function.arguments,
+                ),
+              };
             }
           }
         }
@@ -224,16 +235,17 @@ class CohereRequestAdapter
       // Handle tool messages
       if (message.role === "tool") {
         const toolMsg = message as Cohere.Types.ToolMessage;
-        const toolName = this.findToolName(toolMsg.tool_call_id);
+        const toolCall = this.findToolCall(toolMsg.tool_call_id);
 
-        if (toolName) {
+        if (toolCall) {
           const parsed = safeJsonParse(toolMsg.content);
           const toolResult = parsed.ok ? parsed.value : toolMsg.content;
 
           commonMessage.toolCalls = [
             {
               id: toolMsg.tool_call_id,
-              name: toolName,
+              name: toolCall.name,
+              arguments: toolCall.arguments,
               content: toolResult,
               isError: false,
             },

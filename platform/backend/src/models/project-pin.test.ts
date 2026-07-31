@@ -70,7 +70,7 @@ describe("ProjectPinModel", () => {
     expect(bPins.has(project.id)).toBe(false);
   });
 
-  test("deleting a project cascade-removes its pins", async ({
+  test("a pin survives a project soft delete", async ({
     makeUser,
     makeOrganization,
   }) => {
@@ -85,10 +85,13 @@ describe("ProjectPinModel", () => {
 
     await ProjectModel.delete(project.id);
 
+    // The pin row is retained with the hidden project (pins are looked up only
+    // for projects the list surfaces already resolved, so it never shows); a
+    // restore-by-hand would bring the pin back with everything else.
     const pins = await ProjectPinModel.getPinnedAtForProjects({
       userId: user.id,
       projectIds: [project.id],
     });
-    expect(pins.has(project.id)).toBe(false);
+    expect(pins.has(project.id)).toBe(true);
   });
 });

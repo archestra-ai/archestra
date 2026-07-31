@@ -7,40 +7,50 @@ import {
 } from "./app-run-link";
 
 const APP_ID = "7b0839a1-4663-4371-a739-e5dac7f8c33e";
+/** An app with no slug — every link falls back to the id. */
+const APP = { id: APP_ID, slug: null };
 
 describe("appRunUrl", () => {
   test("is the root-relative standalone path", () => {
-    expect(appRunUrl(APP_ID)).toBe(`/a/${APP_ID}`);
+    expect(appRunUrl(APP)).toBe(`/a/${APP_ID}`);
+  });
+
+  test("prefers the slug when the app has one", () => {
+    expect(appRunUrl({ id: APP_ID, slug: "enemy-tracker" })).toBe(
+      "/a/enemy-tracker",
+    );
+  });
+
+  test("falls back to the id when the slug is absent", () => {
+    expect(appRunUrl({ id: APP_ID })).toBe(`/a/${APP_ID}`);
   });
 });
 
 describe("appRunLink", () => {
   test("labels the link with the app name and an absolute href", () => {
-    expect(appRunLink("Enemy Tracker", APP_ID)).toBe(
+    expect(appRunLink("Enemy Tracker", APP)).toBe(
       `[Enemy Tracker](/a/${APP_ID})`,
     );
   });
 
   test("escapes a name that would otherwise inject a second link", () => {
     // Without escaping, `](/evil)[` closes the label early and injects a link.
-    const link = appRunLink("Evil](/evil)", APP_ID);
+    const link = appRunLink("Evil](/evil)", APP);
     expect(link).toBe(`[Evil\\]\\(\\/evil\\)](/a/${APP_ID})`);
     // The href is exactly the app page — the label text never terminates it.
     expect(link.endsWith(`](/a/${APP_ID})`)).toBe(true);
   });
 
   test("escapes markdown punctuation so the label renders literally", () => {
-    expect(appRunLink("A*b_c`d", APP_ID)).toBe(
-      `[A\\*b\\_c\\\`d](/a/${APP_ID})`,
-    );
+    expect(appRunLink("A*b_c`d", APP)).toBe(`[A\\*b\\_c\\\`d](/a/${APP_ID})`);
   });
 
   test("collapses whitespace in the name", () => {
-    expect(appRunLink("  My   App  ", APP_ID)).toBe(`[My App](/a/${APP_ID})`);
+    expect(appRunLink("  My   App  ", APP)).toBe(`[My App](/a/${APP_ID})`);
   });
 
   test("falls back to a visible label for a blank name", () => {
-    expect(appRunLink("   ", APP_ID)).toBe(`[Open app](/a/${APP_ID})`);
+    expect(appRunLink("   ", APP)).toBe(`[Open app](/a/${APP_ID})`);
   });
 });
 

@@ -1,0 +1,378 @@
+import { randomUUID } from "node:crypto";
+import { SESSION_ID_HEADER } from "@archestra/shared";
+import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { z } from "zod";
+import { executeA2AMessage } from "@/agents/a2a-executor";
+import config from "@/config";
+import { AgentModel, AgentTeamModel, TeamModel, UserModel } from "@/models";
+import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
+import { ProviderError } from "@/routes/chat/errors";
+import {
+  extractBearerToken,
+  validateMCPGatewayToken,
+} from "@/routes/mcp-gateway/utils";
+import { ApiError, UuidIdSchema } from "@/types";
+
+/**
+ * A2A (Agent-to-Agent) Protocol routes
+ * Exposes internal agents as A2A agents with AgentCard discovery and JSON-RPC execution
+ * Only internal agents (agentType='agent') can be used for A2A.
+ */
+
+const A2AAgentCardSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  url: z.string(),
+  version: z.string(),
+  capabilities: z.object({
+    streaming: z.boolean(),
+    pushNotifications: z.boolean(),
+    stateTransitionHistory: z.boolean(),
+  }),
+  defaultInputModes: z.array(z.string()),
+  defaultOutputModes: z.array(z.string()),
+  skills: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      description: z.string(),
+      tags: z.array(z.string()),
+      inputModes: z.array(z.string()),
+      outputModes: z.array(z.string()),
+    }),
+  ),
+});
+
+const A2AMessagePartSchema = z.object({
+  kind: z.literal("text"),
+  text: z.string(),
+});
+
+// A2A Message schema for message/send response
+const A2AMessageSchema = z.object({
+  messageId: z.string(),
+  role: z.enum(["user", "agent"]),
+  parts: z.array(A2AMessagePartSchema),
+  contextId: z.string().optional(),
+  taskId: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+const A2AJsonRpcRequestSchema = z.object({
+  jsonrpc: z.literal("2.0"),
+  id: z.union([z.string(), z.number()]),
+  method: z.string(),
+  params: z
+    .object({
+      message: z
+        .object({
+          parts: z.array(A2AMessagePartSchema).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
+const A2AJsonRpcResponseSchema = z.object({
+  jsonrpc: z.literal("2.0"),
+  id: z.union([z.string(), z.number()]),
+  result: A2AMessageSchema.optional(),
+  error: z
+    .object({
+      code: z.number(),
+      message: z.string(),
+      data: z.unknown().optional(),
+    })
+    .optional(),
+});
+
+const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  const { endpoint } = config.a2aGateway;
+
+  // GET AgentCard for an internal agent
+  fastify.get(
+    `${endpoint}/:agentId/.well-known/agent.json`,
+    {
+      schema: {
+        description:
+          "Get A2A AgentCard for an internal agent (must be agentType='agent')",
+        tags: ["A2A"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        response: {
+          200: A2AAgentCardSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { agentId } = request.params;
+      const agent = await AgentModel.findById(agentId);
+
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Only internal agents can be used for A2A
+      if (agent.agentType !== "agent") {
+        throw new ApiError(
+          400,
+          "Agent is not an internal agent (A2A requires agents with agentType='agent')",
+        );
+      }
+
+      // Validate token authentication (reuse MCP Gateway utilities)
+      const token = extractBearerToken(request);
+      if (!token) {
+        throw new ApiError(
+          401,
+          "Authorization header required. Use: Bearer <platform_token>",
+        );
+      }
+
+      const tokenAuth = await validateMCPGatewayToken(agent.id, token);
+      if (!tokenAuth) {
+        throw new ApiError(401, "Invalid or unauthorized token");
+      }
+
+      // Construct base URL from request
+      const protocol = request.headers["x-forwarded-proto"] || "http";
+      const host = request.headers.host || "localhost:9000";
+      const baseUrl = `${protocol}://${host}`;
+
+      // Build skills array with a single skill representing the agent
+      const skillId = agent.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "");
+      const skills = [
+        {
+          id: skillId,
+          name: agent.name,
+          description: agent.description || "",
+          tags: [],
+          inputModes: ["text"],
+          outputModes: ["text"],
+        },
+      ];
+
+      return reply.send({
+        name: agent.name,
+        description: agent.description || agent.systemPrompt || "",
+        url: `${baseUrl}${endpoint}/${agent.id}`,
+        version: "1",
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false,
+        },
+        defaultInputModes: ["text"],
+        defaultOutputModes: ["text"],
+        skills,
+      });
+    },
+  );
+
+  // POST JSON-RPC endpoint for A2A message execution
+  fastify.post(
+    `${endpoint}/:agentId`,
+    {
+      schema: {
+        description:
+          "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload — non-JSON-RPC payloads are stringified and passed through to the agent as the user message.",
+        tags: ["A2A"],
+        params: z.object({
+          agentId: UuidIdSchema,
+        }),
+        body: z.union([A2AJsonRpcRequestSchema, z.unknown()]),
+        response: {
+          200: A2AJsonRpcResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { agentId } = request.params;
+      const body = request.body;
+
+      // Detect JSON-RPC envelope; otherwise treat body as a pass-through payload.
+      const envelopeParse = A2AJsonRpcRequestSchema.safeParse(body);
+      const isJsonRpc = envelopeParse.success;
+      const id: string | number = isJsonRpc ? envelopeParse.data.id : 1;
+      const params = isJsonRpc ? envelopeParse.data.params : {};
+
+      // Fetch the internal agent
+      const agent = await AgentModel.findById(agentId);
+
+      if (!agent) {
+        return reply.send({
+          jsonrpc: "2.0" as const,
+          id,
+          error: {
+            code: -32602,
+            message: "Agent not found",
+          },
+        });
+      }
+
+      // Only internal agents can be used for A2A
+      if (agent.agentType !== "agent") {
+        return reply.send({
+          jsonrpc: "2.0" as const,
+          id,
+          error: {
+            code: -32602,
+            message:
+              "Agent is not an internal agent (A2A requires agents with agentType='agent')",
+          },
+        });
+      }
+
+      // Validate token authentication (reuse MCP Gateway utilities)
+      const token = extractBearerToken(request);
+      if (!token) {
+        return reply.send({
+          jsonrpc: "2.0" as const,
+          id,
+          error: {
+            code: -32600,
+            message:
+              "Authorization header required. Use: Bearer <platform_token>",
+          },
+        });
+      }
+
+      const tokenAuth = await validateMCPGatewayToken(agent.id, token);
+      if (!tokenAuth) {
+        return reply.send({
+          jsonrpc: "2.0" as const,
+          id,
+          error: {
+            code: -32600,
+            message: "Invalid or unauthorized token",
+          },
+        });
+      }
+
+      // Get user info - for user tokens we have userId, for team tokens we use system context
+      let userId: string;
+      const organizationId = tokenAuth.organizationId;
+
+      if (tokenAuth.userId) {
+        // User token - use the token's user
+        userId = tokenAuth.userId;
+        const user = await UserModel.getById(userId);
+        if (!user) {
+          return reply.send({
+            jsonrpc: "2.0" as const,
+            id,
+            error: {
+              code: -32600,
+              message: "User not found for token",
+            },
+          });
+        }
+      } else {
+        // Team/org token - we don't have a specific user, use a system context
+        // The LLM client will work without user-specific API key resolution
+        userId = "system";
+      }
+
+      // Extract user message: from JSON-RPC message parts when enveloped,
+      // otherwise stringify the raw payload and pass it through to the agent.
+      let userMessage: string;
+      if (isJsonRpc) {
+        userMessage =
+          params?.message?.parts
+            ?.filter((p) => p.kind === "text")
+            .map((p) => p.text)
+            .join("\n") || "";
+
+        if (!userMessage) {
+          return reply.send({
+            jsonrpc: "2.0" as const,
+            id,
+            error: {
+              code: -32602,
+              message: "No message content provided",
+            },
+          });
+        }
+      } else {
+        userMessage = typeof body === "string" ? body : JSON.stringify(body);
+      }
+
+      try {
+        // Extract session ID from headers to group A2A requests with calling session
+        // If no session ID provided, generate a unique one for this A2A request
+        // This ensures all tool calls within one A2A request are grouped together
+        const headerSessionId =
+          (request.headers[SESSION_ID_HEADER.toLowerCase()] as
+            | string
+            | undefined) ||
+          (request.headers[SESSION_ID_HEADER] as string | undefined);
+        const sessionId =
+          headerSessionId || `a2a-${Date.now()}-${randomUUID()}`;
+
+        // Resolve user for span attributes (user is already fetched above for user tokens)
+        const a2aUser =
+          tokenAuth.userId && userId !== "system"
+            ? await UserModel.getById(tokenAuth.userId)
+            : null;
+
+        // Wrap A2A execution with a parent span so all LLM and MCP tool calls
+        // within this request appear as children of a single unified trace.
+        const result = await startActiveChatSpan({
+          agentName: agent.name,
+          agentId,
+          agentType: agent.agentType ?? undefined,
+          sessionId,
+          teams: await AgentTeamModel.getTeamLabelInfoForAgent(agentId),
+          userTeams: a2aUser
+            ? await TeamModel.getTeamLabelInfoForUser({
+                userId: a2aUser.id,
+                organizationId: agent.organizationId,
+              })
+            : [],
+          routeCategory: RouteCategory.A2A,
+          user: a2aUser
+            ? { id: a2aUser.id, email: a2aUser.email, name: a2aUser.name }
+            : null,
+          callback: async () => {
+            return executeA2AMessage({
+              agentId,
+              message: userMessage,
+              organizationId,
+              userId,
+              sessionId,
+              parentDelegationChain: undefined, // This is the root call, chain starts with agentId
+            });
+          },
+        });
+
+        return reply.send({
+          jsonrpc: "2.0" as const,
+          id,
+          result: {
+            messageId: result.messageId,
+            role: "agent" as const,
+            parts: [{ kind: "text" as const, text: result.text }],
+          },
+        });
+      } catch (error) {
+        const chatError =
+          error instanceof ProviderError ? error.chatErrorResponse : undefined;
+        return reply.send({
+          jsonrpc: "2.0" as const,
+          id,
+          error: {
+            code: -32603,
+            message: error instanceof Error ? error.message : "Internal error",
+            data: chatError,
+          },
+        });
+      }
+    },
+  );
+};
+
+export default a2aRoutes;

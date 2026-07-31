@@ -1,21 +1,29 @@
+import { urlSlugify } from "@archestra/shared";
 import {
   and,
   count,
   desc,
   eq,
   getTableColumns,
-  ilike,
   inArray,
   or,
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { softDelete } from "@/database/soft-delete";
+import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import { ApiError } from "@/types";
-import type { App, InsertApp } from "@/types/app";
+import {
+  APP_NAME_MAX_LENGTH,
+  type App,
+  type InsertApp,
+  isReservedAppSlug,
+} from "@/types/app";
+import type { AgentLabelWithDetails } from "@/types/label";
 import { isUniqueConstraintError } from "@/utils/db";
-import { escapeLikePattern } from "@/utils/sql-search";
+import { isUuid } from "@/utils/uuid";
 import AppAccessModel from "./app-access";
+import AppLabelModel from "./app-label";
 import AppToolModel from "./app-tool";
 import AppVersionModel, { type VersionPayload } from "./app-version";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -23,6 +31,9 @@ import McpCatalogUserModel from "./mcp-catalog-user";
 
 /** Raw `apps` row (no `scope`/`environmentId` — those live on the backing catalog). */
 type AppRow = typeof schema.appsTable.$inferSelect;
+
+/** Length of the `-<hex>` a colliding generated slug is disambiguated with. */
+const COLLISION_SUFFIX_LENGTH = 7;
 
 // An app's visibility (`scope`) and `environmentId` are owned by its backing
 // catalog (FR-30). Reads JOIN apps→mcp_server→internal_mcp_catalog and surface
@@ -51,26 +62,53 @@ function buildOrgFilters(params: {
   organizationId: string;
   search?: string;
   accessibleAppIds?: string[];
+  enabled?: boolean;
 }) {
-  const normalizedSearch = params.search?.trim();
-  const searchPattern = normalizedSearch
-    ? `%${escapeLikePattern(normalizedSearch)}%`
-    : undefined;
+  // Per-token rather than one whole-string substring: an app is usually named
+  // from memory ("merge queue take a number" for "Merge Queue — Take a Number"),
+  // and a single LIKE makes the match hinge on reproducing the saved word order
+  // and punctuation exactly. Still a conjunction, so extra words keep narrowing.
+  const searchFilter = buildTokenizedSearchFilter({
+    query: params.search,
+    columns: [schema.appsTable.name, schema.appsTable.description],
+  });
   return [
     eq(schema.appsTable.organizationId, params.organizationId),
     notDeleted(schema.appsTable),
     ...(params.accessibleAppIds !== undefined
       ? [inArray(schema.appsTable.id, params.accessibleAppIds)]
       : []),
-    ...(searchPattern
-      ? [
-          or(
-            ilike(schema.appsTable.name, searchPattern),
-            ilike(schema.appsTable.description, searchPattern),
-          ),
-        ]
+    ...(params.enabled !== undefined
+      ? [eq(schema.appsTable.enabled, params.enabled)]
       : []),
+    ...(searchFilter ? [searchFilter] : []),
   ];
+}
+
+/**
+ * Attach labels to a batch of app rows in one query (no N+1). `App` carries
+ * `labels` as a required field, so every read path funnels through here.
+ */
+async function withLabels<T extends { id: string }>(
+  rows: T[],
+): Promise<(T & { labels: AgentLabelWithDetails[] })[]> {
+  if (rows.length === 0) return [];
+  const labelsByApp = await AppLabelModel.getLabelsForApps(
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) => ({
+    ...row,
+    labels: labelsByApp.get(row.id) ?? [],
+  }));
+}
+
+/** Single-row convenience wrapper around {@link withLabels}. */
+async function withLabelsOne<T extends { id: string }>(
+  row: T | undefined,
+): Promise<(T & { labels: AgentLabelWithDetails[] }) | null> {
+  if (!row) return null;
+  const [hydrated] = await withLabels([row]);
+  return hydrated ?? null;
 }
 
 /**
@@ -81,13 +119,20 @@ function buildOrgFilters(params: {
  * (accessibility + batch team loaders) lives in `AppAccessModel`.
  */
 class AppModel {
-  /** Active apps in an org, newest first; `accessibleAppIds` applies scope filtering. */
+  /**
+   * Active apps in an org, newest first; `accessibleAppIds` applies scope
+   * filtering. `enabled` filters on the lifecycle state — the chat `list_apps`
+   * tool passes `true` so disabled apps never surface as reusable to a model,
+   * while the REST list omits it so the Apps page still shows the author
+   * their own disabled apps (where re-enabling lives).
+   */
   static async findByOrganization(params: {
     organizationId: string;
     limit?: number;
     offset?: number;
     search?: string;
     accessibleAppIds?: string[];
+    enabled?: boolean;
   }): Promise<App[]> {
     let query = appWithCatalogQuery()
       .where(and(...buildOrgFilters(params)))
@@ -96,7 +141,7 @@ class AppModel {
 
     if (params.limit !== undefined) query = query.limit(params.limit);
     if (params.offset !== undefined) query = query.offset(params.offset);
-    return await query;
+    return await withLabels(await query);
   }
 
   static async countByOrganization(params: {
@@ -116,7 +161,7 @@ class AppModel {
     const [result] = await appWithCatalogQuery().where(
       and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)),
     );
-    return result ?? null;
+    return await withLabelsOne(result);
   }
 
   /**
@@ -194,7 +239,7 @@ class AppModel {
         notDeleted(schema.appsTable),
       ),
     );
-    return result ?? null;
+    return await withLabelsOne(result);
   }
 
   /** A single active app scoped to an org. */
@@ -209,7 +254,7 @@ class AppModel {
         notDeleted(schema.appsTable),
       ),
     );
-    return result ?? null;
+    return await withLabelsOne(result);
   }
 
   /**
@@ -239,6 +284,85 @@ class AppModel {
         ),
       );
     return result?.id ?? null;
+  }
+
+  /**
+   * Resolve a `/a/<segment>` URL segment — a slug or an app id — to an app id
+   * within one organization, or null when nothing matches. Callers still run
+   * the view check on the resolved id; this only turns a segment into an id.
+   */
+  static async resolveIdFromIdOrSlug({
+    idOrSlug,
+    organizationId,
+  }: {
+    idOrSlug: string;
+    organizationId: string;
+  }): Promise<string | null> {
+    // `apps.id` is a uuid column. Casting it to text so it can be compared
+    // against a possibly-non-uuid slug defeats the primary-key index and forces
+    // a sequential scan, so only compare against `id` when the segment is
+    // itself a uuid, and otherwise rely on the indexed `slug` lookup.
+    const matchesIdOrSlug = isUuid(idOrSlug)
+      ? or(
+          eq(schema.appsTable.id, idOrSlug),
+          eq(schema.appsTable.slug, idOrSlug),
+        )
+      : eq(schema.appsTable.slug, idOrSlug);
+
+    const [row] = await db
+      .select({ id: schema.appsTable.id })
+      .from(schema.appsTable)
+      .where(
+        and(
+          matchesIdOrSlug,
+          eq(schema.appsTable.organizationId, organizationId),
+          notDeleted(schema.appsTable),
+        ),
+      )
+      .limit(1);
+
+    return row?.id ?? null;
+  }
+
+  /**
+   * A free `/a/` slug derived from an app name, suffixed on collision. Racy by
+   * construction — `apps_org_slug_uidx` is the real guard, and the caller maps
+   * its violation to a 409.
+   */
+  static async generateUniqueSlug({
+    name,
+    organizationId,
+  }: {
+    name: string;
+    organizationId: string;
+  }): Promise<string> {
+    // Everything AppSlugSchema refuses from a user must also be unreachable by
+    // derivation: an empty slugification (a punctuation-only name), a uuid shape
+    // (it would shadow an id in resolveIdFromIdOrSlug), and a reserved segment.
+    // The truncation leaves room for the collision suffix.
+    const slugified = urlSlugify(name)
+      .slice(0, APP_NAME_MAX_LENGTH - COLLISION_SUFFIX_LENGTH)
+      // Truncating mid-word can leave the trailing hyphen the shape forbids.
+      .replace(/-+$/, "");
+    const usable =
+      slugified !== "" && !isUuid(slugified) && !isReservedAppSlug(slugified);
+    const baseSlug = usable ? slugified : "app";
+
+    const [existing] = await db
+      .select({ id: schema.appsTable.id })
+      .from(schema.appsTable)
+      .where(
+        and(
+          eq(schema.appsTable.organizationId, organizationId),
+          eq(schema.appsTable.slug, baseSlug),
+          notDeleted(schema.appsTable),
+        ),
+      )
+      .limit(1);
+
+    return existing
+      ? `${baseSlug}-${crypto.randomUUID().slice(0, 6)}`
+      : baseSlug;
   }
 
   /** A single active app, returned only if the caller may view it (else null). */
@@ -323,6 +447,20 @@ class AppModel {
   }
 
   /**
+   * Flip an app's locked state. A pure boolean on the app row, like
+   * `setEnabled`: locked refuses every agent-driven mutation until unlocked,
+   * while viewing and running stay unaffected.
+   */
+  static async setLocked(id: string, locked: boolean): Promise<App | null> {
+    const [row] = await db
+      .update(schema.appsTable)
+      .set({ locked })
+      .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)))
+      .returning({ id: schema.appsTable.id });
+    return row ? await AppModel.findById(id) : null;
+  }
+
+  /**
    * Update an app atomically. `patch` updates catalog columns; `teamIds`
    * (when supplied) replaces the team set; `version` (when supplied) forks a new
    * immutable version iff its canonical payload differs from the head, bumping
@@ -338,7 +476,10 @@ class AppModel {
   static async update(params: {
     id: string;
     patch?: Partial<
-      Pick<App, "name" | "description" | "scope" | "spec" | "environmentId">
+      Pick<
+        App,
+        "name" | "slug" | "description" | "scope" | "spec" | "environmentId"
+      >
     >;
     version?: VersionPayload;
     teamIds?: string[];
@@ -351,9 +492,11 @@ class AppModel {
   }): Promise<App | null> {
     const patch = params.patch ?? {};
     // App-row columns only; scope/environmentId are owned by the backing catalog.
-    const appRowPatch: Partial<Pick<AppRow, "name" | "description" | "spec">> =
-      {};
+    const appRowPatch: Partial<
+      Pick<AppRow, "name" | "slug" | "description" | "spec">
+    > = {};
     if (patch.name !== undefined) appRowPatch.name = patch.name;
+    if (patch.slug !== undefined) appRowPatch.slug = patch.slug;
     if (patch.description !== undefined)
       appRowPatch.description = patch.description;
     if (patch.spec !== undefined) appRowPatch.spec = patch.spec;
@@ -531,8 +674,17 @@ class AppModel {
     // Tool assignments live in appToolsTable (audited:false, "parent carries the
     // signal"), so include them here — otherwise assigning/removing a tool via
     // /api/apps/:appId/tools/:toolId → app.updated would show no diff.
-    const tools = await AppToolModel.getToolsForApp(id);
-    return { ...row, tools: tools.map((t) => t.name).sort() };
+    // Labels live in appLabelsTable (audited:false, "parent carries the
+    // signal") for the same reason, so a label-only edit still shows a diff.
+    const [tools, labels] = await Promise.all([
+      AppToolModel.getToolsForApp(id),
+      AppLabelModel.getLabelsForApp(id),
+    ]);
+    return {
+      ...row,
+      tools: tools.map((t) => t.name).sort(),
+      labels: labels.map((label) => `${label.key}:${label.value}`).sort(),
+    };
   }
 }
 

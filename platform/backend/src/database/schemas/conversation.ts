@@ -1,9 +1,9 @@
 import type { SupportedProvider } from "@archestra/shared";
+import { desc, isNull, sql } from "drizzle-orm";
 import {
   boolean,
   index,
   jsonb,
-  pgTable,
   text,
   timestamp,
   uuid,
@@ -13,10 +13,11 @@ import agentsTable from "./agent";
 import llmProviderApiKeysTable from "./llm-provider-api-key";
 import modelsTable from "./model";
 import projectsTable from "./project";
+import { softDeletablePgTable } from "./soft-deletable-table";
 
 // Note: Additional pg_trgm GIN index for search is created in migration 0116_pg_trgm_indexes.sql:
 // - conversations_title_trgm_idx: GIN index on title column
-const conversationsTable = pgTable(
+const conversationsTable = softDeletablePgTable(
   "conversations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -76,6 +77,20 @@ const conversationsTable = pgTable(
       .$type<ConversationOrigin>()
       .notNull()
       .default("user"),
+    /**
+     * The stored `title` is a seeded stand-in rather than a real title: an
+     * `app_open` chat is created titled with the app's name so the header and
+     * sidebar have something to show before the first exchange (a null title
+     * would read "New Chat Session" — an app draft has no user message for
+     * `getConversationDisplayTitle` to fall back to). Title generation treats a
+     * placeholder as untitled and replaces it. Cleared by any explicit title
+     * write — generated or hand-typed — so generation fires once and can never
+     * overwrite a name the user chose. Never set for `user` or
+     * `schedule_trigger` origins.
+     */
+    titleIsPlaceholder: boolean("title_is_placeholder")
+      .notNull()
+      .default(false),
     pinnedAt: timestamp("pinned_at", { mode: "date" }),
     lastMessageAt: timestamp("last_message_at", { mode: "date" })
       .notNull()
@@ -92,11 +107,34 @@ const conversationsTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (table) => ({
+  (table) => [
     // Project views count and list chats per project; without this the
     // per-project aggregation seq-scans conversations.
-    projectIdIdx: index("conversations_project_id_idx").on(table.projectId),
-  }),
+    index("conversations_project_id_idx").on(table.projectId),
+    // Hot path: the sidebar list filters user+org and sorts by lastMessageAt
+    // desc (ConversationModel.findAll). Composite so the lookup and the sort
+    // are both served by one index; partial on active rows so soft-deleted
+    // conversations neither bloat it nor cost writes when hidden.
+    index("conversations_active_owner_last_message_idx")
+      .on(table.userId, table.organizationId, desc(table.lastMessageAt))
+      .where(sql`${table.deletedAt} IS NULL`),
+  ],
 );
 
 export default conversationsTable;
+
+/**
+ * THE single source of truth for excluding soft-deleted conversations from
+ * reads. Import this at every read site — in-model and cross-model joins —
+ * instead of re-deriving `isNull(conversationsTable.deletedAt)` by hand, so a
+ * new read path can't silently leak deleted rows.
+ *
+ * Placement rule: this is a `WHERE`-clause predicate and is correct ONLY when
+ * `conversationsTable` is the base/inner table of the query. Where conversations
+ * is LEFT JOINed (the optional side), adding it to `WHERE` silently turns the
+ * LEFT JOIN into an INNER JOIN and drops parent rows — put it in the join's
+ * `ON` clause instead. Deliberate non-consumers: billing/usage aggregates
+ * (interaction, instance-usage) that must count deleted conversations too, and
+ * the audit middleware (historical record). See the soft-delete plan.
+ */
+export const notDeletedConversation = isNull(conversationsTable.deletedAt);

@@ -1,4 +1,5 @@
 import {
+  DEFAULT_APP_NAME,
   DEFAULT_THEME_ID,
   MEMBER_ROLE_NAME,
   type OrganizationCustomFont,
@@ -37,7 +38,7 @@ class OrganizationModel {
    * white-labeling. Falls back to "Archestra" when unset.
    */
   static async getAppName(): Promise<string> {
-    return (await OrganizationModel.getFirst())?.appName || "Archestra";
+    return (await OrganizationModel.getFirst())?.appName || DEFAULT_APP_NAME;
   }
 
   /**

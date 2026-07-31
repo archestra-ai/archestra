@@ -2,6 +2,7 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   AgentModel,
   AgentToolModel,
+  AgentVersionModel,
   AppAccessModel,
   AppModel,
   AppToolModel,
@@ -56,6 +57,13 @@ interface AgentToolAssignmentRequest {
   mcpServerId?: string | null;
   /** Optional prefetched lookup data used to avoid N+1 validation queries. */
   preFetchedData?: Partial<AgentToolAssignmentPrefetchedData>;
+  /**
+   * Skip this assignment's config version fork. Set by bulk callers, which
+   * fork once per agent for the whole batch via
+   * `AgentVersionModel.forkAgentsBestEffort` — one user action should produce
+   * one version, not one per tool.
+   */
+  deferVersionFork?: boolean;
 }
 
 export async function assignToolToAgent(
@@ -84,6 +92,13 @@ export async function assignToolToAgent(
 
   if (result.status === "unchanged") {
     return "duplicate";
+  }
+
+  // The tool surface changed — snapshot a new agent config version. Shared
+  // choke point for every single-tool assign (REST, MCP tools, agent import),
+  // so those paths need no fork of their own.
+  if (!params.deferVersionFork) {
+    await AgentVersionModel.forkIfChangedBestEffort(params.agentId);
   }
 
   if (result.status === "updated") {
@@ -184,8 +199,9 @@ export async function resolveAppToolsByName(params: {
   userId: string;
   organizationId: string;
   toolNames: readonly string[];
-  /** Environment to resolve tools within (the app's bound environment; the org
-   * default for scaffold_app, where env selection is deferred). */
+  /** Environment to resolve tools within (the app's bound environment; for
+   * scaffold_app the authoring agent's, which is where the app gets bound).
+   * The Default baseline always matches on top. */
   environmentId: string | null;
 }): Promise<
   { tools: Array<{ id: string; name: string }> } | ToolAssignmentError
@@ -293,9 +309,10 @@ export async function assignToolToApp(params: {
   }
 
   // Environment fence: a tool whose catalog is outside the app's bound
-  // environment is not assignable. This is a same-org, wrong-environment tool —
+  // environment (and outside the Default baseline, which every app may draw
+  // from) is not assignable. This is a same-org, wrong-environment tool —
   // distinct from the foreign-org not_found above — so it gets a clear 400.
-  const inEnvironment = await ToolModel.isToolInEnvironment(
+  const inEnvironment = await ToolModel.isToolInEnvironmentOrDefault(
     params.toolId,
     app.environmentId,
   );

@@ -4,7 +4,13 @@ import { schema } from "@/database";
 import { ConversationOriginSchema } from "./conversation";
 
 /** Who a shared project is visible to (no share row = owner only). */
-export const ProjectShareVisibilitySchema = z.enum(["organization", "team"]);
+// `user` shares with named individuals listed in `project_share_user`, the
+// same option conversations have carried from the start.
+export const ProjectShareVisibilitySchema = z.enum([
+  "organization",
+  "team",
+  "user",
+]);
 export type ProjectShareVisibility = z.infer<
   typeof ProjectShareVisibilitySchema
 >;
@@ -31,6 +37,14 @@ export type ProjectViewerRole = z.infer<typeof ProjectViewerRoleSchema>;
 export const ProjectListScopeSchema = z.enum(["personal", "team", "org"]);
 export type ProjectListScope = z.infer<typeof ProjectListScopeSchema>;
 
+/**
+ * Which lifecycle slice `GET /api/projects` returns: `active` (default) hides
+ * soft-deleted projects; `deleted` returns ONLY them — a project:admin-only,
+ * org-wide oversight view backing the restore flow.
+ */
+export const ProjectLifecycleSchema = z.enum(["active", "deleted"]);
+export type ProjectLifecycle = z.infer<typeof ProjectLifecycleSchema>;
+
 export const SelectProjectSchema = createSelectSchema(schema.projectsTable);
 export const InsertProjectSchema = createInsertSchema(
   schema.projectsTable,
@@ -40,6 +54,8 @@ export const InsertProjectSchema = createInsertSchema(
   slug: true,
   createdAt: true,
   updatedAt: true,
+  // soft-delete is ProjectModel.delete's business, never an insert payload.
+  deletedAt: true,
 });
 export type Project = z.infer<typeof SelectProjectSchema>;
 export type InsertProject = z.infer<typeof InsertProjectSchema>;
@@ -72,9 +88,22 @@ export const ProjectListItemSchema = z.object({
    * business), and non-team visibilities have no teams.
    */
   shareTeamNames: z.array(z.string()).nullable(),
+  /**
+   * Names of the people a `user`-shared project is shared with, for the
+   * visibility badge — without them such a project reads as private. Withheld
+   * (null) from anyone who cannot manage the project, on the same reasoning as
+   * `shareTeamNames`: the full recipient list is the owner's business.
+   */
+  shareUserNames: z.array(z.string()).nullable(),
   /** When the requesting user pinned this project; null = not pinned. */
   pinnedAt: z.date().nullable(),
   createdAt: z.date(),
+  /**
+   * When this project was soft-deleted; null for an active project. Non-null
+   * only in the project:admin deleted-projects view (`GET /api/projects?status=
+   * deleted`), where it drives the "deleted N ago" label.
+   */
+  deletedAt: z.date().nullable(),
 });
 export type ProjectListItem = z.infer<typeof ProjectListItemSchema>;
 
@@ -84,6 +113,9 @@ export type ProjectListItem = z.infer<typeof ProjectListItemSchema>;
  */
 export const ProjectDetailSchema = ProjectListItemSchema.extend({
   shareTeamIds: z.array(z.string()).nullable(),
+  // People a `user`-shared project names. Null when the caller cannot
+  // manage sharing, matching how shareTeamIds is withheld.
+  shareUserIds: z.array(z.string()).nullable(),
 });
 export type ProjectDetail = z.infer<typeof ProjectDetailSchema>;
 

@@ -118,6 +118,11 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "optimizationRule.deleted": "Optimization rule deleted",
   // Organization
   "organization.updated": "Organization updated",
+  // Project
+  "project.created": "Project created",
+  "project.updated": "Project updated",
+  "project.deleted": "Project deleted",
+  "project.restored": "Project restored",
   // Role
   "role.created": "Role created",
   "role.updated": "Role updated",
@@ -135,6 +140,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "skill.created": "Skill created",
   "skill.updated": "Skill updated",
   "skill.deleted": "Skill deleted",
+  "skill.restored": "Skill restored",
   "skill.imported": "Skill imported",
   // Team
   "team.created": "Team created",

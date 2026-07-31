@@ -1,7 +1,11 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import type { ChatMessageFeedback, ChatSkillMetadata } from "@archestra/shared";
+import {
+  type ChatMessageFeedback,
+  type ChatSkillMetadata,
+  toPlaceholderTitle,
+} from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -2429,6 +2433,11 @@ export function ChatPageContent({
       // Check if there are pending tool actions to apply
       const pendingActions = getPendingActions(initialAgentId);
 
+      // The sidebar shows this until the server generates a real title — and
+      // keeps it if generation fails.
+      const placeholderTitle =
+        toPlaceholderTitle(message.text ?? "") || undefined;
+
       createInitialConversation(async (newConversation) => {
         // Apply pending tool actions if any
         if (pendingActions.length > 0) {
@@ -2506,7 +2515,7 @@ export function ChatPageContent({
         }
 
         selectConversation(newConversation.id);
-      }, message.text?.trim());
+      }, placeholderTitle);
     },
     [
       isPlaywrightSetupVisible,

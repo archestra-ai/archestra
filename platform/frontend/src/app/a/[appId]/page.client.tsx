@@ -7,13 +7,16 @@ import { useApp } from "@/lib/app.query";
 
 // Full-page standalone runtime: just the app, no Archestra chrome. The app name
 // goes to the browser tab title, like any standalone web app.
-export default function AppRunPage({ appId }: { appId: string }) {
+//
+// `idOrSlug` is whatever the URL carried — a custom slug or the app id. Only the
+// lookup accepts both; the runtime below is mounted on the resolved `app.id`.
+export default function AppRunPage({ idOrSlug }: { idOrSlug: string }) {
   const {
     data: app,
     isPending,
     isLoadingError,
     refetch,
-  } = useApp(appId, { toastOnError: false });
+  } = useApp(idOrSlug, { toastOnError: false });
 
   useEffect(() => {
     if (app?.name) document.title = app.name;
@@ -42,7 +45,9 @@ export default function AppRunPage({ appId }: { appId: string }) {
 
   return (
     <div className="h-app-viewport w-full">
-      <AppFrame endpoint={{ kind: "app", appId }} fillContainer />
+      {/* app.id, never the URL segment: the runtime endpoint is uuid-keyed and
+          the id is the app's isolation key (data store, tool gate, audience). */}
+      <AppFrame endpoint={{ kind: "app", appId: app.id }} fillContainer />
     </div>
   );
 }

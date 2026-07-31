@@ -108,6 +108,7 @@ export const ToolFilterSchema = z.object({
   excludeArchestraTools: z.coerce
     .boolean()
     .optional()
+    // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
     .describe("Hide built-in Archestra tools"),
   includeKnowledgeSourcesTool: z.coerce
     .boolean()

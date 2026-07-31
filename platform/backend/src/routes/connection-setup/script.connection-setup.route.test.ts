@@ -1,6 +1,8 @@
 import {
   CLAUDE_CODE_CLIENT_ID,
+  COPILOT_CLI_CLIENT_ID,
   EXTERNAL_AGENT_ID_HEADER,
+  VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { vi } from "vitest";
 import {
@@ -389,7 +391,15 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(script).toContain("copilot_internal/v2/token");
     // token obtained at runtime, not injected server-side
     expect(script).toContain("ARCHESTRA_GHCP_TOKEN");
-    expect(script).not.toMatch(/arch_[0-9a-f]{64}/);
+    // The CLI's provider headers attribute the session the same way Claude
+    // Code's and Codex's do: the client id always, plus the provisioned
+    // passthrough key that ties each request back to this user.
+    expect(script).toContain(
+      `${EXTERNAL_AGENT_ID_HEADER}: ${COPILOT_CLI_CLIENT_ID}`,
+    );
+    expect(script).toMatch(
+      new RegExp(`${VIRTUAL_KEY_HEADER}: arch_[0-9a-f]{64}`),
+    );
   });
 
   test("github-copilot is rejected for clients that do not support it", async ({

@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.3.19",
+  "version": "1.3.24",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -28,6 +28,7 @@
     "test:integration:ui": "turbo test:integration:ui",
     "check:ci": "turbo check:ci",
     "license-check": "tsx standalone-scripts/license-check.ts",
+    "check:white-label": "tsx standalone-scripts/check-white-label-copy.ts",
     "codegen": "CODEGEN=true turbo codegen && python3 dev/grafana/generate-pg-dashboard-variants.py",
     "cleanup:dev:caches": "tsx standalone-scripts/cleanup-dev-caches.ts",
     "worktree:bootstrap": "scripts/worktree-bootstrap.sh bootstrap",

@@ -5,7 +5,9 @@ import { tryParseJson } from "./json";
 
 type OpenAiResponsesArm = Extract<
   Interaction,
-  { type: "azure:responses" | "openai:responses" }
+  {
+    type: "azure:responses" | "openai:responses" | "perplexity:responses";
+  }
 >;
 
 // Failed interactions persist `{ error }` in place of a provider response;

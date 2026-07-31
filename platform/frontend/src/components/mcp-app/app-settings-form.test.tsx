@@ -4,12 +4,14 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 const {
   updateMutateAsync,
   setEnabledMutateAsync,
+  setLockedMutateAsync,
   assignMutateAsync,
   unassignMutateAsync,
   useAppToolsMock,
 } = vi.hoisted(() => ({
   updateMutateAsync: vi.fn(),
   setEnabledMutateAsync: vi.fn(),
+  setLockedMutateAsync: vi.fn(),
   assignMutateAsync: vi.fn(),
   unassignMutateAsync: vi.fn(),
   useAppToolsMock: vi.fn(),
@@ -20,6 +22,10 @@ vi.mock("@/lib/app.query", () => ({
   useUpdateApp: () => ({ mutateAsync: updateMutateAsync, isPending: false }),
   useSetAppEnabled: () => ({
     mutateAsync: setEnabledMutateAsync,
+    isPending: false,
+  }),
+  useSetAppLocked: () => ({
+    mutateAsync: setLockedMutateAsync,
     isPending: false,
   }),
   useAssignToolToApp: () => ({
@@ -86,8 +92,10 @@ const APP = {
   description: "Team budget tracker",
   scope: "personal",
   enabled: true,
+  locked: false,
   teams: [],
   users: [],
+  labels: [],
   environmentId: null,
 } as unknown as Parameters<typeof AppSettingsForm>[0]["app"];
 
@@ -162,6 +170,9 @@ describe("AppSettingsForm save", () => {
         name: "Budget v2",
         description: "Team budget tracker",
         environmentId: null,
+        // Labels are replaced wholesale too, so the full current set rides
+        // every save — here the fixture's empty one.
+        labels: [],
       },
     });
     expect(assignMutateAsync).not.toHaveBeenCalled();
@@ -298,6 +309,86 @@ describe("AppSettingsForm save", () => {
 
     await waitFor(() =>
       expect(screen.getByText("Name is required.")).toBeInTheDocument(),
+    );
+    expect(updateMutateAsync).not.toHaveBeenCalled();
+    expect(onBack).not.toHaveBeenCalled();
+  });
+});
+
+describe("AppSettingsForm URL field", () => {
+  const SLUGGED = {
+    ...(APP as object),
+    slug: "budget",
+  } as Parameters<typeof AppSettingsForm>[0]["app"];
+
+  test("seeds the field from the app's current slug", () => {
+    renderForm({ app: SLUGGED });
+
+    expect(screen.getByLabelText("URL")).toHaveValue("budget");
+  });
+
+  test("sends a changed slug", async () => {
+    const { container, onBack } = renderForm({ app: SLUGGED });
+
+    fireEvent.change(screen.getByLabelText("URL"), {
+      target: { value: "  team-budget  " },
+    });
+    submitForm(container);
+
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.objectContaining({ slug: "team-budget" }),
+      }),
+    );
+  });
+
+  test("omits an unchanged slug so a save cannot 409 against its own row", async () => {
+    const { container, onBack } = renderForm({ app: SLUGGED });
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Budget v2" },
+    });
+    submitForm(container);
+
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.not.objectContaining({ slug: expect.anything() }),
+      }),
+    );
+  });
+
+  test("treats a cleared field as leave-alone, not as an empty slug", async () => {
+    // The API has no way to unset a URL, so an empty field must not be sent —
+    // it would come back a 400 rather than clearing anything.
+    const { container, onBack } = renderForm({ app: SLUGGED });
+
+    fireEvent.change(screen.getByLabelText("URL"), { target: { value: "" } });
+    submitForm(container);
+
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+    expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.not.objectContaining({ slug: expect.anything() }),
+      }),
+    );
+  });
+
+  test.each([
+    ["uppercase", "Team-Budget"],
+    ["an underscore", "team_budget"],
+    ["a space", "team budget"],
+  ])("blocks the save on %s and never calls the API", async (_label, value) => {
+    const { container, onBack } = renderForm({ app: SLUGGED });
+
+    fireEvent.change(screen.getByLabelText("URL"), { target: { value } });
+    submitForm(container);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/lowercase letters, numbers and single hyphens/i),
+      ).toBeInTheDocument(),
     );
     expect(updateMutateAsync).not.toHaveBeenCalled();
     expect(onBack).not.toHaveBeenCalled();

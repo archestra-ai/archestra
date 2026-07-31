@@ -16,6 +16,7 @@ import {
   providerDisplayNames,
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
+  stripClaudeContextVariantSuffix,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
 import {
@@ -28,6 +29,7 @@ import { LRUCacheManager } from "@/cache-manager";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -58,6 +60,7 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
+import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import {
   ApiError,
   type DualLlmAnalysis,
@@ -724,7 +727,13 @@ export async function handleLLMProxy<
     }
 
     // Cost optimization - potentially switch to cheaper model
-    const baselineModel = requestAdapter.getModel();
+    // A client may mark a Claude id with a context variant (`…[1m]`). It names
+    // the same model at the same price, so it is dropped for bookkeeping —
+    // otherwise the request records a model no catalog lists, which can never be
+    // priced. The request itself is forwarded with the id the client sent.
+    const baselineModel = stripClaudeContextVariantSuffix(
+      requestAdapter.getModel(),
+    );
     const hasTools = requestAdapter.hasTools();
     const tools = requestAdapter.getTools();
     // Cast messages since getOptimizedModel expects specific provider types
@@ -754,13 +763,36 @@ export async function handleLLMProxy<
       );
     }
 
-    const actualModel = requestAdapter.getModel();
+    const actualModel = stripClaudeContextVariantSuffix(
+      requestAdapter.getModel(),
+    );
 
     // Ensure model entries exist for cost tracking
-    await ModelModel.ensureModelExists(baselineModel, providerName);
+    const discovered = [
+      await ModelModel.ensureModelExists(baselineModel, providerName),
+      actualModel !== baselineModel
+        ? await ModelModel.ensureModelExists(actualModel, providerName)
+        : null,
+    ].filter((model) => model !== null);
 
-    if (actualModel !== baselineModel) {
-      await ModelModel.ensureModelExists(actualModel, providerName);
+    // Only a first sighting reaches here, so the registry fetch (cached) and the
+    // update stay off the per-request path. Enrichment is best-effort: a model
+    // that cannot be priced must not fail the request it arrived on.
+    if (discovered.length > 0) {
+      try {
+        const modelsDevData = await modelsDevClient.fetchModelsFromApi();
+        for (const model of discovered) {
+          await enrichDiscoveredModel({ model, modelsDevData });
+        }
+      } catch (error) {
+        logger.warn(
+          {
+            errorMessage:
+              error instanceof Error ? error.message : String(error),
+          },
+          "Failed to enrich proxy-discovered models",
+        );
+      }
     }
 
     // Prepare SSE headers for lazy commitment if streaming.
@@ -1147,8 +1179,10 @@ export async function handleLLMProxy<
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
         response: { error: errorMessage },
-        model: requestAdapter.getModel(),
-        baselineModel: requestAdapter.getModel(),
+        model: stripClaudeContextVariantSuffix(requestAdapter.getModel()),
+        baselineModel: stripClaudeContextVariantSuffix(
+          requestAdapter.getModel(),
+        ),
         inputTokens: 0,
         outputTokens: 0,
       });

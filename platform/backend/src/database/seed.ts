@@ -31,6 +31,7 @@ import logger from "@/logging";
 import {
   AgentExcludedToolModel,
   AgentModel,
+  AgentVersionModel,
   AppModel,
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
@@ -150,7 +151,11 @@ export async function syncBuiltInAgents(): Promise<void> {
       name: BUILT_IN_AGENT_NAMES.APP_RUNTIME,
       description:
         "Backs archestra.llm.complete() for MCP Apps — the proxy identity that attributes app LLM completions to org usage limits",
-      systemPrompt: APP_RUNTIME_SYSTEM_PROMPT,
+      // Shipped platform text: branded here, at seed time, for the same reason
+      // built-in skills are — the model should see the org's brand, not ours.
+      systemPrompt: archestraMcpBranding.brandBuiltInText(
+        APP_RUNTIME_SYSTEM_PROMPT,
+      ),
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
       } as const,
@@ -165,15 +170,23 @@ export async function syncBuiltInAgents(): Promise<void> {
       );
 
       if (!existing) {
-        await db.insert(schema.agentsTable).values({
-          organizationId: organization.id,
-          name: builtInAgent.name,
-          agentType: "agent",
-          scope: "org",
-          description: builtInAgent.description,
-          systemPrompt: builtInAgent.systemPrompt,
-          builtInAgentConfig: builtInAgent.builtInAgentConfig,
-        });
+        const [inserted] = await db
+          .insert(schema.agentsTable)
+          .values({
+            organizationId: organization.id,
+            name: builtInAgent.name,
+            agentType: "agent",
+            scope: "org",
+            description: builtInAgent.description,
+            systemPrompt: builtInAgent.systemPrompt,
+            builtInAgentConfig: builtInAgent.builtInAgentConfig,
+          })
+          .returning({ id: schema.agentsTable.id });
+        // This path writes agentsTable directly rather than through
+        // AgentModel, so it forks explicitly — otherwise every built-in agent
+        // would sit at latest_version 0 and the first user edit would fold the
+        // platform's seeded config into that user's version 1.
+        await AgentVersionModel.forkIfChangedBestEffort(inserted.id);
         logger.info(
           {
             builtInAgentId: builtInAgent.builtInAgentId,
@@ -194,6 +207,10 @@ export async function syncBuiltInAgents(): Promise<void> {
           .update(schema.agentsTable)
           .set({ systemPrompt: builtInAgent.systemPrompt })
           .where(eq(schema.agentsTable.id, existing.id));
+        // A deploy rewriting a built-in prompt is a config change like any
+        // other. Forking it here attributes it to the deploy; leaving it
+        // unforked would attach it to whichever user edits the agent next.
+        await AgentVersionModel.forkIfChangedBestEffort(existing.id);
 
         logger.info(
           {
@@ -296,6 +313,13 @@ export async function syncBuiltInSkillsForOrganization(
         },
         "Seeded built-in skill",
       );
+      continue;
+    }
+
+    // A soft-deleted built-in is a durable opt-out: the org removed it, so
+    // reconciliation must neither resurrect nor update it (findBuiltIn
+    // includes soft-deleted rows precisely so this check can run).
+    if (existing.deletedAt) {
       continue;
     }
 
@@ -697,6 +721,7 @@ async function syncModelsForApiKey(
 function getProviderDisplayName(provider: SupportedProvider): string {
   const displayNames: Record<SupportedProvider, string> = {
     anthropic: "Anthropic",
+    // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
     archestra: "Archestra",
     openai: "OpenAI",
     openrouter: "OpenRouter",
@@ -943,7 +968,13 @@ export async function seedDefaultAppsForPristineOrgs(): Promise<void> {
               organizationId: org.id,
               authorId: admin.userId,
               name: definition.name,
-              description: definition.description,
+              slug: await AppModel.generateUniqueSlug({
+                name: definition.name,
+                organizationId: org.id,
+              }),
+              description: archestraMcpBranding.brandBuiltInText(
+                definition.description,
+              ),
               templateId: definition.templateId,
             },
             payload: {

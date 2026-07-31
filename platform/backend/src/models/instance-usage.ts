@@ -34,8 +34,16 @@ class InstanceUsageModel {
         .from(schema.llmProviderApiKeysTable),
       db.select({ total: count() }).from(schema.virtualApiKeysTable),
       db.select({ total: count() }).from(schema.mcpServersTable),
+      // Deliberately NOT filtered by notDeletedConversation (unlike the agent
+      // and app counts above): conversations are soft-deletable, but this is a
+      // usage/telemetry gauge and must stay whole — soft-deleting a chat should
+      // not retroactively shrink reported instance usage. See the soft-delete
+      // plan's deliberate-exclude list.
       db.select({ total: count() }).from(schema.conversationsTable),
-      db.select({ total: count() }).from(schema.skillsTable),
+      db
+        .select({ total: count() })
+        .from(schema.skillsTable)
+        .where(notDeleted(schema.skillsTable)),
       db
         .select({ total: count() })
         .from(schema.appsTable)

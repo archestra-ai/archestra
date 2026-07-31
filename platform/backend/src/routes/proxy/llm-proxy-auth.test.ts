@@ -445,7 +445,7 @@ describe("attemptJwksAuth", () => {
       identityProviderId: idp.id,
     });
 
-    const gatewayUtils = await import("@/routes/mcp-gateway.utils");
+    const gatewayUtils = await import("@/routes/mcp-gateway/utils");
     const spy = vi.spyOn(gatewayUtils, "validateExternalIdpToken");
 
     const result = await attemptJwksAuth(
@@ -473,7 +473,7 @@ describe("attemptJwksAuth", () => {
     });
 
     // Mock validateExternalIdpToken to throw an error
-    const gatewayUtils = await import("@/routes/mcp-gateway.utils");
+    const gatewayUtils = await import("@/routes/mcp-gateway/utils");
     const spy = vi
       .spyOn(gatewayUtils, "validateExternalIdpToken")
       .mockRejectedValue(new Error("OIDC discovery failed"));
@@ -503,7 +503,7 @@ describe("attemptJwksAuth", () => {
       identityProviderId: idp.id,
     });
 
-    const gatewayUtils = await import("@/routes/mcp-gateway.utils");
+    const gatewayUtils = await import("@/routes/mcp-gateway/utils");
     const spy = vi
       .spyOn(gatewayUtils, "validateExternalIdpToken")
       .mockResolvedValue(null);
@@ -546,7 +546,7 @@ describe("attemptJwksAuth", () => {
     await makeLlmProviderApiKey(org.id, secret.id, { provider: "openai" });
 
     // Mock successful JWKS validation
-    const gatewayUtils = await import("@/routes/mcp-gateway.utils");
+    const gatewayUtils = await import("@/routes/mcp-gateway/utils");
     const spy = vi
       .spyOn(gatewayUtils, "validateExternalIdpToken")
       .mockResolvedValue({
@@ -587,7 +587,7 @@ describe("attemptJwksAuth", () => {
       identityProviderId: idp.id,
     });
 
-    const gatewayUtils = await import("@/routes/mcp-gateway.utils");
+    const gatewayUtils = await import("@/routes/mcp-gateway/utils");
     const spy = vi
       .spyOn(gatewayUtils, "validateExternalIdpToken")
       .mockResolvedValue({

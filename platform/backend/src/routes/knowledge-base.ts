@@ -1374,6 +1374,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetConnectorUserGroups,
         description:
+          // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
           "Synced external user groups for an auto-sync-permissions connector: each group's member emails, the Archestra org users they resolve to, and how many documents grant the group",
         tags: ["Connectors"],
         params: z.object({ id: z.uuid() }),
@@ -1531,6 +1532,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpsertConnectorMemberOverride,
         description:
+          // white-label-ok: OpenAPI prose; branded per request by enrichOpenApiWithRbac (route schemas register before the branding singleton syncs)
           "Manually map an upstream member account to an Archestra user for an auto-sync-permissions connector — the admin escape hatch when the upstream hides the member's email from every credential",
         tags: ["Connectors"],
         params: z.object({ id: z.uuid() }),

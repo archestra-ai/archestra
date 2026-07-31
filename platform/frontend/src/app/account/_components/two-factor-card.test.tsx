@@ -4,11 +4,16 @@ import userEvent from "@testing-library/user-event";
 import { useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { TwoFactorCard } from "./two-factor-card";
 
 vi.mock("next/navigation");
 
 vi.mock("@/lib/clients/auth/auth-client");
+
+// Pinned to a non-default brand so the enrollment assertion below proves the
+// issuer follows the deployment's name rather than coincidentally matching it.
+vi.mock("@/lib/hooks/use-app-name");
 
 const mockRouterPush = vi.fn();
 
@@ -40,6 +45,7 @@ function mockSession(twoFactorEnabled: boolean) {
 describe("TwoFactorCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAppName).mockReturnValue("Acme AI");
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
@@ -63,8 +69,11 @@ describe("TwoFactorCard", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
     await waitFor(() => {
+      // `issuer` is what the user's authenticator app shows beside the code, so
+      // it must follow the deployment's brand rather than the built-in default.
       expect(authClient.twoFactor.enable).toHaveBeenCalledWith({
         password: "hunter22",
+        issuer: "Acme AI",
       });
     });
 

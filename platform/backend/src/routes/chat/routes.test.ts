@@ -1125,6 +1125,65 @@ describe("extractFirstMessages", () => {
     expect(result.firstAssistantMessage).toBe("");
   });
 
+  it("ignores the seeded greeting of an app chat and takes the real reply", () => {
+    const messages = [
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "render_app",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { appId: "app-1" },
+            output: { structuredContent: { name: "Expense Tracker" } },
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "Here's **Expense Tracker**.\n\nWant to change the app? Tell me how!",
+          },
+        ],
+      },
+      {
+        role: "user",
+        parts: [{ type: "text", text: "Add a monthly budget column" }],
+      },
+      {
+        role: "assistant",
+        parts: [{ type: "text", text: "Added a monthly budget column." }],
+      },
+    ];
+
+    const result = extractFirstMessages(messages);
+
+    expect(result.firstUserMessage).toBe("Add a monthly budget column");
+    expect(result.firstAssistantMessage).toBe("Added a monthly budget column.");
+  });
+
+  it("still captures the reply when the first user message has no text", () => {
+    const messages = [
+      {
+        role: "user",
+        parts: [{ type: "text", text: "" }],
+        metadata: { skill: { id: "skill-1", name: "deep-research" } },
+      },
+      {
+        role: "assistant",
+        parts: [{ type: "text", text: "Researching the repo now." }],
+      },
+    ];
+
+    const result = extractFirstMessages(messages);
+
+    expect(result.firstUserSkillName).toBe("deep-research");
+    expect(result.firstAssistantMessage).toBe("Researching the repo now.");
+  });
+
   it("skips messages without text parts", () => {
     const messages = [
       {
@@ -1396,6 +1455,25 @@ describe("buildTitlePrompt", () => {
     expect(prompt).toContain("Assistant: Hi there");
     expect(prompt).not.toContain("Respond with ONLY the title");
   });
+
+  it("excerpts an opening turn instead of forwarding a pasted log whole", () => {
+    const prompt = buildTitlePrompt("u".repeat(20_000), "a".repeat(20_000));
+
+    // Enough of each side to name the topic, nowhere near either full message.
+    expect(prompt).toContain("u".repeat(1000));
+    expect(prompt).toContain("a".repeat(1000));
+    expect(prompt.length).toBeLessThan(2500);
+  });
+
+  it("does not cut an emoji in half when excerpting", () => {
+    // An odd-length prefix puts the cut inside a surrogate pair, which a raw
+    // slice would forward to the provider as an unpaired surrogate.
+    const prompt = buildTitlePrompt(`Debug my ${"🐛".repeat(2000)}`, "");
+
+    expect(prompt).not.toMatch(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/,
+    );
+  });
 });
 
 describe("buildChatStopConditions", () => {
@@ -1500,10 +1578,10 @@ describe("generateConversationTitle", () => {
     expect(messageText(capturedBody, "user")).toBe(
       "Chat conversation messages:\n\nUser: Hello\n\nAssistant: Hi!",
     );
-    expect(capturedBody.max_tokens).toBe(64);
+    expect(capturedBody.max_tokens).toBe(4096);
   });
 
-  it("caps output tokens so non-streaming requests stay under the provider limit", async () => {
+  it("leaves room for a reasoning model's hidden thinking", async () => {
     let capturedBody: { max_tokens?: number } | undefined;
     server.use(
       http.post(TITLE_COMPLETIONS_URL, async ({ request }) => {
@@ -1526,7 +1604,85 @@ describe("generateConversationTitle", () => {
     });
 
     if (!capturedBody) throw new Error("title request was never sent");
-    expect(capturedBody.max_tokens).toBeLessThanOrEqual(64);
-    expect(capturedBody.max_tokens).toBeGreaterThan(0);
+    // Thinking tokens are drawn from this same ceiling, and 1024 is the
+    // smallest thinking budget the Anthropic API accepts. A ceiling at or
+    // below that leaves a thinking model no room to answer after it thinks:
+    // the response comes back empty and the chat keeps its first-message
+    // fallback title.
+    expect(capturedBody.max_tokens).toBeGreaterThan(1024);
+    // …and far enough under the budget that made Anthropic reject the
+    // non-streaming request outright rather than answer it.
+    expect(capturedBody.max_tokens).toBeLessThanOrEqual(8192);
+  });
+
+  it("normalizes a title the model wrapped in quotes or spread over lines", async () => {
+    server.use(
+      http.post(TITLE_COMPLETIONS_URL, () =>
+        HttpResponse.json(openAiCompletion('"React\n  Component   Basics"')),
+      ),
+    );
+
+    const result = await generateConversationTitle({
+      provider: "openai",
+      apiKey: "test-key",
+      modelName: "gpt-test",
+      baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Generate a title.",
+      firstUserMessage: "Hello",
+      firstAssistantMessage: "Hi!",
+    });
+
+    expect(result).toBe("React Component Basics");
+  });
+
+  it("rejects a paragraph the model wrote instead of a title", async () => {
+    server.use(
+      http.post(TITLE_COMPLETIONS_URL, () =>
+        HttpResponse.json(openAiCompletion("word ".repeat(500))),
+      ),
+    );
+
+    const result = await generateConversationTitle({
+      provider: "openai",
+      apiKey: "test-key",
+      modelName: "gpt-test",
+      baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Generate a title.",
+      firstUserMessage: "Hello",
+      firstAssistantMessage: "Hi!",
+    });
+
+    // Storing 80 characters of an answer is worse than the placeholder the
+    // client already shows, so a null keeps the placeholder in the sidebar.
+    expect(result).toBeNull();
+  });
+
+  it("rejects an empty response from a model that only thought", async () => {
+    server.use(
+      http.post(TITLE_COMPLETIONS_URL, () =>
+        HttpResponse.json(openAiCompletion("")),
+      ),
+    );
+
+    const result = await generateConversationTitle({
+      provider: "openai",
+      apiKey: "test-key",
+      modelName: "gpt-test",
+      baseUrl: null,
+      agentId: "title-agent-id",
+      userId: "user-id",
+      conversationId: "conversation-id",
+      systemPrompt: "Generate a title.",
+      firstUserMessage: "Hello",
+      firstAssistantMessage: "Hi!",
+    });
+
+    expect(result).toBeNull();
   });
 });

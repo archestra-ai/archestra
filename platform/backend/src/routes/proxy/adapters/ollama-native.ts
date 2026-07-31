@@ -40,6 +40,7 @@ import type {
   ToolCompressionStats,
   UsageView,
 } from "@/types";
+import { extractCommonToolCallArguments } from "@/types";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 
 // =============================================================================
@@ -165,11 +166,14 @@ class OllamaNativeRequestAdapter
     const results: CommonToolResult[] = [];
     this.request.messages.forEach((message, index) => {
       if (message.role !== "tool") return;
+      const toolCall = this.findToolCallInMessages(
+        this.request.messages,
+        message,
+      );
       results.push({
         id: this.toolResultId(message, index),
-        name:
-          this.findToolNameInMessages(this.request.messages, message) ??
-          "unknown",
+        name: toolCall?.name ?? "unknown",
+        arguments: toolCall?.arguments,
         content: parseMaybeJson(nativeContentToText(message.content)),
         isError: false,
       });
@@ -257,10 +261,10 @@ class OllamaNativeRequestAdapter
     return message.tool_call_id ?? `${SYNTHETIC_TOOL_RESULT_ID_PREFIX}${index}`;
   }
 
-  private findToolNameInMessages(
+  private findToolCallInMessages(
     messages: NativeMessages,
     toolMessage: NativeMessage,
-  ): string | null {
+  ): { name: string; arguments?: Record<string, unknown> } | null {
     const toolCallId = toolMessage.tool_call_id;
     if (toolCallId) {
       for (let i = messages.length - 1; i >= 0; i--) {
@@ -268,15 +272,41 @@ class OllamaNativeRequestAdapter
         if (message.role === "assistant" && message.tool_calls) {
           for (const toolCall of message.tool_calls) {
             if (toolCall.id === toolCallId) {
-              return toolCall.function.name;
+              return {
+                name: toolCall.function.name,
+                arguments: extractCommonToolCallArguments(
+                  toolCall.function.arguments,
+                ),
+              };
             }
           }
         }
       }
     }
     // The native shape: results name the tool directly instead of referencing
-    // a call id. Ollama's own clients send only this.
-    return toolMessage.tool_name ?? null;
+    // a call id. Ollama's own clients send only this, so the arguments come
+    // from the nearest preceding call of that tool — the same correlation the
+    // wire format itself implies.
+    const toolName = toolMessage.tool_name;
+    if (!toolName) {
+      return null;
+    }
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message.role === "assistant" && message.tool_calls) {
+        for (const toolCall of message.tool_calls) {
+          if (toolCall.function.name === toolName) {
+            return {
+              name: toolName,
+              arguments: extractCommonToolCallArguments(
+                toolCall.function.arguments,
+              ),
+            };
+          }
+        }
+      }
+    }
+    return { name: toolName };
   }
 
   private toCommonFormat(messages: NativeMessages): CommonMessage[] {
@@ -291,10 +321,12 @@ class OllamaNativeRequestAdapter
       // purely from an empty tool-call list, so dropping one here disables
       // trusted-data policies and dual-LLM sanitization with no other signal.
       if (message.role === "tool") {
+        const toolCall = this.findToolCallInMessages(messages, message);
         common.toolCalls = [
           {
             id: this.toolResultId(message, index),
-            name: this.findToolNameInMessages(messages, message) ?? "unknown",
+            name: toolCall?.name ?? "unknown",
+            arguments: toolCall?.arguments,
             content: parseMaybeJson(nativeContentToText(message.content)),
             isError: false,
           },

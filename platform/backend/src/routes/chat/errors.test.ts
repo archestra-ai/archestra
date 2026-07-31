@@ -22,6 +22,7 @@ vi.mock("@sentry/node", () => ({
 
 import { NoSuchToolError, UnsupportedFunctionalityError } from "ai";
 import { MICROSOFT_365_COPILOT_TOOLS_UNSUPPORTED_MESSAGE } from "@/routes/proxy/adapters/microsoft-365-copilot-graph-translator";
+import { GithubCopilot } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import {
   buildAbortiveTurnError,
@@ -2371,6 +2372,49 @@ describe("mapProviderError - Microsoft 365 Copilot tools rejection", () => {
       isRetryable: false,
     };
     const result = mapProviderError(error, "microsoft-365-copilot");
+
+    expect(result.code).toBe(ChatErrorCode.InvalidRequest);
+  });
+});
+
+describe("mapProviderError - GitHub Copilot model rejection", () => {
+  it("maps Copilot's model-not-supported 400 to the actionable NotFound copy (T-959)", () => {
+    // The proxy's error wrapping keeps message/type but drops the upstream
+    // `model_not_supported` code — this is the exact shape the chat receives.
+    const error = {
+      name: "AI_APICallError",
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          message: GithubCopilot.API.MODEL_NOT_SUPPORTED_MESSAGE,
+          type: "api_validation_error",
+        },
+      }),
+      isRetryable: false,
+    };
+    const result = mapProviderError(error, "github-copilot");
+
+    expect(result.code).toBe(ChatErrorCode.NotFound);
+    expect(result.isRetryable).toBe(false);
+    // "The selected model is not available. Please choose a different model."
+    // — not the retry-suggesting invalid-request copy: retrying a
+    // deterministic rejection fails identically every time.
+    expect(result.message).toBe(ChatErrorMessages[ChatErrorCode.NotFound]);
+  });
+
+  it("keeps other github-copilot 400s on the generic invalid-request code", () => {
+    const error = {
+      name: "AI_APICallError",
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: {
+          message: "messages must be non-empty",
+          type: "invalid_request_error",
+        },
+      }),
+      isRetryable: false,
+    };
+    const result = mapProviderError(error, "github-copilot");
 
     expect(result.code).toBe(ChatErrorCode.InvalidRequest);
   });

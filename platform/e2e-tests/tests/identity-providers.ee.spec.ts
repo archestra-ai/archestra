@@ -7,6 +7,7 @@ import {
   getIdpRoleMappingRuleRowTestId,
   KEYCLOAK_OIDC,
   KEYCLOAK_SAML,
+  MEMBER_EMAIL,
   SSO_DOMAIN,
   UI_BASE_URL,
 } from "../consts";
@@ -326,6 +327,68 @@ async function getTeamIdByNameViaApi(
 
   expect(team, `Expected team "${teamName}" to exist`).toBeDefined();
   return team?.id ?? "";
+}
+
+/**
+ * Hand team administration to {@link MEMBER_EMAIL} and drop the admin's own
+ * membership, leaving the admin outside the team.
+ *
+ * Creating a team makes the creator one of its admins, and SSO team sync skips
+ * anyone who is already a member — it never claims or removes a manual
+ * membership. A team-sync test signing in as the creator would therefore have
+ * nothing to observe. Promoting a successor first is required: removing a
+ * team's last admin is rejected.
+ */
+async function handTeamOverAndLeave(
+  page: Page,
+  teamName: string,
+): Promise<void> {
+  const teamId = await getTeamIdByNameViaApi(page, teamName);
+
+  const membersResponse = await page.request.get(
+    `${UI_BASE_URL}/api/teams/${teamId}/members`,
+  );
+  await expectApiResponseOk(membersResponse, "get team members");
+  const members = (await membersResponse.json()) as Array<{
+    userId: string;
+    email: string;
+  }>;
+  const creatorMembership = members.find(
+    (member) => member.email === ADMIN_EMAIL,
+  );
+  expect(
+    creatorMembership,
+    `Expected ${ADMIN_EMAIL} to be a member of "${teamName}" after creating it`,
+  ).toBeDefined();
+
+  const orgMembersResponse = await page.request.get(
+    `${UI_BASE_URL}/api/auth/organization/list-members`,
+  );
+  await expectApiResponseOk(orgMembersResponse, "list organization members");
+  const orgMembers =
+    (
+      (await orgMembersResponse.json()) as {
+        members?: Array<{ userId: string; user: { email: string } }>;
+      }
+    ).members ?? [];
+  const successor = orgMembers.find(
+    (member) => member.user.email === MEMBER_EMAIL,
+  );
+  expect(
+    successor,
+    `Expected organization member ${MEMBER_EMAIL} to exist`,
+  ).toBeDefined();
+
+  const addResponse = await page.request.post(
+    `${UI_BASE_URL}/api/teams/${teamId}/members`,
+    { data: { userId: successor?.userId, role: "admin" } },
+  );
+  await expectApiResponseOk(addResponse, "promote successor team admin");
+
+  const removeResponse = await page.request.delete(
+    `${UI_BASE_URL}/api/teams/${teamId}/members/${creatorMembership?.userId}`,
+  );
+  await expectApiResponseOk(removeResponse, "remove creator membership");
 }
 
 function getRoleMappingRuleRow(page: Page, index: number) {
@@ -681,6 +744,11 @@ test.describe("Identity Provider Team Sync E2E", () => {
       first: true,
     });
     await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 5000 });
+
+    // STEP 3.5: Leave the team the admin just created. Creating a team makes
+    // the creator one of its admins, and sync skips existing members, so the
+    // admin has to be outside the team for the SSO login below to add them.
+    await handTeamOverAndLeave(page, teamName);
 
     // STEP 4: Test SSO login with admin user (in archestra-admins group)
     const { context: ssoContext } = await signInViaIdentityProvider({

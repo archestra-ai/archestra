@@ -1,5 +1,6 @@
 import type { SensitiveContextOrigin } from "@archestra/shared";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
+import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 
@@ -77,9 +78,18 @@ export interface ArchestraContext {
    */
   subagentToolStream?: SubagentToolStreamBridge;
   /**
+   * Bridge that detaches a long-running dispatched call into a durable,
+   * cancellable task. Matters most for `run_tool`: in `search_and_run_only`
+   * mode every third-party tool call arrives through it, so without this the
+   * agents most likely to call a slow tool would be the ones that never got a
+   * task. Absent in headless executions, where nobody is watching.
+   */
+  taskBridge?: ChatTaskBridge;
+  /**
    * The id of the tool call currently executing. Set on the delegation path so
    * the child's surfaced tool calls can be attributed to the delegation call
-   * (`agent__<slug>`) that spawned them.
+   * (`agent__<slug>`) that spawned them, and on the `run_tool` path so a task
+   * card attaches to the call the user can actually see.
    */
   currentToolCallId?: string;
   /**

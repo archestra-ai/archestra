@@ -1,7 +1,7 @@
 import config from "@/config";
 import logger from "@/logging";
 import { createGithubCopilotFetch } from "@/services/github-copilot-token";
-import { ApiError } from "@/types";
+import { ApiError, GithubCopilot } from "@/types";
 import { joinBaseUrl } from "@/utils/base-url";
 import { type ModelInfo, modelFetchError } from "./types";
 
@@ -19,6 +19,16 @@ import { type ModelInfo, modelFetchError } from "./types";
  * model is a Responses-only one, while every usable chat model is
  * picker=false, so that flag would surface an unusable model and hide the
  * working ones (verified against a live subscription).
+ *
+ * The catalog fields alone are not enough: `/models` also lists entries that
+ * `/chat/completions` rejects outright with `model_not_supported` — retired
+ * aliases next to their still-working snapshots (`gpt-4` vs `gpt-4o`,
+ * `gpt-3.5-turbo` vs `gpt-3.5-turbo-0613`), client-internal agent models
+ * (`copilot-search-*`, `exec-agent-*`), and per-plan-unavailable models that
+ * still declare `"/chat/completions"` in `supported_endpoints`. No field
+ * discriminates them (verified live: a dead alias can be field-identical to a
+ * working model, down to `version`), so every candidate is verified with a
+ * zero-inference probe before it is catalogued.
  */
 export async function fetchGithubCopilotModels(
   apiKey: string,
@@ -50,21 +60,123 @@ export async function fetchGithubCopilotModels(
     data?: GithubCopilotModel[];
   };
 
-  return (Array.isArray(payload.data) ? payload.data : [])
-    .filter(isChatCompletionsModel)
-    .map((model) => ({
-      id: model.id,
-      displayName: model.name || model.id,
-      provider: "github-copilot" as const,
-      capabilities: {
-        contextLength:
-          model.capabilities?.limits?.max_context_window_tokens ?? null,
-        supportsToolCalling: model.capabilities?.supports?.tool_calls ?? null,
-      },
-    }));
+  const candidates = (Array.isArray(payload.data) ? payload.data : []).filter(
+    isChatCompletionsModel,
+  );
+  const invocable = await dropModelsRejectedUpstream({
+    candidates,
+    copilotFetch,
+    baseUrl,
+    extraHeaders,
+  });
+
+  return invocable.map((model) => ({
+    id: model.id,
+    displayName: model.name || model.id,
+    provider: "github-copilot" as const,
+    capabilities: {
+      contextLength:
+        model.capabilities?.limits?.max_context_window_tokens ?? null,
+      supportsToolCalling: model.capabilities?.supports?.tool_calls ?? null,
+    },
+  }));
 }
 
 // ===== Internal helpers =====
+
+/** Concurrent invocability probes per sync (a catalog is a few dozen entries). */
+const VERIFY_CONCURRENCY = 8;
+
+/**
+ * Drops candidates Copilot's `/chat/completions` would reject with
+ * `model_not_supported`, using a deliberately invalid, zero-inference request:
+ * CAPI validates the model before the payload, so a dead model answers
+ * `model_not_supported` while a live one answers "messages must be non-empty"
+ * (verified live). No tokens are generated and no model is ever invoked, so
+ * the probe cannot consume a premium request.
+ *
+ * Only a definite `model_not_supported` drops a model. Anything inconclusive
+ * (429, 5xx, network failure — or a validation-order change upstream) keeps
+ * it, so an outage degrades to today's unverified catalog instead of an empty
+ * one.
+ */
+async function dropModelsRejectedUpstream(params: {
+  candidates: GithubCopilotModel[];
+  copilotFetch: ReturnType<typeof createGithubCopilotFetch>;
+  baseUrl: string;
+  extraHeaders?: Record<string, string> | null;
+}): Promise<GithubCopilotModel[]> {
+  const { candidates, copilotFetch, baseUrl, extraHeaders } = params;
+  if (candidates.length === 0) {
+    return candidates;
+  }
+
+  const invocable: boolean[] = new Array(candidates.length);
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(VERIFY_CONCURRENCY, candidates.length) },
+    async () => {
+      while (nextIndex < candidates.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        invocable[index] = await isModelInvocable({
+          modelId: candidates[index].id,
+          copilotFetch,
+          baseUrl,
+          extraHeaders,
+        });
+      }
+    },
+  );
+  await Promise.all(workers);
+
+  const dropped = candidates.filter((_, index) => !invocable[index]);
+  if (dropped.length > 0) {
+    logger.info(
+      { droppedModelIds: dropped.map((model) => model.id) },
+      "Dropped GitHub Copilot models the chat/completions endpoint rejects",
+    );
+  }
+  return candidates.filter((_, index) => invocable[index]);
+}
+
+async function isModelInvocable(params: {
+  modelId: string;
+  copilotFetch: ReturnType<typeof createGithubCopilotFetch>;
+  baseUrl: string;
+  extraHeaders?: Record<string, string> | null;
+}): Promise<boolean> {
+  const { modelId, copilotFetch, baseUrl, extraHeaders } = params;
+  try {
+    const response = await copilotFetch(
+      joinBaseUrl(baseUrl, "/chat/completions"),
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(extraHeaders ?? {}),
+        },
+        // Invalid on purpose: the model is validated before the payload, so
+        // this never generates output — see dropModelsRejectedUpstream.
+        body: JSON.stringify({ model: modelId, messages: [] }),
+      },
+    );
+    if (response.ok) {
+      await response.body?.cancel();
+      return true;
+    }
+    const errorText = await response.text();
+    try {
+      const parsed = JSON.parse(errorText) as { error?: { code?: string } };
+      return parsed.error?.code !== GithubCopilot.API.MODEL_NOT_SUPPORTED_CODE;
+    } catch {
+      return true;
+    }
+  } catch {
+    // Network failure is inconclusive — keep the model.
+    return true;
+  }
+}
 
 /** True if the model is usable through Copilot's `/chat/completions` endpoint. */
 function isChatCompletionsModel(model: GithubCopilotModel): boolean {

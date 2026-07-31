@@ -31,12 +31,12 @@ describe("isAppsHackathonOpen", () => {
     expect(isAppsHackathonOpen(APPS_HACKATHON_CLOSES_AT_MS)).toBe(false);
   });
 
-  it("spells the window as 22–29 July 2026, 00:00 UK (BST = UTC+1)", () => {
+  it("opens 22 July 2026 00:00 UK (BST = UTC+1) and closes 30 July 2026 00:00 UTC", () => {
     expect(new Date(APPS_HACKATHON_OPENS_AT_MS).toISOString()).toBe(
       "2026-07-21T23:00:00.000Z",
     );
     expect(new Date(APPS_HACKATHON_CLOSES_AT_MS).toISOString()).toBe(
-      "2026-07-28T23:00:00.000Z",
+      "2026-07-30T00:00:00.000Z",
     );
   });
 });

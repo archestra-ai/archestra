@@ -159,6 +159,8 @@ export const TOOL_RENDER_APP_SHORT_NAME = "render_app";
 export const TOOL_READ_APP_SHORT_NAME = "read_app";
 export const TOOL_EDIT_APP_SHORT_NAME = "edit_app";
 export const TOOL_SET_APP_TOOLS_SHORT_NAME = "set_app_tools";
+export const TOOL_SET_APP_LABELS_SHORT_NAME = "set_app_labels";
+export const TOOL_SET_APP_LOCK_SHORT_NAME = "set_app_lock";
 export const TOOL_VALIDATE_APP_SHORT_NAME = "validate_app";
 export const TOOL_PUBLISH_APP_SHORT_NAME = "publish_app";
 export const TOOL_DELETE_APP_SHORT_NAME = "delete_app";
@@ -271,6 +273,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_READ_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_SET_APP_TOOLS_SHORT_NAME,
+  TOOL_SET_APP_LABELS_SHORT_NAME,
+  TOOL_SET_APP_LOCK_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
   TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_DELETE_APP_SHORT_NAME,
@@ -440,6 +444,8 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   read_app: "apps",
   edit_app: "apps",
   set_app_tools: "apps",
+  set_app_labels: "apps",
+  set_app_lock: "apps",
   validate_app: "apps",
   publish_app: "apps",
   delete_app: "apps",
@@ -684,6 +690,8 @@ export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
   TOOL_SET_APP_TOOLS_SHORT_NAME,
+  TOOL_SET_APP_LABELS_SHORT_NAME,
+  TOOL_SET_APP_LOCK_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
   TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_READ_APP_SHORT_NAME,

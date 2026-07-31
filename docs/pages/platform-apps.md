@@ -3,7 +3,7 @@ title: MCP Apps
 category: Apps
 order: 1
 description: User-authored MCP Apps — sandboxed HTML interfaces with their own data store and tools
-lastUpdated: 2026-07-28
+lastUpdated: 2026-07-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,7 +24,7 @@ Authoring is a staged flow — each tool's result points at the next step:
 
 Editing the HTML forks a new immutable version, and the head version is served when the app runs. The procedure and the SDK conventions live in the built-in **build-app** skill, not in the tool descriptions, so the model loads them on demand.
 
-Run or author an app at `/a/:id` (no chat chrome, no sidebar), or run it from chat: a successful `scaffold_app`, `edit_app`, or `render_app` call renders the app inline in the conversation. All surfaces drive the same app-bound runtime, so behavior is identical. Because every owned app is backed by its own MCP server, its server settings — visibility (sharing), environment, assigned tools, and deletion — are managed from its card in the [MCP registry](./platform-mcp), not the authoring page.
+Run or author an app at `/a/:slug` (no chat chrome, no sidebar), or run it from chat: a successful `scaffold_app`, `edit_app`, or `render_app` call renders the app inline in the conversation. All surfaces drive the same app-bound runtime, so behavior is identical. Because every owned app is backed by its own MCP server, its server settings — visibility (sharing), environment, assigned tools, and deletion — are managed from its card in the [MCP registry](./platform-mcp), not the authoring page.
 
 ## Who Can Use an App
 
@@ -32,9 +32,33 @@ App settings offers four choices under "Who can use this app". **Personal** keep
 
 Sharing a chat does not share the apps it renders. Each viewer resolves an app against that app's own visibility. An app you have not shared with someone shows an access message in their view — a personal app in a chat you shared, for example. The chat's share dialog warns you when this will happen, and names the apps, so you can share them with the same people first.
 
+Disabling an app (in App settings) pulls it back without deleting it. It leaves everyone else's gallery, and its launch tool leaves every agent surface. To chat, a disabled app does not exist: it is not listed, and no conversation can read, edit, publish, or delete it — not even yours. You still see it in your own gallery, marked Disabled; enable it there to keep building.
+
 The `/apps` gallery lists everything the viewer can reach in two sections: apps you own, and the interactive apps exposed by your installed external [MCP servers](./platform-mcp). Each `ui://` resource is its own card, titled by the server's display name (*Task Tracker*); when one server exposes several UIs, the title carries the tool — *Task Tracker / show_board*. A card opens the app in a new chat. That chat stays out of your conversation list until you write into it. An owned card carries **Open in new tab** and **Delete** in its overflow menu; an external card carries **Open in new tab** (the standalone runtime) and a link to the backing **MCP server** page (where the server — and its uninstall — lives).
 
 While the feature is enabled, newly created agents get the full app tool set assigned by default — the staged flow (`refine_app`, `scaffold_app`, `read_app`, `edit_app`, `validate_app`, `publish_app`) plus the supporting `preview_app_tool`, `get_app_diagnostics`, `render_app`, `list_apps`, and `delete_app` — so "build me an app" works in chat without per-agent setup. The tools can be unassigned per agent like any other; agents created before the feature was enabled need them assigned manually.
+
+## Locking an App
+
+A locked app is immutable. Agents refuse every change to it — edits, tool assignments, deletion — until it is unlocked. Viewing and running are unaffected. An agent may unlock an app only when you directly ask it to; it never unlocks one on its own. Lock or unlock an app in App settings, or ask an agent in chat.
+
+## Defaults for New Apps
+
+Two settings in **Settings → Chat** govern how new apps start. Both are off by default. Flipping them never touches existing apps.
+
+**New apps are disabled by default** creates every new app disabled. The app stays author-only and invisible to agents until you enable it in App settings.
+
+**New apps are locked by default** creates every new app [locked](#locking-an-app). No agent can edit it until a user unlocks it.
+
+## Labels
+
+Labels are key-value tags that organize your apps — `env: prod`, for example. You add them in App settings.
+
+The `/apps` gallery filters by label. Pick a key, then the values you want. Choosing values under two keys narrows the list to apps carrying both. Choosing several values under one key widens it to apps carrying any of them.
+
+Apps from installed MCP servers show their server's labels, so one filter covers the whole gallery. You edit those on the server's page in the [MCP registry](./platform-mcp).
+
+Agents can read and set labels through the built-in app tools, so you can ask one in chat to tag an app.
 
 ## External MCP clients
 
@@ -85,7 +109,7 @@ Each app has its own key-to-document store, exposed to the app's HTML as `arches
 
 ## Tools and auto-auth
 
-Beyond the data store, an app can be assigned upstream MCP-server tools — from the Tools tab of its settings in the MCP registry, or directly from chat via the `tools` parameter of `scaffold_app` (declarative: the list replaces the current assignments). Assignment mirrors the agent model (scope-aligned, dynamic credentials by default). A running app can call only its assigned tools plus its own data-store tools; everything else is refused at the route.
+Beyond the data store, an app can be assigned upstream MCP-server tools — from the Tools tab of its settings in the MCP registry, or directly from chat via the `tools` parameter of `scaffold_app` (declarative: the list replaces the current assignments). Assignment mirrors the agent model (scope-aligned, dynamic credentials by default). A running app can call only its assigned tools plus its own data-store tools; everything else is refused at the route. `scaffold_app` binds the app to the authoring agent's [environment](./platform-environments); assignable tools are that environment's plus the Default environment's.
 
 Tool calls run **as the viewing user**: the platform resolves the MCP server and credentials per viewer at call time (personal install first, then team, then org), so an app reuses whatever MCP servers the viewer has already connected — no tokens in app code, no per-app auth setup. If the viewer hasn't connected the required server yet, `archestra.tools.call` rejects with `{ code: "auth_required", url }`; the user completes authentication in the MCP registry (apps cannot run OAuth flows themselves) and the next call succeeds.
 

@@ -151,6 +151,9 @@ export function SkillEditorDialog({
   const [files, setFiles] = useState<ResourceFile[]>([]);
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  // People the skill is shared with by name. Stored beside the `personal`
+  // scope, so the selector reads (scope, userIds) as a fourth choice.
+  const [userIds, setUserIds] = useState<string[]>([]);
   // empty = not restricted (available to agents in every environment).
   const [environmentIds, setEnvironmentIds] = useState<string[]>([]);
   // null = the SKILL.md manifest is open; otherwise an index into `files`.
@@ -205,6 +208,7 @@ export function SkillEditorDialog({
       );
       setScope(skill.scope);
       setTeamIds(skill.teams.map((team) => team.id));
+      setUserIds(skill.users.map((user) => user.id));
       setEnvironmentIds(
         skill.environments.map((environment) => environment.id),
       );
@@ -213,6 +217,7 @@ export function SkillEditorDialog({
       setFiles([]);
       setScope("personal");
       setTeamIds([]);
+      setUserIds([]);
       setEnvironmentIds([]);
     }
     setOpenFileIndex(null);
@@ -243,6 +248,7 @@ export function SkillEditorDialog({
       ...(isSyncedSkill ? {} : { files }),
       scope,
       teamIds: scope === "team" ? teamIds : [],
+      userIds: scope === "personal" ? userIds : [],
       environmentIds,
     };
     const result = isEdit
@@ -664,6 +670,8 @@ export function SkillEditorDialog({
                 onScopeChange={setScope}
                 teamIds={teamIds}
                 onTeamIdsChange={setTeamIds}
+                userIds={userIds}
+                onUserIdsChange={setUserIds}
               />
               <EnvironmentMultiSelector
                 value={environmentIds}

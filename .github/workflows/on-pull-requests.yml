@@ -6,11 +6,6 @@ on:
       - opened
       - synchronize
       - reopened
-      # labeled: adding the "run-unit-tests" label triggers a run immediately
-      # (see the merge-queue-only guard comment below). The per-PR concurrency
-      # group cancels the superseded run, so the label-event re-run of the
-      # lint/policy jobs is cheap noise, not a duplicate.
-      - labeled
   # Required checks must also run on merge_group when merge queue is enabled,
   # otherwise the queue waits for PR-only statuses that never appear on the
   # temporary merge-group SHA.
@@ -68,7 +63,7 @@ jobs:
 
       - name: Checkout repository
         if: steps.check-context.outputs.should_check == 'true' && steps.check-freeze.outputs.frozen == 'true'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -98,7 +93,7 @@ jobs:
         working-directory: ./platform
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -136,7 +131,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -153,7 +148,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -168,7 +163,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -183,13 +178,13 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        uses: ./.github/actions/setup-uv
 
       # the shipped scripts are zero-dependency; this gates the contributor tooling
       # (pytest + the ty / ruff / zero-dependency gates), pinned to the supported python floor.
@@ -232,42 +227,33 @@ jobs:
       - name: Skip dependency review for merge queue
         run: echo "Dependency Review only has PR diff context; PR run already validated dependencies before merge queue."
 
-  # Fast feedback on every PR push: lint + typecheck + codegen validation
-  # (platform-lint-and-unit-tests). The heavy test suites — backend unit test
-  # shards, frontend integration tests, and both Rust checks — are
-  # merge-queue-only, mirroring the E2E model in platform-e2e-tests.yml
-  # (which runs on merge queue or on-demand via the "run-e2e" PR label).
+  # Fast feedback on every PR push: lint + typecheck + unit tests.
+  # Full E2E runs in the separate "Platform E2E Tests" workflow on merge queue
+  # or on-demand via the "run-e2e" PR label.
   #
-  # merge-queue-only guard: the heavy test jobs below carry
-  #   github.event_name != 'pull_request' ||
-  #     contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
-  # On plain PR pushes the jobs skip UNDER THEIR OWN NAMES — GitHub treats a
-  # skipped check run as satisfying a required status check (see the
-  # required-check note in platform-e2e-tests.yml), so the "Backend Unit
-  # Tests" / "Platform Rust Checks" required contexts stay green without
-  # running. NEVER add same-named placeholder twin jobs: a skipped twin also
-  # reports on merge_group and would satisfy the required check even when the
-  # real job FAILS. On merge_group, github.event_name != 'pull_request' is
-  # true, so the queue always validates for real — a red shard blocks the
-  # merge. Add the "run-unit-tests" label to a PR to run the suites on its
-  # pushes (the `labeled` trigger above picks the label up immediately).
+  # bot-pr-guard: the expensive jobs below skip on automated bot PRs.
+  # release-please (archestra-ci[bot]) force-rewrites its PR branch on every
+  # merge to main — re-running the full suite dozens of times a day — and the
+  # contributor-onboarding bot (archestra-contributor-pr-bot[bot]) opens
+  # one-line docs PRs that auto-merge in seconds. Neither can surface real
+  # failures, and the merge queue re-runs all required checks for real on
+  # merge_group anyway. A job that skips under its own name still satisfies
+  # its required status check (see the required-check note in
+  # platform-e2e-tests.yml), so no placeholder twins are needed — a
+  # same-named twin would mask real failures on merge_group. The guard only
+  # bites on pull_request events: on merge_group, github.event.pull_request
+  # is null and the first clause short-circuits, so queue validation runs
+  # unchanged.
   #
-  # This guard subsumes the old bot-pr-guard on these jobs: bot PRs
-  # (release-please / contributor-onboarding) never carry the label, so they
-  # skip like every other unlabeled PR.
-  #
-  # EXCEPTION: platform-lint-and-unit-tests stays on every PR push for fast
-  # typecheck/codegen signal, and must still run on release-please PRs — it
-  # auto-commits the regenerated docs/openapi.json version bump onto the
-  # release branch ("chore: update docs/openapi.json version for release").
-  # Without that commit the merge_group codegen check fails and the release
-  # cannot merge, so that job only skips the contributor-onboarding bot
-  # (archestra-contributor-pr-bot[bot]), whose one-line auto-merged docs PRs
-  # cannot surface real failures.
+  # EXCEPTION: platform-lint-and-unit-tests must still run on release-please
+  # PRs — it auto-commits the regenerated docs/openapi.json version bump onto
+  # the release branch ("chore: update docs/openapi.json version for
+  # release"). Without that commit the merge_group codegen check fails and
+  # the release cannot merge, so that job only skips the contributor bot.
   platform-lint-and-unit-tests:
     name: Platform Lint and Unit Tests
-    # bot guard (see the EXCEPTION note above): contributor bot only —
-    # release-please PRs need this job's codegen auto-commit.
+    # bot-pr-guard (see above): contributor bot only — release-please PRs
+    # need this job's codegen auto-commit.
     if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # Backstop: every check here finishes in well under 10m, but leaked
@@ -299,7 +285,7 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
 
       - name: Checkout project
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -316,7 +302,7 @@ jobs:
 
       - name: Update checkout credentials for release-please PR
         if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: true # zizmor: ignore[artipacked] release-please PRs need push credentials for generated updates.
           ref: ${{ github.head_ref }}
@@ -349,6 +335,12 @@ jobs:
         run: |
           pnpm exec turbo check:ci --filter=!@backend
           pnpm exec turbo check:commit --filter=@backend
+
+      # Guards white-labeling: fails when user- or LLM-facing copy hardcodes the
+      # brand instead of resolving the deployment's app name. Occurrences that
+      # legitimately name the vendor carry an inline `white-label-ok:` reason.
+      - name: White-label copy check
+        run: pnpm check:white-label
 
       # Validates the production build (turbo build: next build + backend build +
       # Rust NAPI) compiles on every push. This replaces the per-push Docker image
@@ -451,8 +443,8 @@ jobs:
   # operates on the committed lockfile.
   platform-rust-checks:
     name: Platform Rust Checks
-    # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-4vcpu-ubuntu-2404' }}
     timeout-minutes: 15
     permissions:
@@ -462,7 +454,7 @@ jobs:
         working-directory: ./platform
     steps:
       - name: Checkout project
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -497,8 +489,8 @@ jobs:
 
   ai-labs-rust-checks:
     name: AI Labs Rust Checks
-    # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-4vcpu-ubuntu-2404' }}
     timeout-minutes: 15
@@ -509,7 +501,7 @@ jobs:
         working-directory: ./ai-labs
     steps:
       - name: Checkout project
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -518,7 +510,7 @@ jobs:
         run: rustup show
 
       - name: Install uv
-        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        uses: ./.github/actions/setup-uv
 
       - name: Rust formatting
         run: cargo fmt --all --check
@@ -538,8 +530,8 @@ jobs:
   # takes the suite off the workflow's critical path.
   backend-unit-tests:
     name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
-    # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     runs-on: blacksmith-16vcpu-ubuntu-2404
     # A full local suite run is ~4 min on comparable hardware; a shard is a
     # quarter of that plus setup. 15 minutes means something is hung.
@@ -560,7 +552,7 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - name: Checkout project
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -601,11 +593,11 @@ jobs:
     name: Backend Unit Tests
     runs-on: blacksmith-2vcpu-ubuntu-2404
     # always() so the gate still runs (and turns red) when a shard fails,
-    # ANDed with the merge-queue-only guard (see comment above
-    # platform-lint-and-unit-tests): when the shards skip on an unlabeled PR
-    # push, the gate must skip too — with plain always() it would run and
-    # fail on the shards' "skipped" result.
-    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests'))
+    # ANDed with the bot-pr-guard (see comment above
+    # platform-lint-and-unit-tests): when the shards skip on a bot PR, the
+    # gate must skip too — with plain always() it would run and fail on the
+    # shards' "skipped" result.
+    if: always() && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
     needs: [backend-unit-tests]
     permissions: {}
     steps:
@@ -621,8 +613,8 @@ jobs:
 
   frontend-integration-tests:
     name: Frontend Integration Tests (MSW)
-    # merge-queue-only guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-unit-tests')
+    # bot-pr-guard (see comment above platform-lint-and-unit-tests)
+    if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     # mac-mini routing (see comment above platform-rust-checks)
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-4vcpu-ubuntu-2404' }}
     permissions:
@@ -635,7 +627,7 @@ jobs:
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
     steps:
       - name: Checkout project
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -714,7 +706,7 @@ jobs:
       actions: write # Required to cancel this workflow run on failover.
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -785,7 +777,7 @@ jobs:
         working-directory: ./platform/helm/archestra
     steps:
       - name: Checkout project
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 1

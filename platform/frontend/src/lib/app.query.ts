@@ -14,6 +14,8 @@ const {
   updateApp,
   enableApp,
   disableApp,
+  lockApp,
+  unlockApp,
   deleteApp,
   assignToolToApp,
   unassignToolFromApp,
@@ -23,12 +25,20 @@ const {
   unpinApp,
   pinExternalApp,
   unpinExternalApp,
+  getAppLabelKeys,
+  getAppLabelValues,
 } = archestraApiSdk;
 
 type AppsQuery = NonNullable<archestraApiTypes.GetAppsData["query"]>;
 type AppsParams = Pick<
   AppsQuery,
-  "limit" | "offset" | "search" | "scope" | "authorIds" | "excludeAuthorIds"
+  | "limit"
+  | "offset"
+  | "search"
+  | "scope"
+  | "authorIds"
+  | "excludeAuthorIds"
+  | "labels"
 >;
 type AppDetailQueryOptions = { toastOnError?: boolean };
 
@@ -51,6 +61,34 @@ export function useApps(
       throwOnApiError(error, { toastOnError });
       return data;
     },
+  });
+}
+
+export function useAppLabelKeys() {
+  const { data: canReadApps } = useHasPermissions({ app: ["read"] });
+  return useQuery({
+    queryKey: ["apps", "labels", "keys"],
+    enabled: !!canReadApps,
+    queryFn: async () => {
+      const { data, error } = await getAppLabelKeys();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
+}
+
+export function useAppLabelValues(params?: { key?: string }) {
+  const { key } = params || {};
+  return useQuery({
+    queryKey: ["apps", "labels", "values", key],
+    queryFn: async () => {
+      const { data, error } = await getAppLabelValues({
+        query: key ? { key } : {},
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: key !== undefined,
   });
 }
 
@@ -353,6 +391,37 @@ export function useSetAppEnabled() {
       queryClient.invalidateQueries({ queryKey: ["apps", variables.appId] });
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success(variables.enabled ? "App enabled" : "App disabled");
+    },
+  });
+}
+
+// Lock/unlock an app. Like enable/disable, a distinct lifecycle transition
+// with its own endpoint: a locked app refuses all chat-driven modification
+// (and REST html replacement/deletion) until unlocked.
+export function useSetAppLocked() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      appId,
+      locked,
+    }: {
+      appId: string;
+      locked: boolean;
+    }) => {
+      const { data, error } = await (locked
+        ? lockApp({ path: { appId } })
+        : unlockApp({ path: { appId } }));
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["apps"] });
+      queryClient.invalidateQueries({ queryKey: ["apps", variables.appId] });
+      toast.success(variables.locked ? "App locked" : "App unlocked");
     },
   });
 }

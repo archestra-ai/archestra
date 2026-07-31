@@ -41,6 +41,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { a2aTaskRunService } from "@/agents/a2a/a2a-task-run-service";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import {
   cleanupEmailProvider,
@@ -84,6 +85,7 @@ import {
 } from "@/services/apps/app-sdk-injection";
 import { posthogErrorTrackingService } from "@/services/error-tracking";
 import { instanceAnalyticsService } from "@/services/instance-analytics";
+import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
@@ -239,9 +241,11 @@ export function registerOpenApiSchemas() {
     id: "DeepSeekChatCompletionResponse",
   });
   z.globalRegistry.add(Archestra.API.ChatCompletionRequestSchema, {
+    // white-label-ok: wire identifier, not copy
     id: "ArchestraChatCompletionRequest",
   });
   z.globalRegistry.add(Archestra.API.ChatCompletionResponseSchema, {
+    // white-label-ok: wire identifier, not copy
     id: "ArchestraChatCompletionResponse",
   });
   z.globalRegistry.add(Minimax.API.ChatCompletionRequestSchema, {
@@ -1307,6 +1311,11 @@ const startWebServer = async () => {
     // (no-op unless ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES is set).
     mcpToolsRefreshManager.start();
 
+    // Post-TTL lifecycle for gateway-minted MCP tasks: mark expired orphans
+    // failed, purge rows past the retention grace (the two steps the Tasks
+    // extension sanctions).
+    mcpGatewayTaskReaper.start();
+
     // Start task queue worker for knowledge base connector syncs and embeddings
     // In "web" mode, a separate worker Deployment handles background jobs
     if (shouldRunWorker) {
@@ -1347,6 +1356,11 @@ const startWebServer = async () => {
     const activeChatRunReaperIntervalId = setInterval(() => {
       void activeChatRunService.reapStaleRuns();
     }, ACTIVE_CHAT_RUN_REAPER_INTERVAL_MS);
+
+    // Same safety net for A2A task runs: the service owns its own interval
+    // (it also prunes terminal event logs), started here unconditionally so
+    // orphaned tasks get settled even on pods that never start a run.
+    a2aTaskRunService.startMaintenance();
 
     /**
      * Here we don't expose the metrics endpoint on the main API port, but we do collect metrics
@@ -1504,9 +1518,19 @@ function registerWebServerShutdown(
     // runs are freed, leaving their conversations blocked until the reaper runs.
     // This is a single fast UPDATE, bounded so a slow DB cannot stall shutdown.
     await Promise.race([
-      activeChatRunService.failInFlightRuns().catch((error) => {
-        fastify.log.error({ error }, "Failed to fail in-flight chat runs");
-      }),
+      Promise.all([
+        activeChatRunService.failInFlightRuns().catch((error) => {
+          fastify.log.error({ error }, "Failed to fail in-flight chat runs");
+        }),
+        // Same reasoning for A2A task runs: settle this pod's WORKING tasks
+        // to FAILED now, instead of leaving clients polling until the reaper.
+        a2aTaskRunService.failInFlightRuns().catch((error) => {
+          fastify.log.error(
+            { error },
+            "Failed to fail in-flight A2A task runs",
+          );
+        }),
+      ]),
       new Promise<void>((resolve) =>
         setTimeout(resolve, SHUTDOWN_CLEANUP_TIMEOUT_MS),
       ),
@@ -1551,6 +1575,8 @@ function registerWebServerShutdown(
       }
 
       mcpToolsRefreshManager.stop();
+
+      mcpGatewayTaskReaper.stop();
 
       instanceAnalyticsService.stop();
 

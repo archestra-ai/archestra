@@ -453,6 +453,74 @@ describe("POST /api/connection-setups", () => {
     expect(attributionKey?.authorId).toBe(user.id);
   });
 
+  test("copilot-cli github-copilot passthrough provisions an attribution key by default (mirrors Claude Code)", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "copilot-cli",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "github-copilot",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    // The Copilot CLI keeps the user's GitHub token (provider-key mode); the
+    // passthrough key rides in the otherwise-null virtualApiKeyId column and
+    // reaches the proxy via COPILOT_PROVIDER_HEADERS.
+    expect(setup?.proxyAuth).toBe("provider-key");
+    expect(setup?.virtualApiKeyId).not.toBeNull();
+    const attributionKey = await VirtualApiKeyModel.findById(
+      setup?.virtualApiKeyId as string,
+    );
+    expect(attributionKey?.keyType).toBe("passthrough");
+    expect(attributionKey?.authorId).toBe(user.id);
+  });
+
+  test("model persists for copilot-cli setups and 400s for other clients", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+
+    const ok = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "copilot-cli",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "github-copilot",
+        model: "claude-sonnet-4",
+      },
+    });
+    expect(ok.statusCode).toBe(200);
+    const rawToken = ok.json().command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(setup?.model).toBe("claude-sonnet-4");
+
+    const wrongClient = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "claude-code",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "anthropic",
+        model: "gpt-4o",
+      },
+    });
+    expect(wrongClient.statusCode).toBe(400);
+    expect(wrongClient.json().error.message).toContain("copilot-cli");
+  });
+
   test("codex openai virtual-key provisions only a personal standard key (no passthrough key)", async ({
     makeAgent,
     makeSecret,

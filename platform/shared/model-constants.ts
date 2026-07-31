@@ -45,6 +45,10 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "cerebras:chatCompletions",
   "mistral:chatCompletions",
   "perplexity:chatCompletions",
+  // Perplexity's Agent API, the provider's second transport: a Responses-shaped
+  // surface serving the vendor-prefixed models and the only Perplexity endpoint
+  // that accepts tools. See PERPLEXITY_AGENT_MODELS.
+  "perplexity:responses",
   "groq:chatCompletions",
   "xai:chatCompletions",
   "openrouter:chatCompletions",
@@ -100,6 +104,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   azure: "Azure AI Foundry",
   "github-copilot": "GitHub Copilot",
   "microsoft-365-copilot": "Microsoft 365 Copilot",
+  // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
   archestra: "Archestra",
 };
 
@@ -109,6 +114,21 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
  * Microsoft Entra ID authentication is enabled in the backend environment.
  */
 const PROVIDERS_WITH_OPTIONAL_API_KEY = new Set<SupportedProvider>([
+  "ollama",
+  "ollama-native",
+  "vllm",
+]);
+
+/**
+ * Providers that charge no per-token rate, so their real price is zero rather
+ * than unknown: the operator runs the server (vLLM, self-hosted Ollama), or the
+ * vendor bills a flat subscription metered on compute time (Ollama's cloud).
+ *
+ * Listed explicitly rather than derived from the self-hosted-provider set it
+ * currently matches, so that adding a keyless provider that does bill per token
+ * cannot silently make its traffic free.
+ */
+export const PROVIDERS_BILLING_NO_TOKEN_RATE = new Set<SupportedProvider>([
   "ollama",
   "ollama-native",
   "vllm",
@@ -270,6 +290,46 @@ export function isPerplexityReasoningModel(model: string): boolean {
 }
 
 /**
+ * Perplexity Agent API model definitions — single source of truth.
+ *
+ * The `perplexity` provider's second surface, taking the same `pplx-` keys as
+ * the `sonar*` chat-completions models above: it speaks a Responses-shaped
+ * `input`/`output` wire format at `/v1/responses` and is the only Perplexity
+ * endpoint that accepts `tools`. Its catalog is vendor-prefixed
+ * (`perplexity/…`, `anthropic/…`, …) while the chat-completions catalog is the
+ * bare `sonar*` family, and that slash is what routes a model to this
+ * transport — see requiresPerplexityAgentApi. Like Sonar, it publishes no
+ * usable /models endpoint, so the catalog is maintained here.
+ *
+ * Presets (`fast`, `low`, `medium`, `high`, `xhigh`) are deliberately absent.
+ * They are a separate request field rather than a model id — each one bundles a
+ * model with built-in web-search and fetch steps that bill per invocation — so
+ * surfacing them as pseudo-models would misreport both the model in use and the
+ * cost. They belong with built-in tool support, which this transport does not
+ * carry.
+ *
+ * The list is the subset of the documented catalog that the live endpoint
+ * actually serves (verified 2026-07-30): the documented `perplexity/sonar` and
+ * every `openai/*` id (gpt-5.6-sol/-terra/-luna, gpt-5.4-mini) answer a bare
+ * `invalid request` however they are asked — with or without tools or
+ * reasoning options — so cataloguing them would only mint models that error
+ * on every turn.
+ *
+ * @see https://docs.perplexity.ai/docs/agent-api/models
+ */
+export const PERPLEXITY_AGENT_MODELS = [
+  { id: "perplexity/glm-5.2", displayName: "GLM 5.2" },
+  { id: "perplexity/kimi-k3", displayName: "Kimi K3" },
+  { id: "perplexity/kimi-k2.7-code", displayName: "Kimi K2.7 Code" },
+  { id: "anthropic/claude-opus-5", displayName: "Claude Opus 5" },
+  { id: "anthropic/claude-sonnet-5", displayName: "Claude Sonnet 5" },
+  { id: "anthropic/claude-haiku-4-5", displayName: "Claude Haiku 4.5" },
+  { id: "google/gemini-3.1-pro-preview", displayName: "Gemini 3.1 Pro" },
+  { id: "google/gemini-3.6-flash", displayName: "Gemini 3.6 Flash" },
+  { id: "xai/grok-4.5", displayName: "Grok 4.5" },
+] as const;
+
+/**
  * MiniMax model definitions — single source of truth.
  * MiniMax does not provide a /v1/models endpoint, so models are maintained here.
  * @see https://platform.minimax.io/docs/guides/models-intro
@@ -359,6 +419,9 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   cohere: "https://api.cohere.ai",
   cerebras: "https://api.cerebras.ai/v1",
   mistral: "https://api.mistral.ai/v1",
+  // Sonar's chat-completions paths are rooted at the bare host; the Agent API
+  // transport derives its `/v1`-suffixed base from this same value — see
+  // perplexityAgentApiBaseUrl.
   perplexity: "https://api.perplexity.ai",
   groq: "https://api.groq.com/openai/v1",
   xai: "https://api.x.ai/v1",
@@ -423,9 +486,10 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   ],
   gemini: [
     "gemini-3.5-pro",
-    "gemini-3.5-flash",
+    "gemini-3.6-flash",
     "gemini-3.1-pro-preview",
     "gemini-3-pro",
+    "gemini-3.5-flash",
     "gemini-2.5-pro",
     "gemini-2.5-flash",
   ],
@@ -437,11 +501,17 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "mistral-medium",
     "mistral-small",
   ],
+  // The bare `sonar*` chat-completions family leads so the provider's default
+  // stays a Sonar model; the vendor-prefixed Agent API entries trail it,
+  // mirroring the cross-vendor shape of `archestra` below.
   perplexity: [
     "sonar-deep-research",
     "sonar-reasoning-pro",
     "sonar-pro",
     "sonar",
+    "anthropic/claude-opus-5",
+    "anthropic/claude-sonnet-5",
+    "perplexity/glm-5.2",
   ],
   groq: ["openai/gpt-oss-120b", "gpt-oss", "llama-4", "llama-3.3"],
   xai: ["grok-4.3", "grok-4", "grok-3"],
@@ -510,7 +580,7 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   anthropic: "claude-opus-4-8",
   openai: "gpt-5.5",
   openrouter: "openrouter/auto",
-  gemini: "gemini-3.5-flash",
+  gemini: "gemini-3.6-flash",
   cohere: "command-a-plus-05-2026",
   groq: "openai/gpt-oss-120b",
   xai: "grok-4.3",
@@ -554,6 +624,31 @@ export const CACHE_PRICE_MULTIPLIERS: Partial<
 };
 
 /**
+ * A bracketed context-variant marker some clients append to a Claude model id,
+ * such as the `[1m]` in `claude-opus-4-8[1m]`.
+ */
+const CLAUDE_CONTEXT_VARIANT_SUFFIX = /\[\d+[km]\]$/i;
+
+/**
+ * Drop a client-side context-variant marker from a Claude model id.
+ *
+ * The marker is a client convention, not part of any Anthropic model id: every
+ * Claude model with a 1M-token window has it by default, needs no beta header,
+ * and bills at standard pricing, so the marked id names the same model at the
+ * same price. Carried through to storage it becomes a second model record that
+ * no catalog lists, leaving it permanently unpriced and billed at the fallback
+ * estimate.
+ *
+ * Scoped to Claude ids, and to markers shaped like a token count, so an
+ * unrecognised bracketed segment on any other provider is left alone.
+ */
+export function stripClaudeContextVariantSuffix(modelId: string): string {
+  return /claude/i.test(modelId)
+    ? modelId.replace(CLAUDE_CONTEXT_VARIANT_SUFFIX, "")
+    : modelId;
+}
+
+/**
  * True for OpenAI models served only (or only fully) through the Responses API
  * (`/v1/responses`), so the chat client must route them to the Responses
  * transport instead of `/v1/chat/completions`:
@@ -573,6 +668,34 @@ export function requiresOpenAiResponsesApi(modelId: string): boolean {
     /(?:^|[-/])pro(?:[-/]|$)/i.test(modelId) ||
     /(?:^|\/)gpt-5\.6(?:$|[-.])/i.test(modelId)
   );
+}
+
+/**
+ * True for `perplexity` models served by the Agent API rather than
+ * chat-completions. The two catalogs are disjoint by construction: the Agent
+ * API's ids are vendor-prefixed (`perplexity/glm-5.2`, `anthropic/…`,
+ * see PERPLEXITY_AGENT_MODELS) while the chat-completions family is the bare
+ * `sonar*` ids, so the slash is the discriminator.
+ */
+export function requiresPerplexityAgentApi(modelId: string): boolean {
+  return modelId.includes("/");
+}
+
+/**
+ * The Agent API base for a `perplexity` credential: the same host as the
+ * chat-completions base (the provider's one configurable URL, default or
+ * per-key), with the `/v1` that roots the Agent API's paths — the SDK then
+ * appends `/responses` to reach its OpenAI-compatible alias.
+ */
+export function perplexityAgentApiBaseUrl(chatBaseUrl?: string | null): string {
+  let base = chatBaseUrl || DEFAULT_PROVIDER_BASE_URLS.perplexity;
+  // Trimmed by slicing rather than a `/\/+$/` replace: the base URL is
+  // operator-supplied per key, and a backtracking anchored match on it is a
+  // denial-of-service vector for a string of many slashes.
+  while (base.endsWith("/")) {
+    base = base.slice(0, -1);
+  }
+  return `${base}/v1`;
 }
 
 /**

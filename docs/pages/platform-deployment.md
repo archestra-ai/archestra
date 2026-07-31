@@ -790,8 +790,8 @@ Upgrading from a chart that ran the bundled engine leaves its cache volume behin
 - **`ARCHESTRA_SKILLS_SANDBOX_OUTPUT_BYTES_LIMIT`** - Maximum captured stdout/stderr per command; output beyond this is truncated.
   - Default: `262144` (256 KiB)
 - **`ARCHESTRA_SKILLS_SANDBOX_ARTIFACT_BYTES_LIMIT`** - Maximum size of a file the sandbox can export to the conversation's Files panel, and of a chat attachment it can stage for the agent to read.
-  - Default: `16777216` (16 MiB)
-  - This does not cap what chat can upload. A larger attachment skips sandbox staging and is still stored — see `ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`.
+  - Default: `52428800` (50 MiB), matching `ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT` so every stored attachment can be staged.
+  - Lowering it does not cap what chat can upload. An attachment over this limit skips sandbox staging and is still stored.
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_CONCURRENT`** - Sandbox commands the shared Dagger session runs at once, deployment-wide. Raise it with the engine's CPU and memory.
   - Default: `10`
 - **`ARCHESTRA_DAGGER_RUNTIME_MAX_QUEUE_LENGTH`** - Sandbox commands allowed to wait for a free slot. Past this, a command fails with a runtime-at-capacity error instead of queueing.
@@ -1185,25 +1185,28 @@ These environment variables set the default base URL for each LLM provider. Per-
 
 Active chat run wake-ups use Postgres `LISTEN/NOTIFY` by default. This gives fast reconnect replay and Stop handling without waiting for the fallback poll interval. Poll intervals still exist in this mode as a safety net, so missed notifications or broken listener connections do not block progress forever.
 
-Enable polling compatibility only when your database endpoint cannot keep session-stable listener connections, such as PgBouncer transaction pooling or some managed/serverless database proxies. In that mode, active run replay and Stop handling rely on periodic database reads. Lower intervals react faster but create more reads; higher intervals reduce database load but make replay and Stop slower.
+Chat streams and A2A task streams are woken by Postgres `LISTEN/NOTIFY`, which works across replicas. You do not have to tell the platform whether your database endpoint supports it: on connect, it sends itself a notification and checks whether it arrives. Until one does, it polls more often so Stop and replay stay responsive. Streams read from the database either way, so a missed notification costs latency, never correctness.
+
+Set the variables below only to tune load or to skip the listener entirely.
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS`** - Fallback/poll interval for replaying active chat runs after reconnect.
   - Default: `500`
   - Load model: roughly one replay-check read per reconnecting client per interval while waiting for new events
 
-- **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Interval for checking whether a running chat stream has been explicitly stopped.
-  - With Postgres `LISTEN/NOTIFY`, Stop requests normally wake streams immediately; this interval is only a safety fallback if notification wake-up is missed
-  - With polling compatibility enabled, this is the primary polling interval
-  - Default: `30000` with Postgres `LISTEN/NOTIFY`, `500` when polling compatibility is enabled
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_STOP_POLL_INTERVAL_MS`** - Fallback interval for checking whether a running chat stream has been stopped.
+  - Default: `30000`
+  - Stop requests normally wake streams immediately, so this is the safety net for a missed notification. When notifications are not arriving, the platform ignores this value and checks every 500ms instead
   - Load model: roughly one stop-check read per running chat stream per interval
 
-- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Uses polling only instead of the default Postgres `LISTEN/NOTIFY` wake-ups for active chat run replay and stop detection.
+- **`ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`** - Skips the listener connection entirely and relies on polling.
   - Default: `false`
-  - Keep disabled when direct Postgres or session pooling is available
+  - You rarely need this. The platform detects an endpoint that cannot deliver notifications and adjusts on its own; set it only to avoid holding a listener connection you know will never work
+  - Also covers A2A task streams, which share the same wake-up mechanism
 
 - **`ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL`** - Optional Postgres connection string for active chat run `LISTEN/NOTIFY`.
   - Default: Uses `ARCHESTRA_DATABASE_URL`
   - Set this when regular database traffic goes through PgBouncer transaction pooling but notifications can use a direct or session-pooled connection
+  - A2A task streams use this connection too
 
 - **`ARCHESTRA_CHAT_SECRET_SCAN_ENABLED`** - Enables client-side pre-send scanning of chat messages for secrets and high-entropy tokens.
   - Default: `true`
@@ -1277,11 +1280,22 @@ Each MCP server automatically gets a unique hash-based subdomain (e.g., `a1b2c3d
 
 The sandbox inherits origin restrictions from `ARCHESTRA_FRONTEND_URL` and `ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS` (the same variables that control CORS). When set, only those origins can embed the sandbox iframe. When neither is set (local dev), all origins are accepted.
 
+### A2A Gateway
+
+A2A task streams work across replicas. A client can subscribe on one replica while the task runs on another — the stream reads the task's event log from the database, and Postgres `LISTEN/NOTIFY` wakes it as soon as the running replica writes. If a notification is missed, the stream falls back to a periodic read, so it stays correct either way. Behind a connection pooler that cannot hold a listener, set `ARCHESTRA_CHAT_ACTIVE_RUN_POLLING_COMPATIBILITY_ENABLED`.
+
+- **`ARCHESTRA_A2A_TASK_RETENTION_DAYS`** - How long a finished A2A task is kept before it is deleted, along with its artifacts and stream events.
+  - Default: `90`. Set to `0` to keep tasks forever.
+  - Only terminal tasks (completed, failed, canceled, rejected) are eligible; a task still running is never deleted.
+  - The task's messages are detached before it goes, so the conversation history they belong to is untouched — only the task-scoped view of them is lost. The agent's answer also stays in that history.
+  - Deletion runs in bounded batches on the same background sweep that reaps orphaned tasks, so a large backlog is worked down over several passes.
+
 ### MCP Gateway
 
 - **`ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS`** - Per-request timeout, in milliseconds, for an upstream MCP tool call made through the gateway.
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
+- The MCP Tasks threshold — how long a call from a Tasks-capable client runs synchronously before becoming a background task — derives from this value: half of it, capped at 10 seconds. Task executions themselves are bounded by the 30-minute task retention window, not this timeout.
 
 ### MCP Servers
 

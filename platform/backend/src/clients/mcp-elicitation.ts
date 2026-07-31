@@ -39,16 +39,10 @@ export function configureMcpElicitation(
   client: Client,
   handler: McpElicitationHandler,
 ): void {
+  // `notifications/elicitation/complete` is removed in 2026-07-28: under MRTR a
+  // client learns an out-of-band interaction's outcome by retrying the original
+  // request, so a server-initiated completion signal no longer fits. The
+  // handler only logged, so nothing is lost by not registering it — and a
+  // 2025-11-25 server that still sends one is simply ignored.
   client.setRequestHandler(ElicitRequestSchema, handler);
-  client.setNotificationHandler(
-    ElicitationCompleteNotificationSchema,
-    async ({ params }) => {
-      // The URL flow is completed out-of-band by the server/client pair. The
-      // chat bridge has no local resource to release here, so we only log it.
-      logger.info(
-        { elicitationId: params.elicitationId },
-        "MCP URL elicitation completed",
-      );
-    },
-  );
 }

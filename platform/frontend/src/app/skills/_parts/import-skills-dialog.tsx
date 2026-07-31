@@ -127,6 +127,8 @@ export function ImportSkillsDialog({
   // scope applies to every skill selected in this import
   const [scope, setScope] = useState<ResourceVisibilityScope>("personal");
   const [teamIds, setTeamIds] = useState<string[]>([]);
+  // people every skill in this import is shared with by name
+  const [userIds, setUserIds] = useState<string[]>([]);
   // pull schedule for every skill selected in this import: imports are
   // always synced from the repo and read-only here until disconnected.
   const [syncInterval, setSyncInterval] = useState<"15m" | "1h" | "1d">("1d");
@@ -266,6 +268,7 @@ export function ImportSkillsDialog({
       skillPaths: [...selected],
       scope,
       teamIds: scope === "team" ? teamIds : [],
+      userIds: scope === "personal" ? userIds : [],
       sync: { interval: syncInterval },
     });
     // only navigate away when something was actually created; if every selected
@@ -730,6 +733,8 @@ export function ImportSkillsDialog({
             onScopeChange={setScope}
             teamIds={teamIds}
             onTeamIdsChange={setTeamIds}
+            userIds={userIds}
+            onUserIdsChange={setUserIds}
           />
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
             <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">

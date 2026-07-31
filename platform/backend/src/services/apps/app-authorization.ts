@@ -152,6 +152,12 @@ export async function assertCallerMayModifyApp(params: {
  * read + manage-settings yet cannot start chats. Once past the oversight gate
  * the ordinary scope rule still applies (org apps need admin, team apps need a
  * team-admin member), so this never *widens* who can author.
+ *
+ * A disabled app is additionally frozen for authoring — for its author too
+ * (T-980: a parallel chat of the author rebuilt an app the user had just
+ * disabled). Chat tools never reach this branch (their loader reports a
+ * disabled app as not found); it guards the REST html rewrite, where the
+ * author can see the app but must re-enable it before changing its content.
  */
 export async function assertCallerMayAuthorApp(params: {
   userId: string;
@@ -184,6 +190,12 @@ export async function assertCallerMayAuthorApp(params: {
     throw new ApiError(
       403,
       "You can view this app and change its settings, but only its owner can modify the app itself via chat.",
+    );
+  }
+  if (!params.app.enabled) {
+    throw new ApiError(
+      403,
+      "This app is disabled: its content cannot be changed until it is re-enabled.",
     );
   }
   await assertCallerMayModifyApp({

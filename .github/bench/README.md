@@ -1,7 +1,7 @@
 # Benchmark CI
 
 `.github/workflows/benchmark.yml` runs `archestra-bench` daily against the currently-deployed
-staging platform image, an ephemeral Postgres sidecar, and the shared staging managed Dagger engine.
+staging platform image, an ephemeral Postgres sidecar, and a short-lived benchmark-owned Dagger engine.
 It never mutates the live staging Deployment, its DB, or its data. Trigger manually from the Actions
 tab (`workflow_dispatch`) or wait for the daily cron.
 
@@ -18,6 +18,7 @@ Files:
 - `runner-entrypoint.sh` (`run-benchmark`) — writes `/app/.env`, runs the bench, then exports
   TensorBoard, uploads to GCS, and posts Slack. The reporting scripts live in `ai-labs/scripts/` and
   are copied into the image as `/bench/scripts/`.
+- `dagger-job.yaml` — an isolated, tokenless Dagger engine pod and its public-only egress policy.
 - `job.yaml` — the k8s Job (bench container + `pgvector` sidecar). `${...}` filled by `envsubst` in CI.
 
 ## One-time prerequisites (not automated)

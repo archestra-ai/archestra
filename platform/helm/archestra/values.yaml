@@ -358,15 +358,17 @@ archestra:
   # policy that also allows its egress would report a cluster that enforces as
   # one that does not.
   networkPolicyProbe:
+    # Disable if the probe pods cannot run on this cluster — an unmirrored
+    # busybox image, a taint they cannot tolerate, a restrictive PodSecurity
+    # policy. Helm waits for hook pods, so one that never starts fails the
+    # release, and this is the way out.
     enabled: true
-    target:
-      # Empty means the platform's own Service. Any replacement must be an
-      # in-cluster ClusterIP address so the probe works without internet access.
-      # Do not point this at cluster DNS or the Kubernetes API: both are reached
-      # over node-local paths on some clusters that several dataplanes leave
-      # unfiltered, which reports an unenforced cluster as enforcing.
-      host: ""
-      port: 9000
+    # Empty means the platform's own Service. Any replacement must be an
+    # in-cluster ClusterIP address, and must not be cluster DNS or the
+    # Kubernetes API: both are reached over node-local paths that several
+    # dataplanes leave unfiltered, which reports an unenforced cluster as
+    # enforcing.
+    targetHost: ""
 
   # Resource requests and limits for the Archestra container
   # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/

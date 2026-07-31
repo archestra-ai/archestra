@@ -466,7 +466,7 @@ slower than the single failure the probe actually needs.
 */}}
 {{- define "archestra-platform.networkPolicyProbeTarget" -}}
 {{- $domain := .Values.archestra.orchestrator.kubernetes.clusterDomain | default "cluster.local" -}}
-{{- .Values.archestra.networkPolicyProbe.target.host | default (printf "%s.%s.svc.%s." (include "archestra-platform.fullname" .) .Release.Namespace $domain) -}}
+{{- .Values.archestra.networkPolicyProbe.targetHost | default (printf "%s.%s.svc.%s." (include "archestra-platform.fullname" .) .Release.Namespace $domain) -}}
 {{- end }}
 
 {{/*
@@ -490,7 +490,7 @@ the connect timeout implies.
 25 attempts at 3s covers a platform that is still booting while staying well
 inside Helm's default --timeout, which the hook wait counts against.
 
-Takes a dict of: host, port.
+Takes a dict of: host. The port is the chart's fixed backend Service port.
 */}}
 {{- define "archestra-platform.networkPolicyProbeControlScript" -}}
 command: ["/bin/sh", "-c"]
@@ -499,7 +499,7 @@ args:
     result=blocked
     i=0
     while [ $i -lt 25 ]; do
-      if timeout 3 nc -z -w 2 {{ .host }} {{ .port }} 2>/dev/null; then
+      if timeout 3 nc -z -w 2 {{ .host }} 9000 2>/dev/null; then
         result=reachable
         break
       fi
@@ -516,7 +516,7 @@ args:
       says it without depending on which line Helm printed first.
     */}}
     if [ "$result" = blocked ]; then
-      echo "[archestra] network policy check: INCONCLUSIVE, could not reach {{ .host }}:{{ .port }} — disregard any enforcement result reported for this release"
+      echo "[archestra] network policy check: INCONCLUSIVE, could not reach {{ .host }}:9000 — disregard any enforcement result reported for this release"
     fi
     exit 0
 {{- end }}
@@ -537,7 +537,7 @@ unenforced cluster cannot fake enforcement — the direction that would hide the
 warning this probe exists to raise. Every attempt runs; there is no early exit,
 since both error directions need the full sample.
 
-Takes a dict of: host, port.
+Takes a dict of: host. The port is the chart's fixed backend Service port.
 */}}
 {{- define "archestra-platform.networkPolicyProbeTreatmentScript" -}}
 command: ["/bin/sh", "-c"]
@@ -547,7 +547,7 @@ args:
     ok=0
     i=0
     while [ $i -lt 5 ]; do
-      if timeout 3 nc -z -w 2 {{ .host }} {{ .port }} 2>/dev/null; then
+      if timeout 3 nc -z -w 2 {{ .host }} 9000 2>/dev/null; then
         ok=`expr $ok + 1`
       fi
       i=`expr $i + 1`

@@ -162,12 +162,11 @@ tests:
 
   - it: honours an operator-supplied target
     set:
-      archestra.networkPolicyProbe.target.host: probe-sink.other-ns.svc.cluster.local.
-      archestra.networkPolicyProbe.target.port: 8080
+      archestra.networkPolicyProbe.targetHost: probe-sink.other-ns.svc.cluster.local.
     asserts:
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: nc -z -w 2 probe-sink\.other-ns\.svc\.cluster\.local\. 8080
+          pattern: nc -z -w 2 probe-sink\.other-ns\.svc\.cluster\.local\. 9000
         documentIndex: 2
 
   # A single sample cannot tell enforcement from a dataplane that programmed its

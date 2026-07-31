@@ -7,7 +7,11 @@ import { vi } from "vitest";
 import type { z } from "zod";
 import config from "@/config";
 import { describe, expect, test } from "@/test";
-import type { EffectiveNetworkPolicy, McpServer } from "@/types";
+import type {
+  EffectiveNetworkPolicy,
+  K8sNetworkPolicyCapabilities,
+  McpServer,
+} from "@/types";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
@@ -3927,20 +3931,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     customObjectsApi?: Partial<k8s.CustomObjectsApi>;
     coreApi?: Partial<k8s.CoreV1Api>;
     effectiveNetworkPolicy: EffectiveNetworkPolicy;
-    networkPolicyCapabilities: {
-      kubernetesNetworkPolicy: boolean;
-      ciliumNetworkPolicy: boolean;
-      gkeFqdnNetworkPolicy: boolean;
-      awsApplicationNetworkPolicy: boolean;
-      provider:
-        | "kubernetes"
-        | "cilium"
-        | "gke-fqdn"
-        | "aws-application-network-policy";
-      supportsFqdn: boolean;
-      supportsHttpMethods: boolean;
-      message: string | null;
-    };
+    networkPolicyCapabilities: K8sNetworkPolicyCapabilities;
     multitenant?: boolean;
   }): K8sDeployment {
     return new K8sDeployment({
@@ -4191,6 +4182,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsFqdn: true,
         supportsHttpMethods: false,
         message: null,
+        enforcementSource: "api-discovery",
+        probe: "absent",
+        probedAt: null,
       },
     });
 
@@ -4249,6 +4243,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsFqdn: false,
         supportsHttpMethods: false,
         message: null,
+        enforcementSource: "api-discovery",
+        probe: "absent",
+        probedAt: null,
       },
     });
 
@@ -4287,6 +4284,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsFqdn: false,
         supportsHttpMethods: false,
         message: null,
+        enforcementSource: "api-discovery",
+        probe: "absent",
+        probedAt: null,
       },
     });
 
@@ -4323,6 +4323,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsFqdn: true,
         supportsHttpMethods: false,
         message: null,
+        enforcementSource: "api-discovery",
+        probe: "absent",
+        probedAt: null,
       },
     });
 
@@ -4369,6 +4372,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsFqdn: true,
         supportsHttpMethods: false,
         message: null,
+        enforcementSource: "api-discovery",
+        probe: "absent",
+        probedAt: null,
       },
     });
 
@@ -4429,6 +4435,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         supportsFqdn: true,
         supportsHttpMethods: false,
         message: null,
+        enforcementSource: "api-discovery",
+        probe: "absent",
+        probedAt: null,
       },
     });
 
@@ -4455,7 +4464,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
   test("updates an existing Kubernetes NetworkPolicy and cleans up stale duplicate managed policies", async () => {
     const policyName = "mcp-egress-mcp-mcp-test-server";
     const { api, policies } = makeStatefulNetworkingApi();
-    const capabilities = {
+    const capabilities: K8sNetworkPolicyCapabilities = {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: false,
       gkeFqdnNetworkPolicy: false,
@@ -4464,6 +4473,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsFqdn: false,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "api-discovery",
+      probe: "absent",
+      probedAt: null,
     };
 
     await makeNetworkPolicyDeployment({
@@ -4516,7 +4528,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         spec: { clusterIP: "172.20.0.10", clusterIPs: ["172.20.0.10"] },
       })),
     };
-    const capabilities = {
+    const capabilities: K8sNetworkPolicyCapabilities = {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: false,
       gkeFqdnNetworkPolicy: false,
@@ -4525,6 +4537,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsFqdn: true,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "api-discovery",
+      probe: "absent",
+      probedAt: null,
     };
 
     await makeNetworkPolicyDeployment({
@@ -4613,7 +4628,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
         plural: "ciliumnetworkpolicies",
       },
     });
-    const capabilities = {
+    const capabilities: K8sNetworkPolicyCapabilities = {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: true,
       gkeFqdnNetworkPolicy: false,
@@ -4622,6 +4637,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsFqdn: true,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "api-discovery",
+      probe: "absent",
+      probedAt: null,
     };
 
     await makeNetworkPolicyDeployment({
@@ -4679,7 +4697,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
           plural: "fqdnnetworkpolicies",
         },
       });
-    const capabilities = {
+    const capabilities: K8sNetworkPolicyCapabilities = {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: false,
       gkeFqdnNetworkPolicy: true,
@@ -4688,6 +4706,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsFqdn: true,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "api-discovery",
+      probe: "absent",
+      probedAt: null,
     };
 
     await makeNetworkPolicyDeployment({
@@ -4761,7 +4782,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
   test("deleting managed network policy also cleans up stale duplicate managed policies", async () => {
     const policyName = "mcp-egress-mcp-mcp-test-server";
     const { api: networkingApi, policies } = makeStatefulNetworkingApi();
-    const capabilities = {
+    const capabilities: K8sNetworkPolicyCapabilities = {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: false,
       gkeFqdnNetworkPolicy: false,
@@ -4770,6 +4791,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
       supportsFqdn: false,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "api-discovery",
+      probe: "absent",
+      probedAt: null,
     };
 
     const deployment = makeNetworkPolicyDeployment({
@@ -4800,7 +4824,7 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     });
   });
 
-  const PLAIN_CAPS = {
+  const PLAIN_CAPS: K8sNetworkPolicyCapabilities = {
     kubernetesNetworkPolicy: true,
     ciliumNetworkPolicy: false,
     gkeFqdnNetworkPolicy: false,
@@ -4809,8 +4833,11 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     supportsFqdn: false,
     supportsHttpMethods: false,
     message: null,
+    enforcementSource: "api-discovery",
+    probe: "absent",
+    probedAt: null,
   };
-  const AWS_CAPS = {
+  const AWS_CAPS: K8sNetworkPolicyCapabilities = {
     kubernetesNetworkPolicy: true,
     ciliumNetworkPolicy: false,
     gkeFqdnNetworkPolicy: false,
@@ -4819,8 +4846,11 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     supportsFqdn: true,
     supportsHttpMethods: false,
     message: null,
+    enforcementSource: "api-discovery",
+    probe: "absent",
+    probedAt: null,
   };
-  const CILIUM_CAPS = {
+  const CILIUM_CAPS: K8sNetworkPolicyCapabilities = {
     kubernetesNetworkPolicy: true,
     ciliumNetworkPolicy: true,
     gkeFqdnNetworkPolicy: false,
@@ -4829,6 +4859,9 @@ describe("K8sDeployment.applyK8sNetworkPolicy", () => {
     supportsFqdn: true,
     supportsHttpMethods: false,
     message: null,
+    enforcementSource: "api-discovery",
+    probe: "absent",
+    probedAt: null,
   };
   const POLICY_NAME = "mcp-egress-mcp-mcp-test-server";
   const DNS_PORTS = [

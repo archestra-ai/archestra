@@ -204126,6 +204126,26 @@
                         "message": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "enforcementSource": {
+                          "type": "string",
+                          "enum": [
+                            "probe",
+                            "api-discovery"
+                          ]
+                        },
+                        "probe": {
+                          "type": "string",
+                          "enum": [
+                            "enforced",
+                            "not-enforced",
+                            "inconclusive",
+                            "absent"
+                          ]
+                        },
+                        "probedAt": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -204136,7 +204156,10 @@
                         "provider",
                         "supportsFqdn",
                         "supportsHttpMethods",
-                        "message"
+                        "message",
+                        "enforcementSource",
+                        "probe",
+                        "probedAt"
                       ],
                       "additionalProperties": false
                     }

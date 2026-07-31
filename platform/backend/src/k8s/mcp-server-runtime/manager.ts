@@ -220,7 +220,10 @@ export class McpServerRuntimeManager {
       }
 
       const networkPolicyCapabilities = (
-        await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi)
+        await getK8sCapabilitiesFromApi(
+          this.k8sCustomObjectsApi,
+          this.networkPolicyProbeSource(),
+        )
       ).networkPolicy;
       const networkPolicyResolutionCache =
         await this.buildNetworkPolicyResolutionCache(localCatalogItems);
@@ -644,8 +647,12 @@ export class McpServerRuntimeManager {
       );
       const networkPolicyCapabilities =
         options?.networkPolicyCapabilities ??
-        (await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi))
-          .networkPolicy;
+        (
+          await getK8sCapabilitiesFromApi(
+            this.k8sCustomObjectsApi,
+            this.networkPolicyProbeSource(),
+          )
+        ).networkPolicy;
 
       // Ensure the namespace default-deny baseline before the pod exists, so an
       // un-reconciled or apply-failed pod is denied by default rather than open.
@@ -875,7 +882,10 @@ export class McpServerRuntimeManager {
           catalogItem,
         }),
         networkPolicyCapabilities: (
-          await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi)
+          await getK8sCapabilitiesFromApi(
+            this.k8sCustomObjectsApi,
+            this.networkPolicyProbeSource(),
+          )
         ).networkPolicy,
         k8sExec: this.k8sExec,
       });
@@ -1914,6 +1924,19 @@ export class McpServerRuntimeManager {
       }
     }
     return deploymentsBySelectorId;
+  }
+
+  /**
+   * Where the chart's enforcement probe left its verdict. Threading it through
+   * here keeps the policies this runtime applies and the capabilities the UI
+   * reports based on the same answer about the same cluster.
+   */
+  private networkPolicyProbeSource():
+    | { coreApi: k8s.CoreV1Api; namespace: string }
+    | undefined {
+    return this.k8sApi
+      ? { coreApi: this.k8sApi, namespace: this.namespace }
+      : undefined;
   }
 }
 

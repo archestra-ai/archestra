@@ -52114,6 +52114,9 @@ export type GetK8sCapabilitiesResponses = {
             supportsFqdn: boolean;
             supportsHttpMethods: boolean;
             message: string | null;
+            enforcementSource: 'probe' | 'api-discovery';
+            probe: 'enforced' | 'not-enforced' | 'inconclusive' | 'absent';
+            probedAt: string | null;
         };
     };
 };

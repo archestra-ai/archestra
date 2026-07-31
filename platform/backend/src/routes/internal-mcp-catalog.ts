@@ -102,6 +102,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Apps are hidden from the registry but assignable to a gateway, so the
           // capabilities picker opts in to their backing catalogs here.
           includeApps: z.coerce.boolean().optional(),
+          status: z
+            .enum(["active", "deleted"])
+            .default("active")
+            .describe(
+              "Filter by lifecycle status. `deleted` lists soft-deleted catalog items and requires the manage-deleted permission (granted to admins by default).",
+            ),
         }),
         response: constructResponseSchema(
           z.array(ListInternalMcpCatalogSchema),
@@ -109,6 +115,34 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      // Soft-deleted catalog items are visible only to holders of the dedicated
+      // manage-deleted capability (admins by default) — the ordinary delete
+      // permission must not unlock the org-wide tombstone view. This lists
+      // org-scoped deleted roots (a backend affordance for discovering
+      // restorable ids — no UI toggle this change).
+      if (request.query.status === "deleted") {
+        const { success: canManageDeleted } = await hasPermission(
+          { mcpRegistry: ["manage-deleted"] },
+          request.headers,
+        );
+        if (!canManageDeleted) {
+          throw new ApiError(
+            403,
+            "You do not have permission to list deleted catalog items.",
+          );
+        }
+        const deleted =
+          await InternalMcpCatalogModel.findDeletedForOrganization(
+            request.organizationId,
+          );
+        return reply.send(
+          deleted.map((item) => ({
+            ...item,
+            imageApprovalRequired: false,
+          })),
+        );
+      }
+
       const { success: isAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         request.headers,
@@ -1550,6 +1584,59 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         success: await InternalMcpCatalogModel.delete(catalogItem.id),
+      });
+    },
+  );
+
+  fastify.post(
+    "/api/internal_mcp_catalog/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreInternalMcpCatalogItem,
+        description:
+          "Restore a soft-deleted Internal MCP catalog item and its cascaded installs and tools (flag-only reinstall).",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      if (isBuiltInCatalogId(id)) {
+        throw new ApiError(403, "Built-in catalog items cannot be restored");
+      }
+
+      const catalogItem =
+        await InternalMcpCatalogModel.findDeletedByIdForOrganization(
+          id,
+          request.organizationId,
+        );
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+
+      // App-backed catalogs are managed through the Apps lifecycle (mirrors delete).
+      if (catalogItem.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App-backed catalog items are managed through the Apps API and cannot be restored here.",
+        );
+      }
+
+      // Authorization is the route-level manage-deleted permission (admin-only
+      // by default): deleted-resource lifecycle is one org-scoped capability,
+      // not derived from authorship of the live resource.
+
+      const conflict =
+        await InternalMcpCatalogModel.getRestoreConflictMessage(catalogItem);
+      if (conflict) {
+        throw new ApiError(409, conflict);
+      }
+
+      return reply.send({
+        success: await InternalMcpCatalogModel.restore(id),
       });
     },
   );

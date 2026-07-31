@@ -105,6 +105,8 @@ export const InsertMcpServerSchema = createInsertSchema(schema.mcpServersTable)
     id: true,
     createdAt: true,
     updatedAt: true,
+    // Soft-delete bookkeeping, written only by delete/restore, never from input.
+    deletedAt: true,
     // Frozen K8s deployment identity — computed by McpServerModel.create /
     // the startup adopt pass, never accepted from input.
     deploymentName: true,
@@ -127,6 +129,8 @@ export const UpdateMcpServerSchema = createUpdateSchema(schema.mcpServersTable)
     scope: true, // scope is install-time only; to change scope, uninstall + reinstall
     // Frozen at creation/adopt time — renames must never touch it
     deploymentName: true,
+    // Soft-delete bookkeeping, written only by delete/restore, never from input.
+    deletedAt: true,
   })
   .extend({
     localInstallationStatus: LocalMcpServerInstallationStatusSchema.optional(),

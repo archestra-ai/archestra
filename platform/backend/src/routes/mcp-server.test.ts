@@ -4398,7 +4398,7 @@ describe("mcp server core route coverage", () => {
       await expect(McpServerModel.findById(builtin.id)).resolves.not.toBeNull();
     });
 
-    test("uninstalling the last connection retains tools, policies, and assignments (binding nulled)", async ({
+    test("uninstalling the last connection retains tools, policies, and assignments (binding retained)", async ({
       makeInternalMcpCatalog,
     }) => {
       const { default: AgentModel } = await import("@/models/agent");
@@ -4490,7 +4490,9 @@ describe("mcp server core route coverage", () => {
           ),
         );
       expect(assignmentAfter).toHaveLength(1);
-      expect(assignmentAfter[0].mcpServerId).toBeNull();
+      // Soft delete keeps the server row, so the FK never fires — the binding
+      // still points at the (soft-deleted) install and survives a restore.
+      expect(assignmentAfter[0].mcpServerId).toBe(installedServer.id);
     });
 
     test("refuses to delete an app server with 400", async ({

@@ -4,7 +4,6 @@ import {
   index,
   jsonb,
   pgEnum,
-  pgTable,
   text,
   timestamp,
   unique,
@@ -23,6 +22,7 @@ import type {
 import environmentsTable from "./environment";
 import mcpPresetEntriesTable from "./mcp-preset-entry";
 import secretTable from "./secret";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import usersTable from "./user";
 
 export const mcpCatalogScopeEnum = pgEnum("mcp_catalog_scope", [
@@ -31,7 +31,7 @@ export const mcpCatalogScopeEnum = pgEnum("mcp_catalog_scope", [
   "org",
 ]);
 
-const internalMcpCatalogTable = pgTable(
+const internalMcpCatalogTable = softDeletablePgTable(
   "internal_mcp_catalog",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -214,26 +214,19 @@ const internalMcpCatalogTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (table) => ({
-    organizationIdIdx: index("internal_mcp_catalog_organization_id_idx").on(
-      table.organizationId,
-    ),
-    authorIdIdx: index("internal_mcp_catalog_author_id_idx").on(table.authorId),
-    scopeIdx: index("internal_mcp_catalog_scope_idx").on(table.scope),
-    parentIdIdx: index("internal_mcp_catalog_parent_id_idx").on(
-      table.parentCatalogItemId,
-    ),
-    clonedFromIdx: index("internal_mcp_catalog_cloned_from_idx").on(
-      table.clonedFrom,
-    ),
-    parentNameUnique: unique("internal_mcp_catalog_parent_name_unique").on(
+  (table) => [
+    index("internal_mcp_catalog_organization_id_idx").on(table.organizationId),
+    index("internal_mcp_catalog_author_id_idx").on(table.authorId),
+    index("internal_mcp_catalog_scope_idx").on(table.scope),
+    index("internal_mcp_catalog_parent_id_idx").on(table.parentCatalogItemId),
+    index("internal_mcp_catalog_cloned_from_idx").on(table.clonedFrom),
+    unique("internal_mcp_catalog_parent_name_unique").on(
       table.parentCatalogItemId,
       table.name,
     ),
-    environmentIdIdx: index("internal_mcp_catalog_environment_id_idx").on(
-      table.environmentId,
-    ),
-  }),
+    index("internal_mcp_catalog_environment_id_idx").on(table.environmentId),
+    index("internal_mcp_catalog_deleted_at_idx").on(table.deletedAt),
+  ],
 );
 
 export default internalMcpCatalogTable;

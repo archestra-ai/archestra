@@ -1,15 +1,27 @@
 import { and, eq } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 
 class McpServerUserModel {
   /**
    * Get all MCP server IDs that a user has personal access to
    */
   static async getUserPersonalMcpServerIds(userId: string): Promise<string[]> {
+    // Join the server so a soft-deleted install stops granting personal access
+    // (the junction row is retained on soft-delete).
     const mcpServerUsers = await db
       .select({ mcpServerId: schema.mcpServerUsersTable.mcpServerId })
       .from(schema.mcpServerUsersTable)
-      .where(eq(schema.mcpServerUsersTable.userId, userId));
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.mcpServerUsersTable.mcpServerId, schema.mcpServersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.mcpServerUsersTable.userId, userId),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
 
     return mcpServerUsers.map((su) => su.mcpServerId);
   }
@@ -22,12 +34,17 @@ class McpServerUserModel {
     mcpServerId: string,
   ): Promise<boolean> {
     const mcpServerUser = await db
-      .select()
+      .select({ mcpServerId: schema.mcpServerUsersTable.mcpServerId })
       .from(schema.mcpServerUsersTable)
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.mcpServerUsersTable.mcpServerId, schema.mcpServersTable.id),
+      )
       .where(
         and(
           eq(schema.mcpServerUsersTable.mcpServerId, mcpServerId),
           eq(schema.mcpServerUsersTable.userId, userId),
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);

@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-07-21
+lastUpdated: 2026-07-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -96,6 +96,25 @@ Archestra stores the tool list discovered at install time. When the upstream ser
 - **Inspector**: open the server's Inspector tab and click **Refresh Tools**.
 - **API**: `POST /api/mcp_server/:id/reload-tools`.
 - **Automatic**: set `ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES` to re-sync every installed server on an interval. See [Deployment](/docs/platform-deployment).
+
+## Uninstalling and Restoring
+
+Uninstalling an installation is a recoverable delete. Archestra tears down the running server and its Kubernetes secret, but keeps the installation row and its stored credentials. Nothing is erased.
+
+The name is freed immediately. You can create a new registry entry with the name an uninstalled one used — an uninstalled entry never blocks the name.
+
+Restoring brings the installation back marked for reinstall. It does not reconnect on its own: the credentials are still stored, so you click **Reinstall** to bring the server back up with them. You never re-enter a secret to restore.
+
+Deleting a registry entry cascades. Archestra uninstalls every installation created from it and hides that entry's tools in one action. Restoring the entry brings back exactly the installations and tools that were removed with it, each marked for reinstall. An installation you uninstalled on its own earlier stays uninstalled — only the ones removed by this delete come back.
+
+Viewing and restoring uninstalled entries requires the **Manage Deleted** permission (`mcpRegistry:manage-deleted` for registry entries, `mcpServerInstallation:manage-deleted` for installations). Of the predefined roles, only admins hold it; grant it to a custom role to delegate recovery.
+
+Restore is an API action today. List uninstalled entries with `GET /api/internal_mcp_catalog?status=deleted` or uninstalled installations with `GET /api/mcp_server?status=deleted`, then restore one:
+
+- **Installation**: `POST /api/mcp_server/:id/restore`.
+- **Registry entry**: `POST /api/internal_mcp_catalog/:id/restore`.
+
+Restoring an installation whose registry entry is still deleted is rejected — restore the entry first. Restoring is blocked when an active installation or entry already occupies the same scope or name.
 
 ## Renaming a Server
 

@@ -75,6 +75,43 @@ describe("access-control", () => {
     });
   });
 
+  describe("MCP deleted-resource lifecycle (manage-deleted)", () => {
+    // Soft-deleted MCP servers and catalog entries are viewable and restorable
+    // only through the dedicated manage-deleted capability. Of the predefined
+    // roles only admin holds it — delete (which members hold for their own
+    // uninstalls) must not unlock the org-wide tombstone view.
+    test("admin role has manage-deleted on both MCP resources", () => {
+      const admin = predefinedPermissionsMap[ADMIN_ROLE_NAME];
+      expect(admin.mcpServerInstallation).toContain("manage-deleted");
+      expect(admin.mcpRegistry).toContain("manage-deleted");
+    });
+
+    test("editor role does not have manage-deleted", () => {
+      expect(editorPermissions.mcpServerInstallation).not.toContain(
+        "manage-deleted",
+      );
+      expect(editorPermissions.mcpRegistry).not.toContain("manage-deleted");
+    });
+
+    test("member role does not have manage-deleted", () => {
+      expect(memberPermissions.mcpServerInstallation).not.toContain(
+        "manage-deleted",
+      );
+      expect(memberPermissions.mcpRegistry).not.toContain("manage-deleted");
+    });
+
+    test("restore routes require manage-deleted", () => {
+      expect(requiredEndpointPermissionsMap[RouteId.RestoreMcpServer]).toEqual({
+        mcpServerInstallation: ["manage-deleted"],
+      });
+      expect(
+        requiredEndpointPermissionsMap[RouteId.RestoreInternalMcpCatalogItem],
+      ).toEqual({
+        mcpRegistry: ["manage-deleted"],
+      });
+    });
+  });
+
   describe("LLM-spending skill routes", () => {
     // suggestSkillDescription resolves and spends the source agent's configured
     // LLM key, so it must be gated like chatting with the agent — not by the

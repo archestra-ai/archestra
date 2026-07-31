@@ -210,6 +210,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "mcpServer.reinstalled",
     fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
   },
+  // Restore is a POST carrying :id — register directly so the POST walk-up
+  // isn't dropped (which would mis-log it as unknown.created). findByIdForAudit
+  // does NOT filter soft-deleted rows, so `before` captures the deleted install
+  // and `after` the revived one (deletedAt → null, reinstallRequired → true).
+  "/api/mcp_server/:id/restore": {
+    resourceType: "mcpServer",
+    action: "mcpServer.restored",
+    fetchById: (id, orgId) => McpServerModel.findByIdForAudit(id, orgId),
+  },
 
   "/api/roles": {
     resourceType: "role",
@@ -727,6 +736,16 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/internal_mcp_catalog/:id/reinstall": {
     resourceType: "internalMcpCatalog",
     action: "internalMcpCatalog.reinstalled",
+    fetchById: (id, orgId) =>
+      InternalMcpCatalogModel.findByIdForAudit(id, orgId),
+  },
+  // Catalog restore is a POST carrying :id — register directly (walk-up POSTs
+  // are dropped). One catalog-level summary record: the snapshot carries the
+  // install/tool counts affected, and `before`/`after` diff on deletedAt (plus
+  // the counts the cascade revives).
+  "/api/internal_mcp_catalog/:id/restore": {
+    resourceType: "internalMcpCatalog",
+    action: "internalMcpCatalog.restored",
     fetchById: (id, orgId) =>
       InternalMcpCatalogModel.findByIdForAudit(id, orgId),
   },

@@ -5,6 +5,7 @@ import {
   eq,
   ilike,
   inArray,
+  isNotNull,
   isNull,
   ne,
   notExists,
@@ -13,6 +14,7 @@ import {
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import {
   constructLegacyMcpDeploymentName,
   constructLegacyMultitenantMcpDeploymentName,
@@ -183,6 +185,8 @@ class InternalMcpCatalogModel {
     const listConditions = [
       // Legacy preset rows (non-NULL parentCatalogItemId) are never surfaced.
       isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+      // Hide soft-deleted catalog items from the registry.
+      notDeleted(schema.internalMcpCatalogTable),
     ];
     if (environmentId !== undefined) {
       listConditions.push(catalogInEnvironmentPredicate(environmentId));
@@ -296,6 +300,8 @@ class InternalMcpCatalogModel {
       isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
       // App backing catalogs are never surfaced via registry search.
       ne(schema.internalMcpCatalogTable.serverType, "app"),
+      // Hide soft-deleted catalog items.
+      notDeleted(schema.internalMcpCatalogTable),
       ...(environmentId !== undefined
         ? [catalogInEnvironmentPredicate(environmentId)]
         : []),
@@ -379,7 +385,12 @@ class InternalMcpCatalogModel {
     const [dbItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.id, id));
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      );
 
     if (!dbItem) {
       return null;
@@ -412,7 +423,12 @@ class InternalMcpCatalogModel {
     const [dbItem] = await db
       .select()
       .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.id, id));
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      );
 
     if (!dbItem) {
       return null;
@@ -463,6 +479,7 @@ class InternalMcpCatalogModel {
         and(
           eq(schema.internalMcpCatalogTable.environmentId, environmentId),
           eq(schema.internalMcpCatalogTable.serverType, "local"),
+          notDeleted(schema.internalMcpCatalogTable),
         ),
       );
   }
@@ -480,6 +497,7 @@ class InternalMcpCatalogModel {
         and(
           isNull(schema.internalMcpCatalogTable.environmentId),
           eq(schema.internalMcpCatalogTable.serverType, "local"),
+          notDeleted(schema.internalMcpCatalogTable),
           or(
             eq(schema.internalMcpCatalogTable.organizationId, organizationId),
             isNull(schema.internalMcpCatalogTable.organizationId),
@@ -502,7 +520,12 @@ class InternalMcpCatalogModel {
     const dbItems = await db
       .select()
       .from(schema.internalMcpCatalogTable)
-      .where(inArray(schema.internalMcpCatalogTable.id, ids));
+      .where(
+        and(
+          inArray(schema.internalMcpCatalogTable.id, ids),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      );
 
     const catalogItems =
       await InternalMcpCatalogModel.attachListMetadata(dbItems);
@@ -526,8 +549,12 @@ class InternalMcpCatalogModel {
             schema.internalMcpCatalogTable.organizationId,
             options.organizationId,
           ),
+          notDeleted(schema.internalMcpCatalogTable),
         )
-      : eq(schema.internalMcpCatalogTable.name, name);
+      : and(
+          eq(schema.internalMcpCatalogTable.name, name),
+          notDeleted(schema.internalMcpCatalogTable),
+        );
 
     const [dbItem] = await db
       .select()
@@ -583,6 +610,9 @@ class InternalMcpCatalogModel {
             schema.internalMcpCatalogTable.organizationId,
             params.organizationId,
           ),
+          // Active-only: a soft-deleted catalog must not block re-creating (name
+          // reuse) nor register as a restore-time slug collision.
+          notDeleted(schema.internalMcpCatalogTable),
         ),
       );
 
@@ -926,6 +956,8 @@ class InternalMcpCatalogModel {
             schema.internalMcpCatalogTable.catalogItemApprovalStatus,
             "pending",
           ),
+          // A soft-deleted catalog is not awaiting approval.
+          notDeleted(schema.internalMcpCatalogTable),
         ),
       )
       .orderBy(desc(schema.internalMcpCatalogTable.updatedAt));
@@ -948,47 +980,165 @@ class InternalMcpCatalogModel {
     const row = await InternalMcpCatalogModel.findSecretReferences(id);
     if (!row) return false;
 
-    // Cleanup mcp server installations across the catalog item and any legacy
-    // child (preset) rows still present in the DB.
+    // One shared timestamp stamps the catalog, its installs, and its tools — the
+    // correlation key that lets restore revive EXACTLY this cascade. Installs (or
+    // tools) deleted individually earlier carry a different timestamp and stay
+    // deleted on restore.
+    const at = new Date();
+
+    // Cascade across the catalog item and any legacy child (preset) rows.
     const children = await db
-      .select({
-        id: schema.internalMcpCatalogTable.id,
-        presetSecretId: schema.internalMcpCatalogTable.presetSecretId,
-      })
+      .select({ id: schema.internalMcpCatalogTable.id })
       .from(schema.internalMcpCatalogTable)
       .where(eq(schema.internalMcpCatalogTable.parentCatalogItemId, id));
     const catalogIds = [id, ...children.map((c) => c.id)];
 
     for (const catalogId of catalogIds) {
+      // Soft-delete each ACTIVE install (each runs its own K8s teardown), then
+      // the catalog's tool rows — all stamped with the shared timestamp. This
+      // external teardown stays OUTSIDE any transaction (irreversible + slow);
+      // a partially-completed delete self-heals on retry (softDelete skips rows
+      // already stamped).
       const servers = await McpServerModel.findByCatalogId(catalogId);
-      // Deleting each server cascades its tools.
       for (const server of servers) {
-        await McpServerModel.delete(server.id);
+        await McpServerModel.delete(server.id, { at });
       }
+      await ToolModel.softDeleteByCatalog(catalogId, at);
     }
 
-    const secretIds = new Set<string>();
-    if (row.parentCatalogItemId === null) {
-      if (row.clientSecretId) secretIds.add(row.clientSecretId);
-      if (row.localConfigSecretId) secretIds.add(row.localConfigSecretId);
-      if (row.presetSecretId) secretIds.add(row.presetSecretId);
-      for (const child of children) {
-        if (child.presetSecretId) secretIds.add(child.presetSecretId);
+    // Soft-delete legacy child catalog rows, then the catalog itself.
+    for (const child of children) {
+      await softDelete(
+        db,
+        schema.internalMcpCatalogTable,
+        eq(schema.internalMcpCatalogTable.id, child.id),
+        at,
+      );
+    }
+
+    // DB secret bags (clientSecretId/localConfigSecretId/presetSecretId) are
+    // intentionally RETAINED on soft-delete so restore recovers stored
+    // credentials; only the live per-install K8s Secret was torn down above.
+
+    const count = await softDelete(
+      db,
+      schema.internalMcpCatalogTable,
+      eq(schema.internalMcpCatalogTable.id, id),
+      at,
+    );
+    return count > 0;
+  }
+
+  /**
+   * Restore a soft-deleted catalog item and, cascaded via the shared `deletedAt`
+   * timestamp, its tools + installs. TRANSACTIONAL (all-or-nothing): there is no
+   * external work, and a partial restore would strand tools under a live catalog
+   * (the exact non-resolving-tools failure mode), so catalog + tools + installs
+   * must revive together. Flag-only: installs come back flagged for a manual
+   * reinstall (single-tenant per-install, multitenant via catalogReinstallRequired).
+   */
+  static async restore(id: string): Promise<boolean> {
+    const [target] = await db
+      .select({
+        deletedAt: schema.internalMcpCatalogTable.deletedAt,
+        multitenant: schema.internalMcpCatalogTable.multitenant,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          isNotNull(schema.internalMcpCatalogTable.deletedAt),
+        ),
+      );
+    if (!target?.deletedAt) return false;
+    const deletedAt = target.deletedAt;
+
+    const children = await db
+      .select({ id: schema.internalMcpCatalogTable.id })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.parentCatalogItemId, id),
+          eq(schema.internalMcpCatalogTable.deletedAt, deletedAt),
+        ),
+      );
+    const catalogIds = [id, ...children.map((c) => c.id)];
+
+    await withDbTransaction(async (tx) => {
+      for (const catalogId of catalogIds) {
+        await restore(
+          tx,
+          schema.internalMcpCatalogTable,
+          eq(schema.internalMcpCatalogTable.id, catalogId),
+        );
+        await ToolModel.restoreByCatalog(catalogId, deletedAt, tx);
+        await McpServerModel.restoreCascadedForCatalog(
+          { catalogId, deletedAt, multitenant: target.multitenant },
+          tx,
+        );
       }
-    } else if (row.presetSecretId) {
-      secretIds.add(row.presetSecretId);
+      if (target.multitenant) {
+        // Multitenant catalogs re-provision at the catalog level, not per-install.
+        await tx
+          .update(schema.internalMcpCatalogTable)
+          .set({ catalogReinstallRequired: true })
+          .where(eq(schema.internalMcpCatalogTable.id, id));
+      }
+    });
+    return true;
+  }
+
+  /** Physical delete — reserved for purge/rollback flows, never a user action. */
+  static async hardDelete(id: string): Promise<boolean> {
+    const count = await hardDelete(
+      db,
+      schema.internalMcpCatalogTable,
+      eq(schema.internalMcpCatalogTable.id, id),
+    );
+    return count > 0;
+  }
+
+  /**
+   * Restore-conflict guard: 409 when an ACTIVE root catalog already occupies the
+   * slug this restore would revive. Uses `findRootByNameInOrg` (now `notDeleted`)
+   * so it compares against live rows only, and excludes the catalog being restored.
+   */
+  static async getRestoreConflictMessage(
+    catalog: Pick<InternalMcpCatalog, "id" | "name" | "organizationId">,
+  ): Promise<string | null> {
+    if (!catalog.organizationId) return null;
+    const conflict = await InternalMcpCatalogModel.findRootByNameInOrg({
+      name: catalog.name,
+      organizationId: catalog.organizationId,
+    });
+    if (conflict && conflict.id !== catalog.id) {
+      return "Cannot restore because another active catalog item already uses this name.";
     }
+    return null;
+  }
 
-    for (const secretId of secretIds) {
-      await secretManager().deleteSecret(secretId);
-    }
-
-    const deletedRows = await db
-      .delete(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.id, id))
-      .returning({ id: schema.internalMcpCatalogTable.id });
-
-    return deletedRows.length > 0;
+  /**
+   * Org-scoped lookup of a SOFT-DELETED catalog item, for the restore route.
+   * Does NOT filter `notDeleted` — it is the one read that must see deleted rows.
+   */
+  static async findDeletedByIdForOrganization(
+    id: string,
+    organizationId: string,
+  ): Promise<InternalMcpCatalog | null> {
+    const [dbItem] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.id, id),
+          eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+          isNotNull(schema.internalMcpCatalogTable.deletedAt),
+        ),
+      );
+    if (!dbItem) return null;
+    const labels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
+    const teams = await McpCatalogTeamModel.getTeamDetailsForCatalog(id);
+    return { ...dbItem, labels, teams };
   }
 
   // ===== Private methods =====
@@ -1371,7 +1521,12 @@ class InternalMcpCatalogModel {
         providesUi: sql<boolean>`bool_or(${toolUiResourceUriSql()} is not null)`,
       })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.catalogId, catalogIds))
+      .where(
+        and(
+          inArray(schema.toolsTable.catalogId, catalogIds),
+          notDeleted(schema.toolsTable),
+        ),
+      )
       .groupBy(schema.toolsTable.catalogId);
 
     return new Map(
@@ -1448,6 +1603,11 @@ class InternalMcpCatalogModel {
     const toolCount =
       (await InternalMcpCatalogModel.getToolStats([id])).get(id)?.toolCount ??
       0;
+    // Active installs backing this catalog. On a cascade delete/restore these
+    // are the installs affected, so the count belongs in the summary snapshot
+    // (findByCatalogId is `notDeleted`, so it drops to 0 while soft-deleted and
+    // returns on restore — giving the restore diff a non-empty change).
+    const installCount = (await McpServerModel.findByCatalogId(id)).length;
 
     const transportType = row.localConfig?.transportType ?? "stdio";
     const envKeys = Array.isArray(row.localConfig?.environment)
@@ -1483,8 +1643,42 @@ class InternalMcpCatalogModel {
       hasDeploymentSpecYaml: Boolean(row.deploymentSpecYaml),
       hasEnterpriseManagedConfig: row.enterpriseManagedConfig !== null,
       toolCount,
+      installCount,
+      // Lifecycle fields so the cascade delete/restore summary diffs: a restore
+      // flips deletedAt → null and (multitenant) catalogReinstallRequired → true.
+      deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
+      catalogReinstallRequired: row.catalogReinstallRequired,
       createdAt: row.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * Org-scoped listing of SOFT-DELETED root catalog items, for the
+   * `status=deleted` registry filter (a backend affordance for enumerating
+   * restorable ids). Does NOT filter `notDeleted` — it is a deleted-only read.
+   * Only root rows (legacy preset children are never surfaced), and app-backed
+   * catalogs are excluded (managed via the Apps API, like the active listing).
+   */
+  static async findDeletedForOrganization(
+    organizationId: string,
+  ): Promise<ListInternalMcpCatalog[]> {
+    const dbItems = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+          isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
+          ne(schema.internalMcpCatalogTable.serverType, "app"),
+          isNotNull(schema.internalMcpCatalogTable.deletedAt),
+        ),
+      )
+      .orderBy(desc(schema.internalMcpCatalogTable.deletedAt));
+
+    const catalogItems =
+      await InternalMcpCatalogModel.attachListMetadata(dbItems);
+    await InternalMcpCatalogModel.populateAuthorNames(catalogItems);
+    return catalogItems;
   }
 }
 

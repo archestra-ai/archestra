@@ -22,6 +22,7 @@ export const actions = [
   "execute",
   "deploy-to-restricted",
   "manage",
+  "manage-deleted",
   "read-all",
   "share-org",
   "impersonate",

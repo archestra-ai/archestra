@@ -3829,8 +3829,10 @@ describe("ToolModel", () => {
           agentId: null,
         })
         .onConflictDoUpdate({
+          // Mirror the partial index predicate exactly (now gated on
+          // deleted_at is null) so Postgres can infer the arbiter index.
           target: [schema.toolsTable.catalogId, schema.toolsTable.name],
-          targetWhere: sql`${schema.toolsTable.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null`,
+          targetWhere: sql`${schema.toolsTable.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null and ${schema.toolsTable.deletedAt} is null`,
           set: { description: sql`excluded.description` },
         })
         .returning({ inserted: sql<boolean>`(xmax = 0)` });

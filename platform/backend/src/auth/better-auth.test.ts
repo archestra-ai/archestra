@@ -1,4 +1,9 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+  type Permissions,
+} from "@archestra/shared";
+import { allAvailableActions } from "@archestra/shared/access-control";
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
 import { vi } from "vitest";
@@ -430,6 +435,172 @@ describe("handleBeforeHook", () => {
 
       const result = await handleBeforeHook(ctx);
       expect(result).toBe(ctx);
+    });
+  });
+
+  describe("role-assignment no-escalation gate", () => {
+    // The threat this closes: a deliberately-restricted admin role (all
+    // permissions EXCEPT e.g. log:read/auditLog:read/member:impersonate,
+    // but including member:update) must not be able to hand out — to
+    // themselves or anyone — a role carrying the withheld permissions,
+    // read what their own role withholds, and switch back.
+    const restrictedAdminPermission = Object.fromEntries(
+      Object.entries(allAvailableActions).map(([resource, actions]) => {
+        if (resource === "log" || resource === "auditLog") return [resource, []];
+        if (resource === "member")
+          return [resource, actions.filter((a) => a !== "impersonate")];
+        return [resource, actions];
+      }),
+    ) as Permissions;
+
+    const updateMemberCtx = (
+      user: { id: string; email: string } | null,
+      role: string,
+      memberId = "some-member-id",
+    ) =>
+      createMockContext({
+        path: "/organization/update-member",
+        method: "POST",
+        body: { memberId, role },
+        ...(user
+          ? {
+              context: {
+                session: { user, session: { id: "session-id" } },
+              },
+            }
+          : {}),
+      });
+
+    test("blocks a restricted admin assigning the admin role (to anyone, including themselves)", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const customRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: customRole.role });
+
+      const ctx = updateMemberCtx(restricted, ADMIN_ROLE_NAME);
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+        body: {
+          message: expect.stringContaining(
+            "would grant permissions you don't have yourself",
+          ),
+        },
+      });
+      // The rejection names exactly what the caller's role withholds.
+      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+        body: { message: expect.stringContaining("log:read") },
+      });
+    });
+
+    test("blocks assigning a custom role that carries withheld permissions", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const restrictedRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: restrictedRole.role });
+      const auditReader = await makeCustomRole(org.id, {
+        permission: { auditLog: ["read"] },
+      });
+
+      const ctx = updateMemberCtx(restricted, auditReader.role);
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+    });
+
+    test("allows assignments within the caller's own permission set", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const customRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: customRole.role });
+
+      // Downgrading someone to the predefined member role is fine…
+      const downgrade = updateMemberCtx(restricted, MEMBER_ROLE_NAME);
+      expect(await handleBeforeHook(downgrade)).toBe(downgrade);
+      // …and so is assigning their own restricted role (exact subset).
+      const lateral = updateMemberCtx(restricted, customRole.role);
+      expect(await handleBeforeHook(lateral)).toBe(lateral);
+    });
+
+    test("a full admin can still assign any role", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const adminUser = await makeUser({ role: "admin" });
+      await makeMember(adminUser.id, org.id, { role: ADMIN_ROLE_NAME });
+
+      const ctx = updateMemberCtx(adminUser, ADMIN_ROLE_NAME);
+      expect(await handleBeforeHook(ctx)).toBe(ctx);
+    });
+
+    test("leaves unauthenticated and unknown-role calls for better-auth", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const unauthenticated = updateMemberCtx(null, ADMIN_ROLE_NAME);
+      expect(await handleBeforeHook(unauthenticated)).toBe(unauthenticated);
+
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const customRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: customRole.role });
+      const unknownRole = updateMemberCtx(restricted, "no_such_role");
+      expect(await handleBeforeHook(unknownRole)).toBe(unknownRole);
+    });
+
+    test("blocks inviting a user into a role stronger than the inviter's", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const customRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: customRole.role });
+
+      const inviteCtx = (role: string) =>
+        createMockContext({
+          path: "/organization/invite-member",
+          method: "POST",
+          body: { email: "new-user@example.com", role },
+          context: {
+            session: { user: restricted, session: { id: "session-id" } },
+          },
+        });
+
+      await expect(handleBeforeHook(inviteCtx(ADMIN_ROLE_NAME))).rejects.toThrow(
+        APIError,
+      );
+      // Within the subset, the invitation passes through.
+      const allowed = inviteCtx(MEMBER_ROLE_NAME);
+      expect(await handleBeforeHook(allowed)).toBe(allowed);
     });
   });
 });

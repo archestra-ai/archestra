@@ -144,6 +144,37 @@ describe("custom role routes", () => {
     expect(createOrgRoleMock).not.toHaveBeenCalled();
   });
 
+  test("rejects updating a role to grant permissions the user does not have", async ({
+    makeUser,
+    makeCustomRole,
+  }) => {
+    const limitedUser = await makeUser();
+    const limitedRole = await makeCustomRole(organizationId, {
+      permission: { ac: ["read", "update"] },
+    });
+    await db.insert(schema.membersTable).values({
+      id: crypto.randomUUID(),
+      userId: limitedUser.id,
+      organizationId,
+      role: limitedRole.role,
+      createdAt: new Date(),
+    });
+    const targetRole = await makeCustomRole(organizationId, {
+      permission: { ac: ["read"] },
+    });
+
+    authenticatedUser = limitedUser;
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/roles/${targetRole.id}`,
+      payload: { permission: { ac: ["read"], auditLog: ["read"] } },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.message).toContain("auditLog:read");
+    expect(updateOrgRoleMock).not.toHaveBeenCalled();
+  });
+
   test("rejects updates to predefined roles", async () => {
     const response = await app.inject({
       method: "PUT",

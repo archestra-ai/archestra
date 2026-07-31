@@ -6,7 +6,7 @@ import {
   type PredefinedRoleName,
   roleDescriptions,
 } from "@archestra/shared";
-import { allAvailableActions } from "@archestra/shared/access-control";
+
 import type { ColumnDef } from "@tanstack/react-table";
 import { Copy, Download, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
+import { useAllPermissions } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -51,6 +52,9 @@ type Role = archestraApiTypes.GetRoleResponses["200"];
  * Shows both predefined roles (read-only) and custom roles (CRUD).
  */
 export function RolesList() {
+  // The permission builder disables what the author cannot grant — the same
+  // subset rule the server enforces on create/update.
+  const { data: authorPermissions } = useAllPermissions();
   const setActionButton = useSetSettingsAction();
   const {
     pageIndex,
@@ -432,7 +436,7 @@ export function RolesList() {
               <RolePermissionBuilder
                 permission={permission}
                 onChange={setPermission}
-                userPermissions={allAvailableActions}
+                userPermissions={authorPermissions ?? {}}
               />
             </div>
           </DialogBody>
@@ -496,7 +500,7 @@ export function RolesList() {
               <RolePermissionBuilder
                 permission={permission}
                 onChange={setPermission}
-                userPermissions={allAvailableActions}
+                userPermissions={authorPermissions ?? {}}
               />
             </div>
           </DialogBody>

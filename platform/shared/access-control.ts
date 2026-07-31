@@ -362,6 +362,40 @@ export const memberPermissions: Record<Resource, Action[]> = {
   organization: [],
 };
 
+/**
+ * The no-privilege-escalation rule, shared by every server-side grant path
+ * (role authoring, member role assignment, invitations, service-account
+ * roles, the org default role) and by the UI that previews it: a role may
+ * only be granted by someone who already holds every permission it carries.
+ * Returns the `resource:action` pairs the granter is missing (empty = OK).
+ *
+ * UI-behavior resources are exempt — predefined admin deliberately holds
+ * LESS than member on those (e.g. `simpleView`), so including them would
+ * make ordinary grants impossible.
+ */
+export function findUngrantablePermissions(
+  granterPermissions: Permissions,
+  rolePermissions: Permissions,
+): string[] {
+  const exemptUiResources: Resource[] = [
+    "simpleView",
+    "chatAgentPicker",
+    "chatProviderSettings",
+  ];
+
+  const missing: string[] = [];
+  for (const [resource, actions] of Object.entries(rolePermissions)) {
+    if (exemptUiResources.includes(resource as Resource)) continue;
+    const granterActions = granterPermissions[resource as Resource] || [];
+    for (const action of actions ?? []) {
+      if (!granterActions.includes(action)) {
+        missing.push(`${resource}:${action}`);
+      }
+    }
+  }
+  return missing;
+}
+
 export const adminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
   simpleView: [],

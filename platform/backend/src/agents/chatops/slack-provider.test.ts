@@ -1135,6 +1135,40 @@ describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
     expect(result).toBeNull();
     expect(postMessage).not.toHaveBeenCalled();
   });
+
+  test("🔇 keeps an answer-all thread quiet on the following message", async () => {
+    const { provider } = createReactionProvider();
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: "org-react-answer-all",
+      provider: "slack",
+      channelId: CHANNEL,
+      workspaceId: "T12345",
+    });
+    await ChatOpsChannelBindingModel.update(binding.id, {
+      answerAllMessages: true,
+    });
+
+    await provider.parseWebhookNotification(reactionPayload("mute"), {});
+
+    // An answer-all channel has no activation for the mute to clear, so the
+    // reaction has to leave a marker behind or the next un-mentioned message
+    // gets answered as if nothing was asked.
+    const next = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel: CHANNEL,
+          text: "still talking after the mute",
+          ts: "7777777777.000099",
+          thread_ts: ROOT,
+        },
+      ),
+      {},
+    );
+
+    expect(next).toBeNull();
+  });
 });
 
 // =============================================================================

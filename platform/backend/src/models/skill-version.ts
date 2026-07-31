@@ -1,8 +1,17 @@
 import { createHash } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import type { PaginationQuery } from "@archestra/shared";
+import { and, asc, count, desc, eq } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
 import type { SkillVersion, SkillVersionFile } from "@/types";
-import type { SkillFileEncoding, SkillFileKind } from "@/types/skill";
+import type {
+  SkillFileEncoding,
+  SkillFileKind,
+  SkillVersionMetadata,
+} from "@/types/skill";
 
 /** Minimal file shape needed to fork and hash a version. */
 export interface VersionFileInput {
@@ -108,6 +117,36 @@ class SkillVersionModel {
     return row ?? null;
   }
 
+  /**
+   * A skill's versions, newest first, as metadata only — no SKILL.md body, no
+   * files — so a long history stays cheap to list. Paginated: synced skills
+   * fork a version per upstream change, so history is unbounded.
+   *
+   * `skill_versions` carries no organization of its own; callers must have
+   * resolved the live, org-scoped skill (soft-deletes excluded) before
+   * listing its history.
+   */
+  static async listForSkill(params: {
+    skillId: string;
+    pagination: PaginationQuery;
+  }): Promise<PaginatedResult<SkillVersionMetadata>> {
+    const scope = eq(schema.skillVersionsTable.skillId, params.skillId);
+    const [rows, [totals]] = await Promise.all([
+      db
+        .select(skillVersionMetadataColumns)
+        .from(schema.skillVersionsTable)
+        .where(scope)
+        .orderBy(desc(schema.skillVersionsTable.version))
+        .limit(params.pagination.limit)
+        .offset(params.pagination.offset),
+      db
+        .select({ total: count() })
+        .from(schema.skillVersionsTable)
+        .where(scope),
+    ]);
+    return createPaginatedResult(rows, totals?.total ?? 0, params.pagination);
+  }
+
   /** A single resource file from a version by its skill-relative path. */
   static async findFileByPath(
     versionId: string,
@@ -136,3 +175,14 @@ class SkillVersionModel {
 }
 
 export default SkillVersionModel;
+
+// === Internal helpers ===
+
+/** List projection: everything but the SKILL.md body. */
+const skillVersionMetadataColumns = {
+  id: schema.skillVersionsTable.id,
+  skillId: schema.skillVersionsTable.skillId,
+  version: schema.skillVersionsTable.version,
+  contentHash: schema.skillVersionsTable.contentHash,
+  createdAt: schema.skillVersionsTable.createdAt,
+};

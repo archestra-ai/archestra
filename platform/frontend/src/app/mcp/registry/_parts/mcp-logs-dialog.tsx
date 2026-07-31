@@ -622,7 +622,7 @@ export function McpLogsContent({
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
                       </span>
-                      Streaming
+                      <span>Streaming</span>
                     </div>
                   ) : (
                     <div />
@@ -657,7 +657,7 @@ export function McpLogsContent({
                     className="absolute top-1/2 -translate-y-1/2 right-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
                   >
                     <Copy className="h-3 w-3" />
-                    {commandCopied ? " Copied!" : ""}
+                    {commandCopied ? <span> Copied!</span> : null}
                   </Button>
                 </div>
               </div>

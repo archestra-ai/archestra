@@ -163,7 +163,7 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                     className="flex items-center gap-2"
                   >
                     <span className="text-sm text-muted-foreground w-2">
-                      {index === 0 ? "If" : ""}
+                      {index === 0 ? <span>If</span> : null}
                     </span>
                     <ToolCallPolicyCondition
                       condition={condition}

@@ -559,16 +559,27 @@ export function ConnectCommandPanel({
           <p className="text-xs text-muted-foreground">
             {effectiveProxyAuth === "provider-key" ? (
               passthroughAttributes ? (
-                "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan). Your personal auth key is created for you and wired into the command via ANTHROPIC_CUSTOM_HEADERS."
+                <span>
+                  Passthrough — the command only rewires the base URL, so you
+                  reuse your own API key or existing subscription (e.g. Claude
+                  or ChatGPT plan). Your personal auth key is created for you
+                  and wired into the command via ANTHROPIC_CUSTOM_HEADERS.
+                </span>
               ) : (
-                "Passthrough — the command only rewires the base URL, so you reuse your own API key or existing subscription (e.g. Claude or ChatGPT plan)."
+                <span>
+                  Passthrough — the command only rewires the base URL, so you
+                  reuse your own API key or existing subscription (e.g. Claude
+                  or ChatGPT plan).
+                </span>
               )
             ) : providerIsPerUser && provider ? (
-              `${providerDisplayNames[provider]} runs through a personal virtual key — connect your own account below.`
+              <span>
+                {`${providerDisplayNames[provider]} runs through a personal virtual key — connect your own account below.`}
+              </span>
             ) : providers.length === 0 ? (
               canCreateProviderKey ? (
                 <>
-                  {noVirtualKeyReason}{" "}
+                  <span>{noVirtualKeyReason} </span>
                   <button
                     type="button"
                     className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
@@ -576,14 +587,18 @@ export function ConnectCommandPanel({
                     data-testid="connect-auth-add-provider-key"
                   >
                     Add {addKeyPhrase}
-                  </button>{" "}
-                  or switch to your provider key.
+                  </button>
+                  <span> or switch to your provider key.</span>
                 </>
               ) : (
-                `${noVirtualKeyReason} Switch to your provider key, or ask an admin to add ${addKeyPhrase}.`
+                <span>
+                  {`${noVirtualKeyReason} Switch to your provider key, or ask an admin to add ${addKeyPhrase}.`}
+                </span>
               )
             ) : (
-              "A virtual key is created for you and wired into the command."
+              <span>
+                A virtual key is created for you and wired into the command.
+              </span>
             )}
           </p>
         </div>
@@ -785,15 +800,20 @@ export function ConnectCommandPanel({
             >
               {includeSkills ? (
                 <>
-                  Install{" "}
+                  <span>Install </span>
                   <ResourceLink href="/skills">
-                    {selectedSkills.length === allSkills.length
-                      ? `${allSkills.length} shared skill${allSkills.length === 1 ? "" : "s"}`
-                      : `${selectedSkills.length} of ${allSkills.length} shared skills`}
+                    {selectedSkills.length === allSkills.length ? (
+                      <span>
+                        <span>{allSkills.length} shared skill</span>
+                        {allSkills.length === 1 ? null : <span>s</span>}
+                      </span>
+                    ) : (
+                      <span>{`${selectedSkills.length} of ${allSkills.length} shared skills`}</span>
+                    )}
                   </ResourceLink>
                 </>
               ) : (
-                "Shared skills not installed"
+                <span>Shared skills not installed</span>
               )}
             </SummaryRow>
           )}
@@ -1077,10 +1097,12 @@ function ProviderKeyGate({
   return (
     <div className="flex flex-col gap-3 px-5 py-4">
       <p className="text-[13px] text-[#e5e7eb]">
-        {reason}{" "}
-        {canAddKey
-          ? `Add ${addKeyPhrase} to mint one from, or switch to your provider key in the review above.`
-          : `Ask an admin to add ${addKeyPhrase}, or switch to your provider key in the review above.`}
+        <span>{reason} </span>
+        {canAddKey ? (
+          <span>{`Add ${addKeyPhrase} to mint one from, or switch to your provider key in the review above.`}</span>
+        ) : (
+          <span>{`Ask an admin to add ${addKeyPhrase}, or switch to your provider key in the review above.`}</span>
+        )}
       </p>
       {canAddKey && (
         <div>
@@ -1096,7 +1118,7 @@ function ProviderKeyGate({
             ) : (
               <KeyRound className="size-4" />
             )}
-            Add {addKeyPhrase}
+            <span>Add {addKeyPhrase}</span>
           </Button>
         </div>
       )}

@@ -199,7 +199,7 @@ function ProjectDetail() {
                       ) : (
                         <Pin className="h-4 w-4" />
                       )}
-                      {project.pinnedAt ? "Unpin" : "Pin"}
+                      <span>{project.pinnedAt ? "Unpin" : "Pin"}</span>
                     </DropdownMenuItem>
                   )}
                   {canManage && (

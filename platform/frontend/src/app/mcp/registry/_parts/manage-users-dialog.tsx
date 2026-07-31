@@ -919,7 +919,9 @@ function AgentConnectionsSection({
               <>
                 Agents connect as{" "}
                 <span className="font-medium text-foreground">
-                  {pinnedConnection ? connectionLabel(pinnedConnection) : ""}
+                  {pinnedConnection ? (
+                    <span>{connectionLabel(pinnedConnection)}</span>
+                  ) : null}
                 </span>
                 , no matter who is calling. Applies in Auto mode and to Custom
                 tool assignments that resolve at call time.

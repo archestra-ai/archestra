@@ -201,7 +201,7 @@ function ResourceBlock({ event }: { event: AuditLog }) {
                 {formatResourceType(event.resourceType)}
               </span>
             )}
-            {event.resourceType && name ? ": " : ""}
+            {event.resourceType && name ? <span>: </span> : null}
             {name && <span>{name}</span>}
           </span>
         </Badge>

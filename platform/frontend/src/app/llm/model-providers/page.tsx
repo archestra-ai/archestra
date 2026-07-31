@@ -776,7 +776,7 @@ export default function ApiKeysPage() {
                 {updateMutation.isPending && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
-                Test & Save
+                <span>Test & Save</span>
               </Button>
             </DialogStickyFooter>
           </DialogForm>
@@ -878,8 +878,13 @@ function DeleteApiKeyDescription({
           </ul>
           {totalVirtualKeys > virtualKeys.length && (
             <p className="text-muted-foreground">
-              {totalVirtualKeys - virtualKeys.length} more virtual API key
-              {totalVirtualKeys - virtualKeys.length === 1 ? "" : "s"} matched.
+              <span>
+                {totalVirtualKeys - virtualKeys.length} more virtual API key
+              </span>
+              {totalVirtualKeys - virtualKeys.length === 1 ? null : (
+                <span>s</span>
+              )}
+              <span> matched.</span>
             </p>
           )}
         </div>
@@ -911,8 +916,9 @@ function DeleteApiKeyDescription({
           </ul>
           {oauthClients.length > 5 && (
             <p className="text-muted-foreground">
-              {oauthClients.length - 5} more OAuth client
-              {oauthClients.length - 5 === 1 ? "" : "s"} matched.
+              <span>{oauthClients.length - 5} more OAuth client</span>
+              {oauthClients.length - 5 === 1 ? null : <span>s</span>}
+              <span> matched.</span>
             </p>
           )}
         </div>

@@ -60,7 +60,7 @@ export function AuditLogDiffView({
   if (bothNull) {
     return (
       <div className="rounded-md border border-dashed bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
-        {emptyMessage}
+        <span>{emptyMessage}</span>
       </div>
     );
   }
@@ -68,7 +68,7 @@ export function AuditLogDiffView({
   if (lines.length === 0 || lines.every((l) => l.kind === "context")) {
     return (
       <div className="rounded-md border border-dashed bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
-        No field-level differences between the snapshots.
+        <span>No field-level differences between the snapshots.</span>
       </div>
     );
   }

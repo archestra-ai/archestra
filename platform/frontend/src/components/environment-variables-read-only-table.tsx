@@ -197,7 +197,7 @@ function ValueCell({
     return (
       <span className="font-mono">
         {value || hasStoredSecret ? (
-          "••••••••"
+          <span>••••••••</span>
         ) : (
           <span className="text-muted-foreground italic">not set</span>
         )}

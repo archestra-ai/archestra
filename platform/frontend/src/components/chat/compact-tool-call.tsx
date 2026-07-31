@@ -187,18 +187,18 @@ function CompactCircle({
           </button>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          {parseFullToolName(toolName).toolName.replace(/_/g, " ")}
-          {isCancelled
-            ? " (cancelled)"
-            : isBackground
-              ? ` (running in the background · ${formatElapsed(elapsed)})`
-              : state === "running"
-                ? " (running)"
-                : state === "error"
-                  ? " (error)"
-                  : state === "denied"
-                    ? " (denied)"
-                    : ""}
+          <span>{parseFullToolName(toolName).toolName.replace(/_/g, " ")}</span>
+          {isCancelled ? (
+            <span>{" (cancelled)"}</span>
+          ) : isBackground ? (
+            <span>{` (running in the background · ${formatElapsed(elapsed)})`}</span>
+          ) : state === "running" ? (
+            <span>{" (running)"}</span>
+          ) : state === "error" ? (
+            <span>{" (error)"}</span>
+          ) : state === "denied" ? (
+            <span>{" (denied)"}</span>
+          ) : null}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

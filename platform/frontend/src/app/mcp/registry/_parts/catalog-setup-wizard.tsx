@@ -550,7 +550,7 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
       ) : (
         <RefreshCw className="h-4 w-4" />
       )}
-      Refresh Tools
+      <span>Refresh Tools</span>
     </PermissionButton>
   );
 

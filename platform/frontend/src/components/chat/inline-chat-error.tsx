@@ -295,7 +295,7 @@ export function InlineChatError({
                     ) : (
                       <ChevronRight className="h-3 w-3 mr-1" />
                     )}
-                    Error Details
+                    <span>Error Details</span>
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="space-y-2 mt-1">

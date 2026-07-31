@@ -199,11 +199,11 @@ export function McpToolsDialog({
 
       {isLoading ? (
         <div className="py-8 text-center text-muted-foreground">
-          Loading tools...
+          <span>Loading tools...</span>
         </div>
       ) : tools.length === 0 ? (
         <div className="py-8 text-center text-muted-foreground">
-          No tools found for this server
+          <span>No tools found for this server</span>
         </div>
       ) : filteredTools.length === 0 ? (
         <div className="flex flex-col items-center justify-center space-y-4 py-8">

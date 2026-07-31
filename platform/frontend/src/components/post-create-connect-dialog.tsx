@@ -133,7 +133,7 @@ export function PostCreateConnectDialog({
           {navigating ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : null}
-          Open connection guide
+          <span>Open connection guide</span>
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </DialogStickyFooter>

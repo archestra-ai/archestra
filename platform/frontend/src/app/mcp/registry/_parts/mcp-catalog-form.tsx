@@ -1209,8 +1209,8 @@ export function McpCatalogForm({
                   <div className="space-y-1 text-foreground/90">
                     <div className="font-semibold text-foreground">
                       {envRuleViolations.length} value
-                      {envRuleViolations.length === 1 ? "" : "s"} not allowed in
-                      “{boundEnvironmentName}”
+                      {envRuleViolations.length === 1 ? null : <span>s</span>}{" "}
+                      not allowed in “{boundEnvironmentName}”
                     </div>
                     <div>
                       Edit or remove{" "}

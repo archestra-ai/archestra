@@ -927,17 +927,22 @@ export function AppSessionPlayer({
                       </TooltipTrigger>
                       <TooltipContent className="max-w-[260px] text-xs">
                         {rendering ? (
-                          "Preparing your video — click to cancel."
+                          <span>Preparing your video — click to cancel.</span>
                         ) : tooLongToExport ? (
                           <>
-                            This cut runs {formatMs(finalCutMs)}. Trim it to{" "}
-                            {finalCutLimitLabel} or less to export a video.
+                            <span>
+                              This cut runs {formatMs(finalCutMs)}. Trim it to{" "}
+                              {finalCutLimitLabel} or less to export a video.
+                            </span>
                             {trimPill}
                           </>
                         ) : descriptionEditing || surfaceEditing ? (
-                          "Finish editing to export a video."
+                          <span>Finish editing to export a video.</span>
                         ) : (
-                          "Downloads a video of this session with your edits applied. Takes up to a minute."
+                          <span>
+                            Downloads a video of this session with your edits
+                            applied. Takes up to a minute.
+                          </span>
                         )}
                       </TooltipContent>
                     </Tooltip>
@@ -3104,7 +3109,7 @@ function ReplayPromptEditorCard({
             ) : (
               <Sparkles className="size-3" />
             )}
-            {editor.generating ? "Regenerating…" : "Regenerate"}
+            <span>{editor.generating ? "Regenerating…" : "Regenerate"}</span>
           </Button>
           <Button
             type="button"
@@ -3314,7 +3319,7 @@ function ReplayDescriptionRow({
               ) : (
                 <Sparkles className="size-3" />
               )}
-              {generate.isPending ? "Regenerating…" : "Regenerate"}
+              <span>{generate.isPending ? "Regenerating…" : "Regenerate"}</span>
             </Button>
             <Button
               type="button"
@@ -4664,7 +4669,9 @@ export function ReplayChatEditPane({
                 ) : (
                   <Sparkles className="size-3" />
                 )}
-                {promptEditor.generating ? "Drafting…" : "Draft AI prompt"}
+                <span>
+                  {promptEditor.generating ? "Drafting…" : "Draft AI prompt"}
+                </span>
               </Button>
               <Button
                 type="button"
@@ -4775,7 +4782,7 @@ function ReplayAiResponseBubble({
         ) : (
           <Sparkles className="size-3" />
         )}
-        AI-generated response
+        <span>AI-generated response</span>
       </div>
       <Message from="assistant" className="group/row">
         <MessageContent className="relative ring-2 ring-primary/50">
@@ -4910,7 +4917,7 @@ function ReplayAiPromptBubble({
           ) : (
             <Sparkles className="size-3" />
           )}
-          AI-generated prompt
+          <span>AI-generated prompt</span>
         </div>
         {/* The bubble itself is the edit control, like the description and
             every captured message: click it, edit and regenerate in the card

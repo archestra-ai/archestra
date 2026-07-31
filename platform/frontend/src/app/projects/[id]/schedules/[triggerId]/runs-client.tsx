@@ -71,7 +71,7 @@ export function ProjectScheduleRunsClient() {
           ) : (
             <Play className="mr-1.5 h-3.5 w-3.5" />
           )}
-          Run now
+          <span>Run now</span>
         </Button>
       </div>
 

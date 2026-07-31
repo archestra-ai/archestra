@@ -114,7 +114,7 @@ function PinMenuItem({
       onSelect={() => pinAppMutation.mutate({ pinned: !pinned, target })}
     >
       {pinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-      {pinned ? "Unpin" : "Pin"}
+      <span>{pinned ? "Unpin" : "Pin"}</span>
     </DropdownMenuItem>
   );
 }

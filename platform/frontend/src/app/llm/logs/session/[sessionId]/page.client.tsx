@@ -198,7 +198,7 @@ export default function SessionDetailPage({
           ) : (
             <Download className="h-4 w-4 mr-2" />
           )}
-          Export JSON
+          <span>Export JSON</span>
         </Button>
       </div>
 
@@ -255,7 +255,7 @@ export default function SessionDetailPage({
                 />
               </TooltipProvider>
             ) : (
-              "-"
+              <span>-</span>
             )}
           </div>
         </MetadataItem>

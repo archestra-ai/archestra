@@ -620,9 +620,13 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
                       className="text-amber-600"
                       title="Access-restricted until a permission sync tags them with their source permissions"
                     >
-                      {coverage.failClosedDocuments.toLocaleString()} document
-                      {coverage.failClosedDocuments === 1 ? "" : "s"} awaiting
-                      permission sync
+                      <span>
+                        {coverage.failClosedDocuments.toLocaleString()} document
+                      </span>
+                      {coverage.failClosedDocuments === 1 ? null : (
+                        <span>s</span>
+                      )}
+                      <span> awaiting permission sync</span>
                     </div>
                   </MetadataItem>
                 )}

@@ -614,7 +614,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
                     ) : connectionsCount > 0 ? (
                       <DeploymentStatusDot state="running" />
                     ) : null}
-                    {statusText}
+                    <span>{statusText}</span>
                   </span>
                 </OverviewField>
                 {variant !== "builtin" && (

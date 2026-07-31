@@ -72,7 +72,7 @@ export function ConnectorStatusBadge({
       {config.animated && (
         <span className="mr-1.5 h-2 w-2 rounded-full bg-current animate-pulse" />
       )}
-      {config.label}
+      <span>{config.label}</span>
     </Badge>
   );
 }

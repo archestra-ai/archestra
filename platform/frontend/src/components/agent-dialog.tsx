@@ -2180,9 +2180,19 @@ export function AgentDialog({
                                     const totalSelected =
                                       knowledgeBaseIds.length +
                                       connectorIds.length;
-                                    return totalSelected === 0
-                                      ? "Select connectors or knowledge bases"
-                                      : `${totalSelected} source${totalSelected > 1 ? "s" : ""} selected`;
+                                    return totalSelected === 0 ? (
+                                      <span>
+                                        Select connectors or knowledge bases
+                                      </span>
+                                    ) : (
+                                      <span>
+                                        {totalSelected} source
+                                        {totalSelected > 1 ? (
+                                          <span>s</span>
+                                        ) : null}{" "}
+                                        selected
+                                      </span>
+                                    );
                                   })()}
                                   <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
                                 </Button>
@@ -2827,8 +2837,8 @@ export function AgentDialog({
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>
                   {mcpEnvConflicts.length} MCP server
-                  {mcpEnvConflicts.length === 1 ? "" : "s"} not in this
-                  environment
+                  {mcpEnvConflicts.length === 1 ? null : <span>s</span>} not in
+                  this environment
                 </AlertTitle>
                 <AlertDescription>
                   <p>
@@ -2874,7 +2884,7 @@ export function AgentDialog({
                     updateAgent.isPending) && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  {agent ? "Update" : "Create"}
+                  <span>{agent ? "Update" : "Create"}</span>
                 </Button>
               )}
             </DialogStickyFooter>

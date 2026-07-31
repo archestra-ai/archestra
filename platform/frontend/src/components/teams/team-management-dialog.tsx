@@ -752,7 +752,7 @@ function TokenSection({ token }: { token?: TeamToken }) {
   if (!token) {
     return (
       <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-        No token found for this team.
+        <span>No token found for this team.</span>
       </div>
     );
   }

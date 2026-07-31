@@ -36,7 +36,7 @@ vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
       {availableKeys.map((key) => (
         <button key={key.id} type="button" onClick={() => onSelectKey(key.id)}>
           {key.name} {key.connectRequired ? "Connect" : "Connected"}
-          {selectedApiKeyId === key.id ? " Selected" : ""}
+          {selectedApiKeyId === key.id ? <span> Selected</span> : null}
         </button>
       ))}
     </div>
@@ -174,7 +174,7 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "GitHub Copilot Connect Selected",
+        name: /^GitHub Copilot Connect\s*Selected$/,
       }),
     ).toBeInTheDocument();
     expect(
@@ -212,12 +212,12 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "ChatGPT Subscription Connect Selected",
+        name: /^ChatGPT Subscription Connect\s*Selected$/,
       }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", {
-        name: "ChatGPT Subscription Connected Selected",
+        name: /^ChatGPT Subscription Connected\s*Selected$/,
       }),
     ).not.toBeInTheDocument();
   });

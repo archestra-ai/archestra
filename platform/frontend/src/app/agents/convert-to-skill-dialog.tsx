@@ -153,7 +153,7 @@ export function ConvertToSkillDialog({
                     ) : (
                       <Sparkles className="h-3.5 w-3.5" />
                     )}
-                    Generate
+                    <span>Generate</span>
                   </Button>
                 </div>
                 <Textarea

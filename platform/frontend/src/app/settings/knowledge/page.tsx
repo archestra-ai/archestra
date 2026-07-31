@@ -246,7 +246,7 @@ function AddApiKeyDialog({
             {createMutation.isPending && (
               <Loader2 className="h-4 w-4 animate-spin" />
             )}
-            Test & Create
+            <span>Test & Create</span>
           </Button>
         </DialogStickyFooter>
       </DialogForm>

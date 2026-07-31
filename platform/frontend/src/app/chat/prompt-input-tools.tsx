@@ -451,7 +451,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 </a>
               </span>
             ) : (
-              "File uploads are disabled by your administrator"
+              <span>File uploads are disabled by your administrator</span>
             )}
           </TooltipContent>
         </Tooltip>

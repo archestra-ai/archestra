@@ -119,7 +119,8 @@ export function ReinstallConfirmBar({
           Your change needs a new value. The {installNoun}{" "}
           {isPlural ? "keep" : "keeps"} running on the old config until someone
           clicks <strong>Reinstall</strong>
-          {isPlural ? " on each" : ""} and provides the value.
+          {isPlural ? <span>{" on each"}</span> : null}
+          <span>{" and provides the value."}</span>
         </>
       )
     ) : (

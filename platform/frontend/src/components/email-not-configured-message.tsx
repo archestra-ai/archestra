@@ -24,18 +24,21 @@ export function EmailNotConfiguredMessage({
       Email invocation of Agents is not configured for your organization.
       {docsUrl ? (
         <>
-          {" "}
-          See the{" "}
+          <span>{" See the "}</span>
           <ExternalDocsLink
             href={docsUrl}
             className="inline-flex items-center gap-1 text-primary hover:underline"
           >
             setup guide
-          </ExternalDocsLink>{" "}
-          for supported email providers and configuration.
+          </ExternalDocsLink>
+          <span>{" for supported email providers and configuration."}</span>
         </>
       ) : (
-        " Supported email providers and configuration are managed by your administrator."
+        <span>
+          {
+            " Supported email providers and configuration are managed by your administrator."
+          }
+        </span>
       )}
     </p>
   );

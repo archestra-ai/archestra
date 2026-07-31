@@ -893,7 +893,11 @@ function CommandLine({
   if (failed) {
     return (
       <div className="flex items-center gap-3 px-5 py-4 font-mono text-[13px] text-[#f87171]">
-        Couldn't generate the command.
+        {/* Spans (here and in the pending branch below): these three branches
+            reconcile into the same div, so branch flips delete the old bare
+            text node — which crashes React once Chrome page-translate has
+            re-parented it into a <font> wrapper (facebook/react#11538). */}
+        <span>Couldn't generate the command.</span>
         <Button
           type="button"
           variant="outline"
@@ -911,7 +915,7 @@ function CommandLine({
     return (
       <div className="flex items-center gap-2.5 px-5 py-4 font-mono text-[13px] text-[#9ca3af]">
         <Loader2 className="size-3.5 animate-spin" />
-        Generating command…
+        <span>Generating command…</span>
       </div>
     );
   }

@@ -6,6 +6,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { CreateLlmProviderApiKeyDialog } from "./create-llm-provider-api-key-dialog";
 
 const mutateAsync = vi.fn();
+const updateMutateAsync = vi.fn();
 
 vi.mock("@/components/llm-provider-api-key-form", () => ({
   LLM_PROVIDER_API_KEY_PLACEHOLDER: "••••••••••••••••",
@@ -46,6 +47,10 @@ vi.mock("@/lib/llm-provider-api-keys.query", () => ({
     mutateAsync,
     isPending: false,
   }),
+  useUpdateLlmProviderApiKey: () => ({
+    mutateAsync: updateMutateAsync,
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/lib/config/config.query");
@@ -56,6 +61,8 @@ describe("CreateLlmProviderApiKeyDialog", () => {
   beforeEach(() => {
     mutateAsync.mockReset();
     mutateAsync.mockResolvedValue({});
+    updateMutateAsync.mockReset();
+    updateMutateAsync.mockResolvedValue({});
     vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(useHasPermissions).mockReset();
     vi.mocked(useHasPermissions).mockReturnValue({
@@ -178,6 +185,42 @@ describe("CreateLlmProviderApiKeyDialog", () => {
         scope: "personal",
       }),
     );
+    expect(onSuccess).toHaveBeenCalledOnce();
+  });
+
+  it("rotates the existing credential in place when reconnecting a subscription", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const onSuccess = vi.fn();
+
+    render(
+      <CreateLlmProviderApiKeyDialog
+        open
+        onOpenChange={onOpenChange}
+        onSuccess={onSuccess}
+        title="Reconnect ChatGPT Subscription"
+        description="Sign in again"
+        credentialMode="subscription"
+        allowedProviders={["openai"]}
+        reconnectKeyId="existing-key-id"
+        defaultValues={{
+          name: "ChatGPT Subscription",
+          provider: "openai",
+          scope: "personal",
+          openaiAuthMethod: "chatgpt-subscription",
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    // The fresh credential replaces the stored secret; no duplicate key row.
+    expect(updateMutateAsync).toHaveBeenCalledWith({
+      id: "existing-key-id",
+      data: { apiKey: "subscription-token" },
+    });
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onSuccess).toHaveBeenCalledOnce();
   });
 });

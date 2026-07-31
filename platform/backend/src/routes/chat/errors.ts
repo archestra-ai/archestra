@@ -2,6 +2,7 @@ import {
   AnthropicErrorTypes,
   ArchestraInternalErrorCode,
   BedrockErrorTypes,
+  CHATGPT_SUBSCRIPTION_LABEL,
   ChatErrorCode,
   ChatErrorMessages,
   type ChatErrorResponse,
@@ -9,6 +10,7 @@ import {
   GeminiErrorReasons,
   OllamaErrorTypes,
   OpenAIErrorTypes,
+  providerDisplayNames,
   RetryableErrorCodes,
   type SupportedProvider,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
@@ -356,7 +358,8 @@ function extractArchestraInternalCode(
       code === ArchestraInternalErrorCode.UpstreamEmptyResponse ||
       code === ArchestraInternalErrorCode.UpstreamTimeout ||
       code === ArchestraInternalErrorCode.ProviderOverloaded ||
-      code === ArchestraInternalErrorCode.RequestExceedsRateLimit
+      code === ArchestraInternalErrorCode.RequestExceedsRateLimit ||
+      code === ArchestraInternalErrorCode.ProviderAuthRequired
     ) {
       return code;
     }
@@ -1878,6 +1881,15 @@ export function mapProviderError(
   } else if (normalizedCode === ArchestraInternalErrorCode.ProviderOverloaded) {
     // Mid-stream overloads have no usable HTTP status.
     errorCode = ChatErrorCode.ServerError;
+  } else if (
+    normalizedCode === ArchestraInternalErrorCode.ProviderAuthRequired
+  ) {
+    // A per-user subscription credential is unusable (not linked, or the
+    // sign-in expired/was revoked upstream — e.g. a dead ChatGPT/Codex refresh
+    // token). The status mapper would call this Authentication ("Invalid API
+    // key — check your Chat Settings"), pointing at entirely the wrong remedy.
+    // Reclassify so the UI renders the connect/reconnect card.
+    errorCode = ChatErrorCode.ProviderAuthRequired;
   }
   const usageLimitError = extractUsageLimitError(responseBody);
   // An Archestra usage-limit block arrives over the proxy envelope as an HTTP
@@ -1994,7 +2006,7 @@ export function mapProviderError(
     "[ChatErrorMapper] Mapped provider error",
   );
 
-  return createErrorResponse(
+  const response = createErrorResponse(
     errorCode,
     provider,
     statusCode,
@@ -2014,6 +2026,27 @@ export function mapProviderError(
     },
     usageLimitError,
   );
+
+  if (errorCode === ChatErrorCode.ProviderAuthRequired) {
+    // The upstream message names the exact remedy ("Reconnect your ChatGPT
+    // account…"), so prefer it over the table's generic connect text, and
+    // attach authAction so the UI renders the inline connect/reconnect card.
+    // On `openai` this code is only ever emitted for the ChatGPT-subscription
+    // credential mode — a plain API key never needs a per-user link — so the
+    // label must name the subscription, not the provider.
+    if (errorMessage) {
+      response.message = errorMessage;
+    }
+    response.authAction = {
+      provider,
+      providerLabel:
+        provider === "openai"
+          ? CHATGPT_SUBSCRIPTION_LABEL
+          : providerDisplayNames[provider],
+    };
+  }
+
+  return response;
 }
 
 // Matches by name rather than DOMException instanceof: the AbortError may be

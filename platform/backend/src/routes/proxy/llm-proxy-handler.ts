@@ -6,6 +6,7 @@
  */
 
 import {
+  ArchestraInternalErrorCode,
   type BillingMode,
   CHAT_API_KEY_ID_HEADER,
   hasArchestraTokenPrefix,
@@ -576,7 +577,7 @@ export async function handleLLMProxy<
       error: {
         message: `${providerLabel} isn't connected for your account. Connect it at ${connectUrl} then retry your request.`,
         type: "api_authentication_error",
-        internal_code: "provider_auth_required",
+        internal_code: ArchestraInternalErrorCode.ProviderAuthRequired,
       },
     });
   }

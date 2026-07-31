@@ -62,7 +62,7 @@ type RunToolDispatch =
  * built-in wrapper.
  */
 /** True when the (canonical) tool name is the `run_tool` dispatch wrapper. */
-export function isRunToolName(toolName: string): boolean {
+function isRunToolName(toolName: string): boolean {
   return (
     archestraMcpBranding.getToolShortName(toolName) === TOOL_RUN_TOOL_SHORT_NAME
   );

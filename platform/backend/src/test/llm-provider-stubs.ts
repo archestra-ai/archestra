@@ -28,6 +28,11 @@ export interface AnthropicStubOptions {
   /** Terminal `message_delta` stop reason. A real turn carrying tool_use ends as `tool_use`. */
   streamStopReason?: "end_turn" | "tool_use" | "max_tokens" | "stop_sequence";
   /**
+   * Stream text, then a tool_use, then more text. Withholding the middle block
+   * is what exposes whether the indices the client receives stay contiguous.
+   */
+  toolUseBetweenText?: boolean;
+  /**
    * Return a tool_use block from the buffered (non-streaming) response. Separate
    * from `includeToolUse`, which existing tests set while making buffered calls
    * that expect text.
@@ -430,7 +435,49 @@ function createAnthropicStream(options: AnthropicStubOptions) {
     },
   ];
 
-  if (options.includeToolUse) {
+  if (options.toolUseBetweenText) {
+    chunks.push(
+      {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "", citations: [] },
+      },
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "Let me check." },
+      },
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "content_block_start",
+        index: 1,
+        content_block: {
+          type: "tool_use",
+          id: "toolu_test_weather",
+          caller: { type: "direct" },
+          name: "get_weather",
+          input: {},
+        },
+      },
+      {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: '{"location":"SF"}' },
+      },
+      { type: "content_block_stop", index: 1 },
+      {
+        type: "content_block_start",
+        index: 2,
+        content_block: { type: "text", text: "", citations: [] },
+      },
+      {
+        type: "content_block_delta",
+        index: 2,
+        delta: { type: "text_delta", text: "Then I will summarise." },
+      },
+      { type: "content_block_stop", index: 2 },
+    );
+  } else if (options.includeToolUse) {
     chunks.push(
       {
         type: "content_block_start",

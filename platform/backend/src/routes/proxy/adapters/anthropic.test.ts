@@ -226,6 +226,80 @@ describe("declared tools vs called tools", () => {
 });
 
 describe("AnthropicRequestAdapter", () => {
+  describe("declared tools", () => {
+    const messages = [
+      { role: "user", content: "Hello" },
+    ] as Anthropic.Types.MessagesRequest["messages"];
+
+    const tools = [
+      {
+        name: "github__list_issues",
+        description: "list issues",
+        input_schema: { type: "object", properties: {} },
+      },
+      // Provider built-ins carry a `type` and no input schema.
+      { type: "bash_20250124", name: "bash" },
+      { type: "text_editor_20250124", name: "str_replace_editor" },
+    ] as unknown as Anthropic.Types.MessagesRequest["tools"];
+
+    // The availability set is built from the declared names, so built-ins are
+    // counted even though getTools() drops them. The two must not converge:
+    // getTools() feeds persistence and other callers that want schemas.
+    test("getDeclaredToolNames counts built-ins that getTools drops", () => {
+      const adapter = anthropicAdapterFactory.createRequestAdapter(
+        createMockRequest(messages, { tools }),
+      );
+
+      expect(adapter.getDeclaredToolNames?.()).toEqual([
+        "github__list_issues",
+        "bash",
+        "str_replace_editor",
+      ]);
+      expect(adapter.getTools().map((t) => t.name)).toEqual([
+        "github__list_issues",
+      ]);
+    });
+
+    test("a request declaring only built-ins still names them", () => {
+      const adapter = anthropicAdapterFactory.createRequestAdapter(
+        createMockRequest(messages, {
+          tools: [
+            { type: "bash_20250124", name: "bash" },
+          ] as unknown as Anthropic.Types.MessagesRequest["tools"],
+        }),
+      );
+
+      expect(adapter.getDeclaredToolNames?.()).toEqual(["bash"]);
+      expect(adapter.getTools()).toEqual([]);
+    });
+
+    test("is empty when no tools are declared", () => {
+      const adapter = anthropicAdapterFactory.createRequestAdapter(
+        createMockRequest(messages),
+      );
+
+      expect(adapter.getDeclaredToolNames?.()).toEqual([]);
+      expect(adapter.hasTools()).toBe(false);
+    });
+
+    // These names become availability-set members, so an entry with no usable
+    // name must not land in the set — nothing a model can call would match it,
+    // and it would make an otherwise-empty set look populated.
+    test("skips entries carrying no usable name", () => {
+      const adapter = anthropicAdapterFactory.createRequestAdapter(
+        createMockRequest(messages, {
+          tools: [
+            { type: "bash_20250124" },
+            { name: "" },
+            { name: "kept", input_schema: { type: "object", properties: {} } },
+          ] as unknown as Anthropic.Types.MessagesRequest["tools"],
+        }),
+      );
+
+      expect(adapter.getDeclaredToolNames?.()).toEqual(["kept"]);
+    });
+  });
+
   describe("toProviderRequest - tool results handling", () => {
     test("handles empty tool results (no tool_result blocks)", () => {
       const messages = [
@@ -622,6 +696,8 @@ describe("anthropicAdapterFactory.executeStream", () => {
       adapter.processChunk(event);
     }
 
+    // Reading the buffered events is what hands them to the client.
+    adapter.getRawToolCallEvents();
     const response = adapter.toProviderResponse();
     const toolUse = response.content.find((block) => block.type === "tool_use");
     expect(toolUse).toBeDefined();
@@ -678,6 +754,8 @@ describe("anthropicAdapterFactory.executeStream", () => {
       adapter.processChunk(event);
     }
 
+    // Reading the buffered events is what hands them to the client.
+    adapter.getRawToolCallEvents();
     const response = adapter.toProviderResponse();
     const toolUse = response.content.find((block) => block.type === "tool_use");
     expect((toolUse as { input: unknown }).input).toEqual({ city: "SF" });
@@ -783,6 +861,191 @@ describe("AnthropicStreamAdapter content block forwarding", () => {
   });
 });
 
+// A client applies deltas by index but appends blocks in arrival order, so the
+// indices it is given must be contiguous and in the order it receives them —
+// whatever the upstream numbering was, and whichever blocks were withheld.
+describe("AnthropicStreamAdapter content-block renumbering", () => {
+  type Chunk = Parameters<
+    ReturnType<
+      typeof anthropicAdapterFactory.createStreamAdapter
+    >["processChunk"]
+  >[0];
+
+  function indicesIn(
+    events: (string | Uint8Array | null | undefined)[],
+  ): number[] {
+    return events
+      .filter((e): e is string => typeof e === "string")
+      .flatMap((e) =>
+        [...e.matchAll(/"index":(\d+)/g)].map((m) => Number(m[1])),
+      );
+  }
+
+  /** Upstream: text@0, tool_use@1 (withheld), text@2. */
+  function streamTextAroundToolCall() {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    const live: (string | Uint8Array | null | undefined)[] = [];
+    const push = (chunk: Chunk) => {
+      live.push(adapter.processChunk(chunk).sseData);
+    };
+    push({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    } as Chunk);
+    push({ type: "content_block_stop", index: 0 } as Chunk);
+    push({
+      type: "content_block_start",
+      index: 1,
+      content_block: {
+        type: "tool_use",
+        id: "toolu_1",
+        name: "list",
+        input: {},
+      },
+    } as Chunk);
+    push({ type: "content_block_stop", index: 1 } as Chunk);
+    push({
+      type: "content_block_start",
+      index: 2,
+      content_block: { type: "text", text: "" },
+    } as Chunk);
+    push({ type: "content_block_stop", index: 2 } as Chunk);
+    return { adapter, live };
+  }
+
+  test("a withheld tool block leaves no gap in the indices the client sees", () => {
+    const { live } = streamTextAroundToolCall();
+
+    // Upstream numbered these 0 and 2; the client must see 0 and 1.
+    expect(indicesIn(live)).toEqual([0, 0, 1, 1]);
+  });
+
+  test("a released tool block takes the next free index, not its upstream one", () => {
+    const { adapter, live } = streamTextAroundToolCall();
+
+    const flushed = adapter.getRawToolCallEvents();
+
+    expect(indicesIn(live)).toEqual([0, 0, 1, 1]);
+    expect(indicesIn(flushed)).toEqual([2, 2]);
+  });
+
+  test("reading the buffered events twice keeps the same index", () => {
+    const { adapter } = streamTextAroundToolCall();
+
+    const first = adapter.getRawToolCallEvents();
+    const second = adapter.getRawToolCallEvents();
+
+    expect(indicesIn(second)).toEqual(indicesIn(first));
+  });
+
+  test("a refusal block takes the next free index after the live blocks", () => {
+    const { adapter } = streamTextAroundToolCall();
+
+    const refusal = adapter.formatCompleteTextSSE("blocked").join("");
+
+    // The tool block was never released, so 2 is free for the refusal.
+    expect(indicesIn([refusal])).toEqual([2, 2, 2]);
+  });
+
+  // A thinking block and its signature have to be replayed verbatim on the next
+  // turn or the upstream API rejects the conversation, so renumbering must move
+  // its index without touching its payload — and it must not inherit the index
+  // of the tool block withheld after it.
+  test("a thinking block keeps its signature and is renumbered around a withheld call", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    const live: (string | Uint8Array | null | undefined)[] = [];
+    const push = (chunk: Chunk) => {
+      live.push(adapter.processChunk(chunk).sseData);
+    };
+
+    push({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "thinking", thinking: "" },
+    } as Chunk);
+    push({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "signature_delta", signature: "sig_abc123" },
+    } as Chunk);
+    push({ type: "content_block_stop", index: 0 } as Chunk);
+    push({
+      type: "content_block_start",
+      index: 1,
+      content_block: {
+        type: "tool_use",
+        id: "toolu_1",
+        name: "list",
+        input: {},
+      },
+    } as Chunk);
+    push({ type: "content_block_stop", index: 1 } as Chunk);
+    push({
+      type: "content_block_start",
+      index: 2,
+      content_block: { type: "text", text: "" },
+    } as Chunk);
+    push({ type: "content_block_stop", index: 2 } as Chunk);
+
+    const wire = live
+      .filter((e): e is string => typeof e === "string")
+      .join("");
+    expect(wire).toContain("sig_abc123");
+    expect(wire).toContain('"type":"thinking"');
+    // Thinking at 0, the text that followed the withheld call at 1.
+    expect(indicesIn(live)).toEqual([0, 0, 0, 1, 1]);
+  });
+
+  // One withheld block can only ever be off by one, which several bugs survive.
+  // Two withheld blocks split by live text is where an index is reused or
+  // skipped: each released block has to take the next free index in flush
+  // order, and the text between them must not inherit either one's number.
+  test("several withheld blocks each take their own index in flush order", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    const live: (string | Uint8Array | null | undefined)[] = [];
+    const push = (chunk: Chunk) => {
+      live.push(adapter.processChunk(chunk).sseData);
+    };
+    // Upstream: text@0, tool@1, text@2, tool@3, text@4.
+    for (const [index, kind] of [
+      [0, "text"],
+      [1, "tool"],
+      [2, "text"],
+      [3, "tool"],
+      [4, "text"],
+    ] as const) {
+      push({
+        type: "content_block_start",
+        index,
+        content_block:
+          kind === "text"
+            ? { type: "text", text: "" }
+            : {
+                type: "tool_use",
+                id: `toolu_${index}`,
+                name: "list",
+                input: {},
+              },
+      } as Chunk);
+      push({ type: "content_block_stop", index } as Chunk);
+    }
+
+    // The three text blocks are the only ones live, so they must be 0, 1, 2.
+    expect(indicesIn(live)).toEqual([0, 0, 1, 1, 2, 2]);
+
+    // Both calls then take the next two free indices, in the order they were
+    // buffered — never reusing an index the client already applied text to.
+    const flushed = adapter.getRawToolCallEvents();
+    expect(indicesIn(flushed)).toEqual([3, 3, 4, 4]);
+
+    adapter.getRawToolCallEvents();
+    expect(
+      adapter.toProviderResponse().content.filter((b) => b.type === "tool_use"),
+    ).toMatchObject([{ id: "toolu_1" }, { id: "toolu_3" }]);
+  });
+});
+
 describe("AnthropicStreamAdapter policy refusal terminal", () => {
   type Chunk = Parameters<
     ReturnType<
@@ -851,9 +1114,9 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
     expect(endEvents).not.toContain('"stop_reason":"tool_use"');
   });
 
-  // The refusal block index is derived only from non-tool blocks, so it can
-  // land on an index a tool_use block already occupies. Harmless while those
-  // blocks stay buffered; a collision on the wire once they are forwarded.
+  // The refusal takes the next index the client has not been given. A withheld
+  // tool block never took one, so the number it would have had upstream is
+  // still free.
   test("formatCompleteTextSSE ignores tool_use indices when choosing its own", () => {
     const adapter = anthropicAdapterFactory.createStreamAdapter();
     adapter.processChunk({
@@ -876,7 +1139,7 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
 
     const refusal = adapter.formatCompleteTextSSE("blocked").join("");
 
-    // 2 would clear the tool_use block; 1 reuses its index.
+    // Withheld tool blocks leave their index free, so 1 is correct here.
     expect(refusal).toContain('"index":1');
     expect(refusal).not.toContain('"index":2');
   });
@@ -889,6 +1152,82 @@ describe("AnthropicStreamAdapter policy refusal terminal", () => {
     // index 0 was already streamed (the text block); the refusal must use index 1.
     expect(refusalEvents).toContain('"index":1');
     expect(refusalEvents).not.toContain('"index":0');
+  });
+
+  // A turn cut short before the gate ran — an upstream drop, an abort —
+  // delivered no tool calls, so recording them would assert a delivery, and a
+  // policy decision, that never happened.
+  test("toProviderResponse omits tool calls that were never released", () => {
+    const adapter = streamBlockedToolTurn();
+
+    const response = adapter.toProviderResponse();
+
+    expect(response.content.some((block) => block.type === "tool_use")).toBe(
+      false,
+    );
+  });
+
+  // Upstream reported `tool_use` because it did emit calls, but they were
+  // withheld, so the recorded turn holds none. Keeping the upstream reason
+  // would leave a record that contradicts its own content and reads as though
+  // a tool result is owed for a call nobody can point to.
+  test("a turn whose calls were never released is not recorded as owing a result", () => {
+    const adapter = streamBlockedToolTurn();
+
+    const response = adapter.toProviderResponse();
+
+    expect(response.content.some((block) => block.type === "tool_use")).toBe(
+      false,
+    );
+    expect(response.stop_reason).toBe("end_turn");
+  });
+
+  test("a turn whose calls were released keeps the tool_use stop reason", () => {
+    const adapter = streamBlockedToolTurn();
+
+    adapter.getRawToolCallEvents();
+    const response = adapter.toProviderResponse();
+
+    expect(response.content.some((block) => block.type === "tool_use")).toBe(
+      true,
+    );
+    expect(response.stop_reason).toBe("tool_use");
+  });
+
+  // Only `tool_use` is ever rewritten, and only when the content disagrees with
+  // it. Every other reason is the upstream's to state — a turn truncated by
+  // max_tokens still has to say so, or a client cannot tell it was cut off.
+  test("a stop reason other than tool_use is passed through untouched", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+
+    adapter.processChunk({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text: "truncated" },
+    } as Chunk);
+    adapter.processChunk({
+      type: "message_delta",
+      delta: { stop_reason: "max_tokens", stop_sequence: null },
+      usage: { output_tokens: 5 },
+    } as Chunk);
+
+    expect(adapter.toProviderResponse().stop_reason).toBe("max_tokens");
+  });
+
+  test("toProviderResponse records tool calls once they are released", () => {
+    const adapter = streamBlockedToolTurn();
+
+    adapter.getRawToolCallEvents();
+    const response = adapter.toProviderResponse();
+
+    expect(
+      response.content.filter((block) => block.type === "tool_use"),
+    ).toMatchObject([{ id: "toolu_1", name: "list" }]);
   });
 
   test("toProviderResponse persists the refusal, not the blocked tool call", () => {

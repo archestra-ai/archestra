@@ -1,14 +1,24 @@
 "use client";
 
-import { Laptop, Loader2, Smartphone } from "lucide-react";
+import { KeyRound, Laptop, Loader2, Smartphone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { UAParser } from "ua-parser-js";
 import { LoadingSkeletons } from "@/components/loading";
+import { QueryLoadError } from "@/components/query-load-error";
 import { SettingsCardHeader } from "@/components/settings/settings-block";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { useSession } from "@/lib/auth/auth.query";
 import {
+  StaleSessionError,
   useListSessions,
   useRevokeSessionMutation,
 } from "@/lib/auth/sessions.query";
@@ -20,7 +30,15 @@ import {
 export function SessionsCard() {
   const router = useRouter();
   const { data: session } = useSession();
-  const { data: sessions, isPending } = useListSessions();
+  // isLoadingError, not isError: a failed background refetch keeps the last
+  // good list on screen rather than replacing a working card with an error.
+  const {
+    data: sessions,
+    isPending,
+    isLoadingError,
+    error,
+    refetch,
+  } = useListSessions();
   const revokeSession = useRevokeSessionMutation();
 
   return (
@@ -32,6 +50,34 @@ export function SessionsCard() {
       <CardContent className="space-y-3">
         {isPending ? (
           <LoadingSkeletons rows={2} />
+        ) : isLoadingError && error instanceof StaleSessionError ? (
+          <Empty className="py-6">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <KeyRound />
+              </EmptyMedia>
+              <EmptyTitle>Sign in again to manage your sessions</EmptyTitle>
+              <EmptyDescription>
+                For your security, this list is only available shortly after you
+                sign in. Sign out and back in to see where your account is
+                signed in.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button
+                variant="outline"
+                onClick={() => router.push("/auth/sign-out")}
+              >
+                Sign Out
+              </Button>
+            </EmptyContent>
+          </Empty>
+        ) : isLoadingError ? (
+          <QueryLoadError
+            className="py-6"
+            title="Couldn't load your sessions"
+            onRetry={() => refetch()}
+          />
         ) : (
           (sessions ?? []).map((accountSession) => {
             const isCurrentSession = accountSession.id === session?.session?.id;

@@ -33,6 +33,8 @@ vi.mock("@archestra/shared", () => ({
   },
   PLAYWRIGHT_MCP_CATALOG_ID: "playwright-catalog-id",
   PLAYWRIGHT_MCP_SERVER_NAME: "playwright-mcp",
+  // Read by the delete toast, which reports how long a deleted chat is kept.
+  DEFAULT_SOFT_DELETE_RETENTION_DAYS: 30,
 }));
 
 vi.mock("next/navigation");

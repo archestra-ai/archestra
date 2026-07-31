@@ -370,6 +370,7 @@ const contentNavGroups: NavGroup[] = [
           "/settings/github",
           "/settings/identity-providers",
           "/settings/secrets",
+          "/settings/deleted-items",
         ],
       },
     ],

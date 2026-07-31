@@ -797,7 +797,7 @@ export function ChatSidebarSection({
         open={deleteConfirmId !== null}
         onOpenChange={(open) => !open && setDeleteConfirmId(null)}
         title="Delete conversation?"
-        description="This action cannot be undone. This will permanently delete the conversation and all its messages."
+        description="The conversation and its messages are moved to Deleted Items, where they can be restored or removed for good. Any share link stops working now and is not restored."
         isPending={deleteConversationMutation.isPending}
         onConfirm={async () => {
           if (deleteConfirmId) {

@@ -290,6 +290,7 @@ describe("useSettingsTabs", () => {
         "Users",
         "Teams",
         "Roles",
+        "Deleted Items",
         "GitHub",
         "Identity Providers",
         "Secrets",

@@ -715,7 +715,7 @@ function DeleteSkillDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Delete Skill"
-      description={`Delete the skill "${skill.name}"? This removes its instructions and resource files. This action cannot be undone.`}
+      description={`Delete the skill "${skill.name}"? It is moved to Deleted Items with its instructions and resource files, where it can be restored or removed for good.`}
       isPending={deleteSkill.isPending}
       onConfirm={handleDelete}
       confirmLabel="Delete Skill"

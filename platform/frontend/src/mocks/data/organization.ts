@@ -58,6 +58,8 @@ export function makeOrganization(
     slimChatErrorUi: false,
     showTwoFactor: false,
     oauthAccessTokenLifetimeSeconds: 3600,
+    softDeleteRetentionDays: 30,
+    softDeleteAutoPurgeEnabled: true,
     connectionDefaultMcpGatewayId: null,
     connectionDefaultLlmProxyId: null,
     connectionDefaultClientId: null,

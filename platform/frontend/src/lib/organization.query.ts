@@ -627,6 +627,36 @@ export function useUpdateAuthSettings(
 }
 
 /**
+ * Update the soft-delete retention window and the auto-purge switch.
+ */
+export function useUpdateDeletedItemsSettings(
+  onSuccessMessage: string,
+  onErrorMessage: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      data: archestraApiTypes.UpdateDeletedItemsSettingsData["body"],
+    ) => {
+      const { data: updatedOrganization, error } =
+        await archestraApiSdk.updateDeletedItemsSettings({ body: data });
+
+      if (error) {
+        toast.error(onErrorMessage);
+        return null;
+      }
+
+      return updatedOrganization;
+    },
+    onSuccess: (updatedOrganization) => {
+      if (!updatedOrganization) return;
+      queryClient.setQueryData(organizationKeys.details(), updatedOrganization);
+      toast.success(onSuccessMessage);
+    },
+  });
+}
+
+/**
  * Update knowledge settings (embedding model)
  */
 export function useUpdateKnowledgeSettings(

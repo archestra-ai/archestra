@@ -14,7 +14,8 @@ import { cn } from "@/lib/utils";
 interface SettingsBlockProps {
   title: ReactNode;
   description?: ReactNode;
-  control: ReactNode;
+  /** Right-aligned control in the header; omit for a block whose body is the control. */
+  control?: ReactNode;
   notice?: ReactNode;
   children?: ReactNode;
   /** Anchor for a link that points at this specific setting. */

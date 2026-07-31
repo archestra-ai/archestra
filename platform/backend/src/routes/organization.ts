@@ -50,6 +50,7 @@ import {
   UpdateAuthSettingsSchema,
   UpdateConnectionSettingsSchema,
   UpdateDefaultEnvironmentSchema,
+  UpdateDeletedItemsSettingsSchema,
   UpdateKnowledgeSettingsSchema,
   UpdateLlmSettingsSchema,
   UpdateMcpSettingsSchema,
@@ -221,6 +222,29 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Update Skills settings (online catalog availability)",
         tags: ["Organization"],
         body: UpdateSkillsSettingsSchema,
+        response: constructResponseSchema(SelectOrganizationSchema),
+      },
+    },
+    async ({ organizationId, body }, reply) => {
+      const organization = await OrganizationModel.patch(organizationId, body);
+
+      if (!organization) {
+        throw new ApiError(404, "Organization not found");
+      }
+
+      return reply.send(organization);
+    },
+  );
+
+  fastify.patch(
+    "/api/organization/deleted-items-settings",
+    {
+      schema: {
+        operationId: RouteId.UpdateDeletedItemsSettings,
+        description:
+          "Update Deleted Items settings (soft-delete retention window and auto-purge)",
+        tags: ["Organization"],
+        body: UpdateDeletedItemsSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },

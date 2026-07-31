@@ -19,6 +19,11 @@ export const AuditEventNameSchema = z.enum([
   "agent.updated",
   "agent.deleted",
   "agent.restored",
+  // `*.purged` marks the irreversible end of a soft-deleted entity's life: the
+  // row and its bytes are gone, so the audit record is the only remaining
+  // evidence it existed. Written by the retention sweep (actorType "system") and
+  // by an admin's permanent delete from Deleted Items alike.
+  "agent.purged",
   "agent.imported",
   "agentTool.created",
   "agentTool.updated",
@@ -30,6 +35,8 @@ export const AuditEventNameSchema = z.enum([
   "app.created",
   "app.updated",
   "app.deleted",
+  "app.purged",
+  "conversation.purged",
   "chatOpsBinding.created",
   "chatOpsBinding.updated",
   "chatOpsBinding.deleted",
@@ -96,6 +103,7 @@ export const AuditEventNameSchema = z.enum([
   "project.updated",
   "project.deleted",
   "project.restored",
+  "project.purged",
   "role.created",
   "role.updated",
   "role.deleted",
@@ -110,6 +118,7 @@ export const AuditEventNameSchema = z.enum([
   "skill.updated",
   "skill.deleted",
   "skill.restored",
+  "skill.purged",
   "skill.imported",
   "team.created",
   "team.updated",

@@ -22,6 +22,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agent.updated": "Agent updated",
   "agent.deleted": "Agent deleted",
   "agent.restored": "Agent restored",
+  "agent.purged": "Agent permanently deleted",
   "agent.imported": "Agent imported",
   // Agent tool assignment
   "agentTool.created": "Agent tool added",
@@ -36,6 +37,9 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "app.created": "App created",
   "app.updated": "App updated",
   "app.deleted": "App deleted",
+  "app.purged": "App permanently deleted",
+  // Chat
+  "conversation.purged": "Chat permanently deleted",
   // ChatOps binding
   "chatOpsBinding.created": "ChatOps binding created",
   "chatOpsBinding.updated": "ChatOps binding updated",
@@ -123,6 +127,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "project.updated": "Project updated",
   "project.deleted": "Project deleted",
   "project.restored": "Project restored",
+  "project.purged": "Project permanently deleted",
   // Role
   "role.created": "Role created",
   "role.updated": "Role updated",
@@ -141,6 +146,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "skill.updated": "Skill updated",
   "skill.deleted": "Skill deleted",
   "skill.restored": "Skill restored",
+  "skill.purged": "Skill permanently deleted",
   "skill.imported": "Skill imported",
   // Team
   "team.created": "Team created",
@@ -190,7 +196,8 @@ function verbVariant(eventName: AuditEventName): BadgeVariant {
   }
   const verb = eventName.split(".")[1] ?? "";
   if (verb === "created") return "default";
-  if (verb === "deleted") return "destructive";
+  // `purged` is the irreversible one, so it reads at least as loud as a delete.
+  if (verb === "deleted" || verb === "purged") return "destructive";
   return "secondary";
 }
 

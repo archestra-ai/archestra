@@ -2702,6 +2702,26 @@ const config = {
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,
     ),
   },
+  softDeletePurge: {
+    /**
+     * Deployment-level kill switch for the retention sweep. The per-organization
+     * toggle is the normal control; this one exists so an operator can stop the
+     * sweep instance-wide without editing every organization's settings — for
+     * instance if a first run after upgrade turns out to be reclaiming more than
+     * expected. Off leaves soft-deleted rows in place and still recoverable.
+     */
+    enabled: process.env.ARCHESTRA_SOFT_DELETE_PURGE_ENABLED !== "false",
+    /**
+     * Cap on entities purged per sweep, across all organizations. The sweep is
+     * daily and resumes oldest-first, so a backlog (every row already past the
+     * window when the feature first ships) drains over several days instead of
+     * one spike of cascades and byte deletions.
+     */
+    maxPerRun: parsePositiveInt(
+      process.env.ARCHESTRA_SOFT_DELETE_PURGE_MAX_PER_RUN,
+      1_000,
+    ),
+  },
 };
 
 // "all" runs the web server and the worker in one process; "web"/"worker" run

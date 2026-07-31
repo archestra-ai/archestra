@@ -24,8 +24,9 @@ import {
   type ConversationFileItem,
   deleteTargetFor,
 } from "@/lib/chat/conversation-files";
+import { useDeletionToast } from "@/lib/deletion-toast";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { handleApiError } from "@/lib/utils";
+import { handleApiError, toApiError } from "@/lib/utils";
 import websocketService from "@/lib/websocket/websocket";
 
 const {
@@ -40,6 +41,7 @@ const {
   clearChatConversationErrors,
   compactChatConversation,
   deleteChatConversation,
+  restoreChatConversation,
   generateChatConversationTitle,
   getConversationEnabledTools,
   updateConversationEnabledTools,
@@ -588,8 +590,34 @@ export function useToggleHooksDebug() {
   });
 }
 
+/**
+ * Restore a conversation the caller deleted. Owner-scoped on the server, so
+ * this is the undo path for one's own chat — not the admin-wide restore in
+ * Deleted Items.
+ */
+export function useRestoreConversation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await restoreChatConversation({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success("Conversation restored");
+    },
+  });
+}
+
 export function useDeleteConversation() {
   const queryClient = useQueryClient();
+  const notifyDeleted = useDeletionToast();
+  const restore = useRestoreConversation();
 
   return useMutation({
     mutationFn: async (id: string) => {
@@ -653,7 +681,12 @@ export function useDeleteConversation() {
       // Drops both the in-memory queue and its persisted copy.
       chatMessageQueue.clear(deletedId);
 
-      toast.success("Conversation deleted");
+      // Restoring one's own conversation reuses the same permission as
+      // deleting it, so the Undo here can never 403.
+      notifyDeleted({
+        message: "Conversation deleted",
+        undo: () => restore.mutate(deletedId),
+      });
     },
     onSettled: (_data, _error, _deletedId, context) => {
       // Always refetch to ensure server state is in sync

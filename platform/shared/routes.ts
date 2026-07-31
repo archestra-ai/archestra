@@ -492,6 +492,12 @@ export const RouteId = {
   // Auth Settings Routes (organization-level)
   UpdateAuthSettings: "updateAuthSettings",
 
+  // Deleted Items Routes (organization-level trash + retention policy)
+  UpdateDeletedItemsSettings: "updateDeletedItemsSettings",
+  ListDeletedItems: "listDeletedItems",
+  RestoreDeletedItem: "restoreDeletedItem",
+  PurgeDeletedItem: "purgeDeletedItem",
+
   // Connection Settings Routes (organization-level)
   UpdateConnectionSettings: "updateConnectionSettings",
 

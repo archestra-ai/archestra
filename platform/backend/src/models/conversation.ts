@@ -304,10 +304,8 @@ class ConversationModel {
    * shape as the active list (no messages loaded), but selects rows where
    * `deleted_at IS NOT NULL`.
    *
-   * The active-list partial index (`conversations_active_owner_last_message_idx`,
-   * `WHERE deleted_at IS NULL`) does not cover these rows, so this is an
-   * owner-filtered scan — acceptable while the soft-deleted set stays small; a
-   * retention job (and, if needed, a trash index) will bound it.
+   * Served by `conversations_deleted_org_idx`, the partial index over exactly
+   * the rows the active-list index excludes.
    */
   static async findAllDeleted(
     userId: string,
@@ -329,6 +327,36 @@ class ConversationModel {
       ],
       orderBy: desc(schema.conversationsTable.deletedAt),
     });
+  }
+
+  /**
+   * One soft-deleted conversation, scoped to its organization rather than its
+   * owner — the read behind an admin acting on someone else's chat from Deleted
+   * Items. Returns the raw row (not the hydrated list shape) because the callers
+   * need `userId`: restore and share revocation are both owner-scoped
+   * operations, so the admin path performs them as the conversation's owner.
+   */
+  static async findDeletedByIdForOrganization(
+    id: string,
+    organizationId: string,
+  ): Promise<{ id: string; userId: string; title: string | null } | null> {
+    const [row] = await db
+      .select({
+        id: schema.conversationsTable.id,
+        userId: schema.conversationsTable.userId,
+        title: schema.conversationsTable.title,
+      })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          eq(schema.conversationsTable.id, id),
+          eq(schema.conversationsTable.organizationId, organizationId),
+          isNotNull(schema.conversationsTable.deletedAt),
+        ),
+      )
+      .limit(1);
+
+    return row ?? null;
   }
 
   static async findById({

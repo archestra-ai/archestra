@@ -255,6 +255,28 @@ class OrganizationModel {
   }
 
   /**
+   * Every organization's soft-delete retention policy — the retention sweep's
+   * work list. Read as one query rather than per-org lookups so a deployment
+   * with many organizations does not turn one sweep into N round trips.
+   */
+  static async listSoftDeleteRetentionPolicies(): Promise<
+    Array<{
+      organizationId: string;
+      retentionDays: number;
+      autoPurgeEnabled: boolean;
+    }>
+  > {
+    const rows = await db
+      .select({
+        organizationId: schema.organizationsTable.id,
+        retentionDays: schema.organizationsTable.softDeleteRetentionDays,
+        autoPurgeEnabled: schema.organizationsTable.softDeleteAutoPurgeEnabled,
+      })
+      .from(schema.organizationsTable);
+    return rows;
+  }
+
+  /**
    * Whether any organization's locked knowledge embedding config points at this
    * provider + model pair. The provider comes from the org's embedding API key,
    * which is how the knowledge base resolves the model row at embed time.

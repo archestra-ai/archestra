@@ -1296,6 +1296,22 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAuthSettings]: {
     organizationSettings: ["update"],
   },
+  // Deleted Items is an org-wide trash: it lists every member's soft-deleted
+  // entities, so reading it is an organization-settings-level capability rather
+  // than a per-entity `read`. Restore and permanent delete act on other people's
+  // rows, so they need `update` — the same gate as changing the retention policy.
+  [RouteId.ListDeletedItems]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.RestoreDeletedItem]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.PurgeDeletedItem]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.UpdateDeletedItemsSettings]: {
+    organizationSettings: ["update"],
+  },
   [RouteId.UpdateConnectionSettings]: {
     organizationSettings: ["update"],
   },
@@ -1879,6 +1895,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/secrets": { secret: ["read"] },
   "/settings/github": { githubAppConfig: ["read"] },
   "/settings/organization": { organizationSettings: ["read"] },
+  "/settings/deleted-items": { organizationSettings: ["read"] },
 };
 
 // === Internal helpers

@@ -35,6 +35,10 @@ const PERIODIC_TASK_DEFINITIONS: PeriodicTaskDefinition[] = [
     payload: {},
   },
   { taskType: "audit_log_cleanup", intervalSeconds: 86400, payload: {} },
+  // Hard-deletes soft-deleted entities past their organization's retention
+  // window. Daily: the window is measured in days, so a finer cadence would only
+  // add sweeps that find nothing.
+  { taskType: "soft_delete_purge", intervalSeconds: 86400, payload: {} },
 ];
 
 export default PERIODIC_TASK_DEFINITIONS;

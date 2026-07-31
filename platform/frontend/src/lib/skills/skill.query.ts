@@ -2,6 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
+import { useDeletionToast } from "@/lib/deletion-toast";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -175,6 +176,8 @@ export function useUpdateSkill() {
 
 export function useDeleteSkill() {
   const queryClient = useQueryClient();
+  const notifyDeleted = useDeletionToast();
+  const restore = useRestoreSkill();
   return useMutation({
     mutationFn: async (id: string) => {
       const { data, error } = await deleteSkill({ path: { id } });
@@ -184,10 +187,15 @@ export function useDeleteSkill() {
       }
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, id) => {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skills"] });
-      toast.success("Skill deleted");
+      // Restoring a skill reuses the same authorization as deleting it, so
+      // whoever got here can always undo.
+      notifyDeleted({
+        message: "Skill deleted",
+        undo: () => restore.mutate(id),
+      });
     },
   });
 }

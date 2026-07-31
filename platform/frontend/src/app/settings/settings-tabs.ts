@@ -43,6 +43,9 @@ export function useSettingsTabs() {
     ...(permissionMap?.["/settings/roles"]
       ? [{ label: "Roles", href: "/settings/roles" }]
       : []),
+    ...(permissionMap?.["/settings/deleted-items"]
+      ? [{ label: "Deleted Items", href: "/settings/deleted-items" }]
+      : []),
     ...(permissionMap?.["/settings/github"]
       ? [{ label: "GitHub", href: "/settings/github" }]
       : []),

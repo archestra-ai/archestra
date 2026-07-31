@@ -3,7 +3,10 @@ import type {
   OrganizationTheme,
   SupportedProvider,
 } from "@archestra/shared";
-import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@archestra/shared";
+import {
+  DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS,
+  DEFAULT_SOFT_DELETE_RETENTION_DAYS,
+} from "@archestra/shared";
 import {
   boolean,
   integer,
@@ -423,6 +426,24 @@ const organizationsTable = pgTable("organization", {
   presetEntityDefaultValidationRegex: text(
     "preset_entity_default_validation_regex",
   ),
+
+  /**
+   * How many days a soft-deleted entity stays recoverable in Deleted Items
+   * before the daily purge sweep hard-deletes it. Read only when
+   * `softDeleteAutoPurgeEnabled` is true; manual permanent deletion ignores it.
+   */
+  softDeleteRetentionDays: integer("soft_delete_retention_days")
+    .notNull()
+    .default(DEFAULT_SOFT_DELETE_RETENTION_DAYS),
+
+  /**
+   * Whether the daily sweep purges soft-deleted entities past the retention
+   * window. Off means "keep forever": deleted items stay listed and restorable
+   * indefinitely, and only an explicit permanent delete reclaims them.
+   */
+  softDeleteAutoPurgeEnabled: boolean("soft_delete_auto_purge_enabled")
+    .notNull()
+    .default(true),
 });
 
 export default organizationsTable;

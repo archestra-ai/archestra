@@ -46,6 +46,7 @@ import {
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useDeletionToast } from "@/lib/deletion-toast";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -622,21 +623,28 @@ function DeleteAgentDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const deleteAgent = useDeleteProfile();
+  const restoreAgent = useRestoreProfile();
+  const notifyDeleted = useDeletionToast();
 
   const handleDelete = useCallback(async () => {
     const result = await deleteAgent.mutateAsync(agentId);
     if (result) {
-      toast.success("Agent deleted successfully");
+      // Restoring an agent reuses the same permission as deleting it, so the
+      // Undo offered here always works for whoever got this far.
+      notifyDeleted({
+        message: "Agent deleted",
+        undo: () => restoreAgent.mutate(agentId),
+      });
       onOpenChange(false);
     }
-  }, [agentId, deleteAgent, onOpenChange]);
+  }, [agentId, deleteAgent, notifyDeleted, onOpenChange, restoreAgent]);
 
   return (
     <DeleteConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
       title="Delete Agent"
-      description="Are you sure you want to delete this agent? This action cannot be undone."
+      description="The agent is moved to Deleted Items, where it can be restored or removed for good."
       isPending={deleteAgent.isPending}
       onConfirm={handleDelete}
       confirmLabel="Delete Agent"

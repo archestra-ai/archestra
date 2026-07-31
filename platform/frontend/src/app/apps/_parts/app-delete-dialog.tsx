@@ -59,8 +59,9 @@ export function AppDeleteDialog({
           <div className="flex flex-col gap-3 px-4 pb-4">
             <DialogDescription>
               Are you sure you want to delete &quot;{app.name}&quot;? The app
-              will no longer be available, and this cannot be undone in the UI.
-              Its app record and version history may be retained.
+              will no longer be available, and it cannot be restored — deleting
+              it also removes the MCP server behind it. It stays listed in
+              Deleted Items until it is removed for good.
             </DialogDescription>
           </div>
           <DialogStickyFooter className="mt-0 border-t-0 shadow-none">

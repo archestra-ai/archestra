@@ -118,6 +118,11 @@ const conversationsTable = softDeletablePgTable(
     index("conversations_active_owner_last_message_idx")
       .on(table.userId, table.organizationId, desc(table.lastMessageAt))
       .where(sql`${table.deletedAt} IS NULL`),
+    // The mirror of the index above, for the rows it deliberately excludes:
+    // Deleted Items lists an org's trash and the purge sweep scans it by age.
+    index("conversations_deleted_org_idx")
+      .on(table.organizationId, table.deletedAt)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
   ],
 );
 

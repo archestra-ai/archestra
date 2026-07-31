@@ -21,6 +21,11 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     description:
       "Organization-wide security defaults for tools your agents use.",
   },
+  "/settings/deleted-items": {
+    title: "Deleted Items",
+    description:
+      "Restore deleted agents, apps, chats, projects, and skills — or remove them for good. Set how long deleted items are kept before they are cleaned up automatically.",
+  },
   "/settings/github": {
     title: "GitHub",
     description:

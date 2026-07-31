@@ -1574,6 +1574,21 @@ The audit log records administrative actions (mutations via `/api/*` and auth ev
   - Must be a non-negative integer; invalid values fall back to the default (disabled).
   - When enabled, the sweep runs once every 24 hours as a background task.
 
+### Deleted Items Retention
+
+Deleting an agent, app, chat, project, or skill moves it to Deleted Items instead of removing it. A daily sweep permanently deletes anything past its organization's retention window, reclaiming its rows and any files it stored.
+
+The window is a per-organization setting, in **Settings > Deleted Items**. It defaults to 30 days with automatic cleanup on, so an upgrade starts purging items that have already been deleted for longer than that. Turn automatic cleanup off in that same place to keep deleted items indefinitely.
+
+The variables below are deployment-wide and exist for operating the sweep, not for setting policy.
+
+- **`ARCHESTRA_SOFT_DELETE_PURGE_ENABLED`** - Whether the daily sweep runs at all.
+  - Default: `true`
+  - Set to `false` to stop the sweep across every organization without editing each one's settings. Deleted items stay listed and restorable.
+- **`ARCHESTRA_SOFT_DELETE_PURGE_MAX_PER_RUN`** - Maximum entities purged per run, across all organizations.
+  - Default: `1000`
+  - The sweep purges oldest deletions first and resumes where it stopped, so a backlog drains over several days rather than in one run.
+
 ### Maintenance Mode
 
 - **`ARCHESTRA_MAINTENANCE_MODE_MESSAGE`** - Enables maintenance mode and displays a custom message to all users blocking access to the platform.

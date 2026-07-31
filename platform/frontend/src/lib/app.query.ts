@@ -2,6 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useDeletionToast } from "@/lib/deletion-toast";
 import { handleApiError, throwOnApiError } from "@/lib/utils";
 
 const {
@@ -428,6 +429,7 @@ export function useSetAppLocked() {
 
 export function useDeleteApp() {
   const queryClient = useQueryClient();
+  const notifyDeleted = useDeletionToast();
   return useMutation({
     mutationFn: async (appId: string) => {
       const { data, error } = await deleteApp({ path: { appId } });
@@ -442,7 +444,10 @@ export function useDeleteApp() {
       queryClient.invalidateQueries({ queryKey: ["apps"] });
       // Deleting an app tears down its backing catalog — refresh the registry.
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
-      toast.success("App deleted");
+      // No Undo: deleting an app also removes the MCP server backing it, so it
+      // has no restore path. The toast still points at Deleted Items, where the
+      // app can be removed for good.
+      notifyDeleted({ message: "App deleted" });
     },
   });
 }

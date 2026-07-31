@@ -318,6 +318,55 @@ class FileStore {
   }
 
   /**
+   * Delete a project's files — rows and external bytes — when the project is
+   * permanently deleted. `files.project_id` cascades, so the rows would go with
+   * the project row anyway; the bytes would not, so this must run BEFORE the
+   * project row is removed or every externally-stored object is orphaned with
+   * nothing left pointing at it.
+   *
+   * `slug` is taken as a parameter rather than looked up because the project is
+   * soft-deleted by the time this runs, and the scope resolver reads through
+   * `findById`, which excludes soft-deleted rows. Passing it also lets the sweep
+   * clear hand-placed objects that never had a `files` row — the same untracked
+   * objects `search` surfaces for project scopes.
+   *
+   * Best-effort per object: a storage backend that fails to drop one file must
+   * not strand the whole purge, since the row delete that follows is what makes
+   * the project actually gone.
+   */
+  async purgeProjectFiles(params: {
+    organizationId: string;
+    projectId: string;
+    slug: string | null;
+  }): Promise<void> {
+    const rows = await FileModel.listByProject({
+      organizationId: params.organizationId,
+      projectId: params.projectId,
+    });
+    await Promise.all(
+      rows.map(async (row) => {
+        await FileModel.deleteById(row.id);
+        await deleteRowBytes({
+          provider: row.storageProvider,
+          objectKey: row.objectKey,
+        }).catch(() => {});
+      }),
+    );
+
+    const store = getObjectStore();
+    if (!store || !params.slug) return;
+    const scope: OwnerScope = {
+      kind: "project",
+      projectId: params.projectId,
+      label: params.slug,
+    };
+    const leftovers = await store.enumerate(scope).catch(() => []);
+    await Promise.all(
+      leftovers.map((object) => store.remove(object.key).catch(() => {})),
+    );
+  }
+
+  /**
    * List one owner scope (a no-project conversation or a project), optionally
    * filtered by name. For a project scope with an object store configured, DB
    * rows are merged with objects present in the store but not in the table

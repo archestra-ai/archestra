@@ -7,6 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useDeletionToast } from "@/lib/deletion-toast";
 import {
   readFileAsBase64,
   summarizeUploadResults,
@@ -18,12 +19,14 @@ import {
   getApiErrorMessage,
   handleApiError,
   throwOnApiError,
+  toApiError,
 } from "@/lib/utils";
 
 const {
   createProject,
   createProjectFromConversation,
   deleteProject,
+  restoreProject,
   deleteSkillSandboxArtifact,
   getProject,
   getProjectConversations,
@@ -300,8 +303,38 @@ export function useSetProjectShare() {
   });
 }
 
+/**
+ * Restore a soft-deleted project. Requires `project:admin` — unlike agents and
+ * skills, a project's owner cannot restore their own.
+ */
+export function useRestoreProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { error } = await restoreProject({ path: { id }, body: {} });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
+      queryClient.invalidateQueries({ queryKey: scheduleTriggerKeys.all });
+      toast.success("Project restored");
+    },
+  });
+}
+
 export function useDeleteProject() {
   const queryClient = useQueryClient();
+  const notifyDeleted = useDeletionToast();
+  const restore = useRestoreProject();
+  // Restoring a project needs `project:admin`, which the owner who just deleted
+  // it need not have. Offering an Undo that 403s would be worse than none, so
+  // the action only appears for someone who can actually use it.
+  const { data: canRestore } = useHasPermissions({ project: ["admin"] });
+
   return useMutation({
     mutationFn: async ({ id }: { id: string }) => {
       const { error } = await deleteProject({ path: { id } });
@@ -311,11 +344,13 @@ export function useDeleteProject() {
       }
       return true;
     },
-    onSuccess: (ok) => {
+    onSuccess: (ok, { id }) => {
       if (!ok) return;
-      toast.success(
-        "Project deleted — its chats were kept as ordinary conversations.",
-      );
+      notifyDeleted({
+        message:
+          "Project deleted — its chats were kept as ordinary conversations.",
+        undo: canRestore ? () => restore.mutate({ id }) : undefined,
+      });
       // Refresh only the project LIST queries (`["projects", "list", …]`). This
       // can't prefix-match the deleted project's own detail/conversations/files
       // queries (`["projects", id, …]`), which are still mounted for the instant

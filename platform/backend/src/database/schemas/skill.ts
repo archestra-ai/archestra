@@ -170,6 +170,10 @@ const skillsTable = softDeletablePgTable(
       .where(
         sql`${table.scope} in ('team', 'org') AND ${table.deletedAt} IS NULL`,
       ),
+    // Deleted Items lists an org's trash and the purge sweep scans it by age.
+    index("skills_deleted_org_idx")
+      .on(table.organizationId, table.deletedAt)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
   ],
 );
 

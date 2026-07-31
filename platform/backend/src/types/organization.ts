@@ -4,6 +4,8 @@ import {
   OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
   OrganizationCustomFontSchema,
   OrganizationThemeSchema,
+  SOFT_DELETE_RETENTION_MAX_DAYS,
+  SOFT_DELETE_RETENTION_MIN_DAYS,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -300,8 +302,15 @@ export const OAuthAccessTokenLifetimeSecondsSchema = z
   .min(OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS)
   .max(OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS);
 
+export const SoftDeleteRetentionDaysSchema = z
+  .number()
+  .int()
+  .min(SOFT_DELETE_RETENTION_MIN_DAYS)
+  .max(SOFT_DELETE_RETENTION_MAX_DAYS);
+
 const extendedFields = {
   theme: OrganizationThemeSchema,
+  softDeleteRetentionDays: SoftDeleteRetentionDaysSchema,
   customFont: OrganizationCustomFontSchema,
   compressionScope: OrganizationCompressionScopeSchema,
   defaultDiscoveredToolInvocationPolicy:
@@ -455,6 +464,11 @@ export const UpdateKnowledgeSettingsSchema = z.object({
   embeddingChatApiKeyId: z.string().uuid().nullable().optional(),
   rerankerChatApiKeyId: z.string().uuid().nullable().optional(),
   rerankerModel: z.string().nullable().optional(),
+});
+
+export const UpdateDeletedItemsSettingsSchema = z.object({
+  softDeleteRetentionDays: SoftDeleteRetentionDaysSchema.optional(),
+  softDeleteAutoPurgeEnabled: z.boolean().optional(),
 });
 
 export const UpdateAuthSettingsSchema = z.object({

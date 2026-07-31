@@ -112,6 +112,10 @@ const appsTable = softDeletablePgTable(
     uniqueIndex("apps_org_slug_uidx")
       .on(table.organizationId, table.slug)
       .where(sql`${table.slug} IS NOT NULL AND ${table.deletedAt} IS NULL`),
+    // Deleted Items lists an org's trash and the purge sweep scans it by age.
+    index("apps_deleted_org_idx")
+      .on(table.organizationId, table.deletedAt)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
   ],
 );
 

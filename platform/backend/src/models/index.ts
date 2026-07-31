@@ -39,6 +39,10 @@ export { default as ConversationChatErrorModel } from "./conversation-chat-error
 export { default as ConversationCompactionModel } from "./conversation-compaction";
 export { default as ConversationEnabledToolModel } from "./conversation-enabled-tool";
 export { default as ConversationShareModel } from "./conversation-share";
+export {
+  DELETED_ITEM_ENTITY_TYPES,
+  default as DeletedItemModel,
+} from "./deleted-item";
 export { default as EnvironmentModel } from "./environment";
 export { default as EnvironmentDefaultUserLimitModel } from "./environment-default-user-limit";
 export { default as FileModel, FileNameExistsError } from "./file";

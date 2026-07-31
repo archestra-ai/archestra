@@ -68,6 +68,12 @@ type BedrockCommandContext = {
         }>
       | undefined;
     inferenceConfig: BedrockRequest["inferenceConfig"];
+    /**
+     * Model-native parameters Converse forwards verbatim (thinking config,
+     * reasoning effort, …). Every AI-SDK reasoning knob rides this field, so
+     * dropping it silently re-enables reasoning the caller disabled.
+     */
+    additionalModelRequestFields: Record<string, unknown> | undefined;
     toolConfig:
       | {
           tools:
@@ -1640,6 +1646,7 @@ function buildBedrockCommandContext(
         return s;
       }),
       inferenceConfig: request.inferenceConfig,
+      additionalModelRequestFields: request.additionalModelRequestFields,
       toolConfig: request.toolConfig
         ? {
             tools: request.toolConfig.tools?.map((t) => ({

@@ -35,13 +35,25 @@ const ResponseFormatSchema = z
   })
   .passthrough();
 
-// `response_format` must be declared so inbound validation forwards it to
-// OpenRouter (the OpenAI base schema strips undeclared fields). `plugins` is
-// intentionally NOT declared — response-healing is injected server-side, and
-// admitting it would let callers route arbitrary OpenRouter plugins.
+// OpenRouter's unified reasoning parameter — the one knob that disables,
+// floors, or hides reasoning across its heterogeneous upstreams.
+// @see https://openrouter.ai/docs/guides/best-practices/reasoning
+const ReasoningSchema = z.object({
+  enabled: z.boolean().optional(),
+  effort: z.string().optional(),
+  max_tokens: z.number().int().positive().optional(),
+  exclude: z.boolean().optional(),
+});
+
+// `response_format` and `reasoning` must be declared so inbound validation
+// forwards them to OpenRouter (the OpenAI base schema strips undeclared
+// fields). `plugins` is intentionally NOT declared — response-healing is
+// injected server-side, and admitting it would let callers route arbitrary
+// OpenRouter plugins.
 export const ChatCompletionRequestSchema =
   OpenAIChatCompletionRequestSchema.extend({
     response_format: ResponseFormatSchema.optional(),
+    reasoning: ReasoningSchema.optional(),
   });
 
 export const ChatCompletionResponseSchema =

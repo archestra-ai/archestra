@@ -618,6 +618,7 @@ async function createConversationCompaction(params: {
     userId: params.userId,
     sessionId: params.conversationId,
     source: "chat:compaction",
+    chatApiKeyId: compactionLlm.chatApiKeyId,
   });
 
   // Last-resort flow: salvage untagged output rather than fail the compaction.
@@ -698,6 +699,7 @@ async function tryCreateInContextCompaction(params: {
       userId: params.userId,
       sessionId: params.conversationId,
       source: "chat:compaction",
+      chatApiKeyId: fallbackLlm?.chatApiKeyId,
     });
     // Rehydrate attachment refs back to inline bytes before the LLM call —
     // otherwise the compaction model sees ref URLs it can't fetch and

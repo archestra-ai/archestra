@@ -60,14 +60,13 @@ describe("guardrails: KB query -> subsequent restricted tool invocation is block
       },
     ];
 
-    const trustEval = await evaluateIfContextIsTrusted(
-      commonMessages,
-      agent.id,
-      agent.organizationId,
-      undefined,
-      false,
-      { teamIds: [] },
-    );
+    const trustEval = await evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: false,
+      policyContext: { teamIds: [] },
+    });
 
     expect(trustEval.contextIsTrusted).toBe(false);
 
@@ -123,14 +122,13 @@ describe("guardrails: KB query -> subsequent restricted tool invocation is block
       },
     ];
 
-    const trustEval = await evaluateIfContextIsTrusted(
-      commonMessages,
-      agent.id,
-      agent.organizationId,
-      undefined,
-      false,
-      { teamIds: [] },
-    );
+    const trustEval = await evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: false,
+      policyContext: { teamIds: [] },
+    });
 
     expect(trustEval.contextIsTrusted).toBe(false);
     expect(trustEval.unsafeContextBoundary).toMatchObject({

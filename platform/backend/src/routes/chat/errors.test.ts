@@ -77,6 +77,39 @@ describe("mapProviderError - per-user provider auth required", () => {
       providerLabel: "GitHub Copilot",
     });
   });
+
+  it("reclassifies a revoked ChatGPT-subscription envelope (internal_code) to the reconnect card, keeping the actionable message", () => {
+    // The envelope the chat route receives when the Codex refresh token is
+    // expired/revoked: the token service's synthetic 401 relayed by the proxy
+    // with the normalized internal code. Without it, the 401 maps to the
+    // generic Authentication card ("Invalid API key — check your Chat
+    // Settings"), pointing at entirely the wrong remedy.
+    const revokedMessage =
+      "ChatGPT sign-in has expired or been revoked. Reconnect your ChatGPT account to keep using your Codex subscription.";
+    const result = mapProviderError(
+      {
+        name: "AI_APICallError",
+        statusCode: 401,
+        responseBody: JSON.stringify({
+          error: {
+            type: "authentication_error",
+            message: revokedMessage,
+            internal_code: ArchestraInternalErrorCode.ProviderAuthRequired,
+          },
+        }),
+        isRetryable: false,
+      },
+      "openai",
+    );
+
+    expect(result.code).toBe(ChatErrorCode.ProviderAuthRequired);
+    expect(result.isRetryable).toBe(false);
+    expect(result.message).toBe(revokedMessage);
+    expect(result.authAction).toEqual({
+      provider: "openai",
+      providerLabel: "ChatGPT Subscription",
+    });
+  });
 });
 
 describe("mapProviderError - request too large", () => {

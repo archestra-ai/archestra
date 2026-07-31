@@ -29,6 +29,15 @@ export interface ResolvedLlmSelection {
   apiKey: string | undefined;
   modelName: string;
   baseUrl: string | null;
+  /**
+   * The chat_api_keys row that supplied `apiKey`, when it came from a stored
+   * key. Callers that run the selection through the LLM proxy loopback must
+   * forward it (createLLMModel's `chatApiKeyId`) so per-key state binds to the
+   * right row — critically, ChatGPT-subscription (Codex) refresh tokens rotate
+   * on every redemption, and without the row id the proxy redeems bare and
+   * DISCARDS the rotated token, permanently burning the stored credential.
+   */
+  chatApiKeyId?: string;
 }
 
 /**
@@ -211,7 +220,13 @@ export async function resolveBestAvailableLlm(params: {
       const bestModel =
         await LlmProviderApiKeyModelLinkModel.getBestModel(chatApiKeyId);
       if (bestModel) {
-        return { provider, apiKey, modelName: bestModel.modelId, baseUrl };
+        return {
+          provider,
+          apiKey,
+          modelName: bestModel.modelId,
+          baseUrl,
+          chatApiKeyId,
+        };
       }
     }
 
@@ -227,6 +242,7 @@ export async function resolveBestAvailableLlm(params: {
           apiKey,
           modelName: bestModel.modelId,
           baseUrl: systemKey.inferenceBaseUrl ?? systemKey.baseUrl,
+          chatApiKeyId: systemKey.id,
         };
       }
     }
@@ -292,6 +308,9 @@ export async function resolveConfiguredAgentLlm(agent: {
       apiKey,
       modelName,
       baseUrl: apiKeyRecord.inferenceBaseUrl ?? apiKeyRecord.baseUrl,
+      // Only claim the row when its secret is actually being handed out; a
+      // per-user/codex fall-through resolves a different user's key later.
+      chatApiKeyId: apiKey !== undefined ? apiKeyRecord.id : undefined,
     };
   }
 
@@ -339,6 +358,10 @@ export async function resolveAgentLlmOrDefault(params: {
     return {
       ...configuredLlm,
       apiKey: configuredLlm.apiKey ?? fallbackKey?.apiKey,
+      // Identity travels with whichever row's secret is used.
+      chatApiKeyId: configuredLlm.apiKey
+        ? configuredLlm.chatApiKeyId
+        : fallbackKey?.chatApiKeyId,
       baseUrl: configuredLlm.baseUrl ?? fallbackKey?.baseUrl ?? null,
     };
   }
@@ -360,7 +383,7 @@ async function resolveDefaultLlmSelection(params: {
   if (organization?.defaultModelId && organization.defaultLlmApiKeyId) {
     const model = await ModelModel.findById(organization.defaultModelId);
     if (model) {
-      const { apiKey, baseUrl } = await resolveProviderApiKey({
+      const { apiKey, baseUrl, chatApiKeyId } = await resolveProviderApiKey({
         organizationId: params.organizationId,
         userId: params.userId,
         provider: model.provider,
@@ -371,6 +394,7 @@ async function resolveDefaultLlmSelection(params: {
         apiKey,
         modelName: model.modelId,
         baseUrl,
+        chatApiKeyId,
       };
     }
   }

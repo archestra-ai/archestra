@@ -42,6 +42,7 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
+import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type AzureResponsesRequest = Azure.Types.ResponsesRequest;
@@ -66,6 +67,10 @@ export const azureResponsesAdapterFactory: LLMProvider<
 > = {
   provider: "azure",
   interactionType: "azure:responses",
+
+  // The Responses parser drops a chat-completions-shaped error frame as an
+  // unknown chunk, turning an upstream failure into a blank turn.
+  formatStreamErrorFrame: formatResponsesStreamErrorFrame,
 
   createRequestAdapter(
     request: AzureResponsesRequest,

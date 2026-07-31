@@ -59,6 +59,7 @@ export async function suggestSkillDescription(params: {
     agentId: agent.id,
     userId,
     source: "skill:description_generation",
+    chatApiKeyId: llm.chatApiKeyId,
   });
 
   try {

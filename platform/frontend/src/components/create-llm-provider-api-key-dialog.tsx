@@ -27,6 +27,7 @@ import { useFeature } from "@/lib/config/config.query";
 import {
   useCreateLlmProviderApiKey,
   useLlmProviderApiKeys,
+  useUpdateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
 
 export type CreateLlmProviderApiKeyDialogProps = {
@@ -42,6 +43,12 @@ export type CreateLlmProviderApiKeyDialogProps = {
   credentialMode?: "api-key" | "subscription";
   showConsoleLink?: boolean;
   onSuccess?: () => void;
+  /**
+   * Re-authentication mode: rotate this existing key's credential in place
+   * instead of creating a new key. Used to reconnect an expired personal
+   * subscription (ChatGPT/Copilot) without minting a duplicate credential row.
+   */
+  reconnectKeyId?: string;
 };
 
 export function CreateLlmProviderApiKeyDialog({
@@ -54,8 +61,10 @@ export function CreateLlmProviderApiKeyDialog({
   credentialMode = "api-key",
   showConsoleLink = false,
   onSuccess,
+  reconnectKeyId,
 }: CreateLlmProviderApiKeyDialogProps) {
   const createMutation = useCreateLlmProviderApiKey();
+  const updateMutation = useUpdateLlmProviderApiKey();
   const { data: existingKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const byosEnabled = useFeature("byosEnabled");
   const azureOpenAiEntraIdEnabled = useFeature("azureOpenAiEntraIdEnabled");
@@ -137,6 +146,24 @@ export function CreateLlmProviderApiKeyDialog({
   };
   const handleCreate = form.handleSubmit(createCredential);
   const handleSubscriptionCredential = (credential: string) => {
+    if (reconnectKeyId) {
+      // Re-authentication: rotate the existing key's secret in place — a
+      // second create would leave a duplicate credential row behind, with the
+      // stale one still selected in conversations.
+      void (async () => {
+        try {
+          await updateMutation.mutateAsync({
+            id: reconnectKeyId,
+            data: { apiKey: credential },
+          });
+          onOpenChange(false);
+          onSuccess?.();
+        } catch {
+          // Error handled by mutation
+        }
+      })();
+      return;
+    }
     const values = { ...form.getValues(), apiKey: credential };
     void createCredential(values);
   };

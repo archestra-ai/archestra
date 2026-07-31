@@ -24,6 +24,23 @@ export const BUILT_IN_AGENT_IDS = {
   APP_RUNTIME: "app-runtime-llm-agent",
 } as const;
 
+/**
+ * Default question rounds per dual LLM analysis. Three rounds capture what
+ * the transcripts show matters (content type, dominant topics, overall
+ * takeaway); rounds four and five mostly drilled into "not determinable"
+ * territory at two LLM calls each. Admins can raise it per organization in
+ * the Dual LLM Main Agent's settings.
+ */
+export const DUAL_LLM_DEFAULT_MAX_ROUNDS = 3;
+
+/**
+ * The default that shipped before the cost of a round was measured. Boot
+ * re-sync migrates configs still sitting exactly on this value to
+ * {@link DUAL_LLM_DEFAULT_MAX_ROUNDS}; any other value is a deliberate
+ * admin choice and is left alone.
+ */
+export const DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS = 5;
+
 /** System prompt template for the policy configuration subagent.
  * Uses Handlebars syntax for variable substitution, consistent with other system prompts.
  * Available context comes from buildPolicyConfigSystemPromptContext().

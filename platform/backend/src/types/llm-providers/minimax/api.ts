@@ -66,10 +66,12 @@ export const ChatCompletionRequestSchema = z
     tool_choice: ToolChoiceOptionSchema.optional(),
     stream: z.boolean().optional(),
     /**
-     * Temperature range: (0.0, 1.0] (exclusive of 0.0)
+     * Temperature range: [0.0, 1.0]. MiniMax accepts 0 (deterministic
+     * callers like the dual LLM guardrail send it); rejecting it here failed
+     * those requests at the proxy before MiniMax was ever reached.
      * Recommended value: 1.0
      */
-    temperature: z.number().gt(0).max(1).nullable().optional(),
+    temperature: z.number().min(0).max(1).nullable().optional(),
     top_p: z.number().min(0).max(1).nullable().optional(),
     max_tokens: z.number().nullable().optional(),
     /**
@@ -95,6 +97,16 @@ export const ChatCompletionRequestSchema = z
      * sent top-level or the server sees an unknown key and ignores it.
      */
     reasoning_split: z.boolean().optional(),
+    /**
+     * Thinking toggle (M3+; M2.x models think unconditionally and reject the
+     * disable). Must be declared or inbound validation strips it before the
+     * adapter.
+     */
+    thinking: z
+      .object({
+        type: z.enum(["enabled", "disabled"]),
+      })
+      .optional(),
     /**
      * Accepted for compatibility with clients written against MiniMax's Python
      * examples; the adapter unwraps it into the top-level body before sending.

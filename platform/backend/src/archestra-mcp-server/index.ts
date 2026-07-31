@@ -459,9 +459,57 @@ function validateToolArgs(
     return { value: parsed.data as Record<string, unknown> };
   }
 
+  // Some models JSON-encode a nested object argument as a string —
+  // `{"from": "{\"type\":…}"}` — most often on union-typed parameters
+  // (copy_file's `from`, upload_file's `source`). Reparse exactly the keys the
+  // validation error names and re-validate once; only touching failing keys
+  // means a legitimately-string parameter that happens to hold JSON can never
+  // be rewritten. When the repaired call STILL fails, report the post-repair
+  // error: it names the actual semantic problem (a refine, a bad union
+  // variant), where the pre-repair "expected object, received string" would
+  // send a model that always stringifies into an unwinnable retry loop.
+  const repaired = reparseStringifiedObjectArgs(args, parsed.error);
+  if (repaired) {
+    const reparsed = schema.safeParse(repaired);
+    if (reparsed.success) {
+      return { value: reparsed.data as Record<string, unknown> };
+    }
+    return {
+      error: zodValidationErrorResult({
+        toolName,
+        error: reparsed.error,
+        schema,
+      }),
+    };
+  }
+
   return {
     error: zodValidationErrorResult({ toolName, error: parsed.error, schema }),
   };
+}
+
+function reparseStringifiedObjectArgs(
+  args: Record<string, unknown> | undefined,
+  error: ZodError,
+): Record<string, unknown> | null {
+  if (!args) return null;
+  let repaired: Record<string, unknown> | null = null;
+  for (const issue of error.issues) {
+    const key = issue.path[0];
+    if (typeof key !== "string") continue;
+    const value = (repaired ?? args)[key];
+    if (typeof value !== "string") continue;
+    const text = value.trim();
+    if (!text.startsWith("{") && !text.startsWith("[")) continue;
+    try {
+      const parsedValue: unknown = JSON.parse(text);
+      if (typeof parsedValue !== "object" || parsedValue === null) continue;
+      repaired = { ...(repaired ?? args), [key]: parsedValue };
+    } catch {
+      // Not JSON after all — leave the value (and the original error) as is.
+    }
+  }
+  return repaired;
 }
 
 /**

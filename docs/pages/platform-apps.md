@@ -107,6 +107,22 @@ The app tools form an autonomous build→render→fix loop, so an agent rarely n
 
 Each app has its own key-to-document store, exposed to the app's HTML as `archestra.storage`. The store is **partitioned**: `storage.user` addresses a partition private to the viewing user (the user is taken from the authenticated session, never from the app), and `storage.shared` addresses one app-wide partition all users share. No app id is ever passed: the app's MCP endpoint is route-bound, so an app can only ever read and write its own store. Access is gated by the viewing user's RBAC — reads need `app:read`, writes need `app:update`.
 
+## App Files
+
+An app can also keep files. It calls the built-in file tools through `archestra.tools.call` — `archestra__save_file`, `archestra__read_file`, `archestra__search_files`, `archestra__edit_file`, `archestra__delete_file`, plus `archestra__upload_file` and `archestra__download_file` for moving bytes through the app's own execution sandbox.
+
+The file store is private to each viewer of the app. Two people using the same app never see each other's files, and an app never sees a chat's or a project's files. The store is the same wherever the app runs — inline in chat, on its standalone page, or in an external MCP client — so a document the app writes is there on the next visit. The app's sandbox is scoped the same way, so what an app does never clutters the sandbox of a conversation, another app, or another viewer.
+
+Apps additionally get `archestra__read_file_raw`, which returns a file's exact bytes base64-encoded, whatever the type — the way a program reads a 3D model or PDF it saved earlier. It exists only inside app runtimes: agents read the same store through `archestra__read_file`'s paged text window and never see the raw variant.
+
+Use files for documents the app produces or the viewer keeps — a generated report, for example. Use the data store for structured state like settings and records.
+
+An agent moves files between a chat and the app you have open there. Ask it to open a file in the app, and it copies the file across — an attachment, or something from the chat's Files panel. The copy keeps its own filename, so the app finds it by listing its files and opening that name. Copies go the other way too: a file the app made lands in your Files panel, ready to download.
+
+An app's files are all an agent can see of it. It lists them to find what the app has produced, and it cannot observe what the app is showing you or doing. Name the file you want, and it copies that one.
+
+Reads need `file:manage`, and the transfer tools need `sandbox:execute`. The file tools require the sandbox runtime; deployments that run without it have no file store.
+
 ## Tools and auto-auth
 
 Beyond the data store, an app can be assigned upstream MCP-server tools — from the Tools tab of its settings in the MCP registry, or directly from chat via the `tools` parameter of `scaffold_app` (declarative: the list replaces the current assignments). Assignment mirrors the agent model (scope-aligned, dynamic credentials by default). A running app can call only its assigned tools plus its own data-store tools; everything else is refused at the route. `scaffold_app` binds the app to the authoring agent's [environment](./platform-environments); assignable tools are that environment's plus the Default environment's.

@@ -38,6 +38,7 @@ import {
   extractCommonToolCallArguments,
 } from "@/types";
 import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-client";
+import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type OpenAiResponsesRequest = OpenAi.Types.ResponsesRequest;
@@ -62,6 +63,10 @@ export const openAiResponsesAdapterFactory: LLMProvider<
 > = {
   provider: "openai",
   interactionType: "openai:responses",
+
+  // The Responses parser drops a chat-completions-shaped error frame as an
+  // unknown chunk, turning an upstream failure into a blank turn.
+  formatStreamErrorFrame: formatResponsesStreamErrorFrame,
 
   createRequestAdapter(
     request: OpenAiResponsesRequest,
@@ -165,6 +170,15 @@ export const openAiResponsesAdapterFactory: LLMProvider<
     if (get(error, "error.code") === "context_length_exceeded") {
       return ArchestraInternalErrorCode.ContextLengthExceeded;
     }
+    // The ChatGPT-subscription (Codex) fetch wrapper reports a dead sign-in
+    // (expired/revoked refresh token) as a synthetic 401 whose body carries the
+    // normalized code; relay it so the chat mapper renders the reconnect card.
+    if (
+      get(error, "error.internal_code") ===
+      ArchestraInternalErrorCode.ProviderAuthRequired
+    ) {
+      return ArchestraInternalErrorCode.ProviderAuthRequired;
+    }
     return undefined;
   },
 
@@ -206,7 +220,16 @@ class OpenAiResponsesRequestAdapter
       return [];
     }
 
-    return this.request.input.flatMap((item) => toCommonMessages(item));
+    // Pair function_call_output items with their function_call by call_id so
+    // tool results surface as CommonMessage.toolCalls — the shape trusted-data
+    // / Dual LLM policy evaluation reads. Without the pairing, Responses-routed
+    // conversations look tool-free to the evaluator and sanitization is
+    // silently bypassed.
+    const toolCallsByCallId = getToolCallsByCallId(this.request.input);
+
+    return this.request.input.flatMap((item) =>
+      toCommonMessages(item, toolCallsByCallId),
+    );
   }
 
   getToolResults(): CommonToolResult[] {
@@ -798,7 +821,13 @@ function createEmptyToolCompressionStats(): ToolCompressionStats {
   };
 }
 
-function toCommonMessages(item: ResponseInputItem): CommonMessage[] {
+function toCommonMessages(
+  item: ResponseInputItem,
+  toolCallsByCallId: Map<
+    string,
+    { name: string; arguments?: Record<string, unknown> }
+  >,
+): CommonMessage[] {
   // "easy input message" items carry role/content and omit `type` (it defaults
   // to "message"); the AI SDK emits this shape. Without handling it here,
   // getMessages() drops the user's prompt and trusted-data / Dual LLM policy
@@ -813,13 +842,27 @@ function toCommonMessages(item: ResponseInputItem): CommonMessage[] {
   }
 
   if (item.type === "function_call_output") {
+    const toolCall = toolCallsByCallId.get(item.call_id);
+    const content =
+      typeof item.output === "string"
+        ? item.output
+        : JSON.stringify(item.output);
     return [
       {
         role: "tool",
-        content:
-          typeof item.output === "string"
-            ? item.output
-            : JSON.stringify(item.output),
+        content,
+        // An output whose function_call was pruned from the input still
+        // carries untrusted data — surface it under the "unknown" name so
+        // default trusted-data policies apply rather than nothing.
+        toolCalls: [
+          {
+            id: item.call_id,
+            name: toolCall?.name ?? "unknown",
+            arguments: toolCall?.arguments,
+            content,
+            isError: false,
+          },
+        ],
       },
     ];
   }

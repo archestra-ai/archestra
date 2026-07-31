@@ -3,6 +3,7 @@ import {
   buildUserSystemPromptContext,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
+  TOOL_COPY_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
@@ -491,6 +492,24 @@ function buildFileHandlingInstruction(
     // way to surface a file to the user is to export it from the sandbox.
     paragraphs.push(
       `To hand a file to the user, export it from the sandbox with \`${downloadFile}\` by its path; its bytes are recorded for the user's Files panel without passing through your reply.`,
+    );
+  }
+
+  // Capability-gated like every tool mention here: only agents holding
+  // copy_file learn the app exchange. The "app" side works only when the chat
+  // UI has an app open (the tool errors otherwise, naming the fix).
+  if (has(TOOL_COPY_FILE_SHORT_NAME)) {
+    const copyFile = archestraMcpBranding.getToolName(
+      TOOL_COPY_FILE_SHORT_NAME,
+    );
+    // An app is opaque from here: its store is the only part of it you can
+    // observe, and only by listing it. Without that step a model asked for
+    // "the file in the app" invents a name — usually the one it copied in.
+    const discover = has(TOOL_SEARCH_FILES_SHORT_NAME)
+      ? ` To copy something OUT, first list what the app holds with \`${searchFiles}\` and \`scope: "app"\`. That listing is all you can see of an app: you cannot observe what it is displaying or doing. So never guess a filename, and when the listing leaves the user's request ambiguous — "the model I'm looking at" — ask them which file instead of picking one.`
+      : "";
+    paragraphs.push(
+      `When the user has an app open in this chat, its files are a separate per-user store the app reads directly. Exchange with it via \`${copyFile}\`: copy a chat file or attachment INTO the app (so the app can load it — e.g. "open this file in the app"), or copy a file the app produced OUT into this chat's files (so the user can download it, or you can read it here). A file the user attached copies straight from the attachment — \`from: {"type":"chat_attachment","filename":"<name as attached>"}\` — in one call; never stage it through the sandbox first. The copy keeps the source's filename, which is how the app finds it and how it tells the format: leave the name alone unless the user or the app asks for a specific one, and never rewrite the extension.${discover} Do this unprompted when the task clearly calls for it.`,
     );
   }
 

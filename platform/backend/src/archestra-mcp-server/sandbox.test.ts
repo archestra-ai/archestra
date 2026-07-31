@@ -1316,7 +1316,7 @@ describe("sandbox tools (runtime enabled)", () => {
       );
       expect(result.isError).toBe(true);
       expect(textOf(result)).toContain(
-        "must be the attachment's id, not its filename",
+        "must be the attachment's id — when you only know the name, use `filename` instead",
       );
       expect(uploadSpy).not.toHaveBeenCalled();
     });

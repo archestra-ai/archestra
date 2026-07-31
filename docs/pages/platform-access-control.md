@@ -118,7 +118,19 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 
 ## Custom Roles
 
-Users with `ac:create` permission can create custom roles by selecting specific permission combinations. Custom roles allow fine-grained access control tailored to your needs. Note that you can only grant permissions that you already possess — this prevents privilege escalation.
+Users with `ac:create` permission can create custom roles by selecting specific permission combinations. Custom roles allow fine-grained access control tailored to your needs.
+
+#### No privilege escalation
+
+A role can only be granted by someone who already holds every permission it carries. This single rule is enforced server-side on **every** grant path:
+
+- creating or editing a custom role's permissions,
+- changing a member's role,
+- inviting a user with a role,
+- setting the organization's default member role,
+- creating or updating a service account.
+
+The role pickers in the UI disable roles you cannot grant and explain which permissions you are missing. The rule is what makes deliberately-restricted admin roles trustworthy: an admin role created without, say, `log:read`, `auditLog:read`, and `member:impersonate` cannot be escaped by its holders — with `member:update` they can still manage users freely inside their own permission set, but any attempt to hand out (to themselves or anyone else) a role carrying the withheld permissions is rejected. Roles applied by an identity provider through [SSO role mapping](/docs/platform-sso-role-mapping) are the deliberate exception: they are granted by the IdP configuration, not by a platform user.
 
 ### Available Permissions
 

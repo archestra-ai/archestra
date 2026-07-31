@@ -5,6 +5,7 @@
  * This adapter delegates request/response/stream parsing to the OpenAI adapters
  * and only overrides provider-specific configuration (baseUrl, api key behavior).
  */
+
 import {
   ArchestraInternalErrorCode,
   GROQ_REQUEST_EXCEEDS_BUCKET_STATUS,

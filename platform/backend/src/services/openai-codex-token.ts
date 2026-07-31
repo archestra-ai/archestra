@@ -26,7 +26,10 @@
  */
 import { createHmac, randomBytes } from "node:crypto";
 import { arch, platform, release } from "node:os";
-import { isVaultReference } from "@archestra/shared";
+import {
+  ArchestraInternalErrorCode,
+  isVaultReference,
+} from "@archestra/shared";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -481,6 +484,9 @@ function redemptionErrorResponse(error: unknown): Response {
         error: {
           message: error.message,
           type: error.statusCode === 401 ? "authentication_error" : "api_error",
+          // Preserve the Archestra-normalized classification across the
+          // synthetic HTTP hop; the adapter's extractInternalCode relays it.
+          ...(error.internalCode ? { internal_code: error.internalCode } : {}),
         },
       },
       { status: error.statusCode },
@@ -516,11 +522,14 @@ async function redeemWithOpenAi(refreshToken: string): Promise<{
       { status: response.status, ...oauthErrorLogFields(body) },
       "[OpenAiCodex] refresh token redemption failed",
     );
-    // OpenAI reports expired/revoked/reused refresh tokens as 400/401.
+    // OpenAI reports expired/revoked/reused refresh tokens as 400/401. The
+    // internal code rides the error envelope so the chat error mapper renders
+    // the reconnect card instead of a generic invalid-key message.
     if (response.status === 400 || response.status === 401) {
       throw new ApiError(
         401,
         "ChatGPT sign-in has expired or been revoked. Reconnect your ChatGPT account to keep using your Codex subscription.",
+        ArchestraInternalErrorCode.ProviderAuthRequired,
       );
     }
     throw new ApiError(

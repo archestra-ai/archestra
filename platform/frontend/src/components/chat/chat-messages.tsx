@@ -5,6 +5,8 @@ import {
   type archestraApiTypes,
   type ChatMessageFeedback,
   ChatMessageMetadataSchema,
+  DUAL_LLM_ANALYSIS_PART_TYPE,
+  type DualLlmAnalysisPartData,
   extractMcpExecutedAs,
   getArchestraToolFullName,
   HOOK_RUN_PART_TYPE,
@@ -112,6 +114,7 @@ import {
   type SubagentChildEntry,
 } from "./chat-messages.utils";
 import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
+import { DualLlmAnalysisBlock } from "./dual-llm-analysis-block";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
 import { InlineChatError } from "./inline-chat-error";
@@ -1060,6 +1063,21 @@ export function ChatMessages({
                                 </MessageContent>
                               </Message>
                             </Fragment>
+                          );
+                        }
+
+                        case DUAL_LLM_ANALYSIS_PART_TYPE: {
+                          const analysisData = (
+                            part as { data?: DualLlmAnalysisPartData }
+                          ).data;
+                          if (!analysisData) {
+                            return null;
+                          }
+                          return (
+                            <DualLlmAnalysisBlock
+                              key={partKey}
+                              data={analysisData}
+                            />
                           );
                         }
 

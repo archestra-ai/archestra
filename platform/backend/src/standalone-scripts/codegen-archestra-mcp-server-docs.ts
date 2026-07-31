@@ -9,6 +9,7 @@ import {
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   getArchestraToolGroupId,
   getArchestraToolShortName,
+  isAppRuntimeOnlyArchestraToolShortName,
 } from "@archestra/shared";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { TOOL_PERMISSIONS } from "@/archestra-mcp-server/rbac";
@@ -86,7 +87,12 @@ async function main() {
   const markdownContent = generateMarkdownContent(existingContent);
   fs.writeFileSync(docsFilePath, markdownContent);
 
-  const tools = getArchestraMcpTools();
+  // App-runtime-only built-ins are not part of the agent-facing surface this
+  // page documents (they are covered on the Apps page).
+  const tools = getArchestraMcpTools().filter((tool) => {
+    const shortName = getArchestraToolShortName(tool.name);
+    return !(shortName && isAppRuntimeOnlyArchestraToolShortName(shortName));
+  });
   const groupCount = new Set(Object.values(ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME))
     .size;
 
@@ -116,7 +122,12 @@ lastUpdated: ${lastUpdated}
 }
 
 function generateMarkdownBody(): string {
-  const tools = getArchestraMcpTools();
+  // App-runtime-only built-ins are not part of the agent-facing surface this
+  // page documents (they are covered on the Apps page).
+  const tools = getArchestraMcpTools().filter((tool) => {
+    const shortName = getArchestraToolShortName(tool.name);
+    return !(shortName && isAppRuntimeOnlyArchestraToolShortName(shortName));
+  });
 
   const allPreInstalledShortNames = DEFAULT_ARCHESTRA_TOOL_NAMES.map(
     (name) => getArchestraToolShortName(name) ?? name,

@@ -286,6 +286,16 @@ export interface ChunkProcessingResult {
 }
 
 /**
+ * Keep-alive frame written while a dual LLM analysis holds a stream idle
+ * before the upstream call. A `:`-prefixed line is defined by the event-stream
+ * spec as a comment, so every compliant SSE parser drops it without touching
+ * message content — which also means it is only safe on `text/event-stream`
+ * transports, not on the NDJSON or binary event streams some providers speak.
+ */
+export const DUAL_LLM_KEEPALIVE_SSE_COMMENT =
+  ": archestra dual-llm analysis in progress\n\n";
+
+/**
  * Adapter interface for streaming LLM responses
  *
  * Handles parsing provider-specific chunks, accumulating state,
@@ -322,7 +332,9 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
 
   /**
    * Format a text fragment as SSE to inject into an ongoing stream.
-   * Used for progress messages (e.g., dual LLM status) during streaming.
+   * Used to surface a terminal dual LLM sanitization failure before the
+   * request fails closed. Never used for mid-stream progress: injected text
+   * is indistinguishable from model output and fuses into the answer.
    */
   formatTextDeltaSSE(text: string): string | Uint8Array;
 

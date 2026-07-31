@@ -180,6 +180,11 @@ export const TOOL_PERMISSIONS: Record<
   // (authorship, project membership) stays in the handlers.
   search_files: { resource: "file", action: "manage" },
   read_file: { resource: "file", action: "manage" },
+  // Agent-side exchange with the chat's open app — pure PFS↔PFS, so file
+  // permission, not sandbox execution.
+  copy_file: { resource: "file", action: "manage" },
+  // App-runtime only (never seeded/agent-visible); still viewer-RBAC-checked.
+  read_file_raw: { resource: "file", action: "manage" },
   save_file: { resource: "file", action: "manage" },
   edit_file: { resource: "file", action: "manage" },
   delete_file: { resource: "file", action: "manage" },

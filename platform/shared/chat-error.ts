@@ -54,6 +54,14 @@ export const ArchestraInternalErrorCode = {
    * admits it and the same request fails identically in a brand-new chat.
    */
   RequestExceedsRateLimit: "request_exceeds_rate_limit",
+  /**
+   * A per-user credential is required and unusable: either none is linked, or
+   * the linked subscription sign-in is no longer valid upstream (an expired or
+   * revoked ChatGPT/Codex refresh token). NOT retryable — the user must
+   * (re)connect their account. Mirrors ChatErrorCode.ProviderAuthRequired so
+   * the chat UI renders the connect card instead of a generic key error.
+   */
+  ProviderAuthRequired: "provider_auth_required",
 } as const;
 
 export type ArchestraInternalErrorCode =

@@ -29,6 +29,7 @@ import {
   AppRenderScreenshotModel,
   AppToolModel,
   AppVersionModel,
+  McpToolCallModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
 import {
@@ -61,7 +62,10 @@ import {
   appRunUrl,
   escapeAppNameForModelText,
 } from "@/services/apps/app-run-link";
-import { gateAppToolCall } from "@/services/apps/app-tool-runtime-gate";
+import {
+  gateAppToolCall,
+  redactAppBuiltinAuditResult,
+} from "@/services/apps/app-tool-runtime-gate";
 import {
   buildValidatedVersionPayload,
   htmlHasDocumentRoot,
@@ -1503,14 +1507,6 @@ const registry = defineArchestraTools([
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
-      // Preview is for the app's assigned upstream MCP tools — the data store
-      // and other built-ins are not run through here.
-      if (archestraMcpBranding.isToolName(args.toolName)) {
-        return errorResult(
-          "preview_app_tool runs the app's assigned MCP tools; the App Data Store and other built-ins are not previewable.",
-        );
-      }
-
       // The exact runtime gate the rendered app hits (allowlist + visibility +
       // invocation policy). Preview carries its own human-approval gate, so a
       // require_approval policy on the target is not treated as a block here;
@@ -1535,17 +1531,57 @@ const registry = defineArchestraTools([
           ? decision.resolvedToolName
           : args.toolName;
 
+      if (decision.kind === "app-builtin") {
+        // Built-ins run in-process, not through the MCP client. The context
+        // mirrors the app runtime's exactly — appId bound, NO conversationId —
+        // so preview exercises the same per-(app, viewer) namespace the running
+        // app sees, and no agentId so the authoring agent's own assignments
+        // don't gate it. Imported lazily: index.ts imports this module.
+        const { executeArchestraTool } = await import("./index");
+        const response = await executeArchestraTool(
+          resolvedToolName,
+          args.args ?? {},
+          {
+            agent: { id: app.id, name: app.name },
+            appId: app.id,
+            userId,
+            organizationId,
+            tokenAuth: previewTokenAuth(userId, organizationId),
+            abortSignal: context.abortSignal,
+          },
+        );
+        try {
+          await McpToolCallModel.create({
+            ownerType: "app",
+            appId: app.id,
+            agentId: null,
+            mcpServerName: archestraMcpBranding.serverName,
+            method: "tools/call",
+            toolCall: {
+              id: `preview-${userId}-${app.id}-${Date.now()}`,
+              name: resolvedToolName,
+              arguments: args.args ?? {},
+            },
+            toolResult: redactAppBuiltinAuditResult(resolvedToolName, response),
+            userId,
+            authMethod: "session",
+          });
+        } catch (dbError) {
+          logger.warn(
+            { err: dbError, appId: app.id, toolName: resolvedToolName },
+            "Failed to persist previewed app built-in tool call",
+          );
+        }
+        return formatPreviewResult(
+          resolvedToolName,
+          response as CommonToolResult,
+        );
+      }
+
       // Execute as the app owner with the caller's own (per-viewer) credentials,
       // mirroring the runtime's dynamic resolution — the audit row is recorded
       // against the app by executeToolCallForOwner.
-      const tokenAuth: TokenAuthContext = {
-        tokenId: `session:${userId}`,
-        teamId: null,
-        isOrganizationToken: false,
-        isSessionAuth: true,
-        userId,
-        organizationId,
-      };
+      const tokenAuth = previewTokenAuth(userId, organizationId);
       const result = await mcpClient.executeToolCallForOwner(
         {
           id: `preview-${userId}-${app.id}-${Date.now()}`,
@@ -2092,6 +2128,25 @@ export function unwrapToolResultForPreview(result: CommonToolResult): string {
  * hard-capped; on isError the raw text + structuredContent ride through
  * untouched (the SDK throws for those, so there is no unwrapped value to show).
  */
+/**
+ * The preview caller's own session identity — preview executes as the app owner
+ * but with the authoring user's credentials, exactly as the runtime resolves
+ * them per viewer.
+ */
+function previewTokenAuth(
+  userId: string,
+  organizationId: string,
+): TokenAuthContext {
+  return {
+    tokenId: `session:${userId}`,
+    teamId: null,
+    isOrganizationToken: false,
+    isSessionAuth: true,
+    userId,
+    organizationId,
+  };
+}
+
 function formatPreviewResult(
   toolName: string,
   result: CommonToolResult,

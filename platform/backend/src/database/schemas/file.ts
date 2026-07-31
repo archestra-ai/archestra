@@ -11,6 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { SkillSandboxFileStorageProvider } from "@/types/skill-sandbox";
+import appsTable from "./app";
 import conversationsTable from "./conversation";
 import projectsTable from "./project";
 import skillSandboxesTable from "./skill-sandbox";
@@ -32,6 +33,11 @@ const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
  *   - `project_id` — when set, the file belongs to that PROJECT; access is the
  *     project's membership (not the author). Deleting the project deletes the
  *     file (cascade).
+ *   - `app_id` — when set, the file belongs to that MCP App's per-viewer
+ *     namespace: the author is the viewer who was running the app, and the pair
+ *     (app, viewer) is the whole scope. App files never mix with a chat's or a
+ *     project's files, on any app surface. Deleting the app deletes them
+ *     (cascade).
  *
  * Bytes are Postgres-only today (`storage_provider = 'db'`, `data` bytea); the
  * `storage_provider`/`object_key` columns are the seam a future external
@@ -55,6 +61,10 @@ const filesTable = pgTable(
       () => conversationsTable.id,
       { onDelete: "set null" },
     ),
+    /** Owning MCP App; null = not an app file. Scope is (app, author/viewer). */
+    appId: uuid("app_id").references(() => appsTable.id, {
+      onDelete: "cascade",
+    }),
     /** Producing sandbox — PURE PROVENANCE; never used for access. */
     sandboxId: uuid("sandbox_id").references(() => skillSandboxesTable.id, {
       onDelete: "set null",
@@ -77,6 +87,7 @@ const filesTable = pgTable(
     index("files_project_id_idx").on(table.projectId),
     index("files_conversation_id_idx").on(table.conversationId),
     index("files_sandbox_id_idx").on(table.sandboxId),
+    index("files_app_id_idx").on(table.appId),
     // Filename uniqueness per owner scope, so the human-readable filesystem
     // layout is collision-free and a repeat write is rejected rather than
     // overwriting. No-project files belong to a conversation and live at
@@ -87,6 +98,12 @@ const filesTable = pgTable(
       .where(
         sql`${table.projectId} IS NULL AND ${table.conversationId} IS NOT NULL`,
       ),
+    // An MCP App's files are unique per (viewer, app) — the app's whole
+    // namespace. Disjoint from the orphan index below, which excludes app rows,
+    // so an app write can never collide with a headless one on filename alone.
+    uniqueIndex("files_user_app_filename_uidx")
+      .on(table.userId, table.appId, table.filename)
+      .where(sql`${table.appId} IS NOT NULL`),
     // TODO(headless-files): a no-project write with no conversation (headless
     // A2A / ChatOps / schedule / email execution) lands here as a flat
     // `<email>/<filename>` orphan, kept unique per author by this index. Such
@@ -96,7 +113,7 @@ const filesTable = pgTable(
     uniqueIndex("files_user_filename_orphan_uidx")
       .on(table.userId, table.filename)
       .where(
-        sql`${table.projectId} IS NULL AND ${table.conversationId} IS NULL`,
+        sql`${table.projectId} IS NULL AND ${table.conversationId} IS NULL AND ${table.appId} IS NULL`,
       ),
     uniqueIndex("files_project_filename_uidx")
       .on(table.projectId, table.filename)

@@ -66,14 +66,13 @@ describe("guardrails: run_tool dispatch -> target tool's trusted data policies a
       },
     ];
 
-    const trustEval = await evaluateIfContextIsTrusted(
-      commonMessages,
-      agent.id,
-      agent.organizationId,
-      undefined,
-      false,
-      { teamIds: [] },
-    );
+    const trustEval = await evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: false,
+      policyContext: { teamIds: [] },
+    });
 
     expect(trustEval.contextIsTrusted).toBe(false);
     // The boundary names the tool that produced the data (for the divider and
@@ -125,14 +124,13 @@ describe("guardrails: run_tool dispatch -> target tool's trusted data policies a
       },
     ];
 
-    const trustEval = await evaluateIfContextIsTrusted(
-      commonMessages,
-      agent.id,
-      agent.organizationId,
-      undefined,
-      false,
-      { teamIds: [] },
-    );
+    const trustEval = await evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: false,
+      policyContext: { teamIds: [] },
+    });
 
     expect(trustEval.contextIsTrusted).toBe(false);
     expect(trustEval.unsafeContextBoundary).toMatchObject({
@@ -169,14 +167,13 @@ describe("guardrails: run_tool dispatch -> target tool's trusted data policies a
       },
     ];
 
-    const trustEval = await evaluateIfContextIsTrusted(
-      commonMessages,
-      agent.id,
-      agent.organizationId,
-      undefined,
-      false,
-      { teamIds: [] },
-    );
+    const trustEval = await evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: false,
+      policyContext: { teamIds: [] },
+    });
 
     expect(trustEval.contextIsTrusted).toBe(true);
     expect(trustEval.unsafeContextBoundary).toBeUndefined();
@@ -206,14 +203,13 @@ describe("guardrails: run_tool dispatch -> target tool's trusted data policies a
       },
     ];
 
-    const trustEval = await evaluateIfContextIsTrusted(
-      commonMessages,
-      agent.id,
-      agent.organizationId,
-      undefined,
-      false,
-      { teamIds: [] },
-    );
+    const trustEval = await evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: false,
+      policyContext: { teamIds: [] },
+    });
 
     expect(trustEval.contextIsTrusted).toBe(false);
     expect(trustEval.unsafeContextBoundary).toMatchObject({
@@ -257,14 +253,13 @@ describe("guardrails: run_tool dispatch -> target tool's trusted data policies a
       },
     ];
 
-    const trustEval = await evaluateIfContextIsTrusted(
-      commonMessages,
-      agent.id,
-      agent.organizationId,
-      undefined,
-      false,
-      { teamIds: [] },
-    );
+    const trustEval = await evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: false,
+      policyContext: { teamIds: [] },
+    });
 
     expect(trustEval.contextIsTrusted).toBe(true);
     expect(trustEval.unsafeContextBoundary).toBeUndefined();
@@ -293,14 +288,13 @@ describe("guardrails: run_tool dispatch -> target tool's trusted data policies a
       },
     ];
 
-    const trustEval = await evaluateIfContextIsTrusted(
-      commonMessages,
-      agent.id,
-      agent.organizationId,
-      undefined,
-      false,
-      { teamIds: [] },
-    );
+    const trustEval = await evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: false,
+      policyContext: { teamIds: [] },
+    });
 
     expect(trustEval.contextIsTrusted).toBe(true);
     expect(trustEval.unsafeContextBoundary).toBeUndefined();
@@ -342,14 +336,13 @@ describe("guardrails: run_tool dispatch -> target tool's trusted data policies a
       },
     ];
 
-    const trustEval = await evaluateIfContextIsTrusted(
-      commonMessages,
-      agent.id,
-      agent.organizationId,
-      undefined,
-      false,
-      { teamIds: [] },
-    );
+    const trustEval = await evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      considerContextUntrusted: false,
+      policyContext: { teamIds: [] },
+    });
 
     expect(trustEval.contextIsTrusted).toBe(true);
     expect(trustEval.unsafeContextBoundary).toBeUndefined();

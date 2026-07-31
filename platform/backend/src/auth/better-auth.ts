@@ -39,6 +39,7 @@ import AgentModel from "@/models/agent";
 import AuditLogModel from "@/models/audit-log";
 import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
+import OrganizationRoleModel from "@/models/organization-role";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
@@ -609,6 +610,74 @@ async function assertCallerCanImpersonate(
   }
 }
 
+/**
+ * No-privilege-escalation gate for putting a member INTO a role: the caller
+ * must already hold every permission the target role grants. Role authoring
+ * (custom-role routes), the org default role, and service-account roles all
+ * enforce this same subset rule — without it here, `member:update` (or
+ * `invitation:create`) alone would be enough to grant admin, read what a
+ * deliberately-restricted role withholds, and switch back.
+ *
+ * An unauthenticated caller and an unresolvable role are both left for
+ * better-auth to reject so error shapes stay consistent.
+ */
+async function assertCallerCanGrantMemberRole(
+  ctx: HookEndpointContext,
+  roleName: string,
+): Promise<void> {
+  const { request, context } = ctx;
+
+  type SessionUser = { id: string };
+  let user = (context?.session as { user?: SessionUser } | undefined)?.user;
+
+  if (!user && request) {
+    try {
+      const headers = new Headers(request.headers as HeadersInit);
+      const resolved = await auth.api.getSession({ headers });
+      user = resolved?.user as SessionUser | undefined;
+    } catch (err) {
+      logger.debug(
+        { err },
+        "[auth:beforeHook] grant-role gate: getSession failed",
+      );
+    }
+  }
+
+  if (!user?.id) return;
+
+  const userRecord = await UserModel.getById(user.id);
+  if (!userRecord?.organizationId) {
+    throw new APIError("FORBIDDEN", {
+      message: "You do not have permission to assign roles",
+    });
+  }
+
+  const targetRole = await OrganizationRoleModel.getByIdentifier(
+    roleName,
+    userRecord.organizationId,
+  );
+  if (!targetRole) return;
+
+  const callerPermissions = await UserModel.getUserPermissions(
+    user.id,
+    userRecord.organizationId,
+  );
+  const { valid, missingPermissions } =
+    OrganizationRoleModel.validateRolePermissions(
+      callerPermissions,
+      targetRole.permission,
+    );
+  if (!valid) {
+    throw new APIError("FORBIDDEN", {
+      message:
+        `Assigning the "${targetRole.name}" role would grant permissions ` +
+        `you don't have yourself: ${missingPermissions.join(", ")}. ` +
+        "Roles can only be granted by someone who already holds every " +
+        "permission they carry.",
+    });
+  }
+}
+
 function getBetterAuthLogLevel(
   logLevel: string,
 ): "debug" | "info" | "warn" | "error" | undefined {
@@ -733,8 +802,21 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     await assertCallerCanImpersonate(ctx);
   }
 
+  // Subset-check the target role BEFORE the audit stash: better-auth's own
+  // gate is only `member:update`, which must not be enough to hand out a
+  // role more powerful than the caller's own (grant admin -> read what your
+  // role withholds -> switch back). The endpoint better-auth serves is
+  // /organization/update-member-role (verified live — the bare
+  // /organization/update-member path 404s).
+  if (path === "/organization/update-member-role" && method === "POST") {
+    const role = body.role;
+    if (typeof role === "string" && role.length > 0) {
+      await assertCallerCanGrantMemberRole(ctx, role);
+    }
+  }
+
   if (
-    path === "/organization/update-member" &&
+    path === "/organization/update-member-role" &&
     method === "POST" &&
     beforeRequest
   ) {
@@ -815,6 +897,14 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
       throw new APIError("BAD_REQUEST", {
         message: "Invalid email format",
       });
+    }
+
+    // Same no-escalation subset rule as update-member: the invited role is
+    // applied verbatim on acceptance, so inviting (even yourself, via another
+    // address) into a stronger role is the same escalation.
+    const invitedRole = body.role;
+    if (typeof invitedRole === "string" && invitedRole.length > 0) {
+      await assertCallerCanGrantMemberRole(ctx, invitedRole);
     }
 
     return ctx;
@@ -1182,7 +1272,11 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
   }
 
   // Audit member role changes
-  if (path === "/organization/update-member" && method === "POST" && request) {
+  if (
+    path === "/organization/update-member-role" &&
+    method === "POST" &&
+    request
+  ) {
     const stash = memberRoleUpdateByRequest.get(request);
     memberRoleUpdateByRequest.delete(request);
     const newRole = body.role as string | undefined;

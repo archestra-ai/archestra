@@ -81,6 +81,9 @@ describe("resolveOpenedApp", () => {
       }),
     ).toEqual({
       kind: "owned",
+      // The verified id is what copy_file keys the app side off, so it must
+      // survive resolution — never re-read from the client's message metadata.
+      id: app.id,
       name: "Expense Tracker",
       description: "Logs receipts.",
       tools: [],

@@ -47,14 +47,17 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
   CreateLlmProviderApiKeyDialog: ({
     title,
     defaultValues,
+    reconnectKeyId,
   }: {
     title: string;
     defaultValues: { provider?: string; openaiAuthMethod?: string };
+    reconnectKeyId?: string;
   }) => (
     <div>
       <span>{title}</span>
       <span>{defaultValues.provider}</span>
       <span>{defaultValues.openaiAuthMethod}</span>
+      {reconnectKeyId && <span>{`reconnect:${reconnectKeyId}`}</span>}
     </div>
   ),
 }));
@@ -250,6 +253,44 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
 
     expect(screen.getByText("Sign in with ChatGPT")).toBeInTheDocument();
     expect(screen.getByText("chatgpt-subscription")).toBeInTheDocument();
+  });
+
+  it("re-opens the sign-in flow to reconnect a connected subscription that is already selected", async () => {
+    const user = userEvent.setup();
+    const chatgptKey = {
+      id: "chatgpt-key",
+      name: "ChatGPT Subscription",
+      provider: "openai",
+      scope: "personal",
+      userId: "current-user",
+      isChatgptSubscription: true,
+    } as LlmProviderApiKey;
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [chatgptKey],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+
+    render(
+      <LlmProviderApiKeySelector
+        currentConversationChatApiKeyId="chatgpt-key"
+        currentProvider="openai"
+        onApiKeyChange={() => {}}
+        suppressAutoSelect
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /^ChatGPT Subscription Connected\s*Selected$/,
+      }),
+    );
+
+    // The dialog opens in reconnect mode, targeting the existing credential
+    // so the sign-in rotates its secret instead of creating a duplicate.
+    expect(
+      screen.getByText("Reconnect ChatGPT Subscription"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("reconnect:chatgpt-key")).toBeInTheDocument();
   });
 
   it("opens the provider-specific subscription flow", async () => {

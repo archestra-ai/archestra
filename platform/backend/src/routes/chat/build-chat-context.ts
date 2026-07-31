@@ -85,6 +85,9 @@ export async function buildChatContext(params: {
       userId: user.id,
       enabledToolIds: hasCustomSelection ? enabledToolIds : undefined,
       conversationId,
+      // The exchange tools' "app" side keys off the access-verified open app;
+      // external apps have no owned namespace, so only "owned" threads an id.
+      openedAppId: openedApp?.kind === "owned" ? openedApp.id : undefined,
       organizationId,
       // Pass conversationId as sessionId to group all chat requests (including delegated agents) together
       sessionId: conversationId,

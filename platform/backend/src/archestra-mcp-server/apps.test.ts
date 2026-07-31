@@ -2002,14 +2002,30 @@ describe("preview_app_tool", () => {
     );
   }
 
-  test("refuses an Archestra built-in (only assigned MCP tools are previewable)", async () => {
+  // Preview runs the app-runtime built-ins in-process, exactly as the rendered
+  // app does — so an author can exercise them from the authoring chat and see
+  // the real result shape.
+  test("runs an app-runtime built-in in-process", async () => {
     const result = await preview({
       appId,
       toolName: getArchestraToolFullName(TOOL_APP_DATA_GET_SHORT_NAME),
       args: { key: "x" },
     });
+    // The key is absent, but the call executed: a data-store miss, not a
+    // "not previewable" refusal.
+    expect(result.isError ?? false).toBe(false);
+    expect((result.content[0] as any).text).not.toContain("assigned MCP tools");
+  });
+
+  // The management/chat surface stays out of reach from an app.
+  test("refuses an Archestra tool that is not an app-runtime built-in", async () => {
+    const result = await preview({
+      appId,
+      toolName: getArchestraToolFullName(TOOL_SCAFFOLD_APP_SHORT_NAME),
+      args: {},
+    });
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("assigned MCP tools");
+    expect((result.content[0] as any).text).toContain("not available to apps");
   });
 
   test("refuses a tool not assigned to the app", async () => {

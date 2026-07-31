@@ -1,5 +1,128 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`skill and sandbox tool text > archestra__copy_file 1`] = `
+{
+  "description": "Exchange a file between this chat and the app the user has open: copy a chat/project file or a chat attachment INTO the open app's file store (so the app can load it), or copy a file OUT of the app's store into this chat's files (so it appears in the Files panel, can be read here, or downloaded). Exactly one side is always the app. Use it when the user asks to open a file in the app, or to save something the app produced. The copy is per-viewer: it lands in the current user's own namespace of the app. To copy OUT, call search_files with scope: "app" first to see what the app holds — its store is not otherwise visible from here, so a filename you did not list is a guess.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Copy a file between this chat and the app the user has open. One side is always the app; the other is the chat's files or an attachment.",
+    "properties": {
+      "from": {
+        "description": "Where the bytes come from: {"type":"chat_file","id"|"filename"} | {"type":"chat_attachment","attachmentId"|"filename"} | {"type":"app_file","id"|"filename"}.",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "description": "A file from this chat's scope (conversation or project).",
+            "properties": {
+              "filename": {
+                "description": "Filename instead of \`id\`; ambiguous names rejected.",
+                "minLength": 1,
+                "type": "string",
+              },
+              "id": {
+                "description": "File id from search_files.",
+                "type": "string",
+              },
+              "type": {
+                "const": "chat_file",
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "A file the user attached to this chat.",
+            "properties": {
+              "attachmentId": {
+                "description": "Id of an attachment uploaded to THIS conversation.",
+                "minLength": 1,
+                "type": "string",
+              },
+              "filename": {
+                "description": "Original filename of an attachment in this conversation (when you have no id). If the same name was attached more than once, the newest one wins.",
+                "minLength": 1,
+                "type": "string",
+              },
+              "type": {
+                "const": "chat_attachment",
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "description": "A file from the open app's per-viewer store (what the app saved for this user).",
+            "properties": {
+              "filename": {
+                "description": "Filename instead of \`id\`.",
+                "minLength": 1,
+                "type": "string",
+              },
+              "id": {
+                "description": "File id in the app's store.",
+                "type": "string",
+              },
+              "type": {
+                "const": "app_file",
+                "type": "string",
+              },
+            },
+            "required": [
+              "type",
+            ],
+            "type": "object",
+          },
+        ],
+      },
+      "to": {
+        "additionalProperties": false,
+        "description": "Where the copy lands.",
+        "properties": {
+          "filename": {
+            "description": "Destination filename; defaults to the source's name. Plain filename, no paths.",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string",
+          },
+          "overwrite": {
+            "description": "Replace an existing same-named destination file in place. Default false: a duplicate name is an error.",
+            "type": "boolean",
+          },
+          "scope": {
+            "description": ""app" = the open app's per-viewer store; "chat" = this chat's files (the project's files when this chat belongs to a project).",
+            "enum": [
+              "chat",
+              "app",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "scope",
+        ],
+        "type": "object",
+      },
+    },
+    "required": [
+      "from",
+      "to",
+    ],
+    "type": "object",
+  },
+  "name": "archestra__copy_file",
+  "title": "Copy File",
+}
+`;
+
 exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
 {
   "description": "Create a new Agent Skill from a SKILL.md manifest. The skill is created as a personal skill owned by you, available via list_skills and as a chat slash-command. Draft the SKILL.md (and any bundled resource files) with the user, then call this to persist it. To share a skill with a team or the whole organization, change its scope in the Skills UI.",
@@ -313,6 +436,31 @@ exports[`skill and sandbox tool text > archestra__read_file 1`] = `
 }
 `;
 
+exports[`skill and sandbox tool text > archestra__read_file_raw 1`] = `
+{
+  "description": "Read a persistent file's exact bytes, base64-encoded, whatever its type — text, images, or any binary (3D models, PDFs, archives). No paging, no line numbers. Identify the file by \`id\` or \`filename\`.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Read a persistent file's exact bytes, base64-encoded, whatever its type — text, images, or any binary (3D models, PDFs, archives). For programs that parse the content; there is no paging and no line numbering.",
+    "properties": {
+      "filename": {
+        "description": "Filename to read instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "id": {
+        "description": "File id (the \`id\` or \`ref\` from search_files / save_file).",
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "name": "archestra__read_file_raw",
+  "title": "Read File (raw bytes)",
+}
+`;
+
 exports[`skill and sandbox tool text > archestra__run_command 1`] = `
 {
   "description": "Execute a shell command in the conversation's sandbox (Debian, working dir /home/sandbox). Created on first use and persists across calls — files written by one command are visible to the next. Python runs in a uv project at /home/sandbox: \`python3\` is the project venv; install packages with \`uv add --project /home/sandbox <pkg>\` (pip is disabled). Files the user attached to the conversation are staged under /home/sandbox/attachments/. Loaded skills are mounted under /skills and are on PYTHONPATH, so their modules import directly. Returns stdout, stderr, exit code, and timing (text only — use download_file for generated files).",
@@ -410,14 +558,22 @@ exports[`skill and sandbox tool text > archestra__save_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__search_files 1`] = `
 {
-  "description": "List or search the conversation's persistent files. The query is a case-insensitive substring matched against filenames only, not contents — omit it (or pass empty) to list the files (the first 200; narrow with a substring if there are more). Returns metadata only — each result carries a stable \`ref\` you pass to read_file, edit_file, or delete_file, or to upload_file to copy the file into the sandbox.",
+  "description": "List or search the conversation's persistent files. The query is a case-insensitive substring matched against filenames only, not contents — omit it (or pass empty) to list the files (the first 200; narrow with a substring if there are more). Returns metadata only — each result carries a stable \`ref\` you pass to read_file, edit_file, or delete_file, or to upload_file to copy the file into the sandbox. Pass scope: "app" to list the files of the app the user has open instead — the only way to see what an app holds, and the discovery step before copying one of its files out with copy_file.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
-    "description": "List or search the conversation's persistent files by filename substring; omit the query to list the files (the first 200). Filenames only, not contents.",
+    "description": "List or search persistent files by filename substring; omit the query to list them (the first 200). Filenames only, not contents. Lists this chat's files, or the open app's files with scope: "app".",
     "properties": {
       "query": {
         "description": "Case-insensitive substring matched against filenames only. Omit it (or pass empty) to list the files (the first 200).",
+        "type": "string",
+      },
+      "scope": {
+        "description": ""chat" (default) = this chat's files; "app" = the files of the app the user has open, which is how you find what the app has produced before copying one out with copy_file.",
+        "enum": [
+          "chat",
+          "app",
+        ],
         "type": "string",
       },
     },
@@ -503,7 +659,7 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
         "type": "string",
       },
       "source": {
-        "description": "Where the file bytes come from. One of four shapes, each tagged by a \`type\`: a chat attachment (\`{"type":"chat_attachment","attachmentId":...}\`), inline base64 (\`{"type":"base64","dataBase64":...}\`), inline text (\`{"type":"text","text":"print(1)"}\`), or a file from the user's persistent files (\`{"type":"my_file","filename":...}\`, found via search_files). Use this to place input bytes; to create a file the sandbox will then run or read, write it with run_command instead.",
+        "description": "Where the file bytes come from. One of four shapes, each tagged by a \`type\`: a chat attachment (\`{"type":"chat_attachment","attachmentId"|"filename":...}\`), inline base64 (\`{"type":"base64","dataBase64":...}\`), inline text (\`{"type":"text","text":"print(1)"}\`), or a file from the user's persistent files (\`{"type":"my_file","filename":...}\`, found via search_files). Use this to place input bytes; to create a file the sandbox will then run or read, write it with run_command instead.",
         "oneOf": [
           {
             "additionalProperties": false,
@@ -514,6 +670,11 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
                 "minLength": 1,
                 "type": "string",
               },
+              "filename": {
+                "description": "Original filename of an attachment in this conversation (when you have no id). If the same name was attached more than once, the newest one wins.",
+                "minLength": 1,
+                "type": "string",
+              },
               "type": {
                 "const": "chat_attachment",
                 "type": "string",
@@ -521,7 +682,6 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
             },
             "required": [
               "type",
-              "attachmentId",
             ],
             "type": "object",
           },

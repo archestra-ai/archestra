@@ -89,6 +89,12 @@ export interface ChatToolContext {
   conversationId?: string;
   /** Per-conversation/per-execution scope key (isolationKey ?? conversationId). */
   scopeKey?: string;
+  /**
+   * The owned app the chat UI has open this turn, access-verified by
+   * resolveOpenedApp. Threaded into ArchestraContext so copy_file can address
+   * the app's file namespace; absent when no app is open.
+   */
+  openedAppId?: string;
   chatOpsBindingId?: string;
   chatOpsThreadId?: string;
   sessionId?: string;
@@ -229,6 +235,7 @@ export function buildMcpGatewayTool(params: {
                 agent: { id: ctx.agentId, name: ctx.agentName },
                 conversationId: ctx.conversationId,
                 isolationKey: ctx.scopeKey,
+                openedAppId: ctx.openedAppId,
                 chatOpsBindingId: ctx.chatOpsBindingId,
                 chatOpsThreadId: ctx.chatOpsThreadId,
                 userId: ctx.userId,

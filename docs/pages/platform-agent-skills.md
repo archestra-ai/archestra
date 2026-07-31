@@ -3,7 +3,7 @@ title: Skills
 category: Agents
 order: 3
 description: Reusable SKILL.md instruction sets that agents load on demand
-lastUpdated: 2026-07-30
+lastUpdated: 2026-07-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -124,6 +124,12 @@ Admins and team admins switch the status filter to **Deleted** to open the trash
 Deleting a built-in skill is a lasting opt-out — it stays gone across restarts. You can still restore it from the trash.
 
 A synced skill can lose its GitHub token while it sits in the trash. It still restores, but the next pull runs unauthenticated — for a now-private repo that fails with a sync error. Re-attach a token under **Settings → GitHub** to fix it.
+
+## Version History
+
+Every edit that changes a skill's `SKILL.md` or resource files creates a new immutable version. An edit that changes nothing does not. Version numbers count up from 1, and the full history is kept.
+
+`GET /api/skills/:id/versions` lists versions as metadata, newest first. `GET /api/skills/:id/versions/:version` returns one version's body and file snapshots. Sandboxes mount a pinned version, so a running skill never changes mid-conversation.
 
 ## Environments
 

@@ -1,8 +1,17 @@
 import { createHash } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import type { PaginationQuery } from "@archestra/shared";
+import { and, asc, count, desc, eq } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import {
+  createPaginatedResult,
+  type PaginatedResult,
+} from "@/database/utils/pagination";
 import type { SkillVersion, SkillVersionFile } from "@/types";
-import type { SkillFileEncoding, SkillFileKind } from "@/types/skill";
+import type {
+  SkillFileEncoding,
+  SkillFileKind,
+  SkillVersionMetadata,
+} from "@/types/skill";
 
 /** Minimal file shape needed to fork and hash a version. */
 export interface VersionFileInput {
@@ -108,6 +117,48 @@ class SkillVersionModel {
     return row ?? null;
   }
 
+  /**
+   * A skill's versions, newest first, as metadata only — no SKILL.md body, no
+   * files — so a long history stays cheap to list. Paginated: synced skills
+   * fork a version per upstream change, so history is unbounded.
+   *
+   * `skill_versions` carries no organization of its own, so the read joins
+   * `skills` and filters on the caller's organization — a skill id alone
+   * must never reach another tenant's history.
+   */
+  static async listForSkill(params: {
+    skillId: string;
+    organizationId: string;
+    pagination: PaginationQuery;
+  }): Promise<PaginatedResult<SkillVersionMetadata>> {
+    const scope = and(
+      eq(schema.skillVersionsTable.skillId, params.skillId),
+      eq(schema.skillsTable.organizationId, params.organizationId),
+    );
+    const [rows, [totals]] = await Promise.all([
+      db
+        .select(skillVersionMetadataColumns)
+        .from(schema.skillVersionsTable)
+        .innerJoin(
+          schema.skillsTable,
+          eq(schema.skillVersionsTable.skillId, schema.skillsTable.id),
+        )
+        .where(scope)
+        .orderBy(desc(schema.skillVersionsTable.version))
+        .limit(params.pagination.limit)
+        .offset(params.pagination.offset),
+      db
+        .select({ total: count() })
+        .from(schema.skillVersionsTable)
+        .innerJoin(
+          schema.skillsTable,
+          eq(schema.skillVersionsTable.skillId, schema.skillsTable.id),
+        )
+        .where(scope),
+    ]);
+    return createPaginatedResult(rows, totals?.total ?? 0, params.pagination);
+  }
+
   /** A single resource file from a version by its skill-relative path. */
   static async findFileByPath(
     versionId: string,
@@ -136,3 +187,14 @@ class SkillVersionModel {
 }
 
 export default SkillVersionModel;
+
+// === Internal helpers ===
+
+/** List projection: everything but the SKILL.md body. */
+const skillVersionMetadataColumns = {
+  id: schema.skillVersionsTable.id,
+  skillId: schema.skillVersionsTable.skillId,
+  version: schema.skillVersionsTable.version,
+  contentHash: schema.skillVersionsTable.contentHash,
+  createdAt: schema.skillVersionsTable.createdAt,
+};

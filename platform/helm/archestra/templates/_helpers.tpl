@@ -246,6 +246,18 @@ An explicit archestra.env value overrides the injection.
     secretKeyRef:
       name: {{ include "archestra-platform.authSecretName" $ }}
       key: {{ $key | lower | replace "_" "-" }}
+{{- /*
+optional: the pre-upgrade migrate Job renders from the NEW templates but runs
+BEFORE the upgraded Secret is applied, so on the upgrade that first introduces
+one of these keys the referenced Secret key does not exist yet and a required
+ref would wedge the Job in CreateContainerConfigError until its deadline.
+Migrations don't need the key; app pods start after the Secret update in the
+same apply, and the application's own fail-closed key check (canary) catches a
+genuinely missing key loudly at startup.
+*/}}
+{{- if has $key (list "ARCHESTRA_CONTENT_ENCRYPTION_SECRET" "ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS") }}
+      optional: true
+{{- end }}
 {{- else }}
 - name: {{ $key }}
   value: {{ $value | quote }}

@@ -31,15 +31,14 @@ export async function openGatewayCatalogToolAssignment(params: {
 }
 
 export async function saveOpenProfileDialog(page: Page): Promise<void> {
-  const saveButton = page.getByRole("button", { name: "Save" });
-  const updateButton = page.getByRole("button", { name: "Update" });
-
-  if (await saveButton.isVisible().catch(() => false)) {
-    await saveButton.click();
-  } else {
-    await expect(updateButton).toBeVisible({ timeout: 15_000 });
-    await updateButton.click();
-  }
+  // One combined locator: sampling Save's visibility at a single instant and
+  // falling back to Update races the dialog's render (isVisible() does not
+  // wait). A dialog has exactly one submit — wait for whichever it is.
+  const submitButton = page
+    .getByRole("button", { name: /^(Save|Update)$/ })
+    .first();
+  await expect(submitButton).toBeVisible({ timeout: 15_000 });
+  await submitButton.click();
 
   await page.waitForLoadState("domcontentloaded");
 }
@@ -56,7 +55,15 @@ async function confirmPersonalCredentialPinIfPrompted(
   const confirmButton = page
     .getByRole("button", { name: /^Use th(is|ese) connections?$/ })
     .first();
-  if (await confirmButton.isVisible({ timeout: 1500 }).catch(() => false)) {
+  // waitFor, not isVisible: isVisible ignores `timeout` and samples one
+  // instant, so a prompt that renders a beat later was routinely missed —
+  // and the caller's fallback Escape then landed on the edit dialog itself,
+  // wedging the flow with no submit button left to click.
+  const appeared = await confirmButton
+    .waitFor({ state: "visible", timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false);
+  if (appeared) {
     // Force past the actionability wait: the dialog's entrance animation keeps
     // the button from being "stable" long enough for a normal click to land.
     await confirmButton.click({ force: true });
@@ -79,7 +86,9 @@ export async function selectCredentialOption(
   // DOM-detach guard: the option list re-renders as the dropdown opens.
   await credentialOption.click({ force: true });
   const confirmed = await confirmPersonalCredentialPinIfPrompted(page);
-  if (!confirmed) {
+  // Close the dropdown only when it is demonstrably still open — a blind
+  // Escape after the dropdown already closed dismisses the edit dialog.
+  if (!confirmed && (await credentialOption.isVisible().catch(() => false))) {
     await page.keyboard.press("Escape");
   }
   await page.waitForTimeout(200);

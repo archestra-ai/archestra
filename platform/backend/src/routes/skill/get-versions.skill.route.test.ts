@@ -93,6 +93,32 @@ describe("GET /api/skills/:id/versions", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("a skill of another organization is 404", async ({
+    makeOrganization,
+  }) => {
+    const otherOrg = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: {
+        organizationId: otherOrg.id,
+        authorId: null,
+        name: "foreign-skill",
+        description: "another org",
+        content: "# foreign",
+        metadata: {},
+        sourceType: "manual",
+        scope: "org",
+      },
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills/${skill.id}/versions`,
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
   test("a soft-deleted skill's history is unreachable", async () => {
     const skill = await seedSkill();
     await SkillModel.delete(skill.id);

@@ -27,6 +27,7 @@ import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
   AgentModel,
+  AgentTeamModel,
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
@@ -1699,13 +1700,15 @@ async function requireReadableAgent(params: {
   }
 
   if (!checker.isAdmin(agent.agentType)) {
-    // Re-fetch with team filtering, mirroring GetAgent
-    const filteredAgent = await AgentModel.findById(
-      params.id,
+    // Team/author visibility, mirroring GetAgent's non-admin filter. The
+    // already-fetched agent serves as the access context — no re-fetch.
+    const hasAccess = await AgentTeamModel.userHasAgentAccess(
       params.userId,
+      params.id,
       false,
+      agent,
     );
-    if (!filteredAgent) {
+    if (!hasAccess) {
       throw new ApiError(404, "Agent not found");
     }
   }

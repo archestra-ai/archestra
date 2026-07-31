@@ -87,6 +87,19 @@ describe("agent version routes", () => {
       expect(data.map((v: { version: number }) => v.version)).toEqual([1]);
     });
 
+    test("a soft-deleted agent's history is unreachable", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      await AgentModel.delete(agent.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions`,
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
     test("an agent of another organization is 404", async ({ makeAgent }) => {
       const foreignAgent = await makeAgent();
 

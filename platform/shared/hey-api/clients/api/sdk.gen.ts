@@ -7148,7 +7148,7 @@ export const updateSkill = <ThrowOnError extends boolean = false>(options: Optio
 export const getSkillUsageStatistics = <ThrowOnError extends boolean = false>(options: Options<GetSkillUsageStatisticsData, ThrowOnError>) => (options.client ?? client).get<GetSkillUsageStatisticsResponses, GetSkillUsageStatisticsErrors, ThrowOnError>({ url: '/api/skills/{id}/usage-statistics', ...options });
 
 /**
- * List a skill's version history, newest first, as metadata only (no SKILL.md body). Version numbers are contiguous from 1. Paginated, unlike the app versions list.
+ * List a skill's version history, newest first, as metadata only (no SKILL.md body). Version numbers are contiguous from 1. Paginated.
  *
  * Authentication:
  *

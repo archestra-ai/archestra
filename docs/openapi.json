@@ -301046,7 +301046,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List a skill's version history, newest first, as metadata only (no SKILL.md body). Version numbers are contiguous from 1. Paginated, unlike the app versions list.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
+        "description": "List a skill's version history, newest first, as metadata only (no SKILL.md body). Version numbers are contiguous from 1. Paginated.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: View and use agent skills within your scope (org, your teams, your own)",
         "parameters": [
           {
             "schema": {

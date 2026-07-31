@@ -696,21 +696,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      const skill = await findSkillOrThrow(id, organizationId);
-      const checker = await getSkillPermissionChecker({
+      const skill = await requireReadableSkill({
+        id,
         userId: user.id,
         organizationId,
       });
-      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
       return reply.send(await loadSkillDetail(skill));
     },
   );
@@ -728,21 +718,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      const skill = await findSkillOrThrow(id, organizationId);
-      const checker = await getSkillPermissionChecker({
+      const skill = await requireReadableSkill({
+        id,
         userId: user.id,
         organizationId,
       });
-      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
       const since = new Date(Date.now() - USAGE_STATISTICS_WINDOW_MS);
       return reply.send(
         await SkillUsageEventModel.getUsageStatistics({
@@ -761,7 +741,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "List a skill's version history, newest first, as metadata only " +
           "(no SKILL.md body). Version numbers are contiguous from 1. " +
-          "Paginated, unlike the app versions list.",
+          "Paginated.",
         tags: ["Skills"],
         params: z.object({ id: z.string() }),
         querystring: PaginationQuerySchema,
@@ -771,23 +751,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, query, organizationId, user }, reply) => {
-      // Version reads don't filter soft-deletes themselves — resolving the
-      // live skill first (404 on deleted) is what keeps history unreachable.
-      const skill = await findSkillOrThrow(id, organizationId);
-      const checker = await getSkillPermissionChecker({
+      const skill = await requireReadableSkill({
+        id,
         userId: user.id,
         organizationId,
       });
-      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
       return reply.send(
         await SkillVersionModel.listForSkill({
           skillId: skill.id,
@@ -814,22 +782,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id, version }, organizationId, user }, reply) => {
-      // Same live-skill-first resolution as the versions list (soft-deletes).
-      const skill = await findSkillOrThrow(id, organizationId);
-      const checker = await getSkillPermissionChecker({
+      const skill = await requireReadableSkill({
+        id,
         userId: user.id,
         organizationId,
       });
-      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
       const row = await SkillVersionModel.findBySkillAndVersion(
         skill.id,
         version,
@@ -1689,6 +1646,35 @@ function assertSyncedSkillContentUnchanged(params: {
 async function findSkillOrThrow(id: string, organizationId: string) {
   const skill = await SkillModel.findById(id);
   if (!skill || skill.organizationId !== organizationId) {
+    throw new ApiError(404, "Skill not found");
+  }
+  return skill;
+}
+
+/**
+ * Resolve a live skill and enforce the full read-access path: org scoping
+ * plus scope/team/author visibility. Every failure is a 404 so existence is
+ * never leaked to users who cannot see the skill. Version reads don't filter
+ * soft-deletes themselves, so resolving the live skill here (findSkillOrThrow
+ * excludes deleted rows) is what keeps a deleted skill's history unreachable.
+ */
+async function requireReadableSkill(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}): Promise<Skill> {
+  const skill = await findSkillOrThrow(params.id, params.organizationId);
+  const checker = await getSkillPermissionChecker({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  const hasAccess = await SkillTeamModel.userHasSkillAccess({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    skill,
+    isSkillAdmin: checker.isAdmin,
+  });
+  if (!hasAccess) {
     throw new ApiError(404, "Skill not found");
   }
   return skill;

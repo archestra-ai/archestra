@@ -151,7 +151,16 @@ export function SearchableSelect({
             className,
           )}
         >
-          <span className="min-w-0 flex-1 truncate text-left">
+          {/* Keyed by the selection so changing it swaps this whole element
+              instead of reconciling its children in place. Selected content is
+              typically an icon beside a bare label, and reconciling that pair
+              inserts the new icon before the label's text node — which crashes
+              React once Chrome page-translate has re-parented that text into a
+              <font> wrapper (facebook/react#11538). */}
+          <span
+            key={selectedItem?.value ?? value ?? ""}
+            className="min-w-0 flex-1 truncate text-left"
+          >
             {selectedItem
               ? (selectedItem.selectedContent ??
                 selectedItem.content ??

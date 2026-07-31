@@ -12,6 +12,7 @@ import config from "@/config";
 import { metrics } from "@/observability";
 import type { CreateClientOptions } from "@/types";
 import { createOpenAiCompatibleAdapterFactory } from "./openai-compatible-adapter";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 export const deepseekAdapterFactory = createOpenAiCompatibleAdapterFactory({
   provider: "deepseek",
@@ -30,6 +31,7 @@ export const deepseekAdapterFactory = createOpenAiCompatibleAdapterFactory({
       : undefined;
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl ?? config.llm.deepseek.baseUrl,
       fetch: customFetch,

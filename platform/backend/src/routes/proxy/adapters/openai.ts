@@ -53,6 +53,7 @@ import {
 import { stripBrowserToolsResults } from "../utils/summarize-tool-results";
 import { unwrapToolContent } from "../utils/unwrap-tool-content";
 import { createOpenAiCodexClient } from "./openai-codex-client";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
 // TYPE ALIASES
@@ -1579,6 +1580,7 @@ export const openaiAdapterFactory: LLMProvider<
     };
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl,
       fetch: customFetch,

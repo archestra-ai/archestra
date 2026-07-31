@@ -47,6 +47,7 @@ import {
   type SamplingParam,
   withSamplingParamFallback,
 } from "./sampling-param-fallback";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
 // TYPE ALIASES
@@ -1246,6 +1247,7 @@ export const anthropicAdapterFactory: LLMProvider<
 
     if (!apiKey && isAnthropicAzureFoundryEntraIdEnabled()) {
       return new AnthropicProvider({
+        maxRetries: PROXY_SDK_MAX_RETRIES,
         apiKey: null,
         authToken: null,
         baseURL: options.baseUrl,
@@ -1261,6 +1263,7 @@ export const anthropicAdapterFactory: LLMProvider<
 
     if (!apiKey && anthropicWorkloadIdentity.isEnabled()) {
       return new AnthropicProvider({
+        maxRetries: PROXY_SDK_MAX_RETRIES,
         apiKey: null,
         authToken: null,
         baseURL: options.baseUrl,
@@ -1275,6 +1278,7 @@ export const anthropicAdapterFactory: LLMProvider<
     }
 
     return new AnthropicProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: regularApiKey,
       authToken: token,
       baseURL: options.baseUrl,

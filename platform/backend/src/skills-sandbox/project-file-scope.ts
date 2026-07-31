@@ -1,5 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeletedConversation } from "@/database/schemas/conversation";
 import { ProjectShareModel } from "@/models";
 import { SkillSandboxError } from "./types";
 
@@ -31,7 +32,12 @@ export async function resolveProjectFileScope(params: {
   const [conversation] = await db
     .select({ projectId: schema.conversationsTable.projectId })
     .from(schema.conversationsTable)
-    .where(eq(schema.conversationsTable.id, conversationId));
+    .where(
+      and(
+        notDeletedConversation,
+        eq(schema.conversationsTable.id, conversationId),
+      ),
+    );
   if (!conversation?.projectId) return null;
 
   const [project] = await db

@@ -1007,6 +1007,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetChatConversations]: {
     chat: ["read"],
   },
+  // Listing soft-deleted conversations (the "Trash" view) is gated on delete,
+  // not read: seeing which chats were trashed is part of the delete/restore
+  // lifecycle, so a chat:read-only role sees active chats but not the trash.
+  [RouteId.GetDeletedChatConversations]: {
+    chat: ["delete"],
+  },
   [RouteId.GetChatConversation]: {
     chat: ["read"],
   },
@@ -1042,6 +1048,10 @@ export const requiredEndpointPermissionsMap: Partial<
     chat: ["update"],
   },
   [RouteId.DeleteChatConversation]: {
+    chat: ["delete"],
+  },
+  // Restore is the inverse of delete — same gate.
+  [RouteId.RestoreChatConversation]: {
     chat: ["delete"],
   },
   // Clearing a conversation's recorded chat errors is a chat-content edit, not a

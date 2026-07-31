@@ -823,6 +823,7 @@ async function makeSession(
       | "userAgent"
       | "activeOrganizationId"
       | "impersonatedBy"
+      | "createdAt"
     >
   > = {},
 ) {

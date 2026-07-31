@@ -1,6 +1,6 @@
 {
-  "id": "6b71b00b-9471-4d6f-ae0a-17ab6ee202a1",
-  "prevId": "101531cb-e4f6-4ac5-9e5a-b42b43ad0a38",
+  "id": "41881b0c-429f-4afe-be01-b705bd174377",
+  "prevId": "7c8927c9-f12f-4845-a5f8-bca879ebaaa9",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3480,6 +3480,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "locked": {
+          "name": "locked",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -9422,12 +9429,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -9442,7 +9443,6 @@
             }
           ],
           "isUnique": false,
-          "where": "deleted_at IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -9458,7 +9458,6 @@
             }
           ],
           "isUnique": false,
-          "where": "deleted_at IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -9547,12 +9546,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -9567,7 +9560,6 @@
             }
           ],
           "isUnique": false,
-          "where": "deleted_at IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -13718,6 +13710,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -13738,6 +13736,7 @@
             }
           ],
           "isUnique": true,
+          "where": "\"projects\".\"deleted_at\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

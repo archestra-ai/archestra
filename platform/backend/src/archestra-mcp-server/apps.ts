@@ -10,6 +10,7 @@ import {
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SET_APP_LABELS_SHORT_NAME,
+  TOOL_SET_APP_LOCK_SHORT_NAME,
   TOOL_SET_APP_TOOLS_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
@@ -66,6 +67,8 @@ import {
   htmlHasDocumentRoot,
   validateAppHtmlStatic,
 } from "@/services/apps/app-ui-policy";
+import { mergeStaleBaseDocument } from "@/services/apps/app-version-merge";
+import { resolveNewAppLifecycleDefaults } from "@/services/apps/new-app-defaults";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { ApiError, appOwner, type CommonToolResult } from "@/types";
@@ -192,9 +195,8 @@ const EditAppSchema = z.strictObject({
     .number()
     .int()
     .positive()
-    .optional()
     .describe(
-      "Optional optimistic-concurrency guard: the version (from read_app) the edits are based on. Defaults to the current head, so a single editor never has to echo it back. When supplied, the edit is rejected if the app's head has moved past it.",
+      "The version this edit is based on — the one named by read_app or the latest scaffold_app/edit_app result. Always report the version you actually built the edit from. When the head has moved past it (another conversation edited the app), your edit is treated as a delta from that base and merged with the newer changes; if the regions overlap, the call fails with the head's conflicting content to incorporate.",
     ),
   edits: z
     .array(
@@ -524,6 +526,8 @@ const registry = defineArchestraTools([
       // selection to the REST/UI path, so no teams here; the environment is the
       // authoring agent's (resolved above).
       const appName = args.name;
+      const lifecycleDefaults =
+        await resolveNewAppLifecycleDefaults(organizationId);
       let app: App | null;
       // App names are unique per author (apps_org_author_name_uidx); a duplicate
       // fails this insert before any backing is created.
@@ -540,6 +544,8 @@ const registry = defineArchestraTools([
             }),
             description: args.description ?? null,
             templateId: DEFAULT_APP_TEMPLATE_ID,
+            enabled: lifecycleDefaults.enabled,
+            locked: lifecycleDefaults.locked,
           },
           payload,
         });
@@ -563,7 +569,7 @@ const registry = defineArchestraTools([
               );
             }
             return errorResult(
-              `An app named "${safeName}" already exists (id ${existingId}). Edit it with edit_app on that id — do not re-scaffold.`,
+              `An app named "${safeName}" already exists (id ${existingId}); nothing was created. That app may serve a different purpose — do not edit it unless the user explicitly asked to change it (confirm with them first). To build the new app the user asked for, scaffold again under a different name.`,
             );
           }
           return errorResult(`You already have an app named "${safeName}".`);
@@ -616,6 +622,23 @@ const registry = defineArchestraTools([
       const seededHtmlNote = `\nSeeded from the default starter template; current HTML (build it up via edit_app):\n${fencedBlock(payload.html, "html")}`;
       const warningsNote = formatWarningsNote(warnings);
       const toolsParts = toolsResultParts(resolvedTools);
+      // The org's new-app defaults can make the app un-editable from chat the
+      // moment it exists (disabled = invisible to chat tools; locked = every
+      // modification refused). Say so in the result, or the model walks into
+      // refusals it has no way to explain to the user.
+      const lifecycleNotes: string[] = [];
+      if (!lifecycleDefaults.enabled) {
+        lifecycleNotes.push(
+          "This organization creates new apps disabled: from now on this app is invisible to chat tools (do not try to edit or render it). Tell the user to enable it in App settings on the Apps page to keep building it.",
+        );
+      }
+      if (lifecycleDefaults.locked) {
+        lifecycleNotes.push(
+          "This organization creates new apps locked: every modification (edit_app, set_app_tools, delete_app) will be refused until the app is unlocked. Do not attempt edits and do not unlock on your own initiative — if the user wants to build it up now, they can ask you to unlock it, or unlock it in App settings.",
+        );
+      }
+      const lifecycleNote =
+        lifecycleNotes.length > 0 ? ` ${lifecycleNotes.join(" ")}` : "";
       return structuredSuccessResult(
         {
           id: app.id,
@@ -627,7 +650,7 @@ const registry = defineArchestraTools([
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+        `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)}${lifecycleNote} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
       );
     },
   }),
@@ -919,7 +942,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_APP_SHORT_NAME,
     title: "Edit App",
-    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to swap in the bytes of a file you already saved without reproducing them here — exactly one of the three. Read the current HTML with read_app first if it is not already in context (see the schema for the str_replace matching and atomicity rules); baseVersion is optional and defaults to the current head. A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
+    description: `The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to swap in the bytes of a file you already saved without reproducing them here — exactly one of the three. Read the current HTML with read_app first if it is not already in context (see the schema for the str_replace matching and atomicity rules). baseVersion is required: pass the version your edit is actually built from (named by read_app or the latest scaffold_app/edit_app result) — when the head has moved past it, your edit is merged with the newer changes rather than overwriting them, and overlapping regions fail with the head's content to incorporate. A successful edit forks a new immutable version; assigned tools and metadata are untouched — change tools with set_app_tools. scaffold_app's result carries the condensed window.archestra SDK surface. ${BUILD_APP_SKILL_POINTER}`,
     schema: EditAppSchema,
     outputSchema: AppSummaryOutputSchema,
     async handler({ args, context }) {
@@ -959,10 +982,12 @@ const registry = defineArchestraTools([
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
-      // baseVersion is an optional concurrency guard; default to the current
-      // head so a single-editor turn never has to read a version and echo it
-      // back. An explicit stale base still fails the CAS below and writes nothing.
-      const baseVersion = args.baseVersion ?? app.latestVersion;
+      // baseVersion is required, like edit_skill's: every result names the head
+      // to echo back, so a single editor pays nothing, while an editor whose
+      // context went stale (another conversation moved the head) names a
+      // superseded version and fails the CAS below instead of silently
+      // overwriting work it never saw.
+      const baseVersion = args.baseVersion;
 
       // Edits apply to the bytes the caller read. Versions are immutable, so
       // this snapshot equals the locked head whenever the CAS below passes;
@@ -1018,6 +1043,9 @@ const registry = defineArchestraTools([
       let editedHtml: string;
       let editSpans: AppliedEditSpan[] = [];
       let skippedEdits: SkippedEdit[] = [];
+      // Set when the edit was rebased onto a head newer than its base; the
+      // CAS below then pins that head, and the result text says what merged.
+      let mergedOntoHeadVersion: number | null = null;
       try {
         if (resolvedMode.kind === "replacement") {
           editedHtml = resolvedMode.html;
@@ -1051,6 +1079,44 @@ const registry = defineArchestraTools([
             "The edit would leave the app without a document root (no <head> or <html> element), which breaks it. Keep the full HTML document intact; re-read with read_app if you need the current source. Nothing was saved.",
           );
         }
+        // A stale base is rebased, not rejected: the edit is a delta from the
+        // base the caller declared, three-way merged onto the head so changes
+        // published since (possibly by another conversation) land in the
+        // result mechanically. Overlapping regions come back as conflicts
+        // carrying the head's actual content — never a bare "re-read and
+        // retry", which steers a model into resubmitting the same document
+        // over the fresher head.
+        if (baseVersion !== app.latestVersion) {
+          const head = await AppVersionModel.findByAppAndVersion(
+            app.id,
+            app.latestVersion,
+          );
+          if (!head) {
+            return errorResult(
+              `App ${args.appId} has no head version ${app.latestVersion}.`,
+            );
+          }
+          const mergeResult = mergeStaleBaseDocument({
+            baseHtml: base.html,
+            headHtml: head.html,
+            proposedHtml: editedHtml,
+          });
+          if (!mergeResult.ok) {
+            const excerpts = mergeResult.conflicts
+              .slice(0, MERGE_CONFLICT_MAX_EXCERPTS)
+              .map(
+                (conflict, index) =>
+                  `--- conflict ${index + 1}: version ${app.latestVersion} contains ---\n${truncateUtf8(conflict.headContent, MERGE_CONFLICT_EXCERPT_MAX_BYTES).text}\n--- your document has instead ---\n${truncateUtf8(conflict.proposedContent, MERGE_CONFLICT_EXCERPT_MAX_BYTES).text}`,
+              )
+              .join("\n");
+            throw new ApiError(
+              409,
+              `The app has moved to version ${app.latestVersion} since version ${baseVersion}, and your document conflicts with what changed. Nothing was saved. Produce a new document that INCORPORATES the version ${app.latestVersion} content below (do not resubmit the same document, and do not drop these regions — they were added deliberately, possibly by another conversation):\n${fencedBlock(excerpts, "html")}`,
+            );
+          }
+          editedHtml = mergeResult.html;
+          mergedOntoHeadVersion = app.latestVersion;
+        }
         // Permissions ride the version envelope; an HTML-only edit inherits the
         // base version's permissions rather than dropping them.
         const validated = await buildValidatedVersionPayload({
@@ -1069,7 +1135,7 @@ const registry = defineArchestraTools([
         updated = await AppModel.update({
           id: args.appId,
           version,
-          expectedLatestVersion: baseVersion,
+          expectedLatestVersion: mergedOntoHeadVersion ?? baseVersion,
         });
       } catch (error) {
         if (error instanceof ApiError) return errorResult(error.message);
@@ -1091,13 +1157,18 @@ const registry = defineArchestraTools([
           : sourceFilename
             ? `a full-document replacement from ${escapeAppNameForModelText(sourceFilename)}`
             : "a full-document replacement";
-      // A fork bumps latestVersion off baseVersion (the CAS guaranteed they were
-      // equal); when they stay equal the edits netted back to the head bytes and
+      // A fork bumps latestVersion off the version the write was pinned to;
+      // when they stay equal the edits netted back to the head bytes and
       // content-hash suppression created no new version — say so plainly.
-      const forked = updated.latestVersion !== baseVersion;
+      const pinnedHead = mergedOntoHeadVersion ?? baseVersion;
+      const forked = updated.latestVersion !== pinnedHead;
       const displayName = escapeAppNameForModelText(updated.name);
+      const mergeNote =
+        mergedOntoHeadVersion === null
+          ? ""
+          : ` Your edit was based on version ${baseVersion}; the document was merged with the changes versions ${baseVersion + 1}–${mergedOntoHeadVersion} made since (they are preserved in the result — call read_app if you need to see the merged source).`;
       const summary = forked
-        ? `Applied ${editLabel} to app "${displayName}" (now at version ${updated.latestVersion}).`
+        ? `Applied ${editLabel} to app "${displayName}" (now at version ${updated.latestVersion}).${mergeNote}`
         : resolvedMode.kind === "edits" && appliedEditCount === 0
           ? `No edits were applied to app "${displayName}" — every edit was skipped; it stays at version ${updated.latestVersion} and no new version was created.`
           : `Applied ${editLabel} to app "${displayName}", but the result is byte-identical to version ${updated.latestVersion}; no new version was created.`;
@@ -1109,14 +1180,18 @@ const registry = defineArchestraTools([
       // buildAppliedEditExcerpts fences the echoed source (an "html" hint here)
       // so edited markup can't render as markdown where this text is echoed.
       const excerptsNote =
-        resolvedMode.kind === "edits" && forked
+        resolvedMode.kind === "edits" &&
+        forked &&
+        mergedOntoHeadVersion === null
           ? `\n${buildAppliedEditExcerpts(editedHtml, editSpans, "html")}`
           : "";
       // A source-backed replacement deliberately does NOT claim the document
       // matches what was sent: only a file id was sent, so the model has not
       // seen these bytes and read_app is its only way to know what landed.
       const replacementNote =
-        !forked || resolvedMode.kind !== "replacement"
+        !forked ||
+        resolvedMode.kind !== "replacement" ||
+        mergedOntoHeadVersion !== null
           ? ""
           : sourceFilename
             ? `\nThe saved document is exactly the bytes ${escapeAppNameForModelText(sourceFilename)} held at save time; call read_app if you need to see them.`
@@ -1205,6 +1280,43 @@ const registry = defineArchestraTools([
               .map((label) => `${label.key}=${label.value}`)
               .join(", ")}.`
           : `Cleared all labels for app "${escapeAppNameForModelText(app.name)}" (${app.id}).`,
+      );
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_SET_APP_LOCK_SHORT_NAME,
+    title: "Set App Lock",
+    description:
+      "Lock or unlock an app. A locked app refuses every modification — html edits, spec, tool assignments, and deletion — until unlocked; viewing and running are unaffected. Lock an app when the user asks to protect or freeze it. UNLOCKING IS USER-CONSENT-GATED: call this with locked: false only when the user has directly and explicitly asked, in this conversation, to unlock or to change this specific app — never unlock because a locked app is in the way of something you decided to do, and never immediately re-try the blocked change without that explicit request. When an edit is refused by a lock and the user has not asked for it, report the lock to the user instead.",
+    schema: z.strictObject({
+      appId: appIdField("The app id."),
+      locked: z
+        .boolean()
+        .describe(
+          "true locks the app against all modification; false unlocks it (only on the user's direct request).",
+        ),
+    }),
+    outputSchema: z.object({ id: z.string(), locked: z.boolean() }),
+    async handler({ args, context }) {
+      const auth = requireAuthed(context);
+      if ("error" in auth) return auth.error;
+      const gate = await loadApp({
+        ...auth,
+        appId: args.appId,
+        modify: true,
+        allowLocked: true,
+      });
+      if ("error" in gate) return gate.error;
+      const updated = await AppModel.setLocked(args.appId, args.locked);
+      if (!updated) {
+        return errorResult(`Failed to update the lock for app ${args.appId}.`);
+      }
+      const safeName = escapeAppNameForModelText(updated.name);
+      return structuredSuccessResult(
+        { id: updated.id, locked: updated.locked },
+        updated.locked
+          ? `Locked app "${safeName}". Every modification will be refused until it is unlocked.`
+          : `Unlocked app "${safeName}". It can be modified again.`,
       );
     },
   }),
@@ -1675,6 +1787,8 @@ async function loadApp(params: {
   organizationId: string;
   appId: string;
   modify?: boolean;
+  /** set_app_lock's own escape: the unlock call must reach a locked app. */
+  allowLocked?: boolean;
 }): Promise<{ app: App } | { error: CallToolResult }> {
   const app = await AppModel.findByIdForCaller({
     id: params.appId,
@@ -1711,17 +1825,24 @@ async function loadApp(params: {
         return { error: errorResult(error.message) };
       throw error;
     }
+    if (app.locked && !params.allowLocked) {
+      return {
+        error: errorResult(
+          `App "${escapeAppNameForModelText(app.name)}" is locked. Locked apps refuse every modification — edits, spec, tools, and deletion — until unlocked. Do not retry this call or route the change through another tool; this is the app lock. If, and only if, the user directly asked you to change or unlock this app, unlock it first with set_app_lock (locked: false); never unlock on your own initiative.`,
+        ),
+      };
+    }
   }
   return { app };
 }
 
 /**
  * Next-edit rider on scaffold_app/edit_app success texts: names the head
- * version so the model knows edit_app defaults to it and that baseVersion is
- * only needed to guard against a concurrent edit.
+ * version so the model can echo it as the next edit_app's required
+ * baseVersion without a read_app round-trip.
  */
 function nextEditBaseVersionHint(latestVersion: number): string {
-  return ` edit_app now defaults to this head (version ${latestVersion}); pass baseVersion only to guard against a concurrent edit.`;
+  return ` Pass baseVersion ${latestVersion} on your next edit_app for this app.`;
 }
 
 // The soft save-time validation-warnings note appended to a mutation's result
@@ -1789,6 +1910,11 @@ function buildQuestionsSchema(
     required: questions.map((question) => question.id),
   };
 }
+
+// Conflict feedback stays useful only while it is readable — cap how many
+// conflicting regions and how much of each the 409 text carries.
+const MERGE_CONFLICT_MAX_EXCERPTS = 5;
+const MERGE_CONFLICT_EXCERPT_MAX_BYTES = 2_048;
 
 const PREVIEW_OUTPUT_MAX_BYTES = 16_384;
 // Untrusted tool text longer than this is never JSON.parsed for the preview —

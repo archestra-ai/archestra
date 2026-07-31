@@ -18,6 +18,7 @@ const ownedApp: Extract<AppListItem, { source: "owned" }> = {
   viewerRole: "owner",
   latestVersion: 1,
   enabled: true,
+  locked: false,
   teams: [],
   users: [],
   executionModel: "viewer-scoped",

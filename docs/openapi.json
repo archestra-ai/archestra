@@ -61589,6 +61589,9 @@
                               "enabled": {
                                 "type": "boolean"
                               },
+                              "locked": {
+                                "type": "boolean"
+                              },
                               "teams": {
                                 "type": "array",
                                 "items": {
@@ -61644,6 +61647,7 @@
                               "viewerRole",
                               "latestVersion",
                               "enabled",
+                              "locked",
                               "teams",
                               "users"
                             ],
@@ -62256,6 +62260,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "locked": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -62338,6 +62345,7 @@
                     "spec",
                     "latestVersion",
                     "enabled",
+                    "locked",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -65608,6 +65616,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "locked": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -65733,6 +65744,7 @@
                     "spec",
                     "latestVersion",
                     "enabled",
+                    "locked",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -66205,6 +66217,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "locked": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -66282,6 +66297,7 @@
                     "spec",
                     "latestVersion",
                     "enabled",
+                    "locked",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -66913,6 +66929,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "locked": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -67038,6 +67057,7 @@
                     "spec",
                     "latestVersion",
                     "enabled",
+                    "locked",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -67399,6 +67419,9 @@
                     "enabled": {
                       "type": "boolean"
                     },
+                    "locked": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -67524,6 +67547,987 @@
                     "spec",
                     "latestVersion",
                     "enabled",
+                    "locked",
+                    "createdAt",
+                    "updatedAt",
+                    "deletedAt",
+                    "scope",
+                    "environmentId",
+                    "labels",
+                    "teams",
+                    "users",
+                    "viewerRole",
+                    "authorName"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "app:update"
+          ]
+        }
+      }
+    },
+    "/api/apps/{appId}/lock": {
+      "post": {
+        "operationId": "lockApp",
+        "tags": [
+          "Apps"
+        ],
+        "description": "Lock an app, refusing all chat-driven modification (and REST html replacement/deletion) until unlocked.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "appId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "templateId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "mcpServerId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "spec": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "summary": {
+                          "type": "string",
+                          "description": "One-line summary of what the app is for."
+                        },
+                        "features": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Concrete capabilities the app should provide."
+                        },
+                        "data": {
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "ui": {
+                          "description": "UI / style direction as a free-form prose string, not a structured object.",
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "tools": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Full names of the MCP tools the app calls through window.archestra."
+                        }
+                      },
+                      "required": [
+                        "summary",
+                        "features",
+                        "tools"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "locked": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "keyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "valueId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "viewerRole": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "shared",
+                        "admin"
+                      ]
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "authorId",
+                    "name",
+                    "slug",
+                    "description",
+                    "templateId",
+                    "mcpServerId",
+                    "spec",
+                    "latestVersion",
+                    "enabled",
+                    "locked",
+                    "createdAt",
+                    "updatedAt",
+                    "deletedAt",
+                    "scope",
+                    "environmentId",
+                    "labels",
+                    "teams",
+                    "users",
+                    "viewerRole",
+                    "authorName"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "app:update"
+          ]
+        }
+      }
+    },
+    "/api/apps/{appId}/unlock": {
+      "post": {
+        "operationId": "unlockApp",
+        "tags": [
+          "Apps"
+        ],
+        "description": "Unlock a locked app, making it editable again.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:update`: Modify MCP Apps, their tools, and their team assignments",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "appId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "authorId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "slug": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "templateId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "mcpServerId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "spec": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "summary": {
+                          "type": "string",
+                          "description": "One-line summary of what the app is for."
+                        },
+                        "features": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Concrete capabilities the app should provide."
+                        },
+                        "data": {
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "ui": {
+                          "description": "UI / style direction as a free-form prose string, not a structured object.",
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "tools": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Full names of the MCP tools the app calls through window.archestra."
+                        }
+                      },
+                      "required": [
+                        "summary",
+                        "features",
+                        "tools"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "latestVersion": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "locked": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "personal",
+                        "team",
+                        "org"
+                      ]
+                    },
+                    "environmentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "keyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "valueId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "teams": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "email"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "viewerRole": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "shared",
+                        "admin"
+                      ]
+                    },
+                    "authorName": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "organizationId",
+                    "authorId",
+                    "name",
+                    "slug",
+                    "description",
+                    "templateId",
+                    "mcpServerId",
+                    "spec",
+                    "latestVersion",
+                    "enabled",
+                    "locked",
                     "createdAt",
                     "updatedAt",
                     "deletedAt",
@@ -70835,6 +71839,10 @@
                 "optimizationRule.updated",
                 "optimizationRule.deleted",
                 "organization.updated",
+                "project.created",
+                "project.updated",
+                "project.deleted",
+                "project.restored",
                 "role.created",
                 "role.updated",
                 "role.deleted",
@@ -71113,6 +72121,10 @@
                                   "optimizationRule.updated",
                                   "optimizationRule.deleted",
                                   "organization.updated",
+                                  "project.created",
+                                  "project.updated",
+                                  "project.deleted",
+                                  "project.restored",
                                   "role.created",
                                   "role.updated",
                                   "role.deleted",
@@ -71688,6 +72700,10 @@
                             "optimizationRule.updated",
                             "optimizationRule.deleted",
                             "organization.updated",
+                            "project.created",
+                            "project.updated",
+                            "project.deleted",
+                            "project.restored",
                             "role.created",
                             "role.updated",
                             "role.deleted",
@@ -95343,6 +96359,11 @@
                         "type": "string",
                         "format": "date-time"
                       },
+                      "deletedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
                       "agent": {
                         "nullable": true,
                         "type": "object",
@@ -95683,6 +96704,7 @@
                       "lastMessageAt",
                       "createdAt",
                       "updatedAt",
+                      "deletedAt",
                       "agent",
                       "share",
                       "messages",
@@ -96128,6 +97150,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "agent": {
                       "nullable": true,
                       "type": "object",
@@ -96468,6 +97495,7 @@
                     "lastMessageAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "agent",
                     "share",
                     "messages",
@@ -96716,6 +97744,759 @@
         }
       }
     },
+    "/api/chat/conversations/deleted": {
+      "get": {
+        "operationId": "getDeletedChatConversations",
+        "tags": [
+          "Chat"
+        ],
+        "description": "List the current user's soft-deleted conversations (the Trash view), newest deletion first.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:delete`: Delete chat conversations",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "userId": {
+                        "type": "string"
+                      },
+                      "organizationId": {
+                        "type": "string"
+                      },
+                      "agentId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "chatApiKeyId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "title": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "selectedModel": {
+                        "type": "string"
+                      },
+                      "selectedProvider": {
+                        "nullable": true,
+                        "type": "string",
+                        "enum": [
+                          "openai",
+                          "gemini",
+                          "anthropic",
+                          "bedrock",
+                          "cohere",
+                          "cerebras",
+                          "mistral",
+                          "perplexity",
+                          "groq",
+                          "xai",
+                          "openrouter",
+                          "vllm",
+                          "ollama",
+                          "ollama-native",
+                          "zhipuai",
+                          "deepseek",
+                          "minimax",
+                          "kimi",
+                          "azure",
+                          "github-copilot",
+                          "microsoft-365-copilot",
+                          "archestra"
+                        ]
+                      },
+                      "modelId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "hasCustomToolSelection": {
+                        "type": "boolean"
+                      },
+                      "hooksDebugEnabled": {
+                        "type": "boolean"
+                      },
+                      "todoList": {
+                        "nullable": true,
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          {
+                            "type": "array",
+                            "items": {}
+                          }
+                        ]
+                      },
+                      "artifact": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "projectId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "origin": {
+                        "type": "string",
+                        "enum": [
+                          "user",
+                          "schedule_trigger",
+                          "app_open"
+                        ]
+                      },
+                      "titleIsPlaceholder": {
+                        "type": "boolean"
+                      },
+                      "pinnedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "lastMessageAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "deletedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "agent": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "systemPrompt": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
+                          },
+                          "toolExposureMode": {
+                            "type": "string",
+                            "enum": [
+                              "full",
+                              "search_and_run_only"
+                            ]
+                          },
+                          "llmApiKeyId": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "systemPrompt",
+                          "agentType",
+                          "toolExposureMode",
+                          "llmApiKeyId"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "share": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "visibility": {
+                            "type": "string",
+                            "enum": [
+                              "organization",
+                              "team",
+                              "user"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "visibility"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "projectName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "projectIcon": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "unread": {
+                        "type": "boolean"
+                      },
+                      "messages": {
+                        "type": "array",
+                        "items": {}
+                      },
+                      "chatErrors": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "conversationId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "error": {
+                              "type": "object",
+                              "properties": {
+                                "code": {
+                                  "type": "string",
+                                  "enum": [
+                                    "rate_limit",
+                                    "usage_limit_exceeded",
+                                    "authentication",
+                                    "permission_denied",
+                                    "invalid_request",
+                                    "provider_insufficient_balance",
+                                    "not_found",
+                                    "context_too_long",
+                                    "request_too_large",
+                                    "request_exceeds_rate_limit",
+                                    "content_filtered",
+                                    "server_error",
+                                    "network_error",
+                                    "empty_response",
+                                    "incomplete_tool_call",
+                                    "tool_call_output_truncated",
+                                    "provider_auth_required",
+                                    "tools_unsupported",
+                                    "aborted",
+                                    "unknown"
+                                  ]
+                                },
+                                "message": {
+                                  "type": "string"
+                                },
+                                "isRetryable": {
+                                  "type": "boolean"
+                                },
+                                "sessionId": {
+                                  "type": "string"
+                                },
+                                "traceId": {
+                                  "type": "string"
+                                },
+                                "spanId": {
+                                  "type": "string"
+                                },
+                                "usageLimitExceeded": {
+                                  "type": "boolean"
+                                },
+                                "usageLimitEntityType": {
+                                  "type": "string"
+                                },
+                                "authAction": {
+                                  "type": "object",
+                                  "properties": {
+                                    "provider": {
+                                      "type": "string",
+                                      "enum": [
+                                        "openai",
+                                        "gemini",
+                                        "anthropic",
+                                        "bedrock",
+                                        "cohere",
+                                        "cerebras",
+                                        "mistral",
+                                        "perplexity",
+                                        "groq",
+                                        "xai",
+                                        "openrouter",
+                                        "vllm",
+                                        "ollama",
+                                        "ollama-native",
+                                        "zhipuai",
+                                        "deepseek",
+                                        "minimax",
+                                        "kimi",
+                                        "azure",
+                                        "github-copilot",
+                                        "microsoft-365-copilot",
+                                        "archestra"
+                                      ]
+                                    },
+                                    "providerLabel": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "provider",
+                                    "providerLabel"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "originalError": {
+                                  "type": "object",
+                                  "properties": {
+                                    "provider": {
+                                      "type": "string",
+                                      "enum": [
+                                        "openai",
+                                        "gemini",
+                                        "anthropic",
+                                        "bedrock",
+                                        "cohere",
+                                        "cerebras",
+                                        "mistral",
+                                        "perplexity",
+                                        "groq",
+                                        "xai",
+                                        "openrouter",
+                                        "vllm",
+                                        "ollama",
+                                        "ollama-native",
+                                        "zhipuai",
+                                        "deepseek",
+                                        "minimax",
+                                        "kimi",
+                                        "azure",
+                                        "github-copilot",
+                                        "microsoft-365-copilot",
+                                        "archestra"
+                                      ]
+                                    },
+                                    "status": {
+                                      "type": "number"
+                                    },
+                                    "message": {
+                                      "type": "string"
+                                    },
+                                    "type": {
+                                      "type": "string"
+                                    },
+                                    "raw": {}
+                                  },
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "code",
+                                "message",
+                                "isRetryable"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "conversationId",
+                            "error",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "compactions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "conversationId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "summary": {
+                              "type": "string"
+                            },
+                            "compactedThroughMessageId": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "trigger": {
+                              "type": "string",
+                              "enum": [
+                                "auto",
+                                "manual"
+                              ]
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "model": {
+                              "type": "string"
+                            },
+                            "originalTokenEstimate": {
+                              "type": "integer",
+                              "minimum": -2147483648,
+                              "maximum": 2147483647
+                            },
+                            "compactedTokenEstimate": {
+                              "type": "integer",
+                              "minimum": -2147483648,
+                              "maximum": 2147483647
+                            },
+                            "createdAt": {
+                              "type": "string",
+                              "format": "date-time"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "conversationId",
+                            "summary",
+                            "compactedThroughMessageId",
+                            "trigger",
+                            "provider",
+                            "model",
+                            "originalTokenEstimate",
+                            "compactedTokenEstimate",
+                            "createdAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "userId",
+                      "organizationId",
+                      "agentId",
+                      "chatApiKeyId",
+                      "title",
+                      "selectedModel",
+                      "selectedProvider",
+                      "modelId",
+                      "hasCustomToolSelection",
+                      "hooksDebugEnabled",
+                      "todoList",
+                      "artifact",
+                      "projectId",
+                      "origin",
+                      "titleIsPlaceholder",
+                      "pinnedAt",
+                      "lastMessageAt",
+                      "createdAt",
+                      "updatedAt",
+                      "deletedAt",
+                      "agent",
+                      "share",
+                      "messages",
+                      "chatErrors",
+                      "compactions"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:delete"
+          ]
+        }
+      }
+    },
     "/api/chat/conversations/{id}": {
       "get": {
         "operationId": "getChatConversation",
@@ -96881,6 +98662,11 @@
                       "format": "date-time"
                     },
                     "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
                       "type": "string",
                       "format": "date-time"
                     },
@@ -97224,6 +99010,7 @@
                     "lastMessageAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "agent",
                     "share",
                     "messages",
@@ -97681,6 +99468,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "agent": {
                       "nullable": true,
                       "type": "object",
@@ -98021,6 +99813,7 @@
                     "lastMessageAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "agent",
                     "share",
                     "messages",
@@ -100214,6 +102007,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "agent": {
                       "nullable": true,
                       "type": "object",
@@ -100554,6 +102352,7 @@
                     "lastMessageAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "agent",
                     "share",
                     "messages",
@@ -101091,6 +102890,768 @@
         }
       }
     },
+    "/api/chat/conversations/{id}/restore": {
+      "post": {
+        "operationId": "restoreChatConversation",
+        "tags": [
+          "Chat"
+        ],
+        "description": "Restore a soft-deleted conversation\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:delete`: Delete chat conversations",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "userId": {
+                      "type": "string"
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    },
+                    "agentId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "chatApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "title": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "selectedModel": {
+                      "type": "string"
+                    },
+                    "selectedProvider": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "openai",
+                        "gemini",
+                        "anthropic",
+                        "bedrock",
+                        "cohere",
+                        "cerebras",
+                        "mistral",
+                        "perplexity",
+                        "groq",
+                        "xai",
+                        "openrouter",
+                        "vllm",
+                        "ollama",
+                        "ollama-native",
+                        "zhipuai",
+                        "deepseek",
+                        "minimax",
+                        "kimi",
+                        "azure",
+                        "github-copilot",
+                        "microsoft-365-copilot",
+                        "archestra"
+                      ]
+                    },
+                    "modelId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "hasCustomToolSelection": {
+                      "type": "boolean"
+                    },
+                    "hooksDebugEnabled": {
+                      "type": "boolean"
+                    },
+                    "todoList": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
+                    "artifact": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "origin": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "schedule_trigger",
+                        "app_open"
+                      ]
+                    },
+                    "titleIsPlaceholder": {
+                      "type": "boolean"
+                    },
+                    "pinnedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "lastMessageAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "agent": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "systemPrompt": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "agentType": {
+                          "type": "string",
+                          "enum": [
+                            "profile",
+                            "mcp_gateway",
+                            "llm_proxy",
+                            "agent"
+                          ]
+                        },
+                        "toolExposureMode": {
+                          "type": "string",
+                          "enum": [
+                            "full",
+                            "search_and_run_only"
+                          ]
+                        },
+                        "llmApiKeyId": {
+                          "nullable": true,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "systemPrompt",
+                        "agentType",
+                        "toolExposureMode",
+                        "llmApiKeyId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "share": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "organization",
+                            "team",
+                            "user"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "visibility"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "projectName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "projectIcon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "unread": {
+                      "type": "boolean"
+                    },
+                    "messages": {
+                      "type": "array",
+                      "items": {}
+                    },
+                    "chatErrors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "error": {
+                            "type": "object",
+                            "properties": {
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "rate_limit",
+                                  "usage_limit_exceeded",
+                                  "authentication",
+                                  "permission_denied",
+                                  "invalid_request",
+                                  "provider_insufficient_balance",
+                                  "not_found",
+                                  "context_too_long",
+                                  "request_too_large",
+                                  "request_exceeds_rate_limit",
+                                  "content_filtered",
+                                  "server_error",
+                                  "network_error",
+                                  "empty_response",
+                                  "incomplete_tool_call",
+                                  "tool_call_output_truncated",
+                                  "provider_auth_required",
+                                  "tools_unsupported",
+                                  "aborted",
+                                  "unknown"
+                                ]
+                              },
+                              "message": {
+                                "type": "string"
+                              },
+                              "isRetryable": {
+                                "type": "boolean"
+                              },
+                              "sessionId": {
+                                "type": "string"
+                              },
+                              "traceId": {
+                                "type": "string"
+                              },
+                              "spanId": {
+                                "type": "string"
+                              },
+                              "usageLimitExceeded": {
+                                "type": "boolean"
+                              },
+                              "usageLimitEntityType": {
+                                "type": "string"
+                              },
+                              "authAction": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "enum": [
+                                      "openai",
+                                      "gemini",
+                                      "anthropic",
+                                      "bedrock",
+                                      "cohere",
+                                      "cerebras",
+                                      "mistral",
+                                      "perplexity",
+                                      "groq",
+                                      "xai",
+                                      "openrouter",
+                                      "vllm",
+                                      "ollama",
+                                      "ollama-native",
+                                      "zhipuai",
+                                      "deepseek",
+                                      "minimax",
+                                      "kimi",
+                                      "azure",
+                                      "github-copilot",
+                                      "microsoft-365-copilot",
+                                      "archestra"
+                                    ]
+                                  },
+                                  "providerLabel": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "provider",
+                                  "providerLabel"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "originalError": {
+                                "type": "object",
+                                "properties": {
+                                  "provider": {
+                                    "type": "string",
+                                    "enum": [
+                                      "openai",
+                                      "gemini",
+                                      "anthropic",
+                                      "bedrock",
+                                      "cohere",
+                                      "cerebras",
+                                      "mistral",
+                                      "perplexity",
+                                      "groq",
+                                      "xai",
+                                      "openrouter",
+                                      "vllm",
+                                      "ollama",
+                                      "ollama-native",
+                                      "zhipuai",
+                                      "deepseek",
+                                      "minimax",
+                                      "kimi",
+                                      "azure",
+                                      "github-copilot",
+                                      "microsoft-365-copilot",
+                                      "archestra"
+                                    ]
+                                  },
+                                  "status": {
+                                    "type": "number"
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string"
+                                  },
+                                  "raw": {}
+                                },
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "code",
+                              "message",
+                              "isRetryable"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "error",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "compactions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "summary": {
+                            "type": "string"
+                          },
+                          "compactedThroughMessageId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "enum": [
+                              "auto",
+                              "manual"
+                            ]
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "originalTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "compactedTokenEstimate": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "conversationId",
+                          "summary",
+                          "compactedThroughMessageId",
+                          "trigger",
+                          "provider",
+                          "model",
+                          "originalTokenEstimate",
+                          "compactedTokenEstimate",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "userId",
+                    "organizationId",
+                    "agentId",
+                    "chatApiKeyId",
+                    "title",
+                    "selectedModel",
+                    "selectedProvider",
+                    "modelId",
+                    "hasCustomToolSelection",
+                    "hooksDebugEnabled",
+                    "todoList",
+                    "artifact",
+                    "projectId",
+                    "origin",
+                    "titleIsPlaceholder",
+                    "pinnedAt",
+                    "lastMessageAt",
+                    "createdAt",
+                    "updatedAt",
+                    "deletedAt",
+                    "agent",
+                    "share",
+                    "messages",
+                    "chatErrors",
+                    "compactions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "chat:delete"
+          ]
+        }
+      }
+    },
     "/api/chat/conversations/{id}/chat-errors": {
       "delete": {
         "operationId": "clearChatConversationErrors",
@@ -101613,6 +104174,11 @@
                           "type": "string",
                           "format": "date-time"
                         },
+                        "deletedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
                         "agent": {
                           "nullable": true,
                           "type": "object",
@@ -101953,6 +104519,7 @@
                         "lastMessageAt",
                         "createdAt",
                         "updatedAt",
+                        "deletedAt",
                         "agent",
                         "share",
                         "messages",
@@ -103325,6 +105892,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "agent": {
                       "nullable": true,
                       "type": "object",
@@ -103668,6 +106240,7 @@
                     "lastMessageAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "agent",
                     "share",
                     "messages",
@@ -104105,6 +106678,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "agent": {
                       "nullable": true,
                       "type": "object",
@@ -104445,6 +107023,7 @@
                     "lastMessageAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "agent",
                     "share",
                     "messages",
@@ -104877,6 +107456,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "agent": {
                       "nullable": true,
                       "type": "object",
@@ -105217,6 +107801,7 @@
                     "lastMessageAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "agent",
                     "share",
                     "messages",
@@ -105659,6 +108244,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "agent": {
                       "nullable": true,
                       "type": "object",
@@ -105999,6 +108589,7 @@
                     "lastMessageAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "agent",
                     "share",
                     "messages",
@@ -263070,6 +265661,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -263136,7 +265733,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -264047,6 +266646,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -264113,7 +266718,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -264809,6 +267416,12 @@
                   "appsHackathonRecorderEnabled": {
                     "type": "boolean"
                   },
+                  "newAppsDisabledByDefault": {
+                    "type": "boolean"
+                  },
+                  "newAppsLockedByDefault": {
+                    "type": "boolean"
+                  },
                   "allowToolAutoAssignment": {
                     "type": "boolean"
                   }
@@ -265311,6 +267924,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -265377,7 +267996,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -266144,6 +268765,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -266210,7 +268837,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -266970,6 +269599,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -267036,7 +269671,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -267796,6 +270433,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -267862,7 +270505,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -268637,6 +271282,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -268703,7 +271354,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -269557,6 +272210,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -269623,7 +272282,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -270456,6 +273117,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -270522,7 +273189,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -271292,6 +273961,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -271358,7 +274033,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -272136,6 +274813,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -272202,7 +274885,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -272947,6 +275632,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -273013,7 +275704,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -274363,6 +277056,12 @@
                     },
                     "appsHackathonRecorderEnabled": {
                       "type": "boolean"
+                    },
+                    "newAppsDisabledByDefault": {
+                      "type": "boolean"
+                    },
+                    "newAppsLockedByDefault": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -274429,7 +277128,9 @@
                     "defaultEnvironmentValidationRegex",
                     "defaultEnvironmentTrustedImageRegistries",
                     "skillToolsEnabled",
-                    "appsHackathonRecorderEnabled"
+                    "appsHackathonRecorderEnabled",
+                    "newAppsDisabledByDefault",
+                    "newAppsLockedByDefault"
                   ],
                   "additionalProperties": false
                 }
@@ -277930,6 +280631,11 @@
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -277944,7 +280650,8 @@
                     "shareTeamNames",
                     "shareUserNames",
                     "pinnedAt",
-                    "createdAt"
+                    "createdAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -278192,7 +280899,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
+        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own chats inside them",
         "parameters": [
           {
             "schema": {
@@ -278250,6 +280957,19 @@
             "name": "excludeAuthorIds",
             "required": false,
             "description": "Exclude owner user IDs (comma-separated). Admin-only; used with scope=personal."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "deleted"
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "description": "Lifecycle slice: `active` (default) or `deleted` (project admins only; org-wide soft-deleted projects for the restore view)."
           }
         ],
         "responses": {
@@ -278326,6 +281046,11 @@
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
+                      },
+                      "deletedAt": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time"
                       }
                     },
                     "required": [
@@ -278340,7 +281065,8 @@
                       "shareTeamNames",
                       "shareUserNames",
                       "pinnedAt",
-                      "createdAt"
+                      "createdAt",
+                      "deletedAt"
                     ],
                     "additionalProperties": false
                   }
@@ -278699,6 +281425,11 @@
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -278713,7 +281444,8 @@
                     "shareTeamNames",
                     "shareUserNames",
                     "pinnedAt",
-                    "createdAt"
+                    "createdAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -279049,6 +281781,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "shareTeamIds": {
                       "nullable": true,
                       "type": "array",
@@ -279077,6 +281814,7 @@
                     "shareUserNames",
                     "pinnedAt",
                     "createdAt",
+                    "deletedAt",
                     "shareTeamIds",
                     "shareUserIds"
                   ],
@@ -279630,7 +282368,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Delete a project (owner or a project admin). Its chats survive as ordinary conversations; its files and scheduled tasks are deleted with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
+        "description": "Soft-delete a project (owner or a project admin). Its chats detach and survive as ordinary conversations; its files and scheduled tasks are retained but hidden, and a project admin can restore them. Nothing is purged.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
         "parameters": [
           {
             "schema": {
@@ -280225,6 +282963,394 @@
           "kind": "static",
           "permissions": [
             "project:update"
+          ]
+        }
+      }
+    },
+    "/api/projects/{id}/restore": {
+      "post": {
+        "operationId": "restoreProject",
+        "tags": [
+          "Projects"
+        ],
+        "description": "Restore a soft-deleted project (project admins only). Brings back its retained files and scheduled tasks (schedules resume forward-only, no catch-up runs); chats do NOT re-attach, so the restored project reports zero chats. 404 if there is no soft-deleted project with that id in the org. Deleting frees the display name, so if the owner has since taken it, pass `name` to restore under a different one; restoring into a name that is still taken is a 409.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "nullable": true,
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "description": "Rename the project as it is restored. Use this when its original name was taken while it was deleted.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "viewerRole": {
+                      "type": "string",
+                      "enum": [
+                        "owner",
+                        "shared",
+                        "admin"
+                      ]
+                    },
+                    "ownerName": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "conversationCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "visibility": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "organization",
+                        "team",
+                        "user"
+                      ]
+                    },
+                    "shareTeamNames": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "shareUserNames": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pinnedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "shareTeamIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "shareUserIds": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "description",
+                    "icon",
+                    "viewerRole",
+                    "ownerName",
+                    "conversationCount",
+                    "visibility",
+                    "shareTeamNames",
+                    "shareUserNames",
+                    "pinnedAt",
+                    "createdAt",
+                    "deletedAt",
+                    "shareTeamIds",
+                    "shareUserIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "project:delete"
           ]
         }
       }
@@ -286353,6 +289479,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "agent": {
                       "nullable": true,
                       "type": "object",
@@ -286693,6 +289824,7 @@
                     "lastMessageAt",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "agent",
                     "share",
                     "messages",

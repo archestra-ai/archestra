@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
+import { notDeletedConversation } from "@/database/schemas/conversation";
 import type {
   Conversation,
   ConversationShare,
@@ -233,7 +234,15 @@ class ConversationShareModel {
         schema.messagesTable,
         eq(schema.conversationsTable.id, schema.messagesTable.conversationId),
       )
-      .where(eq(schema.conversationsTable.id, share.conversationId))
+      // A shared conversation that the owner later deleted must stop resolving
+      // on the public share link. Conversations is the base table here, so this
+      // WHERE predicate is safe (it does not turn the leftJoins into inner).
+      .where(
+        and(
+          notDeletedConversation,
+          eq(schema.conversationsTable.id, share.conversationId),
+        ),
+      )
       .orderBy(schema.messagesTable.createdAt, schema.messagesTable.id);
 
     if (rows.length === 0) return null;

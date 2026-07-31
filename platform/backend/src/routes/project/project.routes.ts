@@ -13,6 +13,7 @@ import {
   constructResponseSchema,
   ProjectConversationItemSchema,
   ProjectDetailSchema,
+  ProjectLifecycleSchema,
   ProjectListItemSchema,
   ProjectListScopeSchema,
   ProjectShareVisibilitySchema,
@@ -82,6 +83,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         shareUserNames: null,
         pinnedAt: null,
         createdAt: project.createdAt,
+        deletedAt: null,
       };
     },
   );
@@ -132,6 +134,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         shareUserNames: null,
         pinnedAt: null,
         createdAt: project.createdAt,
+        deletedAt: null,
       };
     },
   );
@@ -147,7 +150,9 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "with `teamIds`), or `org` (org-wide); omitted = all visible. Admins " +
           "additionally filter `personal` by owner via `authorIds` / " +
           "`excludeAuthorIds` (ignored for non-admins). `search` matches name + " +
-          "description.",
+          "description. `status=deleted` returns the org-wide soft-deleted " +
+          "projects for a project admin (empty for everyone else); the other " +
+          "filters do not apply to that slice.",
         tags: ["Projects"],
         querystring: z.object({
           scope: ProjectListScopeSchema.optional(),
@@ -160,6 +165,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ),
           excludeAuthorIds: CommaSeparatedIds.optional().describe(
             "Exclude owner user IDs (comma-separated). Admin-only; used with scope=personal.",
+          ),
+          status: ProjectLifecycleSchema.optional().describe(
+            "Lifecycle slice: `active` (default) or `deleted` (project admins " +
+              "only; org-wide soft-deleted projects for the restore view).",
           ),
         }),
         response: constructResponseSchema(z.array(ProjectListItemSchema)),
@@ -182,6 +191,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         authorIds: isProjectAdmin ? query.authorIds : undefined,
         excludeAuthorIds: isProjectAdmin ? query.excludeAuthorIds : undefined,
         search: query.search,
+        status: query.status,
       });
     },
   );
@@ -282,9 +292,10 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.DeleteProject,
         description:
-          "Delete a project (owner or a project admin). Its chats survive as " +
-          "ordinary conversations; its files and scheduled tasks are deleted " +
-          "with it.",
+          "Soft-delete a project (owner or a project admin). Its chats detach " +
+          "and survive as ordinary conversations; its files and scheduled tasks " +
+          "are retained but hidden, and a project admin can restore them. " +
+          "Nothing is purged.",
         tags: ["Projects"],
         params: z.object({ id: z.string().uuid() }),
         response: constructResponseSchema(z.object({ ok: z.literal(true) })),
@@ -294,6 +305,46 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await projectService.delete({ id, organizationId, userId: user.id });
       return { ok: true as const };
     },
+  );
+
+  fastify.post(
+    "/api/projects/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreProject,
+        description:
+          "Restore a soft-deleted project (project admins only). Brings back " +
+          "its retained files and scheduled tasks (schedules resume forward-" +
+          "only, no catch-up runs); chats do NOT re-attach, so the restored " +
+          "project reports zero chats. 404 if there is no soft-deleted project " +
+          "with that id in the org. Deleting frees the display name, so if the " +
+          "owner has since taken it, pass `name` to restore under a different " +
+          "one; restoring into a name that is still taken is a 409.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        // nullish, not optional: a POST with no payload arrives as `null`, and
+        // restoring without a rename is the common case.
+        body: z
+          .object({
+            name: z
+              .string()
+              .optional()
+              .describe(
+                "Rename the project as it is restored. Use this when its " +
+                  "original name was taken while it was deleted.",
+              ),
+          })
+          .nullish(),
+        response: constructResponseSchema(ProjectDetailSchema),
+      },
+    },
+    async ({ params: { id }, body, organizationId, user }) =>
+      projectService.restore({
+        id,
+        organizationId,
+        userId: user.id,
+        name: body?.name,
+      }),
   );
 
   fastify.get(

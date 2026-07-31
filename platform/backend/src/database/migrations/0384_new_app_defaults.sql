@@ -1,0 +1,2 @@
+ALTER TABLE "organization" ADD COLUMN "new_apps_disabled_by_default" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "organization" ADD COLUMN "new_apps_locked_by_default" boolean DEFAULT false NOT NULL;

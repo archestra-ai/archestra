@@ -14,6 +14,8 @@ const {
   updateApp,
   enableApp,
   disableApp,
+  lockApp,
+  unlockApp,
   deleteApp,
   assignToolToApp,
   unassignToolFromApp,
@@ -389,6 +391,37 @@ export function useSetAppEnabled() {
       queryClient.invalidateQueries({ queryKey: ["apps", variables.appId] });
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       toast.success(variables.enabled ? "App enabled" : "App disabled");
+    },
+  });
+}
+
+// Lock/unlock an app. Like enable/disable, a distinct lifecycle transition
+// with its own endpoint: a locked app refuses all chat-driven modification
+// (and REST html replacement/deletion) until unlocked.
+export function useSetAppLocked() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      appId,
+      locked,
+    }: {
+      appId: string;
+      locked: boolean;
+    }) => {
+      const { data, error } = await (locked
+        ? lockApp({ path: { appId } })
+        : unlockApp({ path: { appId } }));
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["apps"] });
+      queryClient.invalidateQueries({ queryKey: ["apps", variables.appId] });
+      toast.success(variables.locked ? "App locked" : "App unlocked");
     },
   });
 }

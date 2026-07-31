@@ -245,6 +245,7 @@ function OwnedAppCard({
                 {!app.enabled ? (
                   <Badge variant="outline">Disabled</Badge>
                 ) : null}
+                {app.locked ? <Badge variant="outline">Locked</Badge> : null}
                 {/* Between the scope pill and the overflow menu, exactly as the
                     project card places its owner badge. */}
                 {isForeignPersonalApp ? (

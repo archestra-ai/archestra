@@ -322,9 +322,8 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "route", value: "/api/apps/:appId/pin" },
   { kind: "route", value: "/api/apps/external/:mcpServerId/pin" },
   // Deliberately-unaudited resource families (audited:false in AUDIT_DECISIONS):
-  // chat-project grouping, ephemeral connection-setup render tickets, incoming-
-  // email subscription config, oauth grant runtime (tokens are runtime state).
-  { kind: "prefix", value: "/api/projects" },
+  // ephemeral connection-setup render tickets, incoming-email subscription
+  // config, oauth grant runtime (tokens are runtime state).
   { kind: "prefix", value: "/api/connection-setups" },
   { kind: "prefix", value: "/api/incoming-email" },
   { kind: "exact", value: "/api/oauth/initiate" },
@@ -350,6 +349,14 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "route", value: "/api/mcp_server/:id/inspect" },
   { kind: "route", value: "/api/connectors/:id/test" },
   { kind: "route", value: "/api/agents/:id/suggest-skill-description" },
+  // Children of the now-audited /api/projects/:id that change nothing on the
+  // project row: a pin is per-user state (projectPinsTable is audited:false),
+  // and instructions are file content (filesTable is audited:false). These two
+  // replace the blanket `/api/projects` prefix exclusion that stood while the
+  // family was unaudited — without them they would inherit project.updated /
+  // project.deleted by walk-up and log an empty diff.
+  { kind: "route", value: "/api/projects/:id/pin" },
+  { kind: "route", value: "/api/projects/:id/instructions" },
   { kind: "route", value: "/api/apps/:appId/diagnostics" },
   { kind: "route", value: "/api/apps/:appId/screenshot" },
   { kind: "route", value: "/api/apps/:appId/open-in-chat" },

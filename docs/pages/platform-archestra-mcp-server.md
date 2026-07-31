@@ -2035,6 +2035,7 @@ Required RBAC permission: `skill:update`
 | `edit_app` | The single path for any change to an app's HTML: pass edits for targeted str_replace changes, replacementHtml to swap in a complete new document (no old_str matching), or replacementHtmlSource to s... | `app:update` |
 | `set_app_tools` | Replace an existing app's assigned upstream tools with exactly the set you pass (the full desired list; [] clears all). | `app:update` |
 | `set_app_labels` | Replace an app's labels with exactly the set you pass ([] clears them). | `app:update` |
+| `set_app_lock` | Lock or unlock an app. | `app:update` |
 | `validate_app` | The pre-publish gate for an app's head version: static structural checks (`findings`, each carrying its own specific message) plus the most recent live-render diagnostics (`live`), with `ok` true w... | `app:read` |
 | `publish_app` | Share an app with others: promote it out of personal scope so others can run it — this is how you distribute or make an app available to a team or the whole org — to specific teams (scope: team, wi... | `app:update` |
 | `preview_app_tool` | Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. | `app:update` |
@@ -2211,7 +2212,7 @@ Required RBAC permission: `app:update`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `appId` | `string` | Yes | The app id. |
-| `baseVersion` | `integer` | No | Optional optimistic-concurrency guard: the version (from read_app) the edits are based on. Defaults to the current head, so a single editor never has to echo it back. When supplied, the edit is rejected if the app's head has moved past it. |
+| `baseVersion` | `integer` | Yes | The version this edit is based on — the one named by read_app or the latest scaffold_app/edit_app result. Always report the version you actually built the edit from. When the head has moved past it (another conversation edited the app), your edit is treated as a delta from that base and merged with the newer changes; if the regions overlap, the call fails with the head's conflicting content to incorporate. |
 | `edits` | `object[]` | No | str_replace edits applied in order to the current HTML; the whole edit is atomic (any failure leaves the app unchanged). Pass exactly one of edits, replacementHtml, or replacementHtmlSource. |
 | `edits[].old_str` | `string` | Yes | Exact text to replace; must occur exactly once in the current HTML (add surrounding context to disambiguate). |
 | `edits[].new_str` | `string` | Yes | Replacement text (may be empty to delete). |
@@ -2272,6 +2273,24 @@ Required RBAC permission: `app:update`
 | `labels` | `object[]` | Yes | The app's labels after this call. |
 | `labels[].key` | `string` | Yes | The label key. |
 | `labels[].value` | `string` | Yes | The label value. |
+
+#### set_app_lock
+
+Required RBAC permission: `app:update`
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `appId` | `string` | Yes | The app id. |
+| `locked` | `boolean` | Yes | true locks the app against all modification; false unlocks it (only on the user's direct request). |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | `string` | Yes |  |
+| `locked` | `boolean` | Yes |  |
 
 #### validate_app
 

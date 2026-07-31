@@ -25,7 +25,12 @@ function TabLabel({
       ) : Icon ? (
         <Icon className="h-4 w-4" />
       ) : null}
-      {label}
+      {/* The span keeps the label an element: when the icon branch above
+          changes (e.g. connection status loads), React inserts the new icon
+          before this sibling — inserting before a bare text node crashes
+          after Chrome page-translate re-parents it into a <font> wrapper
+          (facebook/react#11538). */}
+      <span>{label}</span>
       {active !== undefined && (
         <span
           className={cn(

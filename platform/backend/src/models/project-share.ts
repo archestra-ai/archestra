@@ -1,6 +1,12 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { Project, ProjectShare, ProjectShareVisibility } from "@/types";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import type {
+  Project,
+  ProjectLifecycle,
+  ProjectShare,
+  ProjectShareVisibility,
+} from "@/types";
 
 /** A project's share row with its team targets resolved. */
 type ProjectShareWithTeams = ProjectShare & {
@@ -153,6 +159,7 @@ class ProjectShareModel {
         and(
           eq(schema.projectsTable.userId, params.userId),
           eq(schema.projectsTable.organizationId, params.organizationId),
+          notDeleted(schema.projectsTable),
         ),
       );
 
@@ -167,6 +174,7 @@ class ProjectShareModel {
         and(
           eq(schema.projectsTable.organizationId, params.organizationId),
           eq(schema.projectSharesTable.visibility, "organization"),
+          notDeleted(schema.projectsTable),
         ),
       );
 
@@ -196,6 +204,7 @@ class ProjectShareModel {
               and(
                 eq(schema.projectsTable.organizationId, params.organizationId),
                 inArray(schema.projectShareTeamsTable.teamId, teamIds),
+                notDeleted(schema.projectsTable),
               ),
             );
 
@@ -215,6 +224,7 @@ class ProjectShareModel {
         and(
           eq(schema.projectsTable.organizationId, params.organizationId),
           eq(schema.projectShareUsersTable.userId, params.userId),
+          notDeleted(schema.projectsTable),
         ),
       );
 
@@ -241,11 +251,23 @@ class ProjectShareModel {
    */
   static async listAllOrgProjects(params: {
     organizationId: string;
+    // `active` (default) hides soft-deleted rows; `deleted` returns ONLY them
+    // for the project:admin oversight view. There is no "both" slice.
+    lifecycle?: ProjectLifecycle;
   }): Promise<(Project & { visibility: ProjectShareVisibility | null })[]> {
+    const lifecycleFilter =
+      params.lifecycle === "deleted"
+        ? isNotNull(schema.projectsTable.deletedAt)
+        : notDeleted(schema.projectsTable);
     const projects = await db
       .select()
       .from(schema.projectsTable)
-      .where(eq(schema.projectsTable.organizationId, params.organizationId));
+      .where(
+        and(
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          lifecycleFilter,
+        ),
+      );
     return (await ProjectShareModel.attachVisibility(projects)).sort(
       (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     );

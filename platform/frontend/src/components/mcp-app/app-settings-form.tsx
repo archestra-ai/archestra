@@ -34,6 +34,7 @@ import {
   useAppTools,
   useAssignToolToApp,
   useSetAppEnabled,
+  useSetAppLocked,
   useUnassignToolFromApp,
   useUpdateApp,
 } from "@/lib/app.query";
@@ -86,6 +87,7 @@ export function AppSettingsForm({
 
   const updateApp = useUpdateApp();
   const setEnabled = useSetAppEnabled();
+  const setLocked = useSetAppLocked();
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
   const appToolsQuery = useAppTools(app.id);
@@ -104,6 +106,9 @@ export function AppSettingsForm({
   );
   const [enabledStatus, setEnabledStatus] = useState<"disabled" | "enabled">(
     app.enabled ? "enabled" : "disabled",
+  );
+  const [lockedStatus, setLockedStatus] = useState<"unlocked" | "locked">(
+    app.locked ? "locked" : "unlocked",
   );
   // The form's fourth option. On the wire an app shared with named people stays
   // `personal` and carries grants, so "user" is a UI-side reading of
@@ -171,6 +176,23 @@ export function AppSettingsForm({
     (option) => option.value === enabledStatus,
   )?.description;
 
+  const lockedOptions = [
+    {
+      value: "unlocked" as const,
+      label: "Unlocked",
+      description: "Agents (and you) can modify the app normally",
+    },
+    {
+      value: "locked" as const,
+      label: "Locked",
+      description:
+        "Agents refuse every change to this app, and it can't be deleted, until you unlock it",
+    },
+  ];
+  const selectedLockedDescription = lockedOptions.find(
+    (option) => option.value === lockedStatus,
+  )?.description;
+
   const options: VisibilityOption<AppVisibilityChoice>[] = [
     {
       value: "personal",
@@ -226,6 +248,7 @@ export function AppSettingsForm({
   const saving =
     updateApp.isPending ||
     setEnabled.isPending ||
+    setLocked.isPending ||
     assignTool.isPending ||
     unassignTool.isPending;
 
@@ -262,6 +285,16 @@ export function AppSettingsForm({
       const result = await setEnabled.mutateAsync({
         appId: app.id,
         enabled,
+      });
+      if (!result) return;
+    }
+    // Lock/unlock is a lifecycle transition like enable/disable, committed via
+    // its own endpoint before the PATCH.
+    const locked = lockedStatus === "locked";
+    if (locked !== app.locked) {
+      const result = await setLocked.mutateAsync({
+        appId: app.id,
+        locked,
       });
       if (!result) return;
     }
@@ -514,6 +547,36 @@ export function AppSettingsForm({
             {selectedEnabledDescription ? (
               <p className="text-xs text-muted-foreground">
                 {selectedEnabledDescription}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Modification</Label>
+            <Select
+              value={lockedStatus}
+              onValueChange={(next) =>
+                setLockedStatus(next as "unlocked" | "locked")
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {lockedOptions.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    description={option.description}
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedLockedDescription ? (
+              <p className="text-xs text-muted-foreground">
+                {selectedLockedDescription}
               </p>
             ) : null}
           </div>

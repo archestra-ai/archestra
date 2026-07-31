@@ -2679,15 +2679,36 @@
     {
       "idx": 382,
       "version": "7",
-      "when": 1785449051138,
-      "tag": "0382_kb_soft_delete",
+      "when": 1785449060953,
+      "tag": "0382_loose_multiple_man",
       "breakpoints": true
     },
     {
       "idx": 383,
       "version": "7",
-      "when": 1785449105861,
-      "tag": "0383_kb_soft_delete_partial_indexes",
+      "when": 1785450487138,
+      "tag": "0383_app_lock",
+      "breakpoints": true
+    },
+    {
+      "idx": 384,
+      "version": "7",
+      "when": 1785450512327,
+      "tag": "0384_new_app_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 385,
+      "version": "7",
+      "when": 1785455402278,
+      "tag": "0385_silky_purifiers",
+      "breakpoints": true
+    },
+    {
+      "idx": 386,
+      "version": "7",
+      "when": 1785478863890,
+      "tag": "0386_kb_soft_delete",
       "breakpoints": true
     }
   ]

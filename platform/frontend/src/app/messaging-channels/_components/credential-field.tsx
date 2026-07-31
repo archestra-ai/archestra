@@ -11,7 +11,7 @@ export function CredentialField({
     <div className="flex items-center gap-0.5">
       <span className="text-muted-foreground text-xs whitespace-nowrap">
         {label}
-        {optional && " (optional)"}:
+        {optional && <span> (optional)</span>}:
       </span>
       <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">
         {value || "Not set"}

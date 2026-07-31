@@ -3,6 +3,8 @@
 DROP INDEX "knowledge_base_connectors_organization_id_idx";--> statement-breakpoint
 DROP INDEX "knowledge_base_connectors_environment_id_idx";--> statement-breakpoint
 DROP INDEX "knowledge_bases_organization_id_idx";--> statement-breakpoint
+ALTER TABLE "knowledge_base_connectors" ADD COLUMN "deleted_at" timestamp;--> statement-breakpoint
+ALTER TABLE "knowledge_bases" ADD COLUMN "deleted_at" timestamp;--> statement-breakpoint
 CREATE INDEX "knowledge_base_connectors_organization_id_idx" ON "knowledge_base_connectors" USING btree ("organization_id") WHERE deleted_at IS NULL;--> statement-breakpoint
 CREATE INDEX "knowledge_base_connectors_environment_id_idx" ON "knowledge_base_connectors" USING btree ("environment_id") WHERE deleted_at IS NULL;--> statement-breakpoint
 CREATE INDEX "knowledge_bases_organization_id_idx" ON "knowledge_bases" USING btree ("organization_id") WHERE deleted_at IS NULL;

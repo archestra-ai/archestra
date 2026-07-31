@@ -1,5 +1,5 @@
 {
-  "id": "101531cb-e4f6-4ac5-9e5a-b42b43ad0a38",
+  "id": "7c8927c9-f12f-4845-a5f8-bca879ebaaa9",
   "prevId": "2970e7c4-b00f-4c2f-a055-7bc545d21102",
   "version": "7",
   "dialect": "postgresql",
@@ -9422,12 +9422,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -9545,12 +9539,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -13715,6 +13703,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -13735,6 +13729,7 @@
             }
           ],
           "isUnique": true,
+          "where": "\"projects\".\"deleted_at\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

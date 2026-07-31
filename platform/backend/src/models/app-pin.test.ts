@@ -149,4 +149,27 @@ describe("AppPinModel", () => {
     });
     expect(pins.has(AppPinModel.externalPinKey(ref))).toBe(false);
   });
+
+  test("restoring a soft-deleted MCP server resurfaces its external pins", async ({
+    makeUser,
+    makeMcpServer,
+  }) => {
+    const user = await makeUser();
+    const server = await makeMcpServer();
+    const ref = {
+      mcpServerId: server.id,
+      resourceUri: "ui://pm/board.html",
+      toolName: "show_board",
+    };
+    await AppPinModel.pinExternal({ userId: user.id, ...ref });
+
+    await McpServerModel.delete(server.id);
+    await McpServerModel.restore(server.id);
+
+    const pins = await AppPinModel.getPinnedAtForExternalApps({
+      userId: user.id,
+      refs: [ref],
+    });
+    expect(pins.get(AppPinModel.externalPinKey(ref))).toBeInstanceOf(Date);
+  });
 });

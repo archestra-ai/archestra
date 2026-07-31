@@ -160,7 +160,7 @@ describe("internal MCP catalog soft-delete routes", () => {
     expect(row?.after).toMatchObject({ deletedAt: null });
   });
 
-  test("GET ?status=deleted requires the delete permission and lists soft-deleted roots", async ({
+  test("GET ?status=deleted requires manage-deleted and lists soft-deleted roots", async ({
     makeInternalMcpCatalog,
   }) => {
     const catalog = await makeInternalMcpCatalog({
@@ -182,13 +182,32 @@ describe("internal MCP catalog soft-delete routes", () => {
       true,
     );
 
-    // Without the delete permission the deleted view is forbidden.
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
+    // A caller with every ordinary permission (delete included) but not the
+    // admin-default manage-deleted capability must not see the tombstone view.
+    mockHasPermission.mockImplementation(
+      async (permissions: Record<string, string[]>) => ({
+        success: !Object.values(permissions).some((actions) =>
+          actions.includes("manage-deleted"),
+        ),
+        error: null,
+      }),
+    );
     const forbidden = await app.inject({
       method: "GET",
       url: "/api/internal_mcp_catalog?status=deleted",
     });
     expect(forbidden.statusCode).toBe(403);
+  });
+
+  test("the restore route is gated on manage-deleted in the endpoint permission map", async () => {
+    const { requiredEndpointPermissionsMap } = await import(
+      "@archestra/shared/access-control"
+    );
+    expect(
+      requiredEndpointPermissionsMap.restoreInternalMcpCatalogItem,
+    ).toEqual({
+      mcpRegistry: ["manage-deleted"],
+    });
   });
 
   test("restore is rejected when another active catalog reuses the name", async ({

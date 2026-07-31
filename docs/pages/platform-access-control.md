@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-07-29
+lastUpdated: 2026-07-31
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -239,12 +239,14 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpRegistry:create` | Add servers to the MCP registry |
 | `mcpRegistry:update` | Modify MCP registry entries |
 | `mcpRegistry:delete` | Remove servers from the MCP registry |
+| `mcpRegistry:manage-deleted` | View and restore soft-deleted MCP registry entries |
 | `mcpRegistry:team-admin` | Manage team assignments for MCP registry entries |
 | `mcpRegistry:deploy-to-restricted` | Deploy MCP servers (catalog items) to restricted environments |
 | `mcpServerInstallation:read` | View installed MCP servers and their status |
 | `mcpServerInstallation:create` | Install MCP servers from the registry |
 | `mcpServerInstallation:update` | Modify installed MCP server configuration |
 | `mcpServerInstallation:delete` | Uninstall MCP servers |
+| `mcpServerInstallation:manage-deleted` | View and restore soft-deleted (uninstalled) MCP servers |
 | `mcpServerInstallation:admin` | Approve or manage all MCP server installations |
 | `mcpServerInstallationRequest:read` | View MCP server installation requests |
 | `mcpServerInstallationRequest:create` | Submit requests to install MCP servers |

@@ -3715,7 +3715,7 @@ export const deleteInternalMcpCatalogItemByName = <ThrowOnError extends boolean 
  *
  * Authorization:
  *
- * `mcpRegistry:delete`: Remove servers from the MCP registry
+ * `mcpRegistry:manage-deleted`: View and restore soft-deleted MCP registry entries
  */
 export const restoreInternalMcpCatalogItem = <ThrowOnError extends boolean = false>(options: Options<RestoreInternalMcpCatalogItemData, ThrowOnError>) => (options.client ?? client).post<RestoreInternalMcpCatalogItemResponses, RestoreInternalMcpCatalogItemErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/restore', ...options });
 
@@ -4941,7 +4941,7 @@ export const reauthenticateMcpServer = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `mcpServerInstallation:delete`: Uninstall MCP servers
+ * `mcpServerInstallation:manage-deleted`: View and restore soft-deleted (uninstalled) MCP servers
  */
 export const restoreMcpServer = <ThrowOnError extends boolean = false>(options: Options<RestoreMcpServerData, ThrowOnError>) => (options.client ?? client).post<RestoreMcpServerResponses, RestoreMcpServerErrors, ThrowOnError>({ url: '/api/mcp_server/{id}/restore', ...options });
 

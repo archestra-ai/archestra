@@ -106,7 +106,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .enum(["active", "deleted"])
             .default("active")
             .describe(
-              "Filter by lifecycle status. `deleted` lists soft-deleted catalog items and requires the delete permission.",
+              "Filter by lifecycle status. `deleted` lists soft-deleted catalog items and requires the manage-deleted permission (granted to admins by default).",
             ),
         }),
         response: constructResponseSchema(
@@ -115,15 +115,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      // Soft-deleted catalog items are a delete-class view: gate behind the
-      // catalog delete permission and list org-scoped deleted roots (a backend
-      // affordance for discovering restorable ids — no UI toggle this change).
+      // Soft-deleted catalog items are visible only to holders of the dedicated
+      // manage-deleted capability (admins by default) — the ordinary delete
+      // permission must not unlock the org-wide tombstone view. This lists
+      // org-scoped deleted roots (a backend affordance for discovering
+      // restorable ids — no UI toggle this change).
       if (request.query.status === "deleted") {
-        const { success: canDelete } = await hasPermission(
-          { mcpRegistry: ["delete"] },
+        const { success: canManageDeleted } = await hasPermission(
+          { mcpRegistry: ["manage-deleted"] },
           request.headers,
         );
-        if (!canDelete) {
+        if (!canManageDeleted) {
           throw new ApiError(
             403,
             "You do not have permission to list deleted catalog items.",
@@ -1623,18 +1625,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Restore is a delete-class capability: reserved for admins and a personal
-      // item's author, matching the delete route's authorization.
-      const { success: isAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        request.headers,
-      );
-      requireMcpCatalogDeletePermission({
-        checker: { isAdmin },
-        scope: catalogItem.scope,
-        authorId: catalogItem.authorId,
-        userId: request.user.id,
-      });
+      // Authorization is the route-level manage-deleted permission (admin-only
+      // by default): deleted-resource lifecycle is one org-scoped capability,
+      // not derived from authorship of the live resource.
 
       const conflict =
         await InternalMcpCatalogModel.getRestoreConflictMessage(catalogItem);

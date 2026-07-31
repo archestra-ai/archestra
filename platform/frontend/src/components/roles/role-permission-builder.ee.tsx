@@ -44,6 +44,7 @@ const actionLabels: Record<Action, string> = {
   execute: "Execute",
   "deploy-to-restricted": "Deploy to Restricted",
   manage: "Manage",
+  "manage-deleted": "Manage Deleted",
   "read-all": "Read All Chats",
   "share-org": "Share Org-Wide",
   impersonate: "Impersonate",

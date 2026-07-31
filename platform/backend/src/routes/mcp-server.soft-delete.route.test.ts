@@ -176,7 +176,7 @@ describe("MCP server soft-delete routes", () => {
     expect(res.statusCode).toBe(409);
   });
 
-  test("GET ?status=deleted requires the delete permission", async ({
+  test("GET ?status=deleted requires manage-deleted — the delete permission alone is not enough", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
   }) => {
@@ -197,11 +197,31 @@ describe("MCP server soft-delete routes", () => {
       true,
     );
 
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
+    // A member-shaped caller: holds every ordinary permission (including
+    // delete, which members have for their own uninstalls) but NOT the
+    // admin-default manage-deleted capability. The org-wide tombstone view
+    // must stay closed to them.
+    mockHasPermission.mockImplementation(
+      async (permissions: Record<string, string[]>) => ({
+        success: !Object.values(permissions).some((actions) =>
+          actions.includes("manage-deleted"),
+        ),
+        error: null,
+      }),
+    );
     const forbidden = await app.inject({
       method: "GET",
       url: "/api/mcp_server?status=deleted",
     });
     expect(forbidden.statusCode).toBe(403);
+  });
+
+  test("the restore route is gated on manage-deleted in the endpoint permission map", async () => {
+    const { requiredEndpointPermissionsMap } = await import(
+      "@archestra/shared/access-control"
+    );
+    expect(requiredEndpointPermissionsMap.restoreMcpServer).toEqual({
+      mcpServerInstallation: ["manage-deleted"],
+    });
   });
 });

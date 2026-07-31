@@ -107,6 +107,8 @@ Restoring brings the installation back marked for reinstall. It does not reconne
 
 Deleting a registry entry cascades. Archestra uninstalls every installation created from it and hides that entry's tools in one action. Restoring the entry brings back exactly the installations and tools that were removed with it, each marked for reinstall. An installation you uninstalled on its own earlier stays uninstalled — only the ones removed by this delete come back.
 
+Viewing and restoring uninstalled entries requires the **Manage Deleted** permission (`mcpRegistry:manage-deleted` for registry entries, `mcpServerInstallation:manage-deleted` for installations). Of the predefined roles, only admins hold it; grant it to a custom role to delegate recovery.
+
 Restore is an API action today. List uninstalled entries with `GET /api/internal_mcp_catalog?status=deleted` or uninstalled installations with `GET /api/mcp_server?status=deleted`, then restore one:
 
 - **Installation**: `POST /api/mcp_server/:id/restore`.

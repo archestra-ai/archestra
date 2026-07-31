@@ -84,7 +84,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .enum(["active", "deleted"])
             .default("active")
             .describe(
-              "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the delete permission.",
+              "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the manage-deleted permission (granted to admins by default).",
             ),
         }),
         response: constructResponseSchema(z.array(SelectMcpServerSchema)),
@@ -93,15 +93,18 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ user, headers, query, organizationId }, reply) => {
       const { assignmentScope, assignmentTeamIds, catalogId, status } = query;
 
-      // Soft-deleted installs are a delete-class view: gate them behind the
-      // delete permission and list org-scoped deleted rows (a backend affordance
-      // for discovering restorable ids — there is no UI toggle this change).
+      // Soft-deleted installs are visible only to holders of the dedicated
+      // manage-deleted capability (admins by default): the listing is org-wide
+      // (it includes other users' personal installs), so the ordinary delete
+      // permission — which members hold for their own uninstalls — must not
+      // unlock it. It is a backend affordance for discovering restorable ids —
+      // there is no UI toggle this change.
       if (status === "deleted") {
-        const { success: canDelete } = await hasPermission(
-          { mcpServerInstallation: ["delete"] },
+        const { success: canManageDeleted } = await hasPermission(
+          { mcpServerInstallation: ["manage-deleted"] },
           headers,
         );
-        if (!canDelete) {
+        if (!canManageDeleted) {
           throw new ApiError(
             403,
             "You do not have permission to list deleted MCP servers.",
@@ -1556,10 +1559,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpServerSchema),
       },
     },
-    async (
-      { params: { id: mcpServerId }, user, headers, organizationId },
-      reply,
-    ) => {
+    async ({ params: { id: mcpServerId }, organizationId }, reply) => {
       const mcpServer = await McpServerModel.findDeletedByIdForOrganization(
         mcpServerId,
         organizationId,
@@ -1580,12 +1580,9 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      await assertScopedLifecycleAuthorization({
-        mcpServer,
-        userId: user.id,
-        headers,
-        action: "revoke",
-      });
+      // Authorization is the route-level manage-deleted permission (admin-only
+      // by default): deleted-resource lifecycle is one org-scoped capability,
+      // not derived from per-scope ownership of the live resource.
 
       // A standalone server-restore requires its parent catalog to be active:
       // tools resolve through the catalog, and catalog reads filter notDeleted, so

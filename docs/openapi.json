@@ -193714,7 +193714,7 @@
             "in": "query",
             "name": "status",
             "required": false,
-            "description": "Filter by lifecycle status. `deleted` lists soft-deleted catalog items and requires the delete permission."
+            "description": "Filter by lifecycle status. `deleted` lists soft-deleted catalog items and requires the manage-deleted permission (granted to admins by default)."
           }
         ],
         "responses": {
@@ -201841,7 +201841,7 @@
         "tags": [
           "MCP Catalog"
         ],
-        "description": "Restore a soft-deleted Internal MCP catalog item and its cascaded installs and tools (flag-only reinstall).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:delete`: Remove servers from the MCP registry",
+        "description": "Restore a soft-deleted Internal MCP catalog item and its cascaded installs and tools (flag-only reinstall).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:manage-deleted`: View and restore soft-deleted MCP registry entries",
         "parameters": [
           {
             "schema": {
@@ -202106,7 +202106,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "mcpRegistry:delete"
+            "mcpRegistry:manage-deleted"
           ]
         }
       }
@@ -238915,7 +238915,7 @@
             "in": "query",
             "name": "status",
             "required": false,
-            "description": "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the delete permission."
+            "description": "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the manage-deleted permission (granted to admins by default)."
           }
         ],
         "responses": {
@@ -241454,7 +241454,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Restore a soft-deleted (uninstalled) MCP server. Flag-only: the server is marked for manual reinstall, not re-provisioned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:delete`: Uninstall MCP servers",
+        "description": "Restore a soft-deleted (uninstalled) MCP server. Flag-only: the server is marked for manual reinstall, not re-provisioned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:manage-deleted`: View and restore soft-deleted (uninstalled) MCP servers",
         "parameters": [
           {
             "schema": {
@@ -241982,7 +241982,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "mcpServerInstallation:delete"
+            "mcpServerInstallation:manage-deleted"
           ]
         }
       }
@@ -264439,6 +264439,7 @@
                                   "execute",
                                   "deploy-to-restricted",
                                   "manage",
+                                  "manage-deleted",
                                   "read-all",
                                   "share-org",
                                   "impersonate"
@@ -264800,6 +264801,7 @@
                           "execute",
                           "deploy-to-restricted",
                           "manage",
+                          "manage-deleted",
                           "read-all",
                           "share-org",
                           "impersonate"
@@ -264859,6 +264861,7 @@
                             "execute",
                             "deploy-to-restricted",
                             "manage",
+                            "manage-deleted",
                             "read-all",
                             "share-org",
                             "impersonate"
@@ -265207,6 +265210,7 @@
                             "execute",
                             "deploy-to-restricted",
                             "manage",
+                            "manage-deleted",
                             "read-all",
                             "share-org",
                             "impersonate"
@@ -265520,6 +265524,7 @@
                           "execute",
                           "deploy-to-restricted",
                           "manage",
+                          "manage-deleted",
                           "read-all",
                           "share-org",
                           "impersonate"
@@ -265600,6 +265605,7 @@
                             "execute",
                             "deploy-to-restricted",
                             "manage",
+                            "manage-deleted",
                             "read-all",
                             "share-org",
                             "impersonate"
@@ -316006,6 +316012,7 @@
                         "execute",
                         "deploy-to-restricted",
                         "manage",
+                        "manage-deleted",
                         "read-all",
                         "share-org",
                         "impersonate"

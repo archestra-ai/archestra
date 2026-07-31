@@ -803,6 +803,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInternalMcpCatalogTools]: {
     mcpRegistry: ["read"],
   },
+  [RouteId.GetInternalMcpCatalogItemVersions]: {
+    mcpRegistry: ["read"],
+  },
+  [RouteId.GetInternalMcpCatalogItemVersion]: {
+    mcpRegistry: ["read"],
+  },
   [RouteId.UpdateInternalMcpCatalogItem]: {
     mcpRegistry: ["update"],
   },

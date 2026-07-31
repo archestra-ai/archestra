@@ -1,7 +1,9 @@
 import {
+  createPaginatedResponseSchema,
   isBuiltInCatalogId,
   isMetadataOnlyEdit,
   isPlaywrightCatalogItem,
+  PaginationQuerySchema,
   RouteId,
   SERVER_NAME_PLACEHOLDER,
 } from "@archestra/shared";
@@ -31,6 +33,7 @@ import {
   AppModel,
   EnvironmentModel,
   InternalMcpCatalogModel,
+  InternalMcpCatalogVersionModel,
   McpCatalogLabelModel,
   McpServerModel,
   TeamModel,
@@ -70,6 +73,7 @@ import {
   SelectInternalMcpCatalogSchema,
   UuidIdSchema,
 } from "@/types";
+import { SelectInternalMcpCatalogVersionSchema } from "@/types/internal-mcp-catalog-version";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
 // Match the schema from getMcpServerTools endpoint
@@ -591,6 +595,67 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const tools = await ToolModel.findByCatalogId(id);
       return reply.send(tools);
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/:id/versions",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogItemVersions,
+        description: "List a catalog item's config versions, newest first.",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        querystring: PaginationQuerySchema,
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SelectInternalMcpCatalogVersionSchema),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      await loadViewableCatalogItem(request, id);
+      return reply.send(
+        await InternalMcpCatalogVersionModel.listForCatalog({
+          catalogId: id,
+          pagination: request.query,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/:id/versions/:version",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogItemVersion,
+        description: "Get a specific config version of a catalog item.",
+        tags: ["MCP Catalog"],
+        params: z.object({
+          id: UuidIdSchema,
+          version: z.coerce.number().int().positive(),
+        }),
+        response: constructResponseSchema(
+          SelectInternalMcpCatalogVersionSchema,
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { id, version } = request.params;
+      await loadViewableCatalogItem(request, id);
+      const row = await InternalMcpCatalogVersionModel.findByCatalogAndVersion({
+        catalogId: id,
+        version,
+      });
+      if (!row) {
+        throw new ApiError(
+          404,
+          `Catalog item ${id} has no version ${version}.`,
+        );
+      }
+      return reply.send(row);
     },
   );
 
@@ -2390,6 +2455,33 @@ function isK8sApiThrottlingError(reason: unknown): boolean {
   if (!(reason instanceof Error)) return false;
   const code = (reason as { code?: unknown }).code;
   return code === 429 || /^HTTP-Code: 429\b/.test(reason.message);
+}
+
+/**
+ * Assert the caller can view a catalog item, with the exact visibility rules
+ * of `GET /api/internal_mcp_catalog/:id` (org + team scoping, soft-deleted →
+ * 404, built-in catalog's null org allowed). Used by the version routes, whose
+ * reads take a bare catalogId — `organization_id` is nullable on the catalog
+ * table, so the visibility check cannot be a plain org-equality join. Secrets
+ * are never expanded: this is a visibility probe, not a config read.
+ */
+async function loadViewableCatalogItem(
+  request: FastifyRequest,
+  id: string,
+): Promise<void> {
+  const { success: isAdmin } = await hasPermission(
+    { mcpServerInstallation: ["admin"] },
+    request.headers,
+  );
+  const catalogItem = await InternalMcpCatalogModel.findById(id, {
+    expandSecrets: false,
+    userId: request.user.id,
+    isAdmin,
+    organizationId: request.organizationId,
+  });
+  if (!catalogItem) {
+    throw new ApiError(404, "Catalog item not found");
+  }
 }
 
 /**

@@ -49552,6 +49552,7 @@ export type GetInternalMcpCatalogResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -49690,6 +49691,7 @@ export type CreateInternalMcpCatalogItemData = {
         clonedFrom?: string | null;
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
+        latestVersion?: number;
         labels?: Array<{
             key: string;
             value: string;
@@ -49898,6 +49900,7 @@ export type CreateInternalMcpCatalogItemResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -50200,6 +50203,7 @@ export type GetInternalMcpCatalogItemResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -50330,6 +50334,7 @@ export type UpdateInternalMcpCatalogItemData = {
         scope?: 'personal' | 'team' | 'org';
         environmentId?: string | null;
         catalogReinstallRequired?: boolean;
+        latestVersion?: number;
         labels?: Array<{
             key: string;
             value: string;
@@ -50540,6 +50545,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -50654,6 +50660,258 @@ export type GetInternalMcpCatalogToolsResponses = {
 };
 
 export type GetInternalMcpCatalogToolsResponse = GetInternalMcpCatalogToolsResponses[keyof GetInternalMcpCatalogToolsResponses];
+
+export type GetInternalMcpCatalogItemVersionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/internal_mcp_catalog/{id}/versions';
+};
+
+export type GetInternalMcpCatalogItemVersionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetInternalMcpCatalogItemVersionsError = GetInternalMcpCatalogItemVersionsErrors[keyof GetInternalMcpCatalogItemVersionsErrors];
+
+export type GetInternalMcpCatalogItemVersionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            catalogId: string;
+            version: number;
+            snapshot: {
+                name: string;
+                serverType: string;
+                versionLabel: string | null;
+                description: string | null;
+                instructions: string | null;
+                repository: string | null;
+                installationCommand: string | null;
+                icon: string | null;
+                serverUrl: string | null;
+                docsUrl: string | null;
+                requiresAuth: boolean;
+                authDescription: string | null;
+                authFields: unknown;
+                userConfig: unknown;
+                oauthConfig: unknown;
+                enterpriseManagedConfig: unknown;
+                localConfig: unknown;
+                deploymentSpecYaml: string | null;
+                clientSecretId: string | null;
+                localConfigSecretId: string | null;
+                environment: {
+                    id: string;
+                    name: string;
+                } | null;
+                dynamicConnectionMcpServer: {
+                    id: string;
+                    name: string;
+                } | null;
+            };
+            contentHash: string;
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetInternalMcpCatalogItemVersionsResponse = GetInternalMcpCatalogItemVersionsResponses[keyof GetInternalMcpCatalogItemVersionsResponses];
+
+export type GetInternalMcpCatalogItemVersionData = {
+    body?: never;
+    path: {
+        id: string;
+        version: number;
+    };
+    query?: never;
+    url: '/api/internal_mcp_catalog/{id}/versions/{version}';
+};
+
+export type GetInternalMcpCatalogItemVersionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetInternalMcpCatalogItemVersionError = GetInternalMcpCatalogItemVersionErrors[keyof GetInternalMcpCatalogItemVersionErrors];
+
+export type GetInternalMcpCatalogItemVersionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        catalogId: string;
+        version: number;
+        snapshot: {
+            name: string;
+            serverType: string;
+            versionLabel: string | null;
+            description: string | null;
+            instructions: string | null;
+            repository: string | null;
+            installationCommand: string | null;
+            icon: string | null;
+            serverUrl: string | null;
+            docsUrl: string | null;
+            requiresAuth: boolean;
+            authDescription: string | null;
+            authFields: unknown;
+            userConfig: unknown;
+            oauthConfig: unknown;
+            enterpriseManagedConfig: unknown;
+            localConfig: unknown;
+            deploymentSpecYaml: string | null;
+            clientSecretId: string | null;
+            localConfigSecretId: string | null;
+            environment: {
+                id: string;
+                name: string;
+            } | null;
+            dynamicConnectionMcpServer: {
+                id: string;
+                name: string;
+            } | null;
+        };
+        contentHash: string;
+        createdAt: string;
+    };
+};
+
+export type GetInternalMcpCatalogItemVersionResponse = GetInternalMcpCatalogItemVersionResponses[keyof GetInternalMcpCatalogItemVersionResponses];
 
 export type ReinstallInternalMcpCatalogItemData = {
     body?: never;
@@ -51022,6 +51280,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;
@@ -51239,6 +51498,7 @@ export type ApproveCatalogItemImageResponses = {
         catalogItemApprovalReason: string | null;
         catalogItemApprovalReviewedBy: string | null;
         catalogItemApprovalReviewedAt: string | null;
+        latestVersion: number;
         createdAt: string;
         updatedAt: string;
         deletedAt: string | null;

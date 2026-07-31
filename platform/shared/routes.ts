@@ -61,6 +61,8 @@ export const RouteId = {
   CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
+  GetInternalMcpCatalogItemVersions: "getInternalMcpCatalogItemVersions",
+  GetInternalMcpCatalogItemVersion: "getInternalMcpCatalogItemVersion",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
   ReinstallInternalMcpCatalogItem: "reinstallInternalMcpCatalogItem",
   RefreshInternalMcpCatalogImage: "refreshInternalMcpCatalogImage",

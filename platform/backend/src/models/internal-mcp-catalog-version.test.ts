@@ -210,11 +210,13 @@ describe("InternalMcpCatalogVersionModel", () => {
   test("environment and dynamic-connection referents snapshot as id + name pairs", async ({
     makeInternalMcpCatalog,
     makeMcpServer,
+    makeOrganization,
   }) => {
-    const catalog = await makeInternalMcpCatalog();
+    const org = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const [environment] = await db
       .insert(schema.environmentsTable)
-      .values({ name: "staging", organizationId: catalog.organizationId })
+      .values({ name: "staging", organizationId: org.id })
       .returning();
     const install = await makeMcpServer({ catalogId: catalog.id });
 

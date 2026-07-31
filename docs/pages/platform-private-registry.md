@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-07-30
+lastUpdated: 2026-07-31
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -96,6 +96,17 @@ Archestra stores the tool list discovered at install time. When the upstream ser
 - **Inspector**: open the server's Inspector tab and click **Refresh Tools**.
 - **API**: `POST /api/mcp_server/:id/reload-tools`.
 - **Automatic**: set `ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES` to re-sync every installed server on an interval. See [Deployment](/docs/platform-deployment).
+
+## Version History
+
+Archestra records a version of a registry entry's configuration on every change. Editing the connection settings, environment variable definitions, or deployment YAML forks a new version — a save that changes nothing does not. The last 100 versions are kept per entry, so you can review what changed and when.
+
+History covers configuration only. Sharing, teams, and labels are not versioned. Secrets are stored as references — a version never contains secret values. App-backed registry entries are not versioned here; their content history lives with the app.
+
+Version history is an API surface today:
+
+- **List versions**: `GET /api/internal_mcp_catalog/:id/versions` — newest first, paginated.
+- **Get one version**: `GET /api/internal_mcp_catalog/:id/versions/:version`.
 
 ## Uninstalling and Restoring
 

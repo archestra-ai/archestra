@@ -1,0 +1,257 @@
+suite: archestra network policy enforcement probe
+templates:
+  - network-policy-probe.yaml
+values:
+  - ../ci/test-values.yaml
+tests:
+  - it: renders a deny-all policy and both probe arms by default
+    asserts:
+      - hasDocuments:
+          count: 3
+      - isKind:
+          of: NetworkPolicy
+        documentIndex: 0
+      - isKind:
+          of: Pod
+        documentIndex: 1
+      - isKind:
+          of: Pod
+        documentIndex: 2
+
+  - it: does not render when disabled
+    set:
+      archestra.networkPolicyProbe.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: loads the policy before the pod it selects, and the control before the treatment
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-10"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-5"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "0"
+        documentIndex: 2
+
+  # Deleting the pods on success would discard the only record of the verdict,
+  # leaving the platform with nothing to read and no way to warn.
+  - it: keeps the probe pods after a successful run
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation
+        documentIndex: 2
+
+  - it: denies all egress and selects only the treatment arm of this release
+    asserts:
+      - equal:
+          path: spec.podSelector.matchLabels
+          value:
+            app.kubernetes.io/instance: RELEASE-NAME
+            archestra.io/netpol-probe-role: treatment
+        documentIndex: 0
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Egress
+        documentIndex: 0
+      - isNull:
+          path: spec.egress
+        documentIndex: 0
+
+  - it: labels the arms so only the treatment pod is selected
+    asserts:
+      - equal:
+          path: metadata.labels["archestra.io/netpol-probe-role"]
+          value: control
+        documentIndex: 1
+      - equal:
+          path: metadata.labels["archestra.io/netpol-probe-role"]
+          value: treatment
+        documentIndex: 2
+      # The backend finds both arms by this label.
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: netpol-probe
+        documentIndex: 1
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: netpol-probe
+        documentIndex: 2
+      # Suffixed so the platform Service can never route to a probe pod.
+      - matchRegex:
+          path: metadata.labels["app.kubernetes.io/name"]
+          pattern: -netpol-probe$
+        documentIndex: 1
+
+  - it: gives the probe pods no API access
+    asserts:
+      - equal:
+          path: spec.automountServiceAccountToken
+          value: false
+        documentIndex: 1
+      - isNull:
+          path: spec.serviceAccountName
+        documentIndex: 1
+      - equal:
+          path: spec.automountServiceAccountToken
+          value: false
+        documentIndex: 2
+      - isNull:
+          path: spec.serviceAccountName
+        documentIndex: 2
+      - equal:
+          path: spec.restartPolicy
+          value: Never
+        documentIndex: 2
+
+  - it: writes the verdict where the kubelet will publish it
+    asserts:
+      - equal:
+          path: spec.containers[0].terminationMessagePath
+          value: /dev/termination-log
+        documentIndex: 2
+      - equal:
+          path: spec.containers[0].terminationMessagePolicy
+          value: File
+        documentIndex: 2
+
+  - it: reuses the chart busybox image so airgapped mirrors apply
+    set:
+      archestra.initContainers.busyboxImage: registry.example.com/busybox:1.36
+    asserts:
+      - equal:
+          path: spec.containers[0].image
+          value: registry.example.com/busybox:1.36
+        documentIndex: 1
+      - equal:
+          path: spec.containers[0].image
+          value: registry.example.com/busybox:1.36
+        documentIndex: 2
+
+  - it: targets the platform Service by default, fully qualified
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: nc -z -w 2 RELEASE-NAME-archestra-platform\.NAMESPACE\.svc\.cluster\.local\. 9000
+        documentIndex: 1
+
+  - it: follows a custom cluster DNS domain
+    set:
+      archestra.orchestrator.kubernetes.clusterDomain: internal.corp
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: RELEASE-NAME-archestra-platform\.NAMESPACE\.svc\.internal\.corp\.
+        documentIndex: 1
+
+  - it: honours an operator-supplied target
+    set:
+      archestra.networkPolicyProbe.target.host: probe-sink.other-ns.svc.cluster.local.
+      archestra.networkPolicyProbe.target.port: 8080
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: nc -z -w 2 probe-sink\.other-ns\.svc\.cluster\.local\. 8080
+        documentIndex: 2
+
+  # A single sample cannot tell enforcement from a dataplane that programmed its
+  # rules a moment late, so the treatment arm settles first and then votes.
+  - it: settles and samples repeatedly before judging the treatment arm
+    set:
+      archestra.networkPolicyProbe.settleSeconds: 7
+      archestra.networkPolicyProbe.treatmentAttempts: 9
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: sleep 7
+        documentIndex: 2
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'while \[ \$i -lt 9 \]'
+        documentIndex: 2
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'expr \$ok \\\* 2. -gt 9'
+        documentIndex: 2
+      # The control arm neither settles nor votes; it stops at first contact.
+      - notMatchRegex:
+          path: spec.containers[0].args[0]
+          pattern: expr \$ok
+        documentIndex: 1
+
+  - it: bounds every attempt so a blocked path cannot outlive the pod deadline
+    set:
+      archestra.networkPolicyProbe.attemptTimeoutSeconds: 4
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: timeout 4 nc -z
+        documentIndex: 1
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: timeout 4 nc -z
+        documentIndex: 2
+
+  - it: never fails the release
+    asserts:
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: exit 0
+        documentIndex: 1
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: exit 0
+        documentIndex: 2
+
+  # The platform looks for the verdict in the namespace it manages workloads in.
+  # Rendering elsewhere leaves the probe running and its result never read.
+  - it: renders into the namespace the platform inspects
+    set:
+      archestra.orchestrator.kubernetes.namespace: mcp-workloads
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: mcp-workloads
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: mcp-workloads
+        documentIndex: 1
+      - equal:
+          path: metadata.namespace
+          value: mcp-workloads
+        documentIndex: 2
+      # The target stays in the release namespace, where the Service lives.
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: RELEASE-NAME-archestra-platform\.NAMESPACE\.svc\.cluster\.local\.
+        documentIndex: 1
+
+  - it: caps the lifetime of an orphaned probe pod
+    set:
+      archestra.networkPolicyProbe.activeDeadlineSeconds: 120
+    asserts:
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 120
+        documentIndex: 1
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 120
+        documentIndex: 2

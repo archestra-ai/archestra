@@ -1,0 +1,161 @@
+{{- if .Values.archestra.networkPolicyProbe.enabled }}
+{{/*
+Behavioural check that this cluster actually enforces NetworkPolicy.
+
+The Kubernetes API accepts NetworkPolicy objects whether or not anything
+enforces them, and no API surface reliably distinguishes the two: GKE with the
+Calico addon installed but node enforcement off serves the Calico CRDs while
+enforcing nothing, and GKE Dataplane V2, kindnet and the EKS VPC CNI all enforce
+while publishing no CRD at all. Only running the experiment settles it.
+
+Two pods run the identical probe against the same target; the only difference is
+that a deny-all egress policy selects one of them. Reachable from both means
+nothing is enforcing. Reachable from the control but not the treatment means
+enforcement works. Unreachable from the control proves nothing — the target
+never came up — and must never be read as "not enforced".
+
+Hook weights sequence the three: the policy is loaded before the pod it selects
+exists, and the control finishes before the treatment starts.
+*/}}
+{{- $probe := .Values.archestra.networkPolicyProbe }}
+{{- $host := include "archestra-platform.networkPolicyProbeTarget" . }}
+{{- $port := $probe.target.port }}
+{{- /*
+  The namespace the platform inspects for workloads, which is where it looks for
+  this verdict. It is not always the release namespace, and rendering into the
+  wrong one leaves the probe running and its result unread.
+*/}}
+{{- $ns := .Values.archestra.orchestrator.kubernetes.namespace | default .Release.Namespace }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-netpol-probe
+  namespace: {{ $ns }}
+  labels:
+    {{- include "archestra-platform.networkPolicyProbeLabels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-10"
+    {{- /*
+    Never hook-succeeded: this policy has to still be in force when the
+    treatment pod runs at weight 0, and deleting it here would make every
+    cluster look like it enforces nothing.
+    */}}
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  {{- /*
+    Scoped to one role label on one release, so it can only ever select the
+    treatment pod below — never an MCP server, engine, or platform pod.
+  */}}
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      archestra.io/netpol-probe-role: treatment
+  policyTypes:
+    - Egress
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-netpol-probe-control
+  namespace: {{ $ns }}
+  labels:
+    {{- include "archestra-platform.networkPolicyProbeLabels" . | nindent 4 }}
+    archestra.io/netpol-probe-role: control
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-5"
+    {{- /*
+    Both pods outlive the hook on purpose: their termination messages are the
+    only record of the verdict, and the backend reads them to decide what the
+    environments screen shows. Replaced on the next release.
+    */}}
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  {{- /*
+    The probe needs no API access, and must not depend on the platform
+    ServiceAccount existing or carry a token into a deliberately isolated pod.
+  */}}
+  automountServiceAccountToken: false
+  activeDeadlineSeconds: {{ $probe.activeDeadlineSeconds }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: probe
+      image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
+      imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+      {{- include "archestra-platform.networkPolicyProbeControlScript" (dict "attempts" $probe.controlAttempts "attemptTimeout" $probe.attemptTimeoutSeconds "host" $host "port" $port) | nindent 6 }}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      {{- with $probe.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- with $probe.nodeSelector | default .Values.archestra.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $probe.tolerations | default .Values.archestra.tolerations }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "archestra-platform.fullname" . }}-netpol-probe-treatment
+  namespace: {{ $ns }}
+  labels:
+    {{- include "archestra-platform.networkPolicyProbeLabels" . | nindent 4 }}
+    archestra.io/netpol-probe-role: treatment
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  activeDeadlineSeconds: {{ $probe.activeDeadlineSeconds }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: probe
+      image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
+      imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+      {{- include "archestra-platform.networkPolicyProbeTreatmentScript" (dict "attempts" $probe.treatmentAttempts "attemptTimeout" $probe.attemptTimeoutSeconds "settleSeconds" $probe.settleSeconds "host" $host "port" $port) | nindent 6 }}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      {{- with $probe.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- with $probe.nodeSelector | default .Values.archestra.nodeSelector }}
+  nodeSelector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with $probe.tolerations | default .Values.archestra.tolerations }}
+  tolerations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

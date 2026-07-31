@@ -338,6 +338,70 @@ archestra:
     # Extra envFrom entries for the migration Job.
     envFrom: []
 
+  # Verifies that this cluster actually enforces NetworkPolicy, by running the
+  # experiment rather than inferring it. After each install/upgrade two throwaway
+  # busybox pods probe the same target; a deny-all egress policy selects only one
+  # of them. Reachable from both means nothing enforces, and every egress rule
+  # configured in the UI would be silently ignored.
+  #
+  # This cannot be answered from the API: GKE with the Calico addon on but node
+  # enforcement off serves the Calico CRDs while enforcing nothing, and GKE
+  # Dataplane V2, kindnet and the EKS VPC CNI enforce while publishing no CRD.
+  #
+  # Never fails the release — both pods always exit 0. The pods are left behind
+  # deliberately; their termination messages carry the verdict, and the platform
+  # reads them to decide what the environments screen reports. Read it directly
+  # with the command printed at the end of `helm install`/`helm upgrade`.
+  networkPolicyProbe:
+    enabled: true
+    target:
+      # Empty means the platform's own Service. Any replacement must be an
+      # in-cluster ClusterIP address so the probe works without internet access.
+      # Do not point this at cluster DNS or the Kubernetes API: both are reached
+      # over node-local paths on some clusters that several dataplanes leave
+      # unfiltered, which reports an unenforced cluster as enforcing.
+      host: ""
+      port: 9000
+    # Covers a fresh install without --wait, where the platform is still booting.
+    # This arm has to reach the target before the other arm's result means
+    # anything, so it is deliberately patient. Stops at the first success.
+    #
+    # Helm waits for hook pods, and that wait counts against `--timeout`
+    # (5m by default). Keep controlAttempts * (attemptTimeoutSeconds + 1) well
+    # under it with room for scheduling and an image pull, or a slow cluster
+    # turns this diagnostic into a failed release.
+    controlAttempts: 25
+    # Sampled as a majority, so keep it odd and above one: a single attempt
+    # cannot tell a real result from a dataplane that programmed its rules a
+    # moment late. Every attempt costs a full attemptTimeoutSeconds once
+    # enforcement bites, so keep it small too.
+    treatmentAttempts: 5
+    # Time given to the dataplane to program the new pod's rules before sampling
+    # starts. Without it the first attempts race the CNI and a cluster that does
+    # enforce reports that it does not.
+    settleSeconds: 5
+    # Bounds a single attempt. The deny-all arm blocks DNS as well as the
+    # connection, so an attempt can hang well past the connect timeout; without
+    # this cap the pod is killed by activeDeadlineSeconds before it records a
+    # verdict, and the result reads as "no probe ran" instead of "enforced".
+    attemptTimeoutSeconds: 3
+    # Hard cap so an orphaned probe pod cannot linger. Must exceed
+    # controlAttempts * (attemptTimeoutSeconds + 1).
+    activeDeadlineSeconds: 300
+    # A policy that allows egress and also selects the probe pods would let the
+    # restricted arm through and report a cluster that enforces as one that does
+    # not. NetworkPolicy is additive, so nothing else in the namespace may select
+    # `archestra.io/netpol-probe-role: treatment`.
+    resources:
+      requests:
+        cpu: "10m"
+        memory: "16Mi"
+      limits:
+        memory: "64Mi"
+    # Fall back to the platform's placement when unset.
+    nodeSelector: {}
+    tolerations: []
+
   # Resource requests and limits for the Archestra container
   # See: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
   resources:

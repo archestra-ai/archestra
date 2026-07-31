@@ -32,3 +32,26 @@ Using internal PostgreSQL database:
   Database: {{ .Values.postgresql.auth.database }}
   Username: {{ .Values.postgresql.auth.username }}
 {{- end }}
+
+{{- if .Values.archestra.networkPolicyProbe.enabled }}
+
+Network policy enforcement:
+  Two probe pods just tested whether this cluster enforces NetworkPolicy. Read
+  the result (these notes are rendered before the probe runs, so they cannot
+  carry it):
+
+  kubectl --namespace {{ .Release.Namespace }} get pod -l app.kubernetes.io/component=netpol-probe \
+    -o custom-columns='POD:.metadata.name,RESULT:.status.containerStatuses[0].state.terminated.message'
+
+  control=reachable, treatment=blocked   -> enforced
+  control=reachable, treatment=reachable -> NOT ENFORCED: egress rules configured
+                                            in Archestra will be silently ignored
+  control=blocked                        -> inconclusive, the target never came up
+
+  The same verdict drives the warning on the Environments settings screen.
+
+  The pods and their deny-all policy are hook resources, so `helm uninstall`
+  leaves them behind. Remove them with:
+
+  kubectl --namespace {{ .Release.Namespace }} delete pod,networkpolicy -l app.kubernetes.io/component=netpol-probe
+{{- end }}

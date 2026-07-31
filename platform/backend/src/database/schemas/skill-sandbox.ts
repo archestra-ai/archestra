@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import appsTable from "./app";
 import conversationsTable from "./conversation";
 import usersTable from "./user";
 
@@ -23,6 +24,10 @@ import usersTable from "./user";
  * Each conversation has at most one `isDefault` sandbox, created lazily on the
  * first command/upload/skill activation; explicit `{fresh}` sandboxes have
  * `isDefault = false`.
+ *
+ * An MCP App runtime has no conversation, so its default sandbox is keyed by
+ * `app_id` instead: exactly one per (org, user, app), and every sandbox-backed
+ * capability an app uses resolves to that single instance.
  */
 const skillSandboxesTable = pgTable(
   "skill_sandboxes",
@@ -38,9 +43,18 @@ const skillSandboxesTable = pgTable(
       { onDelete: "set null" },
     ),
     /**
-     * The conversation's implicit default sandbox. At most one per
-     * (org, user, conversation) — enforced by the partial unique index below so
-     * concurrent first calls cannot create two defaults.
+     * MCP App the sandbox belongs to; null = not an app sandbox. Mutually
+     * exclusive with `conversation_id` in practice — an app runtime carries no
+     * conversation.
+     */
+    appId: uuid("app_id").references(() => appsTable.id, {
+      onDelete: "cascade",
+    }),
+    /**
+     * The context's implicit default sandbox. At most one per
+     * (org, user, conversation) and one per (org, user, app) — enforced by the
+     * partial unique indexes below so concurrent first calls cannot create two
+     * defaults.
      */
     isDefault: boolean("is_default").notNull().default(false),
     /** Working directory used when a command does not provide an explicit cwd. */
@@ -57,9 +71,16 @@ const skillSandboxesTable = pgTable(
     index("skill_sandboxes_organization_id_idx").on(table.organizationId),
     index("skill_sandboxes_user_id_idx").on(table.userId),
     index("skill_sandboxes_conversation_id_idx").on(table.conversationId),
+    index("skill_sandboxes_app_id_idx").on(table.appId),
     uniqueIndex("skill_sandboxes_default_uidx")
       .on(table.organizationId, table.userId, table.conversationId)
       .where(sql`${table.isDefault}`),
+    // The index above cannot protect an app's default: its conversation_id is
+    // NULL and Postgres treats NULLs as distinct, so (org, user, NULL) would
+    // admit unlimited defaults. Key the app's on app_id instead.
+    uniqueIndex("skill_sandboxes_app_default_uidx")
+      .on(table.organizationId, table.userId, table.appId)
+      .where(sql`${table.isDefault} AND ${table.appId} IS NOT NULL`),
   ],
 );
 

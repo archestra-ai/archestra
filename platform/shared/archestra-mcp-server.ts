@@ -151,6 +151,15 @@ export const TOOL_READ_FILE_SHORT_NAME = "read_file";
 export const TOOL_SAVE_FILE_SHORT_NAME = "save_file";
 export const TOOL_EDIT_FILE_SHORT_NAME = "edit_file";
 export const TOOL_DELETE_FILE_SHORT_NAME = "delete_file";
+// Agent-side exchange between file namespaces (conversation/project/attachment
+// ↔ the chat's open app). Deliberately NOT app-callable: an app stays inside
+// its own namespace; the agent — acting as the user, with the user's RBAC — is
+// the only broker that can move bytes across scopes.
+export const TOOL_COPY_FILE_SHORT_NAME = "copy_file";
+// App-runtime-only raw read: exact bytes (any type, base64), for program
+// consumers. Never seeded or exposed to agents — read_file's paged, numbered
+// window is the agent-shaped rendering of the same store.
+export const TOOL_READ_FILE_RAW_SHORT_NAME = "read_file_raw";
 // MCP Apps — authoring/management (chat) + per-app data store (app runtime).
 export const TOOL_SCAFFOLD_APP_SHORT_NAME = "scaffold_app";
 export const TOOL_REFINE_APP_SHORT_NAME = "refine_app";
@@ -266,6 +275,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
   TOOL_DELETE_FILE_SHORT_NAME,
+  TOOL_COPY_FILE_SHORT_NAME,
+  TOOL_READ_FILE_RAW_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_LIST_APPS_SHORT_NAME,
@@ -436,6 +447,8 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   save_file: "skill_sandbox",
   edit_file: "skill_sandbox",
   delete_file: "skill_sandbox",
+  copy_file: "skill_sandbox",
+  read_file_raw: "skill_sandbox",
 
   scaffold_app: "apps",
   refine_app: "apps",
@@ -729,6 +742,44 @@ export const PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_EDIT_FILE_SHORT_NAME,
   TOOL_DELETE_FILE_SHORT_NAME,
+  TOOL_COPY_FILE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * Built-ins that exist ONLY inside an app runtime — never seeded as tool rows,
+ * so they cannot be assigned to an agent, found by search_tools, or listed on
+ * any gateway. They dispatch in-process through the app MCP proxy alone. A
+ * program parsing a file wants its exact bytes; a model reading the same store
+ * uses `read_file`'s paged, line-numbered window, so the raw read stays off the
+ * agent surface entirely.
+ */
+export const APP_RUNTIME_ONLY_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_READ_FILE_RAW_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+const APP_RUNTIME_ONLY_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
+  new Set(APP_RUNTIME_ONLY_ARCHESTRA_TOOL_SHORT_NAMES);
+
+export function isAppRuntimeOnlyArchestraToolShortName(
+  shortName: string,
+): boolean {
+  return APP_RUNTIME_ONLY_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
+/**
+ * The file tools an MCP App's runtime may call: the persistent-files group plus
+ * the two sandbox file-transfer tools. `run_command` is deliberately excluded —
+ * an app is a UI surface, not an execution environment.
+ *
+ * Apps address these against their own per-(app, viewer) namespace rather than a
+ * conversation's files, so the set is meaningful on every app surface (chat
+ * inline, the standalone page, and the shareable connector).
+ */
+export const APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
+  ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+  TOOL_UPLOAD_FILE_SHORT_NAME,
+  TOOL_DOWNLOAD_FILE_SHORT_NAME,
+  TOOL_READ_FILE_RAW_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**

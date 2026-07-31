@@ -11,6 +11,13 @@ import { sanitizeAppNameForToolMetadata } from "@/services/apps/app-run-link";
 export type OpenedApp =
   | {
       kind: "owned";
+      /**
+       * The app's id, carried so the chat can thread it into the tool-execution
+       * context (`ArchestraContext.openedAppId`) for the agent-side file
+       * exchange. Safe to trust: `resolveOpenedApp` re-verified the viewer's
+       * access to exactly this id on this turn.
+       */
+      id: string;
       name: string;
       description: string | null;
       /**
@@ -68,6 +75,7 @@ export async function resolveOpenedApp(params: {
     const tools = await AppToolModel.getToolsForApp(app.id);
     return {
       kind: "owned",
+      id: app.id,
       name,
       description: promptSafe(app.description),
       // Sorted so the block is byte-stable across turns: assignment order is

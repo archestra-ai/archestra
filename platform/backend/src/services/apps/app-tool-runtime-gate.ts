@@ -1,13 +1,18 @@
 import {
+  APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_APP_DATA_DELETE_SHORT_NAME,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_DATA_LIST_SHORT_NAME,
   TOOL_APP_DATA_SET_SHORT_NAME,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
+  TOOL_READ_FILE_RAW_SHORT_NAME,
+  TOOL_READ_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type { McpUiToolMeta } from "@modelcontextprotocol/ext-apps";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import {
   AppModel,
   TeamModel,
@@ -16,9 +21,10 @@ import {
 } from "@/models";
 
 /**
- * The App Data Store tools are the ONLY Archestra built-ins an app runtime may
- * dispatch — they run in-process keyed by the route-bound appId. Every other
- * Archestra tool (the management/chat surface) is rejected by the gate.
+ * The App Data Store tools run in-process keyed by the route-bound appId.
+ * Together with the LLM completion and the file tools they form the built-in
+ * surface an app runtime may dispatch; every other Archestra tool (the
+ * management/chat surface) is rejected by the gate.
  */
 const APP_DATA_SHORT_NAMES = new Set<string>([
   TOOL_APP_DATA_GET_SHORT_NAME,
@@ -27,11 +33,95 @@ const APP_DATA_SHORT_NAMES = new Set<string>([
   TOOL_APP_DATA_DELETE_SHORT_NAME,
 ]);
 
-/** Reserved Archestra built-ins an app runtime may dispatch via the SDK. */
-export const APP_RUNTIME_BUILTIN_SHORT_NAMES = new Set<string>([
+/**
+ * The file tools, which — unlike the other built-ins — exist only while the
+ * skills-sandbox runtime is on. Kept as a set for the availability predicate.
+ */
+const APP_FILE_SHORT_NAMES = new Set<string>(
+  APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+);
+
+/** Audit-row stand-in for file bytes an app read. */
+const REDACTED_FILE_CONTENT_TEXT = "[file content not persisted in audit logs]";
+
+/**
+ * Reserved Archestra built-ins an app runtime may dispatch via the SDK. Ask
+ * {@link isAppRuntimeBuiltinAvailable} rather than this set directly — some are
+ * feature-flagged.
+ */
+const APP_RUNTIME_BUILTIN_SHORT_NAMES = new Set<string>([
   ...APP_DATA_SHORT_NAMES,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
+  ...APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
 ]);
+
+/**
+ * Whether an app-runtime built-in is actually dispatchable right now. Set
+ * membership alone is not enough for the file tools: they are registered only
+ * when the skills-sandbox runtime is on (see `getArchestraMcpTools`), so with
+ * the flag dark the gate would admit a call that dispatch then fails to
+ * resolve. Every consumer — the gate, the in-process dispatch branch,
+ * `tools/list`, and the SDK bootstrap — asks this one predicate, so a dark flag
+ * removes the whole surface coherently.
+ */
+export function isAppRuntimeBuiltinAvailable(shortName: string): boolean {
+  if (!APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName)) return false;
+  if (isAppFileToolShortName(shortName)) return config.skillsSandbox.enabled;
+  return true;
+}
+
+/**
+ * Whether a built-in is one of the app file tools. They are marked app-only in
+ * `tools/list`: an embedding host's model must not roam the viewer's app files,
+ * while the app's own code still calls them.
+ */
+export function isAppFileToolShortName(shortName: string): boolean {
+  return APP_FILE_SHORT_NAMES.has(shortName);
+}
+
+/**
+ * Redact an app-dispatched built-in's result before it is persisted as an audit
+ * row. `read_file` returns the file's contents, and an app read must not create
+ * a second, long-lived database copy of them — the structured metadata
+ * (filename, size, line window) is kept, the content blocks are replaced. Every
+ * other built-in's result passes through unchanged. Audit persistence stays
+ * best-effort; this only shapes WHAT is stored, never whether the call
+ * proceeds.
+ */
+export function redactAppBuiltinAuditResult(
+  toolName: string,
+  response: CallToolResult,
+): CallToolResult {
+  const shortName = archestraMcpBranding.getToolShortName(toolName);
+  if (
+    shortName !== TOOL_READ_FILE_SHORT_NAME &&
+    shortName !== TOOL_READ_FILE_RAW_SHORT_NAME
+  ) {
+    return response;
+  }
+  // Error results carry diagnostics (not-found, size caps), never file bytes —
+  // keep them intact for the audit trail.
+  if (response.isError) return response;
+  // structuredContent mirrors the bytes in `content` (read_file's text window)
+  // or `contentBase64` (read_file_raw) — strip both the same way, keeping the
+  // metadata for the audit trail.
+  const structured =
+    response.structuredContent && typeof response.structuredContent === "object"
+      ? (() => {
+          const {
+            content: _content,
+            contentBase64: _contentBase64,
+            ...meta
+          } = response.structuredContent as Record<string, unknown>;
+          return meta;
+        })()
+      : response.structuredContent;
+  return {
+    ...response,
+    structuredContent: structured,
+    content: [{ type: "text", text: REDACTED_FILE_CONTENT_TEXT }],
+  };
+}
 
 type AppToolGateDecision =
   | { allowed: true; kind: "app-builtin" }
@@ -68,12 +158,13 @@ export async function gateAppToolCall(params: {
 }): Promise<AppToolGateDecision> {
   const { appId, userId, toolName, toolInput } = params;
 
-  // Archestra built-ins: only the reserved app-runtime tools (App Data Store +
-  // the LLM completion) are dispatchable from an app; they bypass invocation
-  // policy (consistent with the rest of the engine).
+  // Archestra built-ins: only the reserved app-runtime tools (App Data Store,
+  // the LLM completion, the file tools) are dispatchable from an app; they
+  // bypass invocation policy (consistent with the rest of the engine). RBAC is
+  // still enforced per call, against the viewer, inside executeArchestraTool.
   if (archestraMcpBranding.isToolName(toolName)) {
     const shortName = archestraMcpBranding.getToolShortName(toolName);
-    if (shortName && APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName)) {
+    if (shortName && isAppRuntimeBuiltinAvailable(shortName)) {
       return { allowed: true, kind: "app-builtin" };
     }
     return {

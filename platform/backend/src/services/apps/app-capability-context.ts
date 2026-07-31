@@ -24,8 +24,10 @@ interface AppCapabilityContext {
  * user can otherwise reach — resolved through {@link resolveAppAssignableToolRows},
  * the exact surface `resolveAppToolsByName` assigns from. Each name maps to its
  * canonical row (RBAC-filtered, catalog-visibility-scoped, Archestra built-ins
- * excluded because apps reach the data store through archestra.storage), so the
- * grounding lists exactly the names that can really be attached and each
+ * excluded — an app reaches those it may use, the data store and the file tools,
+ * without an assignment: they are always-on runtime built-ins described in the
+ * SDK summary), so the grounding lists exactly the names that can really be
+ * attached and each
  * description comes from the row that would actually be assigned and run.
  *
  * Grounding resolves in the *app's* `environmentId` (plus the Default-

@@ -12,6 +12,11 @@ import { safeSegment } from "./file-path";
  * (`<email>/<conversationId>/<filename>`), so each conversation has its own
  * folder and two conversations may reuse a filename. `conversationId` is null
  * for a headless (no-conversation) write, which falls back to `<email>/<filename>`.
+ *
+ * An MCP App's files are the viewer's own files in their own sub-namespace
+ * (`<email>/apps/<appId>/<filename>`) — the owner is still the user, so access
+ * follows the personal-file rule unchanged, but no app can collide with another
+ * app, with a chat, or with the headless bucket.
  */
 export type OwnerScope =
   | {
@@ -19,6 +24,7 @@ export type OwnerScope =
       userId: string;
       label: string;
       conversationId: string | null;
+      appId?: string | null;
     }
   | { kind: "project"; projectId: string; label: string };
 
@@ -77,6 +83,11 @@ export class FilePathConflictError extends Error {
  */
 export function scopeFolder(scope: OwnerScope): string {
   const owner = safeSegment(scope.label);
+  if (scope.kind === "user" && scope.appId) {
+    // literal "apps" segment: a conversation folder is a bare UUID, so the two
+    // sub-namespaces can never collide.
+    return `${owner}/apps/${safeSegment(scope.appId)}`;
+  }
   if (scope.kind === "user" && scope.conversationId) {
     return `${owner}/${safeSegment(scope.conversationId)}`;
   }

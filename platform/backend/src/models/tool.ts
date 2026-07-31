@@ -9,6 +9,7 @@ import {
   DEFAULT_ARCHESTRA_TOOL_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   getArchestraToolGroupId,
+  isAppRuntimeOnlyArchestraToolShortName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
@@ -1410,7 +1411,15 @@ class ToolModel {
         },
       });
 
-    const archestraTools = getArchestraMcpTools();
+    // App-runtime-only built-ins never become tool rows: no row means no agent
+    // assignment, no search_tools hit, no gateway listing. They dispatch
+    // in-process through the app MCP proxy alone.
+    const archestraTools = getArchestraMcpTools().filter((t) => {
+      // Branding-aware parse: seeding runs on rebranded names, so the shared
+      // strict `archestra__` parser could miss a white-labeled prefix here.
+      const shortName = archestraMcpBranding.getToolShortName(t.name);
+      return !(shortName && isAppRuntimeOnlyArchestraToolShortName(shortName));
+    });
     const archestraToolNames = new Set(archestraTools.map((t) => t.name));
 
     // Migrate pre-existing "discovered" Archestra tools (catalog_id = NULL) to use the catalog

@@ -1,0 +1,12 @@
+-- drizzle-migration-linter: allow-breaking
+-- drizzle-migration-linter: reason=Both app_id columns are added in this same migration and are NULL for every existing row, so the FK validations match nothing and the two new partial unique indexes (each predicated on app_id IS NOT NULL) cover an empty row set — neither can fail on existing data. The orphan index is dropped and recreated in the same transaction with an added AND app_id IS NULL term: with app_id NULL everywhere it covers exactly the rows it covered before, so no older writer is broken. ON DELETE cascade is intentional on both — an app's files and its sandbox are part of the app and must not outlive it. files and skill_sandboxes are modest tables (produced files and sandbox recipes, not proxy traffic), so the index builds take no meaningful lock.
+DROP INDEX "files_user_filename_orphan_uidx";--> statement-breakpoint
+ALTER TABLE "files" ADD COLUMN "app_id" uuid;--> statement-breakpoint
+ALTER TABLE "skill_sandboxes" ADD COLUMN "app_id" uuid;--> statement-breakpoint
+ALTER TABLE "files" ADD CONSTRAINT "files_app_id_apps_id_fk" FOREIGN KEY ("app_id") REFERENCES "public"."apps"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "skill_sandboxes" ADD CONSTRAINT "skill_sandboxes_app_id_apps_id_fk" FOREIGN KEY ("app_id") REFERENCES "public"."apps"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "files_app_id_idx" ON "files" USING btree ("app_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "files_user_app_filename_uidx" ON "files" USING btree ("user_id","app_id","filename") WHERE "files"."app_id" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "skill_sandboxes_app_id_idx" ON "skill_sandboxes" USING btree ("app_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "skill_sandboxes_app_default_uidx" ON "skill_sandboxes" USING btree ("organization_id","user_id","app_id") WHERE "skill_sandboxes"."is_default" AND "skill_sandboxes"."app_id" IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "files_user_filename_orphan_uidx" ON "files" USING btree ("user_id","filename") WHERE "files"."project_id" IS NULL AND "files"."conversation_id" IS NULL AND "files"."app_id" IS NULL;

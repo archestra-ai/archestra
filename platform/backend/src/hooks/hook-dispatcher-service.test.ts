@@ -94,6 +94,7 @@ describe("hookDispatcherService", () => {
       conversationId: "conv-1",
       defaultCwd: "/home/sandbox",
       isDefault: true,
+      appId: null,
       nextReplaySequence: 0,
       createdAt: new Date(),
     });
@@ -186,6 +187,7 @@ describe("hookDispatcherService", () => {
       conversationId: "conv-2",
       defaultCwd: "/home/sandbox",
       isDefault: true,
+      appId: null,
       nextReplaySequence: 0,
       createdAt: new Date(),
     });
@@ -268,6 +270,7 @@ describe("hookDispatcherService", () => {
       conversationId: "conv-3",
       defaultCwd: "/home/sandbox",
       isDefault: true,
+      appId: null,
       nextReplaySequence: 0,
       createdAt: new Date(),
     });
@@ -371,6 +374,7 @@ describe("hookDispatcherService", () => {
         conversationId,
         defaultCwd: "/home/sandbox",
         isDefault: true,
+        appId: null,
         nextReplaySequence: 0,
         createdAt: new Date(),
       });

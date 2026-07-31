@@ -330,6 +330,33 @@ describe("SkillModel immutable versioning", () => {
     const files = await SkillVersionModel.findFiles(v2?.id ?? "");
     expect(files.map((f) => f.content)).toEqual(["# A v2"]);
   });
+
+  test("listForSkill is scoped to the skill's organization", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const otherOrg = await makeOrganization();
+    const skill = await SkillModel.createWithFiles({
+      skill: skillInput({ organizationId: org.id }),
+      files: [],
+    });
+    if (!skill) throw new Error("seed failed");
+
+    const scoped = await SkillVersionModel.listForSkill({
+      skillId: skill.id,
+      organizationId: org.id,
+      pagination: { limit: 10, offset: 0 },
+    });
+    expect(scoped.pagination.total).toBe(1);
+
+    const foreign = await SkillVersionModel.listForSkill({
+      skillId: skill.id,
+      organizationId: otherOrg.id,
+      pagination: { limit: 10, offset: 0 },
+    });
+    expect(foreign.pagination.total).toBe(0);
+    expect(foreign.data).toEqual([]);
+  });
 });
 
 describe("SkillModel.recordUsage", () => {

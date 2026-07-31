@@ -759,6 +759,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send(
         await SkillVersionModel.listForSkill({
           skillId: skill.id,
+          organizationId,
           pagination: query,
         }),
       );
@@ -776,7 +777,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Skills"],
         params: z.object({
           id: z.string(),
-          version: z.coerce.number().int().positive(),
+          // capped at int4 max so impossible versions 400 instead of
+          // reaching Postgres as an out-of-range bind
+          version: z.coerce.number().int().positive().max(2_147_483_647),
         }),
         response: constructResponseSchema(SkillVersionDetailSchema),
       },

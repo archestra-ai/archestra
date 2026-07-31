@@ -143,6 +143,22 @@ describe("agent version routes", () => {
       });
       expect(response.statusCode).toBe(404);
     });
+
+    test("a non-admin can read history of a visible agent", async ({
+      makeAgent,
+    }) => {
+      // org-scoped agent: type-level read passes and the real team/author
+      // filter grants visibility to any org member
+      const agent = await makeAgent({ organizationId });
+      mockChecker({ canRead: true, isAdmin: false });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().pagination.total).toBe(1);
+    });
   });
 
   describe("GET /api/agents/:id/versions/:version", () => {
@@ -162,6 +178,20 @@ describe("agent version routes", () => {
       expect(version.snapshot.description).toBe("second draft");
     });
 
+    test("a non-admin can read a version of a visible agent", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      mockChecker({ canRead: true, isAdmin: false });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions/1`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().version).toBe(1);
+    });
+
     test("a version that does not exist is 404", async ({ makeAgent }) => {
       const agent = await makeAgent({ organizationId });
 
@@ -170,6 +200,16 @@ describe("agent version routes", () => {
         url: `/api/agents/${agent.id}/versions/99`,
       });
       expect(response.statusCode).toBe(404);
+    });
+
+    test("a version beyond the int4 range is 400", async ({ makeAgent }) => {
+      const agent = await makeAgent({ organizationId });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions/3000000000`,
+      });
+      expect(response.statusCode).toBe(400);
     });
 
     test("missing type read permission is 404, not 403", async ({

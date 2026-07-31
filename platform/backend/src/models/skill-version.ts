@@ -122,19 +122,27 @@ class SkillVersionModel {
    * files — so a long history stays cheap to list. Paginated: synced skills
    * fork a version per upstream change, so history is unbounded.
    *
-   * `skill_versions` carries no organization of its own; callers must have
-   * resolved the live, org-scoped skill (soft-deletes excluded) before
-   * listing its history.
+   * `skill_versions` carries no organization of its own, so the read joins
+   * `skills` and filters on the caller's organization — a skill id alone
+   * must never reach another tenant's history.
    */
   static async listForSkill(params: {
     skillId: string;
+    organizationId: string;
     pagination: PaginationQuery;
   }): Promise<PaginatedResult<SkillVersionMetadata>> {
-    const scope = eq(schema.skillVersionsTable.skillId, params.skillId);
+    const scope = and(
+      eq(schema.skillVersionsTable.skillId, params.skillId),
+      eq(schema.skillsTable.organizationId, params.organizationId),
+    );
     const [rows, [totals]] = await Promise.all([
       db
         .select(skillVersionMetadataColumns)
         .from(schema.skillVersionsTable)
+        .innerJoin(
+          schema.skillsTable,
+          eq(schema.skillVersionsTable.skillId, schema.skillsTable.id),
+        )
         .where(scope)
         .orderBy(desc(schema.skillVersionsTable.version))
         .limit(params.pagination.limit)
@@ -142,6 +150,10 @@ class SkillVersionModel {
       db
         .select({ total: count() })
         .from(schema.skillVersionsTable)
+        .innerJoin(
+          schema.skillsTable,
+          eq(schema.skillVersionsTable.skillId, schema.skillsTable.id),
+        )
         .where(scope),
     ]);
     return createPaginatedResult(rows, totals?.total ?? 0, params.pagination);

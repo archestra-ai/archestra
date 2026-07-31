@@ -656,7 +656,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Agents"],
         params: z.object({
           id: UuidIdSchema,
-          version: z.coerce.number().int().positive(),
+          // capped at int4 max so impossible versions 400 instead of
+          // reaching Postgres as an out-of-range bind
+          version: z.coerce.number().int().positive().max(2_147_483_647),
         }),
         response: constructResponseSchema(SelectAgentVersionSchema),
       },
@@ -669,7 +671,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!row) {
-        throw new ApiError(404, "Agent version not found");
+        throw new ApiError(404, `Agent has no version ${version}`);
       }
       return reply.send(row);
     },

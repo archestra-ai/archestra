@@ -80,6 +80,16 @@ describe("GET /api/skills/:id/versions/:version", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("a version beyond the int4 range is 400", async () => {
+    const skill = await seedSkillWithTwoVersions();
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills/${skill.id}/versions/3000000000`,
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
   test("a personal skill of another user is 404, not 403", async ({
     makeUser,
   }) => {

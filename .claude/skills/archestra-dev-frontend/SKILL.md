@@ -54,6 +54,28 @@ pnpm knip   # flags unused exports; part of frontend check:ci
 - Keep frontend files flat where practical and avoid barrel files.
 - Only export what is needed externally.
 
+## Text nodes and machine translation
+
+Chrome page-translate re-parents bare text nodes into `<font>` wrappers. React still holds the original nodes, so deleting one — or inserting an element before it — throws `NotFoundError` and crashes the page (facebook/react#11538, no upstream fix). Never let React add, remove, or replace a **bare** text node: wrap conditional text in an element so only elements move.
+
+`biome-plugins/no-conditional-bare-jsx-text.grit` fails the build on the shapes below, and its diagnostics cannot be suppressed with `biome-ignore` — write them wrapped in the first place:
+
+- `{cond ? <Icon /> : "More"}` → `{cond ? <Icon /> : <span>More</span>}`.
+- `{cond ? (<><Loader2 />Loading…</>) : ("Load more")}` → wrap both branches; the fragment's own bare text is deleted when the branch flips, so `<span>Loading…</span>` inside it and `<span>Load more</span>` for the string.
+- `{saved && "Saved!"}` → `{saved && <span>Saved!</span>}`.
+- `{n > 0 ? " and more" : ""}` → `{n > 0 ? <span> and more</span> : null}` — return `null`, never `""`, and keep the padding spaces inside the span.
+- `<Button>{pending ? <Loader2 /> : <Icon />} Save</Button>` → wrap the label: `<span>Save</span>`. Same for a label expression: `<span>{agent ? "Update" : "Create"}</span>`.
+
+The rule cannot see these; apply the convention by hand:
+
+- A `ReactNode` prop or variable rendered next to a conditional sibling (`{icon}{label}`) — wrap it: `{icon}<span>{label}</span>` (`app/messaging-channels/layout.tsx`).
+- Loading/empty/data branches whose roots are the **same tag** — React reconciles the element and deletes the bare status text in place. Wrap each branch's text (`<span>Loading tools…</span>`) or give the branches distinct `key`s.
+- A shared component rendering a `ReactNode` slot inside an element that persists across content changes — key the wrapper by the content, as `components/form-dialog.tsx` and `components/ui/searchable-select.tsx` do.
+
+Safe, do not churn: text→text updates (`{saving ? "Saving…" : "Save"}`), whole-element unmounts, and strings in attributes.
+
+Wrapping splits a string across sibling elements, so Testing Library's default `getByText` stops matching. Scope to a container with `toHaveTextContent`, or use a function matcher constrained by tag — do not unwrap the span to satisfy a test.
+
 ## Forms
 
 - Prefer `useForm` from `react-hook-form` over multiple `useState` hooks for form state.

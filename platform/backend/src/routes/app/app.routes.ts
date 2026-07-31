@@ -1105,7 +1105,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Apps"],
         params: z.object({
           appId: UuidIdSchema,
-          version: z.coerce.number().int().positive(),
+          // Capped at the int4 ceiling: `version` is an `integer` column, and
+          // an out-of-range parameter would fail in Postgres as a 500.
+          version: z.coerce.number().int().positive().max(2147483647),
         }),
         response: constructResponseSchema(SelectAppVersionSchema),
       },

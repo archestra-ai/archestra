@@ -663,6 +663,16 @@ class InternalMcpCatalogModel {
     newName: string;
     flagReinstallRequired: boolean;
     freezeDeploymentNames: boolean;
+    /**
+     * Suppress this cascade's own version fork. Pass true only when the
+     * caller follows the rename with another fork-hook write in the same
+     * request (the PUT route always runs the generic `update` afterwards), so
+     * one user-visible save records one version instead of an intermediate
+     * renamed-but-otherwise-old snapshot. If the caller throws before its
+     * follow-up write, the rename stays unsnapshotted until the next config
+     * write — the same tolerance `forkIfChangedBestEffort` documents.
+     */
+    skipVersionFork?: boolean;
   }): Promise<void> {
     const { id, newName, flagReinstallRequired, freezeDeploymentNames } =
       params;
@@ -775,7 +785,9 @@ class InternalMcpCatalogModel {
 
     // The name is part of the canonical config, so a rename forks a version.
     // After the cascade's transaction: the fork takes its own FOR UPDATE lock.
-    await InternalMcpCatalogVersionModel.forkIfChangedBestEffort(id);
+    if (!params.skipVersionFork) {
+      await InternalMcpCatalogVersionModel.forkIfChangedBestEffort(id);
+    }
   }
 
   static async update(

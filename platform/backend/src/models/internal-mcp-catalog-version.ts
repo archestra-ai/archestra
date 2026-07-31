@@ -34,9 +34,21 @@ class InternalMcpCatalogVersionModel {
   /**
    * sha256 over the canonical snapshot. Two writes that produce identical
    * config hash equal, which is how `forkIfChanged` suppresses no-op forks.
+   *
+   * Referents are hashed by id only: the snapshot stores `{id, name}` pairs
+   * for history legibility, but a referent's name is live data owned by the
+   * environment/server row, and renaming those runs no fork hook. Hashing the
+   * name would make the next otherwise-no-op catalog write fork a version
+   * whose only delta is the referent's display name.
    */
   static computeContentHash(snapshot: McpCatalogConfigSnapshot): string {
-    return createHash("sha256").update(stableStringify(snapshot)).digest("hex");
+    const hashed = {
+      ...snapshot,
+      environment: snapshot.environment?.id ?? null,
+      dynamicConnectionMcpServer:
+        snapshot.dynamicConnectionMcpServer?.id ?? null,
+    };
+    return createHash("sha256").update(stableStringify(hashed)).digest("hex");
   }
 
   /**

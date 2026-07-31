@@ -3,6 +3,7 @@ import { type Mock, vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { ToolModel } from "@/models";
+import InternalMcpCatalogVersionModel from "@/models/internal-mcp-catalog-version";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -369,6 +370,32 @@ spec:
     expect(serverRow.name).toBe("combo-renamed");
     // The command change (not the rename) drives the manual-reinstall flag.
     expect(serverRow.reinstallRequired).toBe(true);
+  });
+
+  test("a single PUT that renames AND edits config records exactly one new version", async () => {
+    const catalog = await createCatalog({
+      name: "one-save",
+      serverType: "remote",
+    });
+
+    const putResponse = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: { name: "one-save-renamed", description: "edited" },
+    });
+
+    expect(putResponse.statusCode).toBe(200);
+
+    const { data: versions } =
+      await InternalMcpCatalogVersionModel.listForCatalog({
+        catalogId: catalog.id,
+        pagination: { limit: 10, offset: 0 },
+      });
+    // One user save, one version — no intermediate renamed-but-otherwise-
+    // unchanged snapshot from the rename cascade.
+    expect(versions.map((v) => v.version)).toEqual([2, 1]);
+    expect(versions[0].snapshot.name).toBe("one-save-renamed");
+    expect(versions[0].snapshot.description).toBe("edited");
   });
 
   test("a rename issued while K8s is configured waits for the adopt pass, then freezes NULL deployment names from the OLD name", async ({

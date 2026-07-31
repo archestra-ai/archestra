@@ -90,6 +90,18 @@ describe("GET /api/apps/:appId/versions", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("a version number beyond the int4 range is a 400, not a Postgres 500", async ({
+    makeApp,
+  }) => {
+    const versioned = await makeApp({ organizationId, scope: "org" });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/apps/${versioned.id}/versions/3000000000`,
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
   test("a member cannot list versions of another user's personal app", async ({
     makeApp,
     makeUser,

@@ -124,6 +124,32 @@ describe("InternalMcpCatalogVersionModel", () => {
     expect(versions[1].snapshot.name).toBe(catalog.name);
   });
 
+  test("rename composed with a follow-up update records one version (skipVersionFork)", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog();
+
+    // The PUT route's shape for a rename+edit save: the cascade defers its
+    // fork to the generic update that always follows in the same request.
+    await InternalMcpCatalogModel.renameCascade({
+      id: catalog.id,
+      newName: "renamed-composed",
+      flagReinstallRequired: false,
+      freezeDeploymentNames: false,
+      skipVersionFork: true,
+    });
+    expect(await listVersions(catalog)).toHaveLength(1);
+
+    const updated = await InternalMcpCatalogModel.update(catalog.id, {
+      description: "edited in the same save",
+    });
+
+    expect(updated?.latestVersion).toBe(2);
+    const head = await getVersion(catalog, 2);
+    expect(head?.snapshot.name).toBe("renamed-composed");
+    expect(head?.snapshot.description).toBe("edited in the same save");
+  });
+
   test("snapshot carries secret-bundle IDs, never secret material", async ({
     makeInternalMcpCatalog,
     makeSecret,
@@ -235,6 +261,32 @@ describe("InternalMcpCatalogVersionModel", () => {
       id: install.id,
       name: install.name,
     });
+  });
+
+  test("renaming a referent does not fork on the next otherwise-no-op write", async ({
+    makeInternalMcpCatalog,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const [environment] = await db
+      .insert(schema.environmentsTable)
+      .values({ name: "staging", organizationId: org.id })
+      .returning();
+    await InternalMcpCatalogModel.update(catalog.id, {
+      environmentId: environment.id,
+    });
+    expect(await listVersions(catalog)).toHaveLength(2);
+
+    // The environment's name is live data owned by its own row; renaming it
+    // runs no fork hook, and must not drift the catalog's content hash.
+    await db
+      .update(schema.environmentsTable)
+      .set({ name: "staging-renamed" })
+      .where(eq(schema.environmentsTable.id, environment.id));
+
+    const fork = await InternalMcpCatalogVersionModel.forkIfChanged(catalog.id);
+    expect(fork).toEqual({ version: 2, forked: false });
   });
 
   test("legacy imagePullSecrets rewrite in the modern shape does not fork", async ({

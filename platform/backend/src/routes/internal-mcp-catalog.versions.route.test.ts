@@ -109,6 +109,22 @@ describe("internal MCP catalog version routes", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("a version number beyond the int4 range is a 400, not a Postgres 500", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: user.id,
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${catalog.id}/versions/3000000000`,
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+
   test("returns 404 for another organization's catalog", async ({
     makeInternalMcpCatalog,
     makeOrganization,

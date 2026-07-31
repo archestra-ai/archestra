@@ -6,6 +6,8 @@ import {
   BUILT_IN_AGENT_NAMES,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
+  DUAL_LLM_DEFAULT_MAX_ROUNDS,
+  DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS,
   DUAL_LLM_MAIN_SYSTEM_PROMPT,
   DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
   PLAYWRIGHT_MCP_CATALOG_ID,
@@ -113,7 +115,7 @@ export async function syncBuiltInAgents(): Promise<void> {
       systemPrompt: DUAL_LLM_MAIN_SYSTEM_PROMPT,
       builtInAgentConfig: {
         name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-        maxRounds: 5,
+        maxRounds: DUAL_LLM_DEFAULT_MAX_ROUNDS,
       } as const,
     },
     {
@@ -193,6 +195,36 @@ export async function syncBuiltInAgents(): Promise<void> {
             organizationId: organization.id,
           },
           "Seeded built-in agent",
+        );
+        continue;
+      }
+
+      // Migrate configs still sitting exactly on the old shipped default;
+      // any other value is a deliberate admin choice and is left alone
+      // (mirrors the legacy-system-prompt rewrite below).
+      if (
+        builtInAgent.builtInAgentId === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN &&
+        existing.builtInAgentConfig?.name ===
+          BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN &&
+        existing.builtInAgentConfig.maxRounds ===
+          DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS
+      ) {
+        await db
+          .update(schema.agentsTable)
+          .set({
+            builtInAgentConfig: {
+              ...existing.builtInAgentConfig,
+              maxRounds: DUAL_LLM_DEFAULT_MAX_ROUNDS,
+            },
+          })
+          .where(eq(schema.agentsTable.id, existing.id));
+        await AgentVersionModel.forkIfChangedBestEffort(existing.id);
+        logger.info(
+          {
+            builtInAgentId: builtInAgent.builtInAgentId,
+            organizationId: organization.id,
+          },
+          "Updated dual LLM main agent legacy maxRounds default",
         );
         continue;
       }

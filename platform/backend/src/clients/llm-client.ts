@@ -10,6 +10,8 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createXai } from "@ai-sdk/xai";
 import type { InteractionSource } from "@archestra/shared";
 import {
+  ANTHROPIC_THINKING_OFF_HEADER,
+  anthropicSupportsThinkingDisabled,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
@@ -971,7 +973,10 @@ function createOllamaNativeFetch(
   const baseFetch = providedFetch ?? globalThis.fetch;
 
   return (input, init) => {
-    const { hasExplicitThink, headers } = takeThinkMarkerHeader(init?.headers);
+    const { hasMarker: hasExplicitThink, headers } = takeMarkerHeader(
+      init?.headers,
+      OLLAMA_THINK_EXPLICIT_HEADER,
+    );
     const forwarded: RequestInit | undefined =
       init === undefined ? undefined : { ...init, headers };
 
@@ -1037,20 +1042,27 @@ function createAnthropicThinkingDisplayFetch(
   const baseFetch = providedFetch ?? globalThis.fetch;
 
   return (input, init) => {
+    const { hasMarker: thinkingOff, headers } = takeMarkerHeader(
+      init?.headers,
+      ANTHROPIC_THINKING_OFF_HEADER,
+    );
+    const forwarded: RequestInit | undefined =
+      init === undefined ? undefined : { ...init, headers };
+
     if (typeof init?.body !== "string") {
-      return baseFetch(input, init);
+      return baseFetch(input, forwarded);
     }
 
     let body: Record<string, unknown>;
     try {
       const parsed: unknown = JSON.parse(init.body);
       if (typeof parsed !== "object" || parsed === null) {
-        return baseFetch(input, init);
+        return baseFetch(input, forwarded);
       }
       body = parsed as Record<string, unknown>;
     } catch {
       // Not JSON we understand — forward verbatim rather than guessing.
-      return baseFetch(input, init);
+      return baseFetch(input, forwarded);
     }
 
     if (
@@ -1058,29 +1070,43 @@ function createAnthropicThinkingDisplayFetch(
       !anthropicThinksByDefault(body.model) ||
       "thinking" in body
     ) {
-      return baseFetch(input, init);
+      return baseFetch(input, forwarded);
     }
 
-    body.thinking = { type: "adaptive", display: "summarized" };
-    return baseFetch(input, { ...init, body: JSON.stringify(body) });
+    if (thinkingOff) {
+      if (anthropicSupportsThinkingDisabled(body.model)) {
+        body.thinking = { type: "disabled" };
+      } else {
+        // Fable/Mythos-class models think unconditionally and 400 on
+        // `disabled`; the effort floor is the only reasoning bound they take.
+        body.thinking = { type: "adaptive", display: "summarized" };
+        body.output_config ??= { effort: "low" };
+      }
+    } else {
+      body.thinking = { type: "adaptive", display: "summarized" };
+    }
+    return baseFetch(input, { ...forwarded, body: JSON.stringify(body) });
   };
 }
 
 /**
- * Splits the internal think marker out of a request's headers, returning the
+ * Splits an internal marker header out of a request's headers, returning the
  * headers to actually send. `HeadersInit` has three shapes and the AI SDK uses
  * more than one of them, so normalize to a plain object rather than assuming.
  */
-function takeThinkMarkerHeader(headers: HeadersInit | undefined): {
-  hasExplicitThink: boolean;
+function takeMarkerHeader(
+  headers: HeadersInit | undefined,
+  markerName: string,
+): {
+  hasMarker: boolean;
   headers: Record<string, string>;
 } {
   const out: Record<string, string> = {};
-  let hasExplicitThink = false;
+  let hasMarker = false;
 
   const take = (key: string, value: string) => {
-    if (key.toLowerCase() === OLLAMA_THINK_EXPLICIT_HEADER) {
-      hasExplicitThink = true;
+    if (key.toLowerCase() === markerName) {
+      hasMarker = true;
       return;
     }
     out[key] = value;
@@ -1096,7 +1122,7 @@ function takeThinkMarkerHeader(headers: HeadersInit | undefined): {
     for (const [key, value] of Object.entries(headers)) take(key, value);
   }
 
-  return { hasExplicitThink, headers: out };
+  return { hasMarker, headers: out };
 }
 
 /**

@@ -9,6 +9,7 @@ import {
   BUILT_IN_AGENT_IDS,
   DEFAULT_AGENT_SYSTEM_PROMPT,
   DocsPage,
+  DUAL_LLM_DEFAULT_MAX_ROUNDS,
   E2eTestId,
   getDocsUrl,
   getResourceForAgentType,
@@ -848,7 +849,9 @@ export function AgentDialog({
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
   const [autoConfigureOnToolDiscovery, setAutoConfigureOnToolDiscovery] =
     useState(false);
-  const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState("5");
+  const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState(
+    String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
+  );
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [toolExposureMode, setToolExposureMode] =
     useState<ToolExposureMode>("full");
@@ -969,7 +972,7 @@ export function AgentDialog({
               agentData.builtInAgentConfig?.name ===
               BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN
                 ? String(agentData.builtInAgentConfig.maxRounds)
-                : "5",
+                : String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: agentData.passthroughHeaders ?? [],
             toolExposureMode: agentData.toolExposureMode ?? "full",
             accessAllTools: agentData.accessAllTools ?? false,
@@ -996,7 +999,7 @@ export function AgentDialog({
             connectorIds: [],
             scope: "personal",
             autoConfigureOnToolDiscovery: false,
-            dualLlmMaxRounds: "5",
+            dualLlmMaxRounds: String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: [],
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).

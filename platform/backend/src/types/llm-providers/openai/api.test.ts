@@ -1,5 +1,38 @@
 import { describe, expect, test } from "vitest";
-import { ChatCompletionResponseSchema, ResponsesRequestSchema } from "./api";
+import {
+  ChatCompletionRequestSchema,
+  ChatCompletionResponseSchema,
+  ResponsesRequestSchema,
+} from "./api";
+
+describe("ChatCompletionRequestSchema", () => {
+  test("keeps reasoning_effort and max_completion_tokens through validation", () => {
+    // Fastify's zod validator replaces the body with the parsed value, so a
+    // stripped field never reaches the adapter. These two carried the dual
+    // LLM guardrail's reasoning-off knob and its output cap on reasoning
+    // models — both were silently dropped before this pin.
+    const result = ChatCompletionRequestSchema.safeParse({
+      model: "gpt-5.2",
+      messages: [{ role: "user", content: "hi" }],
+      reasoning_effort: "none",
+      max_completion_tokens: 2048,
+    });
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      reasoning_effort: "none",
+      max_completion_tokens: 2048,
+    });
+  });
+
+  test("rejects an unknown reasoning_effort value", () => {
+    const result = ChatCompletionRequestSchema.safeParse({
+      model: "gpt-5.2",
+      messages: [{ role: "user", content: "hi" }],
+      reasoning_effort: "turbo",
+    });
+    expect(result.success).toBe(false);
+  });
+});
 
 describe("ChatCompletionResponseSchema", () => {
   test("accepts a choice that omits index (nonconforming upstreams)", () => {

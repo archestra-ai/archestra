@@ -327,6 +327,19 @@ export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
  */
 export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
 
+/**
+ * Requests the strongest thinking-off configuration the Anthropic model
+ * supports: `thinking: {type: "disabled"}` where accepted (Opus 5, Sonnet 5),
+ * or an `output_config.effort` floor on the Fable/Mythos class, which thinks
+ * unconditionally. Set per call (dual LLM interrogation); consumed and
+ * removed by the backend's Anthropic fetch wrapper before the request is
+ * sent. A header rather than a providerOptions value because the installed
+ * @ai-sdk/anthropic serializes `thinking` only for the enabled/adaptive
+ * variants, so no providerOptions value can carry a disable to the wire.
+ */
+export const ANTHROPIC_THINKING_OFF_HEADER =
+  "x-archestra-anthropic-thinking-off";
+
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 
 export const TimeInMs = {

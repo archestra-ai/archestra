@@ -954,6 +954,24 @@
             "nullable": true,
             "type": "number"
           },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
           "stream": {
             "nullable": true,
             "type": "boolean"
@@ -5275,6 +5293,24 @@
             "nullable": true,
             "type": "number"
           },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
           "stream": {
             "nullable": true,
             "type": "boolean"
@@ -6959,6 +6995,24 @@
             "nullable": true,
             "type": "number"
           },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
           "stream": {
             "nullable": true,
             "type": "boolean"
@@ -8122,6 +8176,24 @@
           "max_tokens": {
             "nullable": true,
             "type": "number"
+          },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
           },
           "stream": {
             "nullable": true,
@@ -9294,6 +9366,24 @@
             "nullable": true,
             "type": "number"
           },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
           "stream": {
             "nullable": true,
             "type": "boolean"
@@ -10458,6 +10548,24 @@
             "nullable": true,
             "type": "number"
           },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
           "stream": {
             "nullable": true,
             "type": "boolean"
@@ -10478,6 +10586,25 @@
               "type"
             ],
             "additionalProperties": {}
+          },
+          "reasoning": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "effort": {
+                "type": "string"
+              },
+              "max_tokens": {
+                "type": "integer",
+                "exclusiveMinimum": true,
+                "maximum": 9007199254740991
+              },
+              "exclude": {
+                "type": "boolean"
+              }
+            }
           }
         },
         "required": [
@@ -11693,6 +11820,10 @@
           "top_logprobs": {
             "nullable": true,
             "type": "number"
+          },
+          "chat_template_kwargs": {
+            "type": "object",
+            "additionalProperties": {}
           }
         },
         "required": [
@@ -15014,6 +15145,24 @@
             "nullable": true,
             "type": "number"
           },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
           "stream": {
             "nullable": true,
             "type": "boolean"
@@ -16178,6 +16327,24 @@
           "max_tokens": {
             "nullable": true,
             "type": "number"
+          },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
           },
           "stream": {
             "nullable": true,
@@ -17547,7 +17714,6 @@
             "nullable": true,
             "type": "number",
             "minimum": 0,
-            "exclusiveMinimum": true,
             "maximum": 1
           },
           "top_p": {
@@ -17599,6 +17765,21 @@
           },
           "reasoning_split": {
             "type": "boolean"
+          },
+          "thinking": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "enabled",
+                  "disabled"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
           },
           "extra_body": {
             "type": "object",
@@ -18747,6 +18928,24 @@
           "max_tokens": {
             "nullable": true,
             "type": "number"
+          },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
           },
           "stream": {
             "nullable": true,
@@ -20056,6 +20255,24 @@
           "max_tokens": {
             "nullable": true,
             "type": "number"
+          },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
           },
           "stream": {
             "nullable": true,
@@ -24570,6 +24787,24 @@
             "nullable": true,
             "type": "number"
           },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
           "stream": {
             "nullable": true,
             "type": "boolean"
@@ -26333,6 +26568,24 @@
             "nullable": true,
             "type": "number"
           },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
           "stream": {
             "nullable": true,
             "type": "boolean"
@@ -27549,6 +27802,24 @@
           "max_tokens": {
             "nullable": true,
             "type": "number"
+          },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
           },
           "stream": {
             "nullable": true,
@@ -28774,6 +29045,24 @@
             "nullable": true,
             "type": "number"
           },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
           "stream": {
             "nullable": true,
             "type": "boolean"
@@ -29991,6 +30280,24 @@
             "nullable": true,
             "type": "number"
           },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
           "stream": {
             "nullable": true,
             "type": "boolean"
@@ -30011,6 +30318,26 @@
               "type"
             ],
             "additionalProperties": {}
+          },
+          "reasoning": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "effort": {
+                "type": "string"
+              },
+              "max_tokens": {
+                "type": "integer",
+                "exclusiveMinimum": true,
+                "maximum": 9007199254740991
+              },
+              "exclude": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": [
@@ -31279,6 +31606,10 @@
           "top_logprobs": {
             "nullable": true,
             "type": "number"
+          },
+          "chat_template_kwargs": {
+            "type": "object",
+            "additionalProperties": {}
           }
         },
         "required": [
@@ -34727,6 +35058,24 @@
             "nullable": true,
             "type": "number"
           },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
           "stream": {
             "nullable": true,
             "type": "boolean"
@@ -35943,6 +36292,24 @@
           "max_tokens": {
             "nullable": true,
             "type": "number"
+          },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
           },
           "stream": {
             "nullable": true,
@@ -37374,7 +37741,6 @@
             "nullable": true,
             "type": "number",
             "minimum": 0,
-            "exclusiveMinimum": true,
             "maximum": 1
           },
           "top_p": {
@@ -37427,6 +37793,22 @@
           },
           "reasoning_split": {
             "type": "boolean"
+          },
+          "thinking": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "enabled",
+                  "disabled"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
           },
           "extra_body": {
             "type": "object",
@@ -38631,6 +39013,24 @@
           "max_tokens": {
             "nullable": true,
             "type": "number"
+          },
+          "max_completion_tokens": {
+            "nullable": true,
+            "type": "integer",
+            "exclusiveMinimum": true,
+            "maximum": 9007199254740991
+          },
+          "reasoning_effort": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
           },
           "stream": {
             "nullable": true,
@@ -127100,6 +127500,24 @@
                     "nullable": true,
                     "type": "number"
                   },
+                  "max_completion_tokens": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "reasoning_effort": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "minimal",
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh"
+                    ]
+                  },
                   "stream": {
                     "nullable": true,
                     "type": "boolean"
@@ -128540,6 +128958,24 @@
                   "max_tokens": {
                     "nullable": true,
                     "type": "number"
+                  },
+                  "max_completion_tokens": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "reasoning_effort": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "minimal",
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh"
+                    ]
                   },
                   "stream": {
                     "nullable": true,
@@ -153170,6 +153606,24 @@
                                         "nullable": true,
                                         "type": "number"
                                       },
+                                      "max_completion_tokens": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "exclusiveMinimum": true,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "reasoning_effort": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "none",
+                                          "minimal",
+                                          "low",
+                                          "medium",
+                                          "high",
+                                          "xhigh"
+                                        ]
+                                      },
                                       "stream": {
                                         "nullable": true,
                                         "type": "boolean"
@@ -154156,6 +154610,24 @@
                                       "max_tokens": {
                                         "nullable": true,
                                         "type": "number"
+                                      },
+                                      "max_completion_tokens": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "exclusiveMinimum": true,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "reasoning_effort": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "none",
+                                          "minimal",
+                                          "low",
+                                          "medium",
+                                          "high",
+                                          "xhigh"
+                                        ]
                                       },
                                       "stream": {
                                         "nullable": true,
@@ -155933,6 +156405,24 @@
                                         "nullable": true,
                                         "type": "number"
                                       },
+                                      "max_completion_tokens": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "exclusiveMinimum": true,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "reasoning_effort": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "none",
+                                          "minimal",
+                                          "low",
+                                          "medium",
+                                          "high",
+                                          "xhigh"
+                                        ]
+                                      },
                                       "stream": {
                                         "nullable": true,
                                         "type": "boolean"
@@ -156919,6 +157409,24 @@
                                       "max_tokens": {
                                         "nullable": true,
                                         "type": "number"
+                                      },
+                                      "max_completion_tokens": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "exclusiveMinimum": true,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "reasoning_effort": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "none",
+                                          "minimal",
+                                          "low",
+                                          "medium",
+                                          "high",
+                                          "xhigh"
+                                        ]
                                       },
                                       "stream": {
                                         "nullable": true,
@@ -158691,6 +159199,24 @@
                                         "nullable": true,
                                         "type": "number"
                                       },
+                                      "max_completion_tokens": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "exclusiveMinimum": true,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "reasoning_effort": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "none",
+                                          "minimal",
+                                          "low",
+                                          "medium",
+                                          "high",
+                                          "xhigh"
+                                        ]
+                                      },
                                       "stream": {
                                         "nullable": true,
                                         "type": "boolean"
@@ -159677,6 +160203,24 @@
                                       "max_tokens": {
                                         "nullable": true,
                                         "type": "number"
+                                      },
+                                      "max_completion_tokens": {
+                                        "nullable": true,
+                                        "type": "integer",
+                                        "exclusiveMinimum": true,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "reasoning_effort": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "none",
+                                          "minimal",
+                                          "low",
+                                          "medium",
+                                          "high",
+                                          "xhigh"
+                                        ]
                                       },
                                       "stream": {
                                         "nullable": true,
@@ -183891,6 +184435,24 @@
                                   "nullable": true,
                                   "type": "number"
                                 },
+                                "max_completion_tokens": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "maximum": 9007199254740991
+                                },
+                                "reasoning_effort": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "minimal",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "xhigh"
+                                  ]
+                                },
                                 "stream": {
                                   "nullable": true,
                                   "type": "boolean"
@@ -184877,6 +185439,24 @@
                                 "max_tokens": {
                                   "nullable": true,
                                   "type": "number"
+                                },
+                                "max_completion_tokens": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "maximum": 9007199254740991
+                                },
+                                "reasoning_effort": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "minimal",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "xhigh"
+                                  ]
                                 },
                                 "stream": {
                                   "nullable": true,
@@ -186654,6 +187234,24 @@
                                   "nullable": true,
                                   "type": "number"
                                 },
+                                "max_completion_tokens": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "maximum": 9007199254740991
+                                },
+                                "reasoning_effort": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "minimal",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "xhigh"
+                                  ]
+                                },
                                 "stream": {
                                   "nullable": true,
                                   "type": "boolean"
@@ -187640,6 +188238,24 @@
                                 "max_tokens": {
                                   "nullable": true,
                                   "type": "number"
+                                },
+                                "max_completion_tokens": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "maximum": 9007199254740991
+                                },
+                                "reasoning_effort": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "minimal",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "xhigh"
+                                  ]
                                 },
                                 "stream": {
                                   "nullable": true,
@@ -189412,6 +190028,24 @@
                                   "nullable": true,
                                   "type": "number"
                                 },
+                                "max_completion_tokens": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "maximum": 9007199254740991
+                                },
+                                "reasoning_effort": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "minimal",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "xhigh"
+                                  ]
+                                },
                                 "stream": {
                                   "nullable": true,
                                   "type": "boolean"
@@ -190398,6 +191032,24 @@
                                 "max_tokens": {
                                   "nullable": true,
                                   "type": "number"
+                                },
+                                "max_completion_tokens": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "exclusiveMinimum": true,
+                                  "maximum": 9007199254740991
+                                },
+                                "reasoning_effort": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "none",
+                                    "minimal",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "xhigh"
+                                  ]
                                 },
                                 "stream": {
                                   "nullable": true,
@@ -206344,6 +206996,24 @@
                     "nullable": true,
                     "type": "number"
                   },
+                  "max_completion_tokens": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "reasoning_effort": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "minimal",
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh"
+                    ]
+                  },
                   "stream": {
                     "nullable": true,
                     "type": "boolean"
@@ -207789,6 +208459,24 @@
                   "max_tokens": {
                     "nullable": true,
                     "type": "number"
+                  },
+                  "max_completion_tokens": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "reasoning_effort": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "minimal",
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh"
+                    ]
                   },
                   "stream": {
                     "nullable": true,
@@ -247583,6 +248271,24 @@
                     "nullable": true,
                     "type": "number"
                   },
+                  "max_completion_tokens": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "reasoning_effort": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "minimal",
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh"
+                    ]
+                  },
                   "stream": {
                     "nullable": true,
                     "type": "boolean"
@@ -249028,6 +249734,24 @@
                   "max_tokens": {
                     "nullable": true,
                     "type": "number"
+                  },
+                  "max_completion_tokens": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "reasoning_effort": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "minimal",
+                      "low",
+                      "medium",
+                      "high",
+                      "xhigh"
+                    ]
                   },
                   "stream": {
                     "nullable": true,

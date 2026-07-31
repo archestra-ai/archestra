@@ -327,6 +327,258 @@ describe("DualLlmSubagent", () => {
     });
   });
 
+  test("resumes a failed interrogation from the cached partial transcript", async ({
+    makeAgent,
+  }) => {
+    const mainAgent = await makeAgent(
+      buildBuiltInAgentOverrides({
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        systemPrompt: "main prompt",
+        maxRounds: 2,
+      }),
+    );
+    const quarantineAgent = await makeAgent(
+      buildBuiltInAgentOverrides({
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+        systemPrompt: "quarantine prompt",
+      }),
+    );
+    vi.spyOn(AgentModel, "getBuiltInAgent").mockImplementation(async (name) => {
+      if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN) return mainAgent;
+      if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE)
+        return quarantineAgent;
+      return null;
+    });
+
+    const partialTranscriptCacheKey =
+      "dual-llm-partial-transcript-org-1-testhash" as const;
+    // The real cache points at Postgres, which unit tests don't run; back the
+    // partial-transcript store with an in-memory map instead.
+    const { cacheManager } = await import("@/cache-manager");
+    const store = new Map<string, unknown>();
+    vi.spyOn(cacheManager, "get").mockImplementation(
+      // biome-ignore lint/suspicious/noExplicitAny: test stub mirrors the generic signature
+      async (key: string) => store.get(key) as any,
+    );
+    vi.spyOn(cacheManager, "set").mockImplementation(
+      async (key: string, value: unknown) => {
+        store.set(key, value);
+      },
+    );
+    vi.spyOn(cacheManager, "delete").mockImplementation(async (key: string) =>
+      store.delete(key),
+    );
+    const createParams = {
+      dualLlmParams: {
+        toolCallId: "tool-call-1",
+        userRequest: "summarize this safely",
+        toolResult: { raw: "sensitive data" },
+        toolName: "get_emails",
+      },
+      callingAgentId: "agent-1",
+      organizationId: "org-1",
+      partialTranscriptCacheKey,
+    };
+
+    // First run: round 1 completes (question + answer), round 2's question
+    // call dies on a 401 — the completed round must be persisted.
+    let firstRunCalls = 0;
+    server.use(
+      http.post(`${LLM_BASE_URL}/chat/completions`, async ({ request }) => {
+        firstRunCalls += 1;
+        const body = (await request.json()) as {
+          messages: Array<{ role: string; content: string }>;
+        };
+        const prompt = lastUserPrompt(body);
+        if (isQuarantinePrompt(prompt)) {
+          return chatCompletion("Answer: 0");
+        }
+        if (firstRunCalls >= 3) {
+          return HttpResponse.json(
+            { error: { message: "sign-in revoked" } },
+            { status: 401 },
+          );
+        }
+        return chatCompletion(
+          "QUESTION: What kind of data is present?\nOPTIONS:\n0: email metadata\n1: not determinable",
+        );
+      }),
+    );
+
+    const firstRun = await DualLlmSubagent.create(createParams);
+    await expect(firstRun.processWithMainAgent()).rejects.toThrow(
+      DualLlmAgentCallError,
+    );
+    expect(firstRunCalls).toBe(3);
+
+    // Second run: resumes at round 2 — no repeat of round 1's question or
+    // answer, and the resumed transcript feeds the question prompt.
+    const secondRunPrompts: string[] = [];
+    server.use(
+      http.post(`${LLM_BASE_URL}/chat/completions`, async ({ request }) => {
+        const body = (await request.json()) as {
+          messages: Array<{ role: string; content: string }>;
+        };
+        const prompt = lastUserPrompt(body);
+        secondRunPrompts.push(prompt);
+        return prompt.includes("SUMMARY MODE")
+          ? chatCompletion("Safe summary")
+          : chatCompletion("DONE");
+      }),
+    );
+
+    const secondRun = await DualLlmSubagent.create(createParams);
+    const analysis = await secondRun.processWithMainAgent();
+
+    expect(analysis.result).toBe("Safe summary");
+    // One question call (round 2 → DONE) + the summary; round 1 was resumed,
+    // not re-interrogated.
+    expect(secondRunPrompts).toHaveLength(2);
+    expect(secondRunPrompts[0]).toContain("Current round: 2 of 2");
+    expect(secondRunPrompts[0]).toContain("Answer: 0");
+    // The full transcript survives into the analysis: resumed round + DONE.
+    expect(analysis.conversations).toHaveLength(3);
+
+    // Success clears the partial transcript.
+    expect(store.has(partialTranscriptCacheKey)).toBe(false);
+  });
+
+  test("retries once without reasoning tuning when the upstream rejects the request shape", async ({
+    makeAgent,
+  }) => {
+    // deepseek settings carry a thinking-disable in providerOptions, so the
+    // parameter-rejection fallback is armed.
+    vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue({
+      ...MOCK_RESOLVED_LLM,
+      provider: "deepseek" as const,
+      modelName: "deepseek-v4-flash",
+    });
+
+    const mainAgent = await makeAgent(
+      buildBuiltInAgentOverrides({
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        systemPrompt: "main prompt",
+      }),
+    );
+    const quarantineAgent = await makeAgent(
+      buildBuiltInAgentOverrides({
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+        systemPrompt: "quarantine prompt",
+      }),
+    );
+    vi.spyOn(AgentModel, "getBuiltInAgent").mockImplementation(async (name) => {
+      if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN) return mainAgent;
+      if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE)
+        return quarantineAgent;
+      return null;
+    });
+
+    const maxTokensSeen: Array<number | undefined> = [];
+    let requestCount = 0;
+    server.use(
+      http.post(`${LLM_BASE_URL}/chat/completions`, async ({ request }) => {
+        requestCount += 1;
+        const body = (await request.json()) as {
+          max_tokens?: number;
+          messages: Array<{ role: string; content: string }>;
+        };
+        maxTokensSeen.push(body.max_tokens);
+        if (requestCount === 1) {
+          return HttpResponse.json(
+            {
+              error: {
+                message: "Unknown parameter: 'thinking'.",
+                type: "invalid_request_error",
+              },
+            },
+            { status: 400 },
+          );
+        }
+        const prompt = lastUserPrompt(body);
+        return prompt.includes("SUMMARY MODE")
+          ? chatCompletion("Safe summary")
+          : chatCompletion("DONE");
+      }),
+    );
+
+    const subagent = await DualLlmSubagent.create({
+      dualLlmParams: {
+        toolCallId: "tool-call-1",
+        userRequest: "summarize this safely",
+        toolResult: { raw: "sensitive data" },
+        toolName: "get_emails",
+      },
+      callingAgentId: "agent-1",
+      organizationId: "org-1",
+    });
+
+    const analysis = await subagent.processWithMainAgent();
+
+    // 400 → one bare retry (DONE) → summary; the guardrail survives a model
+    // that rejects the reasoning knob.
+    expect(analysis.result).toBe("Safe summary");
+    expect(requestCount).toBe(3);
+    // The output cap stays on for every attempt, including the bare retry.
+    expect(maxTokensSeen).toEqual([2048, 2048, 2048]);
+  });
+
+  test("does not strip reasoning tuning for auth failures", async ({
+    makeAgent,
+  }) => {
+    vi.mocked(resolveAgentLlmOrDefault).mockResolvedValue({
+      ...MOCK_RESOLVED_LLM,
+      provider: "deepseek" as const,
+      modelName: "deepseek-v4-flash",
+    });
+
+    const mainAgent = await makeAgent(
+      buildBuiltInAgentOverrides({
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        systemPrompt: "main prompt",
+      }),
+    );
+    const quarantineAgent = await makeAgent(
+      buildBuiltInAgentOverrides({
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+        systemPrompt: "quarantine prompt",
+      }),
+    );
+    vi.spyOn(AgentModel, "getBuiltInAgent").mockImplementation(async (name) => {
+      if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN) return mainAgent;
+      if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE)
+        return quarantineAgent;
+      return null;
+    });
+
+    let requestCount = 0;
+    server.use(
+      http.post(`${LLM_BASE_URL}/chat/completions`, () => {
+        requestCount += 1;
+        return HttpResponse.json(
+          { error: { message: "Invalid API key" } },
+          { status: 401 },
+        );
+      }),
+    );
+
+    const subagent = await DualLlmSubagent.create({
+      dualLlmParams: {
+        toolCallId: "tool-call-1",
+        userRequest: "summarize this safely",
+        toolResult: { raw: "sensitive data" },
+        toolName: "get_emails",
+      },
+      callingAgentId: "agent-1",
+      organizationId: "org-1",
+    });
+
+    await expect(subagent.processWithMainAgent()).rejects.toThrow(
+      DualLlmAgentCallError,
+    );
+    // An auth failure is not a parameter rejection — no bare retry.
+    expect(requestCount).toBe(1);
+  });
+
   test("tags provider call failures with the resolved provider and model", async ({
     makeAgent,
   }) => {

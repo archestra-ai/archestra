@@ -498,6 +498,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         callingAgentId: agentId,
         organizationId,
         userId: undefined,
+        partialTranscriptCacheKey: expect.stringContaining(
+          `dual-llm-partial-transcript-${organizationId}-`,
+        ),
       });
 
       createSpy.mockRestore();

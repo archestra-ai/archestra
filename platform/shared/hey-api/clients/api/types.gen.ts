@@ -294,6 +294,8 @@ export type OpenAiChatCompletionRequestInput = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
 };
 
@@ -1800,6 +1802,8 @@ export type CerebrasChatCompletionRequestInput = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
 };
 
@@ -2267,6 +2271,8 @@ export type MistralChatCompletionRequestInput = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
 };
 
@@ -2626,6 +2632,8 @@ export type PerplexityChatCompletionRequestInput = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
     stream_mode?: 'full' | 'concise';
 };
@@ -2986,6 +2994,8 @@ export type GroqChatCompletionRequestInput = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
 };
 
@@ -3345,10 +3355,18 @@ export type OpenrouterChatCompletionRequestInput = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
     response_format?: {
         type: 'text' | 'json_object' | 'json_schema';
         [key: string]: unknown;
+    };
+    reasoning?: {
+        enabled?: boolean;
+        effort?: string;
+        max_tokens?: number;
+        exclude?: boolean;
     };
 };
 
@@ -3690,6 +3708,9 @@ export type VllmChatCompletionRequestInput = {
     best_of?: number | null;
     logprobs?: boolean | null;
     top_logprobs?: number | null;
+    chat_template_kwargs?: {
+        [key: string]: unknown;
+    };
 };
 
 export type VllmChatCompletionResponseInput = {
@@ -4633,6 +4654,8 @@ export type DeepSeekChatCompletionRequestInput = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
     [key: string]: unknown;
 };
@@ -4993,6 +5016,8 @@ export type ArchestraChatCompletionRequestInput = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
     [key: string]: unknown;
 };
@@ -5408,6 +5433,9 @@ export type MinimaxChatCompletionRequestInput = {
     };
     user?: string;
     reasoning_split?: boolean;
+    thinking?: {
+        type: 'enabled' | 'disabled';
+    };
     extra_body?: {
         reasoning_split?: boolean;
     };
@@ -5758,6 +5786,8 @@ export type XaiChatCompletionRequestInput = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
 };
 
@@ -6138,6 +6168,8 @@ export type OpenAiChatCompletionRequest = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
 };
 
@@ -7644,6 +7676,8 @@ export type CerebrasChatCompletionRequest = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
 };
 
@@ -8111,6 +8145,8 @@ export type MistralChatCompletionRequest = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
 };
 
@@ -8470,6 +8506,8 @@ export type PerplexityChatCompletionRequest = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
     stream_mode?: 'full' | 'concise';
 };
@@ -8830,6 +8868,8 @@ export type GroqChatCompletionRequest = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
 };
 
@@ -9189,10 +9229,18 @@ export type OpenrouterChatCompletionRequest = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
     response_format?: {
         type: 'text' | 'json_object' | 'json_schema';
         [key: string]: unknown;
+    };
+    reasoning?: {
+        enabled?: boolean;
+        effort?: string;
+        max_tokens?: number;
+        exclude?: boolean;
     };
 };
 
@@ -9534,6 +9582,9 @@ export type VllmChatCompletionRequest = {
     best_of?: number | null;
     logprobs?: boolean | null;
     top_logprobs?: number | null;
+    chat_template_kwargs?: {
+        [key: string]: unknown;
+    };
 };
 
 export type VllmChatCompletionResponse = {
@@ -10477,6 +10528,8 @@ export type DeepSeekChatCompletionRequest = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
     [key: string]: unknown;
 };
@@ -10837,6 +10890,8 @@ export type ArchestraChatCompletionRequest = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
     [key: string]: unknown;
 };
@@ -11252,6 +11307,9 @@ export type MinimaxChatCompletionRequest = {
     };
     user?: string;
     reasoning_split?: boolean;
+    thinking?: {
+        type: 'enabled' | 'disabled';
+    };
     extra_body?: {
         reasoning_split?: boolean;
     };
@@ -11602,6 +11660,8 @@ export type XaiChatCompletionRequest = {
     };
     temperature?: number | null;
     max_tokens?: number | null;
+    max_completion_tokens?: number | null;
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     stream?: boolean | null;
 };
 
@@ -35227,6 +35287,8 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
         };
         temperature?: number | null;
         max_tokens?: number | null;
+        max_completion_tokens?: number | null;
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
         [key: string]: unknown;
     };
@@ -35674,6 +35736,8 @@ export type GithubCopilotChatCompletionsWithAgentData = {
         };
         temperature?: number | null;
         max_tokens?: number | null;
+        max_completion_tokens?: number | null;
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
         [key: string]: unknown;
     };
@@ -40841,6 +40905,8 @@ export type GetInteractionsResponses = {
                 };
                 temperature?: number | null;
                 max_tokens?: number | null;
+                max_completion_tokens?: number | null;
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
                 [key: string]: unknown;
             } | {
@@ -41132,6 +41198,8 @@ export type GetInteractionsResponses = {
                 };
                 temperature?: number | null;
                 max_tokens?: number | null;
+                max_completion_tokens?: number | null;
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
                 [key: string]: unknown;
             } | {
@@ -41575,6 +41643,8 @@ export type GetInteractionsResponses = {
                 };
                 temperature?: number | null;
                 max_tokens?: number | null;
+                max_completion_tokens?: number | null;
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
                 [key: string]: unknown;
             } | {
@@ -41866,6 +41936,8 @@ export type GetInteractionsResponses = {
                 };
                 temperature?: number | null;
                 max_tokens?: number | null;
+                max_completion_tokens?: number | null;
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
                 [key: string]: unknown;
             } | {
@@ -42309,6 +42381,8 @@ export type GetInteractionsResponses = {
                 };
                 temperature?: number | null;
                 max_tokens?: number | null;
+                max_completion_tokens?: number | null;
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
                 [key: string]: unknown;
             } | {
@@ -42600,6 +42674,8 @@ export type GetInteractionsResponses = {
                 };
                 temperature?: number | null;
                 max_tokens?: number | null;
+                max_completion_tokens?: number | null;
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
                 stream?: boolean | null;
                 [key: string]: unknown;
             } | {
@@ -47056,6 +47132,8 @@ export type GetInteractionResponses = {
             };
             temperature?: number | null;
             max_tokens?: number | null;
+            max_completion_tokens?: number | null;
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
             [key: string]: unknown;
         } | {
@@ -47347,6 +47425,8 @@ export type GetInteractionResponses = {
             };
             temperature?: number | null;
             max_tokens?: number | null;
+            max_completion_tokens?: number | null;
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
             [key: string]: unknown;
         } | {
@@ -47790,6 +47870,8 @@ export type GetInteractionResponses = {
             };
             temperature?: number | null;
             max_tokens?: number | null;
+            max_completion_tokens?: number | null;
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
             [key: string]: unknown;
         } | {
@@ -48081,6 +48163,8 @@ export type GetInteractionResponses = {
             };
             temperature?: number | null;
             max_tokens?: number | null;
+            max_completion_tokens?: number | null;
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
             [key: string]: unknown;
         } | {
@@ -48524,6 +48608,8 @@ export type GetInteractionResponses = {
             };
             temperature?: number | null;
             max_tokens?: number | null;
+            max_completion_tokens?: number | null;
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
             [key: string]: unknown;
         } | {
@@ -48815,6 +48901,8 @@ export type GetInteractionResponses = {
             };
             temperature?: number | null;
             max_tokens?: number | null;
+            max_completion_tokens?: number | null;
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
             stream?: boolean | null;
             [key: string]: unknown;
         } | {
@@ -52659,6 +52747,8 @@ export type KimiChatCompletionsWithDefaultAgentData = {
         };
         temperature?: number | null;
         max_tokens?: number | null;
+        max_completion_tokens?: number | null;
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
         [key: string]: unknown;
     };
@@ -53106,6 +53196,8 @@ export type KimiChatCompletionsWithAgentData = {
         };
         temperature?: number | null;
         max_tokens?: number | null;
+        max_completion_tokens?: number | null;
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
         [key: string]: unknown;
     };
@@ -63159,6 +63251,8 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
         };
         temperature?: number | null;
         max_tokens?: number | null;
+        max_completion_tokens?: number | null;
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
         [key: string]: unknown;
     };
@@ -63606,6 +63700,8 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
         };
         temperature?: number | null;
         max_tokens?: number | null;
+        max_completion_tokens?: number | null;
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
         stream?: boolean | null;
         [key: string]: unknown;
     };

@@ -81,6 +81,12 @@ export const ChatCompletionRequestSchema = z
     best_of: z.number().nullable().optional(),
     logprobs: z.boolean().nullable().optional(),
     top_logprobs: z.number().nullable().optional(),
+    /**
+     * Per-request chat-template variables (e.g. `{enable_thinking: false}` on
+     * Qwen3-style templates, the documented reasoning off-switch). Must be
+     * declared or inbound validation strips it before the adapter.
+     */
+    chat_template_kwargs: z.record(z.string(), z.unknown()).optional(),
   })
   .describe("vLLM chat completion request (OpenAI-compatible)");
 

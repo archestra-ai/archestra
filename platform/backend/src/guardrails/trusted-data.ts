@@ -376,6 +376,14 @@ export async function evaluateIfContextIsTrusted(
             callingAgentId: agentId,
             organizationId,
             userId,
+            // Lets a mid-analysis failure persist its completed Q&A rounds so
+            // the retry resumes the interrogation instead of repeating it.
+            partialTranscriptCacheKey: buildPartialTranscriptCacheKey({
+              organizationId,
+              toolName,
+              toolResult,
+              userRequest,
+            }),
           });
 
           logger.debug(
@@ -510,7 +518,31 @@ function buildSanitizationCacheKey(params: {
   toolResult: unknown;
   userRequest: string;
 }): AllowedCacheKey {
-  const contentHash = createHash("sha256")
+  const contentHash = buildSanitizationContentHash(params);
+  return `dual-llm-sanitized-result-${params.organizationId}-${params.toolCallId}-${contentHash}`;
+}
+
+/**
+ * Deliberately excludes the tool call id: when a failed sanitization makes
+ * the model (or user) retry the tool call, the retry mints a NEW call id for
+ * byte-identical content — resuming the interrogation must survive that.
+ */
+function buildPartialTranscriptCacheKey(params: {
+  organizationId: string;
+  toolName: string;
+  toolResult: unknown;
+  userRequest: string;
+}): AllowedCacheKey {
+  const contentHash = buildSanitizationContentHash(params);
+  return `dual-llm-partial-transcript-${params.organizationId}-${contentHash}`;
+}
+
+function buildSanitizationContentHash(params: {
+  toolName: string;
+  toolResult: unknown;
+  userRequest: string;
+}): string {
+  return createHash("sha256")
     .update(
       JSON.stringify({
         toolName: params.toolName,
@@ -520,7 +552,6 @@ function buildSanitizationCacheKey(params: {
     )
     .digest("hex")
     .slice(0, 32);
-  return `dual-llm-sanitized-result-${params.organizationId}-${params.toolCallId}-${contentHash}`;
 }
 
 async function readCachedSanitization(

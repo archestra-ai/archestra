@@ -38,6 +38,7 @@ import {
   extractCommonToolCallArguments,
 } from "@/types";
 import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-client";
+import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type OpenAiResponsesRequest = OpenAi.Types.ResponsesRequest;
@@ -62,6 +63,10 @@ export const openAiResponsesAdapterFactory: LLMProvider<
 > = {
   provider: "openai",
   interactionType: "openai:responses",
+
+  // The Responses parser drops a chat-completions-shaped error frame as an
+  // unknown chunk, turning an upstream failure into a blank turn.
+  formatStreamErrorFrame: formatResponsesStreamErrorFrame,
 
   createRequestAdapter(
     request: OpenAiResponsesRequest,

@@ -13,6 +13,7 @@ import {
   chatCompletionToResponses,
   type OpenaiResponsesContext,
 } from "./openai-responses-translator";
+import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
 
@@ -417,6 +418,11 @@ export function makeResponsesFromChatAdapterFactory<
 ): LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   return {
     ...provider,
+    // The wrapped provider speaks chat completions, but this surface emits a
+    // Responses stream — so its mid-stream error frame has to be Responses-
+    // shaped too, or the client parses it as an unknown chunk and the failure
+    // reaches the user as a blank turn.
+    formatStreamErrorFrame: formatResponsesStreamErrorFrame,
     createResponseAdapter(response) {
       return new ResponsesFromChatAdapter(
         provider.createResponseAdapter(response),

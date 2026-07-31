@@ -2,7 +2,7 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Info, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Info, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -838,6 +838,10 @@ function EnvironmentEditorDialog({
             }}
             supportsFqdn={supportsFqdn}
             provider={capabilities?.networkPolicy.provider ?? null}
+            enforcementMeasured={
+              capabilities?.networkPolicy.enforcementSource === "probe"
+            }
+            probedAt={capabilities?.networkPolicy.probedAt ?? null}
             baselineLoaded={egressBaselineLoaded}
             disabled={isPending || !egressBaselineLoaded}
           />
@@ -880,6 +884,8 @@ function NetworkPolicyFields({
   setAllowedCidrsText,
   supportsFqdn,
   provider,
+  enforcementMeasured,
+  probedAt,
   baselineLoaded,
   disabled,
 }: {
@@ -893,6 +899,8 @@ function NetworkPolicyFields({
   setAllowedCidrsText: (value: string) => void;
   supportsFqdn: boolean;
   provider: string | null;
+  enforcementMeasured: boolean;
+  probedAt: string | null;
   baselineLoaded: boolean;
   disabled: boolean;
 }) {
@@ -902,7 +910,30 @@ function NetworkPolicyFields({
   const enforcementUnavailable = provider === "none";
   return (
     <div className="space-y-4">
-      {enforcementUnavailable ? (
+      {enforcementUnavailable && enforcementMeasured ? (
+        <Alert variant="warning">
+          <TriangleAlert className="h-4 w-4" />
+          <AlertTitle>This cluster does not enforce network policy</AlertTitle>
+          <AlertDescription className="block leading-6">
+            A test pod under a deny-all policy still reached the network
+            {probedAt ? (
+              <>
+                {" on "}
+                {/* Rendered as the raw date rather than a locale string, which
+                    would differ between the server pass and the browser. */}
+                <time dateTime={probedAt}>{probedAt.slice(0, 10)}</time>
+              </>
+            ) : null}
+            <span>
+              , so egress rules would be accepted and then ignored. These
+              controls stay disabled until the cluster enforces NetworkPolicy.
+            </span>{" "}
+            <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+              View docs
+            </ExternalDocsLink>
+          </AlertDescription>
+        </Alert>
+      ) : enforcementUnavailable ? (
         <Alert variant="info">
           <Info className="h-4 w-4" />
           <AlertTitle>Network policy enforcement unavailable</AlertTitle>

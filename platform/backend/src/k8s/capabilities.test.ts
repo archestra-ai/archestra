@@ -196,4 +196,125 @@ describe("Kubernetes capability inspection", () => {
 
     expect(customObjectsApi.getAPIResources).toHaveBeenCalledTimes(8);
   });
+
+  describe("with a behavioural enforcement probe", () => {
+    // Verdicts age out, so fixtures are dated relative to now rather than pinned.
+    const PROBED_AT = new Date(Date.now() - 60_000).toISOString();
+
+    function crdsFor(group: string | null, resource?: string) {
+      return {
+        getAPIResources: vi.fn(async ({ group: g }: { group: string }) => ({
+          resources: g === group && resource ? [{ name: resource }] : [],
+        })),
+      };
+    }
+
+    function probeSource(control: string, treatment: string) {
+      return {
+        coreApi: {
+          listNamespacedPod: vi.fn(async () => ({
+            items: [
+              ["control", control],
+              ["treatment", treatment],
+            ].map(([role, message]) => ({
+              metadata: { labels: { "archestra.io/netpol-probe-role": role } },
+              status: {
+                containerStatuses: [
+                  {
+                    state: {
+                      terminated: { message, finishedAt: PROBED_AT },
+                    },
+                  },
+                ],
+              },
+            })),
+          })),
+        } as never,
+        namespace: "archestra",
+      };
+    }
+
+    test("credits enforcement on a cluster whose dataplane publishes no CRD", async () => {
+      // GKE Dataplane V2, kindnet and the EKS VPC CNI enforce the standard API
+      // and advertise nothing, which inference alone reads as "no enforcer" and
+      // uses to disable the egress controls.
+      const capabilities = await getK8sCapabilitiesFromApi(
+        crdsFor(null) as never,
+        probeSource("reachable", "blocked"),
+      );
+
+      expect(capabilities.networkPolicy).toMatchObject({
+        kubernetesNetworkPolicy: true,
+        provider: "kubernetes",
+        supportsFqdn: false,
+        enforcementSource: "probe",
+        probe: "enforced",
+        probedAt: PROBED_AT,
+      });
+    });
+
+    test("overrides installed Calico CRDs when a probe shows nothing enforces", async () => {
+      // GKE serves these CRDs with node enforcement switched off, which is the
+      // state that let egress rules be accepted and silently ignored.
+      const capabilities = await getK8sCapabilitiesFromApi(
+        crdsFor("crd.projectcalico.org", "felixconfigurations") as never,
+        probeSource("reachable", "reachable"),
+      );
+
+      expect(capabilities.networkPolicy).toMatchObject({
+        kubernetesNetworkPolicy: false,
+        provider: "none",
+        supportsFqdn: false,
+        enforcementSource: "probe",
+        probe: "not-enforced",
+      });
+    });
+
+    test("ignores the probe on AWS, where the kind it measures is never enforced", async () => {
+      // The probe uses a plain NetworkPolicy, which the AWS VPC CNI accepts and
+      // ignores, so the treatment arm gets through on a cluster that enforces
+      // via ApplicationNetworkPolicy. Letting that count would drop the provider
+      // to "none" and make the runtime delete the baseline doing the work.
+      const capabilities = await getK8sCapabilitiesFromApi(
+        crdsFor("networking.k8s.aws", "applicationnetworkpolicies") as never,
+        probeSource("reachable", "reachable"),
+      );
+
+      expect(capabilities.networkPolicy).toMatchObject({
+        kubernetesNetworkPolicy: true,
+        provider: "aws-application-network-policy",
+        supportsFqdn: true,
+        awsApplicationNetworkPolicy: true,
+        enforcementSource: "api-discovery",
+      });
+    });
+
+    test("falls back to inference when the probe reached no conclusion", async () => {
+      const capabilities = await getK8sCapabilitiesFromApi(
+        crdsFor("cilium.io", "ciliumnetworkpolicies") as never,
+        probeSource("blocked", "blocked"),
+      );
+
+      expect(capabilities.networkPolicy).toMatchObject({
+        kubernetesNetworkPolicy: true,
+        provider: "cilium",
+        supportsFqdn: true,
+        enforcementSource: "api-discovery",
+        probe: "inconclusive",
+      });
+    });
+
+    test("reports inference when no probe ran at all", async () => {
+      const capabilities = await getK8sCapabilitiesFromApi(
+        crdsFor("cilium.io", "ciliumnetworkpolicies") as never,
+      );
+
+      expect(capabilities.networkPolicy).toMatchObject({
+        provider: "cilium",
+        enforcementSource: "api-discovery",
+        probe: "absent",
+        probedAt: null,
+      });
+    });
+  });
 });

@@ -102,6 +102,13 @@ export const K8sNetworkPolicyCapabilitiesSchema = z.object({
   supportsFqdn: z.boolean(),
   supportsHttpMethods: z.boolean(),
   message: z.string().nullable(),
+  // Whether enforcement was measured by the chart's probe or merely inferred
+  // from which policy CRDs the API serves. Inference cannot distinguish a
+  // cluster that enforces from one that only stores the objects, so the UI
+  // words its warning differently depending on which answer it has.
+  enforcementSource: z.enum(["probe", "api-discovery"]),
+  probe: z.enum(["enforced", "not-enforced", "inconclusive", "absent"]),
+  probedAt: z.string().nullable(),
 });
 
 export const K8sCapabilitiesSchema = z.object({

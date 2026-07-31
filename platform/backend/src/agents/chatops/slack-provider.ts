@@ -47,16 +47,9 @@ import {
   isSsoConfigured,
 } from "./auto-provision";
 import {
-  clearChannelThreadMuted,
-  isChannelAnswerAllEnabled,
-  isChannelThreadActive,
-  isChannelThreadMuted,
+  applyChannelGate,
   isMuteReaction,
-  isThreadMuteCommand,
-  markChannelThreadActive,
-  mightBeAddressedMuteCommand,
   muteChannelThread,
-  resolveChannelGateAction,
 } from "./channel-activation";
 import {
   buildThreadMutedNotice,
@@ -328,86 +321,19 @@ class SlackProvider implements ChatOpsProvider {
     //
     // A channel can also opt into answering EVERY message (a per-channel
     // "answer all messages" binding setting): a message the gate would normally
-    // ignore is processed instead, unless that thread was muted. That flag is
-    // only consulted when the message would otherwise be ignored, so mentions-
-    // only channels (the default) do no extra work.
+    // ignore is processed instead, unless that thread was muted.
     if (!isDM) {
-      const activation = {
+      const { proceed } = await applyChannelGate({
         provider: this.providerId,
         channelId: event.channel,
         threadId: threadTs,
-      };
-      // "mute" / "shut up" etc., optionally prefixed by a name the bot answers
-      // to ("Archestra shut up") with no explicit @mention. The app name is
-      // DB-backed, so only resolve it when the message might be such a command.
-      let wantsMute = isThreadMuteCommand(cleanedText);
-      if (!wantsMute && mightBeAddressedMuteCommand(cleanedText)) {
-        wantsMute = isThreadMuteCommand(cleanedText, [
-          await OrganizationModel.getAppName(),
-        ]);
-      }
-      // isActive is only consulted when the bot wasn't mentioned (see
-      // resolveChannelGateAction), so skip the cache read on mentions.
-      const isActive = hasBotMention
-        ? false
-        : await isChannelThreadActive(activation);
-      // Consult the per-channel "answer all messages" flag only for the cases it
-      // can change: a message the base gate would ignore (un-mentioned +
-      // inactive), or any mute we may need to persist on the thread (an
-      // answer-all channel has no mention-driven activation to clear). Mentioned
-      // or already-active messages resolve without it, so mentions-only channels
-      // (the default) do no extra work.
-      const answerAll =
-        (!hasBotMention && !isActive) || wantsMute
-          ? await isChannelAnswerAllEnabled({
-              provider: this.providerId,
-              channelId: event.channel,
-              workspaceId: body.team_id || null,
-            })
-          : false;
-      const isMuted =
-        answerAll && !hasBotMention && !isActive && !wantsMute
-          ? await isChannelThreadMuted(activation)
-          : false;
-      switch (
-        resolveChannelGateAction({
-          botMentioned: hasBotMention,
-          wantsMute,
-          isActive,
-          answerAll,
-          isMuted,
-        })
-      ) {
-        case "mute": {
-          // muteThreadAndNotify persists the mute marker, so the thread's prior
-          // state has to be read before it.
-          const alreadyMuted = answerAll
-            ? await isChannelThreadMuted(activation)
-            : false;
-          const wasActive = await this.muteThreadAndNotify(
-            event.channel,
-            threadTs,
-          );
-          // An answer-all channel replies without a mention, so clearing the
-          // mention-driven activation isn't enough — the mute is remembered on
-          // the thread itself so it stays quiet until re-mentioned. Confirm it
-          // once (muteThreadAndNotify only confirms an active→muted transition,
-          // and a fresh answer-all thread isn't "active").
-          if (answerAll && !wasActive && !alreadyMuted) {
-            await this.postThreadMutedNotice(event.channel, threadTs);
-          }
-          return null;
-        }
-        case "activate":
-          await markChannelThreadActive(activation);
-          // A re-mention lifts an answer-all mute (see the "mute" case).
-          await clearChannelThreadMuted(activation);
-          break;
-        case "ignore":
-          return null;
-        case "process":
-          break;
-      }
+        botMentioned: hasBotMention,
+        text: cleanedText,
+        postMutedNotice: () =>
+          this.postThreadMutedNotice(event.channel, threadTs),
+        resolveAnswerAllWorkspaceId: async () => body.team_id || null,
+      });
+      if (!proceed) return null;
     }
 
     // Download file attachments first (we're already in an addressed context —

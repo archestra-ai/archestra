@@ -9,6 +9,7 @@ import {
   Hash,
   Plus,
   Search,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import Image from "next/image";
@@ -45,6 +46,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TablePagination } from "@/components/ui/table-pagination";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfiles } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth/auth.query";
@@ -157,6 +163,10 @@ export function ChannelsSection({
   const counts = bindingsResponse?.counts;
   const workspaces = bindingsResponse?.workspaces ?? [];
   const hasDmBinding = bindingsResponse?.hasDmBinding ?? false;
+  const workspacesWithUnmentionedTraffic = useMemo(
+    () => new Set(bindingsResponse?.workspacesWithUnmentionedTraffic ?? []),
+    [bindingsResponse?.workspacesWithUnmentionedTraffic],
+  );
   const hasMultipleWorkspaces = workspaces.length > 1;
 
   const totalCount = (counts?.configured ?? 0) + (counts?.unassigned ?? 0);
@@ -561,6 +571,9 @@ export function ChannelsSection({
                     providerStatus={providerStatus}
                     onAssignAgent={handleAssignAgent}
                     onToggleAnswerAll={handleToggleAnswerAll}
+                    workspacesWithUnmentionedTraffic={
+                      workspacesWithUnmentionedTraffic
+                    }
                     isUpdating={updateMutation.isPending}
                     selectedIds={selectedIds}
                     onToggleSelected={toggleSelected}
@@ -614,6 +627,7 @@ function ChannelRows({
   providerStatus,
   onAssignAgent,
   onToggleAnswerAll,
+  workspacesWithUnmentionedTraffic,
   isUpdating,
   selectedIds,
   onToggleSelected,
@@ -640,6 +654,7 @@ function ChannelRows({
   } | null;
   onAssignAgent: (bindingId: string, agentId: string | null) => void;
   onToggleAnswerAll: (bindingId: string, answerAll: boolean) => void;
+  workspacesWithUnmentionedTraffic: Set<string>;
   isUpdating: boolean;
   selectedIds: Set<string>;
   onToggleSelected: (id: string) => void;
@@ -774,6 +789,12 @@ function ChannelRows({
                   checked={!!binding.answerAllMessages}
                   disabled={isUpdating}
                   onToggle={(value) => onToggleAnswerAll(binding.id, value)}
+                  unverified={
+                    !!providerConfig.answerAllNeedsConsent &&
+                    !workspacesWithUnmentionedTraffic.has(
+                      binding.workspaceId ?? "",
+                    )
+                  }
                 />
               </TableCell>
             )}
@@ -947,11 +968,19 @@ function AnswerAllCell({
   checked = false,
   disabled = false,
   onToggle,
+  unverified = false,
 }: {
   isDm?: boolean;
   checked?: boolean;
   disabled?: boolean;
   onToggle?: (value: boolean) => void;
+  /**
+   * Answer-all is on, but no un-mentioned message has arrived from this
+   * workspace yet — so the setting may be inert for want of the provider-side
+   * permission. Only ever a hint: a channel nobody has posted in looks the same,
+   * so the toggle stays usable.
+   */
+  unverified?: boolean;
 }) {
   // DMs always reply to every message, so the per-channel toggle doesn't apply.
   if (isDm) {
@@ -968,6 +997,26 @@ function AnswerAllCell({
       <span className="text-xs text-muted-foreground">
         {checked ? "All messages" : "Mentions only"}
       </span>
+      {checked && unverified && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {/* A bare svg can't take focus, and the tooltip is the only place
+                the fix is written down — so this needs a real button. */}
+            <button
+              type="button"
+              className="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="No un-mentioned messages received from this workspace yet — how to fix"
+            >
+              <TriangleAlert className="h-3.5 w-3.5 text-amber-500" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">
+            No un-mentioned messages have arrived from this workspace yet. If
+            the bot stays quiet here, reinstall the app so a team owner is asked
+            to grant permission for it to read channel messages.
+          </TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 }

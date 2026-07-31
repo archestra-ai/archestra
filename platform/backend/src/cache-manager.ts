@@ -80,6 +80,10 @@ export const CacheKey = {
   SlackThreadMuted: "slack-thread-muted",
   /** Per-channel "answer all messages" flag, briefly cached to spare the gate a DB read per message */
   ChatOpsChannelAnswerAll: "chatops-channel-answer-all",
+  /** MS Teams thread-format team id → aadGroupId, so the gate resolves it without a Bot Framework call per message */
+  TeamsTeamAadGroupId: "teams-team-aad-group-id",
+  /** MS Teams teams that have delivered an un-mentioned channel message — proof the RSC consent for reading channel messages exists */
+  TeamsUnmentionedChannelTraffic: "teams-unmentioned-channel-traffic",
   /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */

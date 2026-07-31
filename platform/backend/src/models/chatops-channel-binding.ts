@@ -520,22 +520,25 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
-   * Delete a binding by ID and organization
+   * Delete a binding by ID and organization, returning the deleted row (null if
+   * there was nothing to delete). Callers need its channel identity to drop
+   * caches keyed on the binding.
    */
   static async deleteByIdAndOrganization(
     id: string,
     organizationId: string,
-  ): Promise<boolean> {
-    const result = await db
+  ): Promise<ChatOpsChannelBinding | null> {
+    const [deleted] = await db
       .delete(schema.chatopsChannelBindingsTable)
       .where(
         and(
           eq(schema.chatopsChannelBindingsTable.id, id),
           eq(schema.chatopsChannelBindingsTable.organizationId, organizationId),
         ),
-      );
+      )
+      .returning();
 
-    return (result.rowCount ?? 0) > 0;
+    return (deleted as ChatOpsChannelBinding) || null;
   }
 
   /**

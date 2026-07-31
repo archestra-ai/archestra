@@ -358,6 +358,107 @@ describe("ChatOpsManager security validation", () => {
     );
   });
 
+  /**
+   * A sender who lacks access to the channel's agent normally gets told so. In a
+   * channel that answers every message that reply would land in a conversation
+   * the sender never addressed to the bot, so the caller can ask for a silent
+   * denial. Access itself is unaffected either way.
+   */
+  async function denyAccessFor(params: {
+    org: { id: string };
+    agentId: string;
+    senderEmail: string;
+  }) {
+    await ChatOpsChannelBindingModel.create({
+      organizationId: params.org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: params.agentId,
+    });
+    const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
+    const provider = createMockProvider({
+      getUserEmail: async () => params.senderEmail,
+      sendReply: sendReplySpy,
+    });
+    return { provider, sendReplySpy };
+  }
+
+  test("announces an access denial by default", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser({ email: "owner@example.com" });
+    const team = await makeTeam(org.id, owner.id);
+    await makeTeamMember(team.id, owner.id);
+    // Team-scoped: an org-scoped agent is open to everyone, so it could never
+    // reach the denial branch.
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      scope: "team",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    // The sender is not on the agent's team.
+    await makeUser({ email: "outsider@example.com" });
+    const { provider, sendReplySpy } = await denyAccessFor({
+      org,
+      agentId: agent.id,
+      senderEmail: "outsider@example.com",
+    });
+
+    const result = await makeManagerWith(provider).processMessage({
+      message: createMockMessage({ senderEmail: "outsider@example.com" }),
+      provider,
+    });
+
+    expect(result.success).toBe(false);
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("Access Denied"),
+      }),
+    );
+  });
+
+  test("denies silently when the sender never addressed the bot", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser({ email: "owner2@example.com" });
+    const team = await makeTeam(org.id, owner.id);
+    await makeTeamMember(team.id, owner.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      scope: "team",
+      teams: [team.id],
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await makeUser({ email: "outsider2@example.com" });
+    const { provider, sendReplySpy } = await denyAccessFor({
+      org,
+      agentId: agent.id,
+      senderEmail: "outsider2@example.com",
+    });
+
+    const result = await makeManagerWith(provider).processMessage({
+      message: createMockMessage({ senderEmail: "outsider2@example.com" }),
+      provider,
+      announceAccessErrors: false,
+    });
+
+    // Still denied — only the public explanation is withheld.
+    expect(result.success).toBe(false);
+    expect(sendReplySpy).not.toHaveBeenCalled();
+  });
+
   test("per-user provider not connected - replies with a connect link", async ({
     makeUser,
     makeOrganization,

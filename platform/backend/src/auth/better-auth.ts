@@ -805,8 +805,10 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   // Subset-check the target role BEFORE the audit stash: better-auth's own
   // gate is only `member:update`, which must not be enough to hand out a
   // role more powerful than the caller's own (grant admin -> read what your
-  // role withholds -> switch back).
-  if (path === "/organization/update-member" && method === "POST") {
+  // role withholds -> switch back). The endpoint better-auth serves is
+  // /organization/update-member-role (verified live — the bare
+  // /organization/update-member path 404s).
+  if (path === "/organization/update-member-role" && method === "POST") {
     const role = body.role;
     if (typeof role === "string" && role.length > 0) {
       await assertCallerCanGrantMemberRole(ctx, role);
@@ -814,7 +816,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   }
 
   if (
-    path === "/organization/update-member" &&
+    path === "/organization/update-member-role" &&
     method === "POST" &&
     beforeRequest
   ) {
@@ -1270,7 +1272,11 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
   }
 
   // Audit member role changes
-  if (path === "/organization/update-member" && method === "POST" && request) {
+  if (
+    path === "/organization/update-member-role" &&
+    method === "POST" &&
+    request
+  ) {
     const stash = memberRoleUpdateByRequest.get(request);
     memberRoleUpdateByRequest.delete(request);
     const newRole = body.role as string | undefined;

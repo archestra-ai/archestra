@@ -459,7 +459,7 @@ describe("handleBeforeHook", () => {
       memberId = "some-member-id",
     ) =>
       createMockContext({
-        path: "/organization/update-member",
+        path: "/organization/update-member-role",
         method: "POST",
         body: { memberId, role },
         ...(user
@@ -540,7 +540,7 @@ describe("handleBeforeHook", () => {
       expect(await handleBeforeHook(lateral)).toBe(lateral);
     });
 
-    test("a full admin can still assign any role", async ({
+    test("a full admin can still assign any role — including editor, whose predefined set carries vestigial actions", async ({
       makeOrganization,
       makeUser,
       makeMember,
@@ -549,8 +549,13 @@ describe("handleBeforeHook", () => {
       const adminUser = await makeUser({ role: "admin" });
       await makeMember(adminUser.id, org.id, { role: ADMIN_ROLE_NAME });
 
-      const ctx = updateMemberCtx(adminUser, ADMIN_ROLE_NAME);
-      expect(await handleBeforeHook(ctx)).toBe(ctx);
+      // Editor's predefined set includes actions absent from
+      // allAvailableActions (e.g. invitation:read); those grant nothing and
+      // must not block assignment.
+      for (const role of [ADMIN_ROLE_NAME, "editor", MEMBER_ROLE_NAME]) {
+        const ctx = updateMemberCtx(adminUser, role);
+        expect(await handleBeforeHook(ctx)).toBe(ctx);
+      }
     });
 
     test("leaves unauthenticated and unknown-role calls for better-auth", async ({
@@ -3180,7 +3185,7 @@ describe("auth event audit logging", () => {
     );
     await handleBeforeHook(
       createMockContext({
-        path: "/organization/update-member",
+        path: "/organization/update-member-role",
         method: "POST",
         body: { memberId: member.id, role: "editor" },
         request: beforeRequest,
@@ -3197,7 +3202,7 @@ describe("auth event audit logging", () => {
       >);
 
     const afterCtx = createMockContext({
-      path: "/organization/update-member",
+      path: "/organization/update-member-role",
       method: "POST",
       body: { memberId: member.id, role: "editor" },
       request: beforeRequest,
@@ -3243,7 +3248,7 @@ describe("auth event audit logging", () => {
     );
     await handleBeforeHook(
       createMockContext({
-        path: "/organization/update-member",
+        path: "/organization/update-member-role",
         method: "POST",
         body: { memberId: member.id, role: "member" },
         request: beforeRequest,
@@ -3261,7 +3266,7 @@ describe("auth event audit logging", () => {
 
     await handleAfterHook(
       createMockContext({
-        path: "/organization/update-member",
+        path: "/organization/update-member-role",
         method: "POST",
         body: { memberId: member.id, role: "member" },
         request: beforeRequest,

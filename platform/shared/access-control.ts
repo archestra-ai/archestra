@@ -387,7 +387,13 @@ export function findUngrantablePermissions(
   for (const [resource, actions] of Object.entries(rolePermissions)) {
     if (exemptUiResources.includes(resource as Resource)) continue;
     const granterActions = granterPermissions[resource as Resource] || [];
+    const realActions = allAvailableActions[resource as Resource] || [];
     for (const action of actions ?? []) {
+      // Actions outside the permission universe grant nothing (RBAC checks
+      // resolve against allAvailableActions), so they cannot be escalation.
+      // Predefined sets carry a few such vestigial actions (e.g. the editor
+      // role's invitation:read); without this filter no one could grant them.
+      if (!realActions.includes(action)) continue;
       if (!granterActions.includes(action)) {
         missing.push(`${resource}:${action}`);
       }

@@ -476,9 +476,10 @@ Patient and stops at the first success, because on a fresh install the platform
 may still be booting. If this arm never connects the run proves nothing and the
 treatment result must be discarded rather than read as "enforced".
 
-The verdict travels in the container's termination message: the treatment pod is
-network-isolated by construction and so cannot report to the API server itself,
-but the kubelet copies /dev/termination-log into the pod status on its behalf.
+The verdict also travels in the container's termination message: the treatment
+pod is network-isolated by construction and so cannot report to the API server
+itself, but the kubelet copies /dev/termination-log into the pod status on its
+behalf, and the backend reads it from there.
 
 Always exits 0 — this is a diagnostic, and a failing hook would abort the release.
 Avoids $(...) and $((...)), which Kubernetes would try to expand as variable
@@ -486,7 +487,10 @@ references before the shell ever sees them. Each attempt is wrapped in `timeout`
 because a blocked path stalls on DNS as well as the connection, well past what
 the connect timeout implies.
 
-Takes a dict of: attempts, attemptTimeout, host, port.
+25 attempts at 3s covers a platform that is still booting while staying well
+inside Helm's default --timeout, which the hook wait counts against.
+
+Takes a dict of: host, port.
 */}}
 {{- define "archestra-platform.networkPolicyProbeControlScript" -}}
 command: ["/bin/sh", "-c"]
@@ -494,8 +498,8 @@ args:
   - |
     result=blocked
     i=0
-    while [ $i -lt {{ .attempts }} ]; do
-      if timeout {{ .attemptTimeout }} nc -z -w 2 {{ .host }} {{ .port }} 2>/dev/null; then
+    while [ $i -lt 25 ]; do
+      if timeout 3 nc -z -w 2 {{ .host }} {{ .port }} 2>/dev/null; then
         result=reachable
         break
       fi
@@ -512,7 +516,7 @@ args:
       says it without depending on which line Helm printed first.
     */}}
     if [ "$result" = blocked ]; then
-      echo "[archestra] network policy check: INCONCLUSIVE, could not reach {{ .host }}:{{ .port }} in {{ .attempts }} attempts — disregard any enforcement result reported for this release"
+      echo "[archestra] network policy check: INCONCLUSIVE, could not reach {{ .host }}:{{ .port }} — disregard any enforcement result reported for this release"
     fi
     exit 0
 {{- end }}
@@ -527,29 +531,29 @@ Settles first. A dataplane programs a new pod's rules asynchronously, so the
 container can start and connect in the gap before they land. Taking the first
 attempt as the answer turns that race into a confident "not enforced".
 
-Then takes a majority of several attempts rather than trusting any single one. A
+Then takes a majority of five attempts rather than trusting any single one. A
 lone success cannot outvote a genuinely enforced path, and a lone blip on an
 unenforced cluster cannot fake enforcement — the direction that would hide the
 warning this probe exists to raise. Every attempt runs; there is no early exit,
 since both error directions need the full sample.
 
-Takes a dict of: attempts, attemptTimeout, settleSeconds, host, port.
+Takes a dict of: host, port.
 */}}
 {{- define "archestra-platform.networkPolicyProbeTreatmentScript" -}}
 command: ["/bin/sh", "-c"]
 args:
   - |
-    sleep {{ .settleSeconds }}
+    sleep 5
     ok=0
     i=0
-    while [ $i -lt {{ .attempts }} ]; do
-      if timeout {{ .attemptTimeout }} nc -z -w 2 {{ .host }} {{ .port }} 2>/dev/null; then
+    while [ $i -lt 5 ]; do
+      if timeout 3 nc -z -w 2 {{ .host }} {{ .port }} 2>/dev/null; then
         ok=`expr $ok + 1`
       fi
       i=`expr $i + 1`
       sleep 1
     done
-    if [ `expr $ok \* 2` -gt {{ .attempts }} ]; then
+    if [ `expr $ok \* 2` -gt 5 ]; then
       result=reachable
     else
       result=blocked

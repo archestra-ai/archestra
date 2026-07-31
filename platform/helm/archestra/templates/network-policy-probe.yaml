@@ -8,18 +8,17 @@ Calico addon installed but node enforcement off serves the Calico CRDs while
 enforcing nothing, and GKE Dataplane V2, kindnet and the EKS VPC CNI all enforce
 while publishing no CRD at all. Only running the experiment settles it.
 
-Two pods run the identical probe against the same target; the only difference is
-that a deny-all egress policy selects one of them. Reachable from both means
-nothing is enforcing. Reachable from the control but not the treatment means
-enforcement works. Unreachable from the control proves nothing — the target
-never came up — and must never be read as "not enforced".
+Two pods run the same probe against the same target; the only difference is that
+a deny-all egress policy selects one of them. Reachable from both means nothing
+is enforcing. Reachable from the control but not the treatment means enforcement
+works. Unreachable from the control proves nothing — the target never came up —
+and must never be read as "not enforced".
 
 Hook weights sequence the three: the policy is loaded before the pod it selects
 exists, and the control finishes before the treatment starts.
 */}}
-{{- $probe := .Values.archestra.networkPolicyProbe }}
 {{- $host := include "archestra-platform.networkPolicyProbeTarget" . }}
-{{- $port := $probe.target.port }}
+{{- $port := .Values.archestra.networkPolicyProbe.target.port }}
 {{- /*
   The namespace the platform inspects for workloads, which is where it looks for
   this verdict. It is not always the release namespace, and rendering into the
@@ -53,22 +52,26 @@ spec:
       archestra.io/netpol-probe-role: treatment
   policyTypes:
     - Egress
+{{- range $arm := list
+  (dict "role" "control" "weight" "-5" "script" "archestra-platform.networkPolicyProbeControlScript")
+  (dict "role" "treatment" "weight" "0" "script" "archestra-platform.networkPolicyProbeTreatmentScript") }}
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  name: {{ include "archestra-platform.fullname" . }}-netpol-probe-control
+  name: {{ include "archestra-platform.fullname" $ }}-netpol-probe-{{ $arm.role }}
   namespace: {{ $ns }}
   labels:
-    {{- include "archestra-platform.networkPolicyProbeLabels" . | nindent 4 }}
-    archestra.io/netpol-probe-role: control
+    {{- include "archestra-platform.networkPolicyProbeLabels" $ | nindent 4 }}
+    archestra.io/netpol-probe-role: {{ $arm.role }}
   annotations:
     helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "-5"
+    helm.sh/hook-weight: {{ $arm.weight | quote }}
     {{- /*
     Both pods outlive the hook on purpose: their termination messages are the
-    only record of the verdict, and the backend reads them to decide what the
-    environments screen shows. Replaced on the next release.
+    only record of the verdict once the console output has scrolled away, and
+    the backend reads them to decide what the environments screen shows.
+    Replaced on the next release.
     */}}
     helm.sh/hook-delete-policy: before-hook-creation
     {{- /*
@@ -85,7 +88,8 @@ spec:
     ServiceAccount existing or carry a token into a deliberately isolated pod.
   */}}
   automountServiceAccountToken: false
-  activeDeadlineSeconds: {{ $probe.activeDeadlineSeconds }}
+  {{- /* Hard cap so an orphaned probe pod cannot linger. */}}
+  activeDeadlineSeconds: 300
   securityContext:
     runAsNonRoot: true
     runAsUser: 65534
@@ -94,9 +98,9 @@ spec:
       type: RuntimeDefault
   containers:
     - name: probe
-      image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
-      imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
-      {{- include "archestra-platform.networkPolicyProbeControlScript" (dict "attempts" $probe.controlAttempts "attemptTimeout" $probe.attemptTimeoutSeconds "host" $host "port" $port) | nindent 6 }}
+      image: {{ $.Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
+      imagePullPolicy: {{ $.Values.archestra.imagePullPolicy | default "IfNotPresent" }}
+      {{- include $arm.script (dict "host" $host "port" $port) | nindent 6 }}
       terminationMessagePath: /dev/termination-log
       terminationMessagePolicy: File
       securityContext:
@@ -105,71 +109,19 @@ spec:
         capabilities:
           drop:
             - ALL
-      {{- with $probe.resources }}
       resources:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-  {{- with $probe.nodeSelector | default .Values.archestra.nodeSelector }}
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 64Mi
+  {{- with $.Values.archestra.nodeSelector }}
   nodeSelector:
     {{- toYaml . | nindent 4 }}
   {{- end }}
-  {{- with $probe.tolerations | default .Values.archestra.tolerations }}
+  {{- with $.Values.archestra.tolerations }}
   tolerations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: {{ include "archestra-platform.fullname" . }}-netpol-probe-treatment
-  namespace: {{ $ns }}
-  labels:
-    {{- include "archestra-platform.networkPolicyProbeLabels" . | nindent 4 }}
-    archestra.io/netpol-probe-role: treatment
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "0"
-    helm.sh/hook-delete-policy: before-hook-creation
-    {{- /*
-    Prints this pod's output in the `helm install`/`helm upgrade` console, so the
-    verdict reaches whoever ran the release without them going looking for it.
-    Ignored by Helm versions that predate the annotation, which falls back to
-    reading the pods.
-    */}}
-    helm.sh/hook-output-log-policy: hook-succeeded,hook-failed
-spec:
-  restartPolicy: Never
-  automountServiceAccountToken: false
-  activeDeadlineSeconds: {{ $probe.activeDeadlineSeconds }}
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 65534
-    runAsGroup: 65534
-    seccompProfile:
-      type: RuntimeDefault
-  containers:
-    - name: probe
-      image: {{ .Values.archestra.initContainers.busyboxImage | default "busybox:1.36" }}
-      imagePullPolicy: {{ .Values.archestra.imagePullPolicy | default "IfNotPresent" }}
-      {{- include "archestra-platform.networkPolicyProbeTreatmentScript" (dict "attempts" $probe.treatmentAttempts "attemptTimeout" $probe.attemptTimeoutSeconds "settleSeconds" $probe.settleSeconds "host" $host "port" $port) | nindent 6 }}
-      terminationMessagePath: /dev/termination-log
-      terminationMessagePolicy: File
-      securityContext:
-        allowPrivilegeEscalation: false
-        readOnlyRootFilesystem: true
-        capabilities:
-          drop:
-            - ALL
-      {{- with $probe.resources }}
-      resources:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-  {{- with $probe.nodeSelector | default .Values.archestra.nodeSelector }}
-  nodeSelector:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-  {{- with $probe.tolerations | default .Values.archestra.tolerations }}
-  tolerations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+{{- end }}
 {{- end }}

@@ -171,41 +171,38 @@ tests:
         documentIndex: 2
 
   # A single sample cannot tell enforcement from a dataplane that programmed its
-  # rules a moment late, so the treatment arm settles first and then votes.
+  # rules a moment late, so the treatment arm settles and then takes a majority.
   - it: settles and samples repeatedly before judging the treatment arm
-    set:
-      archestra.networkPolicyProbe.settleSeconds: 7
-      archestra.networkPolicyProbe.treatmentAttempts: 9
     asserts:
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: sleep 7
+          pattern: 'sleep 5'
         documentIndex: 2
+      # The control arm does neither; it stops at first contact.
+      - notMatchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'sleep 5'
+        documentIndex: 1
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: 'while \[ \$i -lt 9 \]'
+          pattern: 'expr \$ok \\\* 2. -gt 5'
         documentIndex: 2
-      - matchRegex:
-          path: spec.containers[0].args[0]
-          pattern: 'expr \$ok \\\* 2. -gt 9'
-        documentIndex: 2
-      # The control arm neither settles nor votes; it stops at first contact.
       - notMatchRegex:
           path: spec.containers[0].args[0]
           pattern: expr \$ok
         documentIndex: 1
 
-  - it: bounds every attempt so a blocked path cannot outlive the pod deadline
-    set:
-      archestra.networkPolicyProbe.attemptTimeoutSeconds: 4
+  # A blocked path stalls on DNS as well as the connection, so an unbounded
+  # attempt outlives the pod deadline and the verdict is never written.
+  - it: bounds every attempt
     asserts:
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: timeout 4 nc -z
+          pattern: timeout 3 nc -z
         documentIndex: 1
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: timeout 4 nc -z
+          pattern: timeout 3 nc -z
         documentIndex: 2
 
   - it: never fails the release
@@ -294,14 +291,12 @@ tests:
         documentIndex: 1
 
   - it: caps the lifetime of an orphaned probe pod
-    set:
-      archestra.networkPolicyProbe.activeDeadlineSeconds: 120
     asserts:
       - equal:
           path: spec.activeDeadlineSeconds
-          value: 120
+          value: 300
         documentIndex: 1
       - equal:
           path: spec.activeDeadlineSeconds
-          value: 120
+          value: 300
         documentIndex: 2

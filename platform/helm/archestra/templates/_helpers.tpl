@@ -443,6 +443,148 @@ app.kubernetes.io/part-of: archestra
 {{- end }}
 
 {{/*
+NetworkPolicy enforcement probe labels.
+
+The name label is suffixed with `-netpol-probe` so the platform Service selector
+never routes traffic to a probe pod. The backend finds the probe pods by the
+`app.kubernetes.io/component` label, so it must stay in step with the selector in
+`backend/src/k8s/network-policy-probe.ts`.
+*/}}
+{{- define "archestra-platform.networkPolicyProbeLabels" -}}
+helm.sh/chart: {{ include "archestra-platform.chart" . }}
+app.kubernetes.io/name: {{ include "archestra-platform.name" . }}-netpol-probe
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: netpol-probe
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: archestra
+{{- end }}
+
+{{/*
+Host the probe pods try to reach.
+
+Defaults to the platform's own Service: pod -> ClusterIP -> pod is the datapath
+the product's real egress policies govern and it needs no internet access. Do not
+substitute cluster DNS or the Kubernetes API: NodeLocal DNSCache answers from a
+link-local address on the same node, and on kind/docker-desktop the apiserver
+ClusterIP resolves to the node itself. Several dataplanes leave those node-local
+paths unfiltered, which would report a non-enforcing cluster as enforcing.
+
+Fully qualified (trailing dot) so the resolver does not walk the search list.
+Under the deny-all arm every one of those lookups has to time out, which is far
+slower than the single failure the probe actually needs.
+*/}}
+{{- define "archestra-platform.networkPolicyProbeTarget" -}}
+{{- $domain := .Values.archestra.orchestrator.kubernetes.clusterDomain | default "cluster.local" -}}
+{{- .Values.archestra.networkPolicyProbe.targetHost | default (printf "%s.%s.svc.%s." (include "archestra-platform.fullname" .) .Release.Namespace $domain) -}}
+{{- end }}
+
+{{/*
+Control arm: establish that the target is reachable at all.
+
+Patient and stops at the first success, because on a fresh install the platform
+may still be booting. If this arm never connects the run proves nothing and the
+treatment result must be discarded rather than read as "enforced".
+
+The verdict also travels in the container's termination message: the treatment
+pod is network-isolated by construction and so cannot report to the API server
+itself, but the kubelet copies /dev/termination-log into the pod status on its
+behalf, and the backend reads it from there.
+
+Always exits 0 — this is a diagnostic, and a failing hook would abort the release.
+Avoids $(...) and $((...)), which Kubernetes would try to expand as variable
+references before the shell ever sees them. Each attempt is wrapped in `timeout`
+because a blocked path stalls on DNS as well as the connection, well past what
+the connect timeout implies.
+
+25 attempts at 3s covers a platform that is still booting while staying well
+inside Helm's default --timeout, which the hook wait counts against.
+
+Takes a dict of: host. The port is the chart's fixed backend Service port.
+*/}}
+{{- define "archestra-platform.networkPolicyProbeControlScript" -}}
+command: ["/bin/sh", "-c"]
+args:
+  - |
+    result=blocked
+    i=0
+    while [ $i -lt 25 ]; do
+      if timeout 3 nc -z -w 2 {{ .host }} 9000 2>/dev/null; then
+        result=reachable
+        break
+      fi
+      i=`expr $i + 1`
+      sleep 1
+    done
+    printf '%s' "$result" > /dev/termination-log
+    {{- /*
+      Silent when the target answers: a working check should cost the operator
+      one line, and that line is the treatment arm's.
+
+      When the target never answers, the treatment arm is blocked for the same
+      reason and reports enforcement it did not observe — so this says so, and
+      says it without depending on which line Helm printed first.
+    */}}
+    if [ "$result" = blocked ]; then
+      echo "[archestra] network policy check: INCONCLUSIVE, could not reach {{ .host }}:9000 — disregard any enforcement result reported for this release"
+    fi
+    exit 0
+{{- end }}
+
+{{/*
+Treatment arm: decide whether the deny-all policy selecting this pod bites.
+
+Two safeguards, both learned from watching this misreport on a cluster that does
+enforce:
+
+Settles first. A dataplane programs a new pod's rules asynchronously, so the
+container can start and connect in the gap before they land. Taking the first
+attempt as the answer turns that race into a confident "not enforced".
+
+Then takes a majority of five attempts rather than trusting any single one. A
+lone success cannot outvote a genuinely enforced path, and a lone blip on an
+unenforced cluster cannot fake enforcement — the direction that would hide the
+warning this probe exists to raise. Every attempt runs; there is no early exit,
+since both error directions need the full sample.
+
+Takes a dict of: host. The port is the chart's fixed backend Service port.
+*/}}
+{{- define "archestra-platform.networkPolicyProbeTreatmentScript" -}}
+command: ["/bin/sh", "-c"]
+args:
+  - |
+    sleep 5
+    ok=0
+    i=0
+    while [ $i -lt 5 ]; do
+      if timeout 3 nc -z -w 2 {{ .host }} 9000 2>/dev/null; then
+        ok=`expr $ok + 1`
+      fi
+      i=`expr $i + 1`
+      sleep 1
+    done
+    if [ `expr $ok \* 2` -gt 5 ]; then
+      result=reachable
+    else
+      result=blocked
+    fi
+    printf '%s' "$result" > /dev/termination-log
+    {{- /*
+      One line per outcome: Helm wraps each log record in its own `level=... msg=`
+      envelope, so a multi-line banner would arrive as a column of quoted
+      fragments.
+    */}}
+    if [ "$result" = reachable ]; then
+      echo "[archestra] network policy check: WARNING, network policy not enforced. See https://archestra.ai/docs/platform-environments#network-egress-policies"
+    else
+      echo "[archestra] network policy check: OK, enforcement enabled"
+    fi
+    exit 0
+{{- end }}
+
+{{/*
 Shared init containers for both platform and worker Deployments.
 Handles Vault secret injection, pgvector extension setup, and PostgreSQL readiness.
 */}}

@@ -15,7 +15,7 @@
  * Run (dev, from platform/backend):
  *   pnpm db:reencrypt-content
  * Run (prod image, from /app/backend):
- *   node dist/standalone-scripts/reencrypt-content.mjs
+ *   node dist/standalone-scripts/reencrypt-content.ee.mjs
  */
 import { runContentEncryptionBackfill } from "@/content-encryption/backfill.ee";
 import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";

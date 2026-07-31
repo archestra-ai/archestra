@@ -12,6 +12,7 @@ import {
 } from "@archestra/shared";
 import {
   allAvailableActions,
+  findUngrantablePermissions,
   predefinedPermissionsMap,
 } from "@archestra/shared/access-control";
 import { and, eq, getTableColumns, ilike, sql } from "drizzle-orm";
@@ -137,40 +138,11 @@ class OrganizationRoleModel {
     userPermissions: Permissions,
     rolePermissions: Permissions,
   ): { valid: boolean; missingPermissions: string[] } {
-    logger.debug(
-      "OrganizationRoleModel.validateRolePermissions: validating permissions",
+    const missingPermissions = findUngrantablePermissions(
+      userPermissions,
+      rolePermissions,
     );
-    const missingPermissions: string[] = [];
-
-    const resourcesToSkipValidation: Resource[] = [
-      "simpleView",
-      "chatAgentPicker",
-      "chatProviderSettings",
-    ];
-
-    for (const [resource, actions] of Object.entries(rolePermissions)) {
-      if (resourcesToSkipValidation.includes(resource as Resource)) continue;
-
-      const userResourceActions = userPermissions[resource as Resource] || [];
-
-      for (const action of actions) {
-        if (!userResourceActions.includes(action)) {
-          missingPermissions.push(`${resource}:${action}`);
-        }
-      }
-    }
-
-    logger.debug(
-      {
-        valid: missingPermissions.length === 0,
-        missingCount: missingPermissions.length,
-      },
-      "OrganizationRoleModel.validateRolePermissions: completed",
-    );
-    return {
-      valid: missingPermissions.length === 0,
-      missingPermissions,
-    };
+    return { valid: missingPermissions.length === 0, missingPermissions };
   }
 
   /**

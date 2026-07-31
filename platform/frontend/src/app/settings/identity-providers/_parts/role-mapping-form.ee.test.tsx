@@ -10,6 +10,7 @@ import { useForm } from "react-hook-form";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
+import { useAllPermissions } from "@/lib/auth/auth.query";
 import { RoleMappingForm } from "./role-mapping-form.ee";
 
 // Radix Popper / floating-ui needs ResizeObserver as a real constructor
@@ -35,6 +36,10 @@ vi.mock("@/lib/role.query", () => ({
 }));
 
 vi.mock("@/lib/organization.query");
+// RoleSelectContent resolves the viewer's permissions (to grey out roles the
+// viewer can't grant — moot here since IdP mappings opt out, but hooks run
+// unconditionally); the canonical mock keeps it out of real query-land.
+vi.mock("@/lib/auth/auth.query");
 
 import { useAppearanceSettings } from "@/lib/organization.query";
 
@@ -110,6 +115,11 @@ function getDeleteButtons() {
 }
 
 beforeEach(() => {
+  // Viewer permissions resolve to "still loading" — the IdP mapping picker
+  // opts out of grantability filtering, so no roles are greyed out either way.
+  vi.mocked(useAllPermissions).mockReturnValue({
+    data: undefined,
+  } as ReturnType<typeof useAllPermissions>);
   vi.mocked(useAppearanceSettings).mockReturnValue({
     data: { appName: "Spark" },
   } as unknown as ReturnType<typeof useAppearanceSettings>);

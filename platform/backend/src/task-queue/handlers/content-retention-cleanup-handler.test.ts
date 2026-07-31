@@ -5,7 +5,7 @@ vi.mock("@/logging");
 import { count, eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { MessageModel } from "@/models";
+import { ConversationModel, MessageModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { InteractionRequest, InteractionResponse } from "@/types";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
@@ -221,6 +221,56 @@ describe("handleContentRetentionCleanup", () => {
       .select({ id: schema.conversationsTable.id })
       .from(schema.conversationsTable);
     expect(remaining.id).toBe(active.id);
+  });
+
+  test("a soft-deleted (trashed) conversation still expires — trash never extends lifetime", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    config.retention.chatConversationsDays = 180;
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+
+    const [trashed] = await db
+      .insert(schema.conversationsTable)
+      .values({
+        id: crypto.randomUUID(),
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "trashed and old",
+        lastMessageAt: daysAgo(200),
+      })
+      .returning();
+    await db.insert(schema.messagesTable).values({
+      id: crypto.randomUUID(),
+      conversationId: trashed.id,
+      role: "user",
+      content: { parts: [{ type: "text", text: "old trashed message" }] },
+    });
+    await ConversationModel.delete(trashed.id, user.id, org.id);
+
+    // Soft-deleted but recent: stays restorable, retention must not touch it.
+    await db.insert(schema.conversationsTable).values({
+      id: crypto.randomUUID(),
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "trashed but fresh",
+      lastMessageAt: daysAgo(2),
+      deletedAt: new Date(),
+    });
+
+    await handleContentRetentionCleanup();
+
+    expect(await countRows(schema.conversationsTable)).toBe(1);
+    expect(await countRows(schema.messagesTable)).toBe(0);
+    const [remaining] = await db
+      .select({ title: schema.conversationsTable.title })
+      .from(schema.conversationsTable);
+    expect(remaining.title).toBe("trashed but fresh");
   });
 
   test("a conversation revived after selection survives the sweep", async ({

@@ -669,6 +669,61 @@ describe("knowledge base routes", () => {
       expect(getResponse.statusCode).toBe(404);
     });
 
+    test("re-deleting an already-deleted knowledge base returns 404", async () => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Delete Twice",
+      });
+
+      await app.inject({
+        method: "DELETE",
+        url: `/api/knowledge-bases/${kb.id}`,
+      });
+
+      // Soft delete keeps the row, so the second delete must still read as a
+      // 404 — same as the hard delete it replaced, not a silent success.
+      const second = await app.inject({
+        method: "DELETE",
+        url: `/api/knowledge-bases/${kb.id}`,
+      });
+
+      expect(second.statusCode).toBe(404);
+    });
+
+    test("assigning a connector to a deleted knowledge base returns 404", async () => {
+      const kb = await KnowledgeBaseModel.create({
+        organizationId,
+        name: "Deleted Assign Target",
+      });
+      const connector = await KnowledgeBaseConnectorModel.create({
+        organizationId,
+        name: "Orphan Assigner",
+        connectorType: "jira",
+        config: {
+          type: "jira",
+          jiraBaseUrl: "https://example.atlassian.net",
+          isCloud: true,
+          projectKey: "AS",
+        },
+      });
+
+      await app.inject({
+        method: "DELETE",
+        url: `/api/knowledge-bases/${kb.id}`,
+      });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/connectors/${connector.id}/knowledge-bases`,
+        payload: { knowledgeBaseIds: [kb.id] },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(
+        await KnowledgeBaseConnectorModel.getKnowledgeBaseIds(connector.id),
+      ).toEqual([]);
+    });
+
     test("returns 404 for non-existent knowledge base", async () => {
       const response = await app.inject({
         method: "DELETE",

@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentConnectorAssignment } from "@/types";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentVersionModel from "./agent-version";
@@ -8,12 +9,36 @@ class AgentConnectorAssignmentModel {
   static async findByAgent(
     agentId: string,
   ): Promise<AgentConnectorAssignment[]> {
+    // Join the connector parent so a soft-deleted connector stops surfacing to
+    // the agent (list + retrieval resolution).
     return await db
-      .select()
+      .select({
+        agentId: schema.agentConnectorAssignmentsTable.agentId,
+        connectorId: schema.agentConnectorAssignmentsTable.connectorId,
+        createdAt: schema.agentConnectorAssignmentsTable.createdAt,
+      })
       .from(schema.agentConnectorAssignmentsTable)
-      .where(eq(schema.agentConnectorAssignmentsTable.agentId, agentId));
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
+        eq(
+          schema.agentConnectorAssignmentsTable.connectorId,
+          schema.knowledgeBaseConnectorsTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.agentConnectorAssignmentsTable.agentId, agentId),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      );
   }
 
+  /**
+   * Deliberately NOT parent-filtered: this is the delete-path cache-invalidation
+   * read, keyed on the connector being deleted. The knowledge-source-deletion
+   * service captures the affected-agent set with it *before* stamping
+   * `deleted_at`, so it must return rows regardless of the connector's state.
+   */
   static async findByConnector(
     connectorId: string,
   ): Promise<AgentConnectorAssignment[]> {
@@ -25,7 +50,23 @@ class AgentConnectorAssignmentModel {
       );
   }
 
-  static async assign(agentId: string, connectorId: string): Promise<void> {
+  /**
+   * Attach a connector to an agent. Returns false — without writing — when the
+   * connector is soft-deleted, which callers surface as a 404. The row survives
+   * soft-delete, so the FK alone won't stop the link.
+   */
+  static async assign(agentId: string, connectorId: string): Promise<boolean> {
+    const [connector] = await db
+      .select({ id: schema.knowledgeBaseConnectorsTable.id })
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.id, connectorId),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      );
+    if (!connector) return false;
+
     await db
       .insert(schema.agentConnectorAssignmentsTable)
       .values({ agentId, connectorId })
@@ -34,6 +75,8 @@ class AgentConnectorAssignmentModel {
     // Connectors are part of the config snapshot — fork a version.
     // (AgentModel.update goes through syncForAgent, not here, so no double fork.)
     await AgentVersionModel.forkIfChangedBestEffort(agentId);
+
+    return true;
   }
 
   static async unassign(
@@ -72,12 +115,26 @@ class AgentConnectorAssignmentModel {
   }
 
   static async getConnectorIds(agentId: string): Promise<string[]> {
+    // Join the connector parent so soft-deleted connectors drop out of agent
+    // resolution (retrieval + the query_knowledge_sources hot path).
     const results = await db
       .select({
         connectorId: schema.agentConnectorAssignmentsTable.connectorId,
       })
       .from(schema.agentConnectorAssignmentsTable)
-      .where(eq(schema.agentConnectorAssignmentsTable.agentId, agentId));
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
+        eq(
+          schema.agentConnectorAssignmentsTable.connectorId,
+          schema.knowledgeBaseConnectorsTable.id,
+        ),
+      )
+      .where(
+        and(
+          eq(schema.agentConnectorAssignmentsTable.agentId, agentId),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      );
 
     return results.map((r) => r.connectorId);
   }
@@ -182,10 +239,27 @@ class AgentConnectorAssignmentModel {
   ): Promise<Map<string, string[]>> {
     if (agentIds.length === 0) return new Map();
 
+    // Join the connector parent so soft-deleted connectors drop out of agent
+    // list/detail resolution (the batch resolver the agent endpoints use).
     const rows = await db
-      .select()
+      .select({
+        agentId: schema.agentConnectorAssignmentsTable.agentId,
+        connectorId: schema.agentConnectorAssignmentsTable.connectorId,
+      })
       .from(schema.agentConnectorAssignmentsTable)
-      .where(inArray(schema.agentConnectorAssignmentsTable.agentId, agentIds));
+      .innerJoin(
+        schema.knowledgeBaseConnectorsTable,
+        eq(
+          schema.agentConnectorAssignmentsTable.connectorId,
+          schema.knowledgeBaseConnectorsTable.id,
+        ),
+      )
+      .where(
+        and(
+          inArray(schema.agentConnectorAssignmentsTable.agentId, agentIds),
+          notDeleted(schema.knowledgeBaseConnectorsTable),
+        ),
+      );
 
     const map = new Map<string, string[]>();
     for (const row of rows) {

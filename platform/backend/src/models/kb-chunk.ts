@@ -134,6 +134,12 @@ class KbChunkModel {
       JOIN kb_documents d ON d.id = c.document_id
       LEFT JOIN knowledge_base_connectors kbc ON kbc.id = d.connector_id
       WHERE d.connector_id IN (${ids})
+        -- Defense-in-depth: never serve chunks from a soft-deleted connector.
+        -- The connectorIds are resolved through notDeleted()-filtered resolvers
+        -- upstream, but retrieval is a security surface so we re-check here.
+        -- (kbc is a LEFT JOIN, so a genuinely-unmatched row keeps deleted_at
+        -- NULL and still passes — this only drops soft-deleted connectors.)
+        AND kbc.deleted_at IS NULL
         AND c.${col} IS NOT NULL
         ${envFilter}
         ${bypassAcl ? sql`` : sql`AND c.acl ?| ARRAY[${aclEntries}]`}

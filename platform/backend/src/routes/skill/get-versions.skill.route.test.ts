@@ -119,6 +119,14 @@ describe("GET /api/skills/:id/versions", () => {
     expect(response.statusCode).toBe(404);
   });
 
+  test("a non-UUID skill id is 400", async () => {
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills/not-a-uuid/versions",
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
   test("a soft-deleted skill's history is unreachable", async () => {
     const skill = await seedSkill();
     await SkillModel.delete(skill.id);

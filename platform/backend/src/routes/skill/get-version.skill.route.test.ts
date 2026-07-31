@@ -90,6 +90,25 @@ describe("GET /api/skills/:id/versions/:version", () => {
     expect(response.statusCode).toBe(400);
   });
 
+  test("a non-UUID skill id is 400", async () => {
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills/not-a-uuid/versions/1",
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  test("a soft-deleted skill's version is unreachable", async () => {
+    const skill = await seedSkillWithTwoVersions();
+    await SkillModel.delete(skill.id);
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills/${skill.id}/versions/1`,
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
   test("a personal skill of another user is 404, not 403", async ({
     makeUser,
   }) => {

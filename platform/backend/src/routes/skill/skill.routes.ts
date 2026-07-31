@@ -743,7 +743,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "(no SKILL.md body). Version numbers are contiguous from 1. " +
           "Paginated.",
         tags: ["Skills"],
-        params: z.object({ id: z.string() }),
+        params: z.object({ id: UuidIdSchema }),
         querystring: PaginationQuerySchema,
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillVersionMetadataSchema),
@@ -776,7 +776,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "plus its resource-file snapshots.",
         tags: ["Skills"],
         params: z.object({
-          id: z.string(),
+          id: UuidIdSchema,
           // capped at int4 max so impossible versions 400 instead of
           // reaching Postgres as an out-of-range bind
           version: z.coerce.number().int().positive().max(2_147_483_647),

@@ -41,6 +41,7 @@ import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclus
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
+  type Agent,
   AgentExportPayloadSchema,
   type AgentScope,
   AgentScopeFilterSchema,
@@ -575,42 +576,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Fetch agent first to determine its type
-      // Use admin=true for the lookup so we can check type, then enforce type-specific RBAC
-      const agent = await AgentModel.findById(id, user.id, true);
-
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Defense-in-depth: never allow cross-organization access, even for admins.
-      // Permissions are scoped to the current organizationId.
-      if (agent.organizationId !== organizationId) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Single DB query for all permission checks on this agent type
-      const checker = await getAgentTypePermissionChecker({
+      const agent = await requireReadableAgent({
+        id,
         userId: user.id,
         organizationId,
       });
-
-      // Check read permission (return 404 to avoid leaking existence)
-      try {
-        checker.require(agent.agentType, "read");
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      if (!checker.isAdmin(agent.agentType)) {
-        // Re-fetch with team filtering
-        const filteredAgent = await AgentModel.findById(id, user.id, false);
-        if (!filteredAgent) {
-          throw new ApiError(404, "Agent not found");
-        }
-        return reply.send(filteredAgent);
-      }
-
       return reply.send(agent);
     },
   );
@@ -1673,18 +1643,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 export default agentRoutes;
 
 /**
- * Enforce the full GetAgent read-access path for a version-history route:
- * org scoping, per-type RBAC, and — for non-admins — team-filtered
- * visibility. Every failure is a 404 so existence is never leaked. Version
- * reads don't filter soft-deletes themselves, so resolving the live agent
- * here (findById excludes deleted rows) is what keeps a deleted agent's
- * history unreachable.
+ * Resolve a live agent and enforce the full read-access path shared by
+ * GetAgent and the version-history routes: org scoping, per-type RBAC, and —
+ * for non-admins — team-filtered visibility. Every failure is a 404 so
+ * existence is never leaked. Version reads don't filter soft-deletes
+ * themselves, so resolving the live agent here (findById excludes deleted
+ * rows) is what keeps a deleted agent's history unreachable.
  */
 async function requireReadableAgent(params: {
   id: string;
   userId: string;
   organizationId: string;
-}): Promise<void> {
+}): Promise<Agent> {
   // admin lookup first to learn the type, then enforce type-specific RBAC
   const agent = await AgentModel.findById(params.id, params.userId, true);
   if (!agent || agent.organizationId !== params.organizationId) {
@@ -1714,6 +1684,8 @@ async function requireReadableAgent(params: {
       throw new ApiError(404, "Agent not found");
     }
   }
+
+  return agent;
 }
 
 async function validateKnowledgeBaseAccess(params: {

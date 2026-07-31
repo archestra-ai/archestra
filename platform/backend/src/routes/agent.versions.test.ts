@@ -212,6 +212,19 @@ describe("agent version routes", () => {
       expect(response.statusCode).toBe(400);
     });
 
+    test("a soft-deleted agent's version is unreachable", async ({
+      makeAgent,
+    }) => {
+      const agent = await makeAgent({ organizationId });
+      await AgentModel.delete(agent.id);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}/versions/1`,
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
     test("missing type read permission is 404, not 403", async ({
       makeAgent,
     }) => {

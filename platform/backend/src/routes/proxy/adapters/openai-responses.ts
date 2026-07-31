@@ -215,7 +215,16 @@ class OpenAiResponsesRequestAdapter
       return [];
     }
 
-    return this.request.input.flatMap((item) => toCommonMessages(item));
+    // Pair function_call_output items with their function_call by call_id so
+    // tool results surface as CommonMessage.toolCalls — the shape trusted-data
+    // / Dual LLM policy evaluation reads. Without the pairing, Responses-routed
+    // conversations look tool-free to the evaluator and sanitization is
+    // silently bypassed.
+    const toolCallsByCallId = getToolCallsByCallId(this.request.input);
+
+    return this.request.input.flatMap((item) =>
+      toCommonMessages(item, toolCallsByCallId),
+    );
   }
 
   getToolResults(): CommonToolResult[] {
@@ -807,7 +816,13 @@ function createEmptyToolCompressionStats(): ToolCompressionStats {
   };
 }
 
-function toCommonMessages(item: ResponseInputItem): CommonMessage[] {
+function toCommonMessages(
+  item: ResponseInputItem,
+  toolCallsByCallId: Map<
+    string,
+    { name: string; arguments?: Record<string, unknown> }
+  >,
+): CommonMessage[] {
   // "easy input message" items carry role/content and omit `type` (it defaults
   // to "message"); the AI SDK emits this shape. Without handling it here,
   // getMessages() drops the user's prompt and trusted-data / Dual LLM policy
@@ -822,13 +837,27 @@ function toCommonMessages(item: ResponseInputItem): CommonMessage[] {
   }
 
   if (item.type === "function_call_output") {
+    const toolCall = toolCallsByCallId.get(item.call_id);
+    const content =
+      typeof item.output === "string"
+        ? item.output
+        : JSON.stringify(item.output);
     return [
       {
         role: "tool",
-        content:
-          typeof item.output === "string"
-            ? item.output
-            : JSON.stringify(item.output),
+        content,
+        // An output whose function_call was pruned from the input still
+        // carries untrusted data — surface it under the "unknown" name so
+        // default trusted-data policies apply rather than nothing.
+        toolCalls: [
+          {
+            id: item.call_id,
+            name: toolCall?.name ?? "unknown",
+            arguments: toolCall?.arguments,
+            content,
+            isError: false,
+          },
+        ],
       },
     ];
   }

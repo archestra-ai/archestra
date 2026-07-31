@@ -39,6 +39,121 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
 
     expect(messages).toEqual([{ role: "user", content: "typed" }]);
   });
+
+  // Tool results ride as function_call_output items paired to a function_call
+  // by call_id. Trusted-data / Dual LLM evaluation reads CommonMessage.toolCalls,
+  // so results that don't surface there silently bypass sanitization policies.
+  test("surfaces function_call_output items as tool calls paired by call_id", () => {
+    const request = {
+      model: "gpt-5.6-sol",
+      input: [
+        { role: "user", content: [{ type: "input_text", text: "search it" }] },
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "duckduckgo__search",
+          arguments: '{"query":"mcp security"}',
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "raw web content",
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    const messages = openAiResponsesAdapterFactory
+      .createRequestAdapter(request)
+      .getMessages();
+
+    expect(messages).toEqual([
+      { role: "user", content: "search it" },
+      {
+        role: "tool",
+        content: "raw web content",
+        toolCalls: [
+          {
+            id: "call_1",
+            name: "duckduckgo__search",
+            arguments: { query: "mcp security" },
+            content: "raw web content",
+            isError: false,
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("keeps an orphaned function_call_output visible under the unknown name", () => {
+    const request = {
+      model: "gpt-5.6-sol",
+      input: [
+        {
+          type: "function_call_output",
+          call_id: "call_pruned",
+          output: { data: "still untrusted" },
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    const messages = openAiResponsesAdapterFactory
+      .createRequestAdapter(request)
+      .getMessages();
+
+    expect(messages).toEqual([
+      {
+        role: "tool",
+        content: '{"data":"still untrusted"}',
+        toolCalls: [
+          {
+            id: "call_pruned",
+            name: "unknown",
+            arguments: undefined,
+            content: '{"data":"still untrusted"}',
+            isError: false,
+          },
+        ],
+      },
+    ]);
+  });
+});
+
+describe("OpenAiResponsesRequestAdapter.toProviderRequest", () => {
+  // Sanitized Dual LLM summaries flow back through applyToolResultUpdates and
+  // must replace the raw output the upstream model would otherwise read.
+  test("replaces function_call_output content for updated tool call ids", () => {
+    const request = {
+      model: "gpt-5.6-sol",
+      input: [
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "duckduckgo__search",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "raw web content",
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    const adapter = openAiResponsesAdapterFactory.createRequestAdapter(request);
+    adapter.applyToolResultUpdates({ call_1: "sanitized summary" });
+
+    const forwarded = adapter.toProviderRequest();
+    const outputs = (
+      forwarded.input as Array<{ type?: string; output?: unknown }>
+    ).filter((item) => item.type === "function_call_output");
+
+    expect(outputs).toEqual([
+      expect.objectContaining({
+        call_id: "call_1",
+        output: "sanitized summary",
+      }),
+    ]);
+  });
 });
 
 describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {

@@ -21,6 +21,33 @@ import {
   resolveConfiguredAgentLlm,
 } from "@/utils/llm-resolution";
 
+/**
+ * A failed LLM call inside the Dual LLM workflow, tagged with the provider
+ * and model the workflow actually resolved to. The chat request may run on a
+ * different provider than the sanitization subagents, so error surfaces must
+ * attribute the failure to this provider — not the request's.
+ */
+export class DualLlmAgentCallError extends Error {
+  readonly provider: SupportedProvider;
+  readonly modelName: string;
+
+  constructor(params: {
+    provider: SupportedProvider;
+    modelName: string;
+    cause: unknown;
+  }) {
+    super(
+      params.cause instanceof Error
+        ? params.cause.message
+        : String(params.cause),
+    );
+    this.name = "DualLlmAgentCallError";
+    this.provider = params.provider;
+    this.modelName = params.modelName;
+    this.cause = params.cause;
+  }
+}
+
 export class DualLlmSubagent {
   private constructor(
     private readonly callingAgentId: string,
@@ -201,20 +228,24 @@ export class DualLlmSubagent {
     agent: Agent;
     prompt: string;
   }): Promise<string> {
-    const { model, systemPrompt } = await resolveBuiltInAgentModel({
-      agent: params.agent,
-      organizationId: this.organizationId,
-      userId: this.userId,
-    });
+    const { model, systemPrompt, provider, modelName } =
+      await resolveBuiltInAgentModel({
+        agent: params.agent,
+        organizationId: this.organizationId,
+        userId: this.userId,
+      });
 
-    const result = await generateText({
-      model,
-      system: systemPrompt ?? undefined,
-      prompt: params.prompt,
-      temperature: 0,
-    });
-
-    return result.text.trim();
+    try {
+      const result = await generateText({
+        model,
+        system: systemPrompt ?? undefined,
+        prompt: params.prompt,
+        temperature: 0,
+      });
+      return result.text.trim();
+    } catch (cause) {
+      throw new DualLlmAgentCallError({ provider, modelName, cause });
+    }
   }
 
   private async executeObjectAgent<TSchema extends z.ZodTypeAny>(params: {
@@ -222,21 +253,25 @@ export class DualLlmSubagent {
     prompt: string;
     schema: TSchema;
   }): Promise<z.infer<TSchema>> {
-    const { model, systemPrompt } = await resolveBuiltInAgentModel({
-      agent: params.agent,
-      organizationId: this.organizationId,
-      userId: this.userId,
-    });
+    const { model, systemPrompt, provider, modelName } =
+      await resolveBuiltInAgentModel({
+        agent: params.agent,
+        organizationId: this.organizationId,
+        userId: this.userId,
+      });
 
-    const result = await generateObject({
-      model,
-      system: systemPrompt ?? undefined,
-      prompt: params.prompt,
-      schema: params.schema,
-      temperature: 0,
-    });
-
-    return result.object as z.infer<TSchema>;
+    try {
+      const result = await generateObject({
+        model,
+        system: systemPrompt ?? undefined,
+        prompt: params.prompt,
+        schema: params.schema,
+        temperature: 0,
+      });
+      return result.object as z.infer<TSchema>;
+    } catch (cause) {
+      throw new DualLlmAgentCallError({ provider, modelName, cause });
+    }
   }
 }
 
@@ -247,6 +282,8 @@ async function resolveBuiltInAgentModel(params: {
 }): Promise<{
   model: ReturnType<typeof createDirectLLMModel>;
   systemPrompt: string | null;
+  provider: SupportedProvider;
+  modelName: string;
 }> {
   const { agent, organizationId, userId } = params;
 
@@ -264,6 +301,8 @@ async function resolveBuiltInAgentModel(params: {
       baseUrl: resolved.baseUrl,
     }),
     systemPrompt: renderSystemPrompt(agent.systemPrompt),
+    provider: resolved.provider,
+    modelName: resolved.modelName,
   };
 }
 

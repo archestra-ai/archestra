@@ -936,6 +936,15 @@ export async function handleLLMProxy<
             );
           }
         : undefined,
+      // A failed analysis fails the request closed; surface the failure
+      // inside the visible dual LLM block before the error terminates the
+      // stream, so the block explains why the turn stopped.
+      requestAdapter.isStreaming()
+        ? (message: string) => {
+            ensureStreamHeaders();
+            reply.raw.write(streamAdapter.formatTextDeltaSSE(message));
+          }
+        : undefined,
       initialUntrustedReason,
     );
 

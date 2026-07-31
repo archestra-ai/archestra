@@ -1,12 +1,17 @@
 import { createHash } from "node:crypto";
 import {
+  ApiError,
+  ArchestraInternalErrorCode,
   buildTrustedDataBlockedContentNotice,
   extractMcpToolError,
   isSeededAppRenderToolResult,
   type SensitiveContextOrigin,
   TimeInMs,
 } from "@archestra/shared";
-import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
+import {
+  DualLlmAgentCallError,
+  DualLlmSubagent,
+} from "@/agents/subagents/dual-llm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   resolveRunToolDispatch,
@@ -26,6 +31,43 @@ import type {
 import { DualLlmAnalysisSchema, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 
 /**
+ * A `sanitize_with_dual_llm` policy promises the model never sees the raw
+ * tool result — only the quarantined summary. When the analysis itself fails,
+ * the only safe outcome is to fail the whole request closed: substituting the
+ * raw result (or silently marking it untrusted and continuing) would hand the
+ * model exactly the content the policy quarantines.
+ *
+ * The message carries the actual upstream failure — the provider/model the
+ * Dual LLM workflow resolved to (which may differ from the chat request's
+ * provider), the upstream HTTP status and provider error code, and the
+ * upstream message — so the error surface explains the real cause instead of
+ * repeating the policy narrative shown in the streamed dual LLM block.
+ */
+export class DualLlmSanitizationError extends ApiError {
+  readonly toolCallId: string;
+  readonly toolName: string;
+  readonly upstreamFailure: DualLlmUpstreamFailure;
+
+  constructor(params: {
+    toolCallId: string;
+    toolName: string;
+    cause: unknown;
+  }) {
+    const upstream = describeDualLlmFailure(params.cause);
+    super(
+      502,
+      buildSanitizationFailureMessage(params.toolName, upstream),
+      classifyDualLlmFailureCode(upstream),
+    );
+    this.name = "DualLlmSanitizationError";
+    this.toolCallId = params.toolCallId;
+    this.toolName = params.toolName;
+    this.upstreamFailure = upstream;
+    this.cause = params.cause;
+  }
+}
+
+/**
  * Evaluate if context is trusted and return updates for tool results
  *
  * @param messages - Messages in common format
@@ -35,6 +77,7 @@ import { DualLlmAnalysisSchema, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
  * @param considerContextUntrusted - If true, marks context as untrusted from the beginning
  * @param onDualLlmStart - Optional callback when dual LLM processing starts
  * @param onDualLlmProgress - Optional callback for dual LLM Q&A progress
+ * @param onDualLlmError - Optional callback to surface a failed analysis in the stream before the request fails closed
  * @returns Object with tool result updates and trust status
  */
 export async function evaluateIfContextIsTrusted(
@@ -50,6 +93,7 @@ export async function evaluateIfContextIsTrusted(
     options: string[];
     answer: string;
   }) => void,
+  onDualLlmError?: (message: string) => void,
   initialUntrustedReason?: UnsafeContextBoundaryReason,
 ): Promise<{
   toolResultUpdates: ToolResultUpdates;
@@ -307,25 +351,49 @@ export async function evaluateIfContextIsTrusted(
           { agentId, toolCallId, organizationId, userId },
           "[trustedData] evaluateIfContextIsTrusted: creating dual LLM subagent",
         );
-        const dualLlmSubagent = await DualLlmSubagent.create({
-          dualLlmParams: {
-            toolCallId,
-            userRequest,
-            toolResult,
-            toolName,
-            toolArguments,
-          },
-          callingAgentId: agentId,
-          organizationId,
-          userId,
-        });
+        let analysis: DualLlmAnalysis;
+        try {
+          const dualLlmSubagent = await DualLlmSubagent.create({
+            dualLlmParams: {
+              toolCallId,
+              userRequest,
+              toolResult,
+              toolName,
+              toolArguments,
+            },
+            callingAgentId: agentId,
+            organizationId,
+            userId,
+          });
 
-        logger.debug(
-          { agentId, toolCallId },
-          "[trustedData] evaluateIfContextIsTrusted: processing with dual LLM subagent",
-        );
-        const analysis =
-          await dualLlmSubagent.processWithMainAgent(onDualLlmProgress);
+          logger.debug(
+            { agentId, toolCallId },
+            "[trustedData] evaluateIfContextIsTrusted: processing with dual LLM subagent",
+          );
+          analysis =
+            await dualLlmSubagent.processWithMainAgent(onDualLlmProgress);
+        } catch (error) {
+          // Fail closed: the policy promises the model never sees this raw
+          // result, so a failed analysis must fail the whole request — not
+          // fall through to the untrusted-marking path with raw content.
+          logger.error(
+            { err: error, agentId, toolCallId, toolName },
+            "[trustedData] dual LLM sanitization failed; failing the request closed",
+          );
+          const sanitizationError = new DualLlmSanitizationError({
+            toolCallId,
+            toolName,
+            cause: error,
+          });
+          // The streamed block carries the policy narrative; the thrown error
+          // carries the upstream mechanics — no duplicated essay between them.
+          onDualLlmError?.(
+            `Sanitization failed for ${toolName}: ${sanitizationError.upstreamFailure.message}\n\n` +
+              `The tool result was not shown to the model — the "sanitize with Dual LLM" trusted data policy fails closed. ` +
+              `Fix the organization's LLM API keys before retrying.\n`,
+          );
+          throw sanitizationError;
+        }
         dualLlmAnalyses.push(analysis);
         toolResultUpdates[toolCallId] = analysis.result;
         logger.debug(
@@ -467,4 +535,133 @@ async function writeCachedSanitization(
       "[trustedData] failed to cache dual LLM analysis",
     );
   }
+}
+
+interface DualLlmUpstreamFailure {
+  provider?: string;
+  modelName?: string;
+  statusCode?: number;
+  providerErrorCode?: string;
+  message: string;
+}
+
+/**
+ * Walk a Dual LLM failure to the innermost upstream provider error: through
+ * the DualLlmAgentCallError tag (provider/model attribution), then through
+ * SDK retry wrappers (RetryError.lastError / .errors) and `cause` chains,
+ * collecting the upstream HTTP status, the provider's own error code (from
+ * the parsed or raw response body), and the innermost message.
+ */
+function describeDualLlmFailure(cause: unknown): DualLlmUpstreamFailure {
+  const info: DualLlmUpstreamFailure = {
+    message: cause instanceof Error ? cause.message : String(cause),
+  };
+
+  let current: unknown = cause;
+  if (current instanceof DualLlmAgentCallError) {
+    info.provider = current.provider;
+    info.modelName = current.modelName;
+    current = current.cause;
+  }
+
+  for (let depth = 0; depth < 6 && current instanceof Error; depth++) {
+    if (current.message) {
+      info.message = current.message;
+    }
+
+    const candidate = current as Error & {
+      statusCode?: unknown;
+      status?: unknown;
+      data?: unknown;
+      responseBody?: unknown;
+      lastError?: unknown;
+      errors?: unknown;
+    };
+
+    const statusCode = candidate.statusCode ?? candidate.status;
+    if (info.statusCode === undefined && typeof statusCode === "number") {
+      info.statusCode = statusCode;
+    }
+
+    info.providerErrorCode ??=
+      extractProviderErrorCode(candidate.data) ??
+      extractProviderErrorCode(candidate.responseBody);
+
+    const next =
+      candidate.lastError ??
+      (Array.isArray(candidate.errors) ? candidate.errors.at(-1) : undefined) ??
+      candidate.cause;
+    if (!(next instanceof Error) || next === current) {
+      break;
+    }
+    current = next;
+  }
+
+  return info;
+}
+
+/** Pull the provider's own error code out of a parsed or raw error body. */
+function extractProviderErrorCode(body: unknown): string | undefined {
+  let parsed: unknown = body;
+  if (typeof body === "string") {
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      return undefined;
+    }
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return undefined;
+  }
+  const errorField = (parsed as { error?: unknown }).error;
+  const code =
+    typeof errorField === "object" && errorField !== null
+      ? (errorField as { code?: unknown }).code
+      : (parsed as { code?: unknown }).code;
+  if (typeof code === "string" && code.length > 0) {
+    return code;
+  }
+  if (typeof code === "number") {
+    return `${code}`;
+  }
+  return undefined;
+}
+
+function buildSanitizationFailureMessage(
+  toolName: string,
+  upstream: DualLlmUpstreamFailure,
+): string {
+  const model = upstream.provider
+    ? `${upstream.provider}${upstream.modelName ? `/${upstream.modelName}` : ""}`
+    : "the sanitization model";
+  const status =
+    upstream.statusCode !== undefined
+      ? ` with HTTP ${upstream.statusCode}`
+      : "";
+  const code =
+    upstream.providerErrorCode !== undefined
+      ? ` (provider error code ${upstream.providerErrorCode})`
+      : "";
+  return (
+    `Dual LLM sanitization for "${toolName}" failed; the tool result was not shown to the model. ` +
+    `Sanitization call to ${model} failed${status}${code}: ${upstream.message}`
+  );
+}
+
+/**
+ * Map the upstream failure to the same normalized codes provider adapters
+ * emit, so clients classify the real cause (e.g. the sanitization key being
+ * out of credit) instead of a generic API error.
+ */
+function classifyDualLlmFailureCode(
+  upstream: DualLlmUpstreamFailure,
+): ArchestraInternalErrorCode | undefined {
+  if (
+    /insufficient balance|please recharge|credit balance is too low|insufficient credits/i.test(
+      upstream.message,
+    )
+  ) {
+    return ArchestraInternalErrorCode.ProviderInsufficientBalance;
+  }
+  return undefined;
 }

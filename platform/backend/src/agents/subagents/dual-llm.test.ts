@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import type { InsertAgent } from "@/types";
 import { resolveBestAvailableLlm } from "@/utils/llm-resolution";
-import { DualLlmSubagent } from "./dual-llm";
+import { DualLlmAgentCallError, DualLlmSubagent } from "./dual-llm";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: vitest lifecycle helper (per-test MSW server), not a React hook
 const server = useMswServer();
@@ -311,5 +311,72 @@ describe("DualLlmSubagent", () => {
       ],
       result: "Safe summary",
     });
+  });
+
+  test("tags provider call failures with the resolved provider and model", async ({
+    makeAgent,
+  }) => {
+    const mainAgent = await makeAgent(
+      buildBuiltInAgentOverrides({
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        systemPrompt: "main prompt",
+      }),
+    );
+    const quarantineAgent = await makeAgent(
+      buildBuiltInAgentOverrides({
+        name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+        systemPrompt: "quarantine prompt",
+      }),
+    );
+
+    vi.spyOn(AgentModel, "getBuiltInAgent").mockImplementation(async (name) => {
+      if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN) {
+        return mainAgent;
+      }
+      if (name === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE) {
+        return quarantineAgent;
+      }
+      return null;
+    });
+
+    // 400 is non-retryable, so the SDK surfaces the provider error directly.
+    server.use(
+      http.post(`${LLM_BASE_URL}/chat/completions`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: "1113",
+              message:
+                "Insufficient balance or no resource package. Please recharge.",
+            },
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+
+    const subagent = await DualLlmSubagent.create({
+      dualLlmParams: {
+        toolCallId: "tool-call-1",
+        userRequest: "summarize this safely",
+        toolResult: { raw: "sensitive data" },
+        toolName: "get_emails",
+      },
+      callingAgentId: "agent-1",
+      organizationId: "org-1",
+    });
+
+    const rejection = await subagent.processWithMainAgent().then(
+      () => null,
+      (error) => error,
+    );
+
+    // The workflow's own resolved provider/model ride on the error so error
+    // surfaces attribute the failure correctly (the chat request may run on a
+    // different provider than the sanitization subagents).
+    expect(rejection).toBeInstanceOf(DualLlmAgentCallError);
+    expect(rejection.provider).toBe(MOCK_RESOLVED_LLM.provider);
+    expect(rejection.modelName).toBe(MOCK_RESOLVED_LLM.modelName);
+    expect(rejection.message).toContain("Insufficient balance");
   });
 });

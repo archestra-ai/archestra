@@ -3,13 +3,17 @@ import {
   SEEDED_APP_RENDER_META_KEY,
 } from "@archestra/shared";
 import { vi } from "vitest";
-import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
+import {
+  DualLlmAgentCallError,
+  DualLlmSubagent,
+} from "@/agents/subagents/dual-llm";
 import { cacheManager } from "@/cache-manager";
 import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { CommonMessage, Tool } from "@/types";
 import {
+  DualLlmSanitizationError,
   evaluateIfContextIsTrusted,
   sensitiveContextOriginFromBoundary,
 } from "./trusted-data";
@@ -584,6 +588,151 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       setSpy.mockRestore();
     });
 
+    test("fails the request closed and surfaces the failure when dual LLM sanitization errors", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "external" }],
+        action: "sanitize_with_dual_llm",
+        description: "Sanitize external data",
+      });
+
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi
+          .fn()
+          .mockRejectedValue(new Error("provider unavailable")),
+      } as unknown as DualLlmSubagent);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Summarize the tool results" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_dual",
+              name: "get_emails",
+              content: { source: "external", payload: "raw secret payload" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const streamedErrors: string[] = [];
+      const rejection = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        false,
+        { teamIds: [] },
+        undefined,
+        undefined,
+        (message) => streamedErrors.push(message),
+      ).then(
+        () => null,
+        (error) => error,
+      );
+
+      // The request must die (fail closed), naming the tool and the cause —
+      // never fall through to the untrusted-marking path with raw content.
+      expect(rejection).toBeInstanceOf(DualLlmSanitizationError);
+      expect(rejection.statusCode).toBe(502);
+      expect(rejection.message).toContain("get_emails");
+      expect(rejection.message).toContain("provider unavailable");
+      expect(rejection.message).not.toContain("raw secret payload");
+
+      // The visible dual LLM block carries the failure before the stream dies.
+      expect(streamedErrors).toHaveLength(1);
+      expect(streamedErrors[0]).toContain("Sanitization failed for get_emails");
+      expect(streamedErrors[0]).toContain("provider unavailable");
+
+      createSpy.mockRestore();
+    });
+
+    test("surfaces the actual upstream provider failure through the sanitization error", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "external" }],
+        action: "sanitize_with_dual_llm",
+        description: "Sanitize external data",
+      });
+
+      // Shape of a real AI SDK failure: a retry wrapper whose lastError is the
+      // provider HTTP call error carrying status and the provider's own body.
+      const upstreamCallError = Object.assign(
+        new Error(
+          "Insufficient balance or no resource package. Please recharge.",
+        ),
+        {
+          statusCode: 429,
+          responseBody:
+            '{"error":{"code":"1113","message":"Insufficient balance or no resource package. Please recharge."}}',
+        },
+      );
+      const retryWrapper = Object.assign(
+        new Error(
+          "Failed after 3 attempts. Last error: Insufficient balance or no resource package. Please recharge.",
+        ),
+        { lastError: upstreamCallError },
+      );
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi.fn().mockRejectedValue(
+          new DualLlmAgentCallError({
+            provider: "zhipuai",
+            modelName: "glm-4.7",
+            cause: retryWrapper,
+          }),
+        ),
+      } as unknown as DualLlmSubagent);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Summarize the tool results" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_dual",
+              name: "get_emails",
+              content: { source: "external", payload: "raw" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const rejection = await evaluateIfContextIsTrusted(
+        commonMessages,
+        agentId,
+        organizationId,
+        undefined,
+        false,
+        { teamIds: [] },
+      ).then(
+        () => null,
+        (error) => error,
+      );
+
+      // The error names the provider/model the Dual LLM workflow actually
+      // used (not the chat request's provider), the upstream HTTP status,
+      // and the provider's own error code and message.
+      expect(rejection).toBeInstanceOf(DualLlmSanitizationError);
+      expect(rejection.upstreamFailure).toEqual({
+        provider: "zhipuai",
+        modelName: "glm-4.7",
+        statusCode: 429,
+        providerErrorCode: "1113",
+        message:
+          "Insufficient balance or no resource package. Please recharge.",
+      });
+      expect(rejection.message).toContain("zhipuai/glm-4.7");
+      expect(rejection.message).toContain("HTTP 429");
+      expect(rejection.message).toContain("provider error code 1113");
+      // Classified as the same normalized code provider adapters emit.
+      expect(rejection.internalCode).toBe("provider_insufficient_balance");
+
+      createSpy.mockRestore();
+    });
+
     test("marks context as untrusted when no policies match", async () => {
       // Create a policy that won't match
       await TrustedDataPolicyModel.create({
@@ -930,6 +1079,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         undefined,
         true,
         { teamIds: [] },
+        undefined,
         undefined,
         undefined,
         "inherited_from_parent",

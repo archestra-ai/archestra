@@ -1872,40 +1872,37 @@ class ToolModel {
    * keeps an Auto-mode agent from having the tool pre-excluded the moment it
    * appears.
    *
-   * @param newlyCreatedToolNames names returned by {@link seedArchestraTools}.
+   * Deliberately NOT keyed on the names {@link seedArchestraTools} just
+   * created. A backfill that only fires on the run which creates the tool row
+   * is one-shot: if the row is created by a build that predates this backfill —
+   * separate releases of the tool and the backfill, a canary, a rolled-back
+   * deploy — the pre-fill excludes the tool for Auto-mode agents and no later
+   * boot can ever repair it. Reconciling the full default set every boot makes
+   * it self-healing, and costs one query when there is nothing to do.
    */
-  static async backfillNewDefaultToolsToAgents(
-    newlyCreatedToolNames: string[],
-  ): Promise<void> {
-    const createdShortNames = new Set(
-      newlyCreatedToolNames
-        .map(extractArchestraBuiltInShortName)
-        .filter((name): name is string => name !== null),
-    );
-    const newDefaultShortNames = DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.filter(
-      (shortName) => createdShortNames.has(shortName),
-    );
-    if (newDefaultShortNames.length === 0) return;
-
+  static async backfillDefaultToolsToAgents(): Promise<void> {
     const organizationIds = await OrganizationModel.findAllIds();
     for (const organizationId of organizationIds) {
       const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
         organizationId,
-        newDefaultShortNames,
+        [...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES],
       );
       if (toolIds.length === 0) continue;
+
       const agentIds =
         await AgentModel.findNonBuiltInIdsByOrganizationId(organizationId);
-      for (const agentId of agentIds) {
+      const missing = await AgentToolModel.findAgentIdsMissingAnyTool(
+        agentIds,
+        toolIds,
+      );
+      if (missing.length === 0) continue;
+
+      for (const agentId of missing) {
         await AgentToolModel.createManyIfNotExists(agentId, toolIds);
       }
       logger.info(
-        {
-          organizationId,
-          agentCount: agentIds.length,
-          newDefaultShortNames,
-        },
-        "Backfilled new default tools to org agents",
+        { organizationId, agentCount: missing.length },
+        "Backfilled default tools to org agents",
       );
     }
   }

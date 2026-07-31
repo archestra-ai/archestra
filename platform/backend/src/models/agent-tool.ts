@@ -616,6 +616,37 @@ class AgentToolModel {
   /**
    * Bulk create agent-tool relationships in one query to avoid N+1
    */
+  /**
+   * Which of `agentIds` are missing at least one of `toolIds`. One query, so a
+   * reconcile that has nothing to do costs a single round trip rather than one
+   * per agent.
+   */
+  static async findAgentIdsMissingAnyTool(
+    agentIds: string[],
+    toolIds: string[],
+  ): Promise<string[]> {
+    if (agentIds.length === 0 || toolIds.length === 0) return [];
+
+    const held = await db
+      .select({
+        agentId: schema.agentToolsTable.agentId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          inArray(schema.agentToolsTable.agentId, agentIds),
+          inArray(schema.agentToolsTable.toolId, toolIds),
+        ),
+      )
+      .groupBy(schema.agentToolsTable.agentId);
+
+    const heldCountByAgent = new Map(held.map((r) => [r.agentId, r.count]));
+    return agentIds.filter(
+      (agentId) => (heldCountByAgent.get(agentId) ?? 0) < toolIds.length,
+    );
+  }
+
   static async createManyIfNotExists(
     agentId: string,
     toolIds: string[],

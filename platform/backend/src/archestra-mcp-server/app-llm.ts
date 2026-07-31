@@ -119,6 +119,7 @@ async function runAppLlmCompletion(
     userId,
     source: "app:llm_complete",
     baseUrl: selection.baseUrl,
+    chatApiKeyId: selection.chatApiKeyId,
   });
 
   const system = args.jsonMode

@@ -3667,6 +3667,8 @@ export interface GenerateTitleParams {
   apiKey: string | undefined;
   modelName: string;
   baseUrl: string | null;
+  /** Key row that supplied `apiKey` — forwarded so per-key proxy state (codex refresh-token rotation) binds to the right row. */
+  chatApiKeyId?: string;
   agentId: string;
   userId: string;
   conversationId: string;
@@ -3741,6 +3743,7 @@ export async function generateConversationTitle(
     sessionId: conversationId,
     source: "chat:title_generation",
     baseUrl,
+    chatApiKeyId: params.chatApiKeyId,
   });
 
   try {

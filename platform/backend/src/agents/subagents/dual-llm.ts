@@ -1,12 +1,10 @@
+import { BUILT_IN_AGENT_IDS, type SupportedProvider } from "@archestra/shared";
+import { generateText } from "ai";
 import {
-  BUILT_IN_AGENT_IDS,
-  providerRequiresPerUserCredential,
-  type SupportedProvider,
-} from "@archestra/shared";
-import { generateObject, generateText } from "ai";
-import { z } from "zod";
-import { createDirectLLMModel } from "@/clients/llm-client";
-import config, { getProviderEnvApiKey } from "@/config";
+  createLLMModel,
+  isApiKeyRequired,
+  type LLMModel,
+} from "@/clients/llm-client";
 import logger from "@/logging";
 import { AgentModel } from "@/models";
 import { renderSystemPrompt } from "@/templating";
@@ -16,10 +14,8 @@ import type {
   DualLlmAnalysis,
   DualLlmMessage,
 } from "@/types";
-import {
-  resolveBestAvailableLlm,
-  resolveConfiguredAgentLlm,
-} from "@/utils/llm-resolution";
+import { ApiError } from "@/types";
+import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
 
 /**
  * A failed LLM call inside the Dual LLM workflow, tagged with the provider
@@ -201,27 +197,21 @@ export class DualLlmSubagent {
     question: string,
     options: string[],
   ): Promise<number> {
-    const parsed = await this.executeObjectAgent({
+    const response = await this.executeTextAgent({
       agent: this.quarantineAgent,
       prompt: buildQuarantinePrompt({
         toolResult: this.toolResult,
         question,
         options,
       }),
-      schema: z.object({
-        answer: z.number().int(),
-      }),
     });
 
-    if (
-      typeof parsed.answer !== "number" ||
-      parsed.answer < 0 ||
-      parsed.answer >= options.length
-    ) {
+    const answer = parseAnswerIndex(response);
+    if (answer === null || answer < 0 || answer >= options.length) {
       return options.length - 1;
     }
 
-    return parsed.answer;
+    return answer;
   }
 
   private async executeTextAgent(params: {
@@ -247,32 +237,6 @@ export class DualLlmSubagent {
       throw new DualLlmAgentCallError({ provider, modelName, cause });
     }
   }
-
-  private async executeObjectAgent<TSchema extends z.ZodTypeAny>(params: {
-    agent: Agent;
-    prompt: string;
-    schema: TSchema;
-  }): Promise<z.infer<TSchema>> {
-    const { model, systemPrompt, provider, modelName } =
-      await resolveBuiltInAgentModel({
-        agent: params.agent,
-        organizationId: this.organizationId,
-        userId: this.userId,
-      });
-
-    try {
-      const result = await generateObject({
-        model,
-        system: systemPrompt ?? undefined,
-        prompt: params.prompt,
-        schema: params.schema,
-        temperature: 0,
-      });
-      return result.object as z.infer<TSchema>;
-    } catch (cause) {
-      throw new DualLlmAgentCallError({ provider, modelName, cause });
-    }
-  }
 }
 
 async function resolveBuiltInAgentModel(params: {
@@ -280,71 +244,60 @@ async function resolveBuiltInAgentModel(params: {
   organizationId: string;
   userId?: string;
 }): Promise<{
-  model: ReturnType<typeof createDirectLLMModel>;
+  model: LLMModel;
   systemPrompt: string | null;
   provider: SupportedProvider;
   modelName: string;
 }> {
   const { agent, organizationId, userId } = params;
 
-  const resolved = await resolveBuiltInAgentSelection({
-    agent,
+  // The shared built-in-subagent chain: the agent's explicitly configured
+  // model/key, then the ORGANIZATION DEFAULT model (Settings → Chat), then
+  // the best available key, then the env fallback.
+  const selection = await resolveAgentLlmOrDefault({
+    agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
     organizationId,
     userId,
   });
 
+  if (isApiKeyRequired(selection.provider, selection.apiKey)) {
+    throw new DualLlmAgentCallError({
+      provider: selection.provider,
+      modelName: selection.modelName,
+      cause: new ApiError(
+        400,
+        `No ${selection.provider} API key is available for the dual LLM security workflow.`,
+      ),
+    });
+  }
+
   return {
-    model: createDirectLLMModel({
-      provider: resolved.provider,
-      apiKey: resolved.apiKey,
-      modelName: resolved.modelName,
-      baseUrl: resolved.baseUrl,
+    // Like every other built-in subagent flow (compaction, app LLM, skill
+    // description), the model talks to the local LLM proxy loopback: the
+    // proxy's provider adapters own the credential transports, so per-user
+    // subscription credentials (ChatGPT/Codex, GitHub & Microsoft Copilot)
+    // work here too. Recursion into sanitization is impossible — these
+    // requests carry no tool results, so trusted data evaluation on the
+    // loopback request finds nothing to analyze.
+    model: createLLMModel({
+      provider: selection.provider,
+      apiKey: selection.apiKey,
+      // Attribution label for the proxy call (logging/virtual-key label,
+      // not an agent the call runs "as").
+      agentId: agent.id,
+      modelName: selection.modelName,
+      userId,
+      source: "guardrail:dual_llm",
+      baseUrl: selection.baseUrl,
+      // The proxy must know which key row supplied the credential: Codex
+      // refresh tokens rotate on every redemption, and a loopback call
+      // without the row id would discard the rotation and burn the stored
+      // credential.
+      chatApiKeyId: selection.chatApiKeyId,
     }),
     systemPrompt: renderSystemPrompt(agent.systemPrompt),
-    provider: resolved.provider,
-    modelName: resolved.modelName,
-  };
-}
-
-async function resolveBuiltInAgentSelection(params: {
-  agent: Agent;
-  organizationId: string;
-  userId?: string;
-}): Promise<{
-  provider: SupportedProvider;
-  apiKey: string | undefined;
-  modelName: string;
-  baseUrl: string | null;
-}> {
-  const { agent, organizationId, userId } = params;
-
-  // Agent's explicitly configured model/key, then the best available LLM
-  // across the org's keys.
-  const configured = await resolveConfiguredAgentLlm({
-    llmApiKeyId: agent.llmApiKeyId,
-    modelId: agent.modelId,
-  });
-  if (configured) {
-    return configured;
-  }
-
-  const bestAvailable = await resolveBestAvailableLlm({
-    organizationId,
-    userId,
-  });
-  if (bestAvailable) {
-    return bestAvailable;
-  }
-
-  return {
-    provider: config.chat.defaultProvider,
-    // Per-user providers (GitHub Copilot) must never use the shared env token —
-    // it would be one account's token for this system subagent.
-    apiKey: providerRequiresPerUserCredential(config.chat.defaultProvider)
-      ? undefined
-      : getProviderEnvApiKey(config.chat.defaultProvider),
-    modelName: config.chat.defaultModel,
-    baseUrl: null,
+    provider: selection.provider,
+    modelName: selection.modelName,
   };
 }
 
@@ -440,7 +393,20 @@ ${params.question}
 Options:
 ${params.options.map((option, index) => `${index}: ${option}`).join("\n")}
 
-Return the best option index.`;
+Respond with ONLY the index number of the best option (for example: 2). No other text.`;
+}
+
+/**
+ * Extract the option index from the quarantine agent's reply. The prompt
+ * demands a bare integer, but the format is enforced by instruction only (the
+ * proxy loopback cannot guarantee structured output on every transport), so
+ * accept the first integer anywhere in the reply — "2", "Answer: 2" and
+ * `{"answer": 2}` all resolve. Anything else falls back to the caller's
+ * safest-option default.
+ */
+function parseAnswerIndex(response: string): number | null {
+  const match = response.match(/-?\d+/);
+  return match ? Number.parseInt(match[0], 10) : null;
 }
 
 function parseQuestionResponse(response: string): {

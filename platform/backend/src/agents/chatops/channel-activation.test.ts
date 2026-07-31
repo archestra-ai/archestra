@@ -712,6 +712,28 @@ describe.each([
     expect(postMutedNotice).not.toHaveBeenCalled();
   });
 
+  test("a mute addressed by the bot's display name is honored", async () => {
+    await markChannelThreadActive(activation);
+
+    // The org app name is white-labelled to something else entirely — people
+    // still address the bot by the name their chat client shows them.
+    expect(
+      await gate({ text: "SupportBot mute", botDisplayName: "SupportBot" }),
+    ).toEqual({ proceed: false, addressed: false });
+    expect(postMutedNotice).toHaveBeenCalledTimes(1);
+  });
+
+  test("an unrelated name before a mute command is not a mute", async () => {
+    await markChannelThreadActive(activation);
+
+    // Only the names the bot answers to are stripped — "joey mute" is aimed at
+    // a person, and must reach the agent rather than silencing the thread.
+    expect(
+      await gate({ text: "joey mute", botDisplayName: "SupportBot" }),
+    ).toEqual({ proceed: true, addressed: true });
+    expect(postMutedNotice).not.toHaveBeenCalled();
+  });
+
   test("a mute addressed by app name rather than @mention is honored", async () => {
     await markChannelThreadActive(activation);
 

@@ -441,6 +441,12 @@ export async function applyChannelGate(params: {
   threadId: string;
   botMentioned: boolean;
   text: string;
+  /**
+   * The bot's name as the provider displays it, so it answers to the name people
+   * actually see. Distinct from the organization's app name, which is a branding
+   * setting and can differ (or be white-labelled to something else entirely).
+   */
+  botDisplayName?: string | null;
   postMutedNotice: () => Promise<void>;
   resolveAnswerAllWorkspaceId: () => Promise<string | null>;
 }): Promise<{ proceed: boolean; addressed: boolean }> {
@@ -451,6 +457,7 @@ export async function applyChannelGate(params: {
   if (!wantsMute && mightBeAddressedMuteCommand(text)) {
     wantsMute = isThreadMuteCommand(text, [
       await OrganizationModel.getAppName(),
+      ...(params.botDisplayName ? [params.botDisplayName] : []),
     ]);
   }
   const isActive = botMentioned

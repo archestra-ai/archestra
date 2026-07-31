@@ -151,24 +151,7 @@ export function getK8sNamespace(): string {
  * K8s client errors can have `statusCode`, `code`, or `response.statusCode` set.
  */
 export function isK8sConflictError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-
-  if ("statusCode" in error && error.statusCode === 409) {
-    return true;
-  }
-
-  if ("code" in error && error.code === 409) {
-    return true;
-  }
-
-  if (
-    "response" in error &&
-    (error as { response: { statusCode: number } }).response?.statusCode === 409
-  ) {
-    return true;
-  }
-
-  return false;
+  return getK8sErrorStatusCode(error) === 409;
 }
 
 /**
@@ -176,26 +159,94 @@ export function isK8sConflictError(error: unknown): boolean {
  * K8s client errors can have `statusCode`, `code`, or `response.statusCode` set to 404.
  */
 export function isK8sNotFoundError(error: unknown): boolean {
-  if (!error || typeof error !== "object") {
-    return false;
-  }
+  return getK8sErrorStatusCode(error) === 404;
+}
 
-  if ("statusCode" in error && error.statusCode === 404) {
-    return true;
-  }
+/**
+ * Whether a Kubernetes API call failed for a reason that says nothing about
+ * the workload itself: the API server throttled the request (429, API
+ * Priority & Fairness) or was itself unavailable/overloaded (5xx). Such
+ * failures must never be treated as a deployment failure — the pod may be
+ * perfectly healthy — only as "we couldn't ask right now".
+ */
+export function isTransientK8sApiError(error: unknown): boolean {
+  const status = getK8sErrorStatusCode(error);
+  return (
+    status === 429 ||
+    status === 500 ||
+    status === 502 ||
+    status === 503 ||
+    status === 504
+  );
+}
 
-  if ("code" in error && error.code === 404) {
-    return true;
-  }
+/**
+ * Run `fn` over `items` with at most `limit` in flight at once. Used to bound
+ * fan-outs that hit the Kubernetes API for every MCP server — full
+ * parallelism across a large install base trips the API server's Priority &
+ * Fairness throttling (429 "Too many requests"). Per-item failures are
+ * captured, not thrown, mirroring `Promise.allSettled`.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results = new Array<PromiseSettledResult<R>>(items.length);
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.max(1, Math.min(limit, items.length)) },
+    async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex++;
+        try {
+          results[index] = {
+            status: "fulfilled",
+            value: await fn(items[index] as T),
+          };
+        } catch (reason) {
+          results[index] = { status: "rejected", reason };
+        }
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
+}
 
-  if (
-    "response" in error &&
-    (error as { response: { statusCode: number } }).response?.statusCode === 404
-  ) {
-    return true;
+/**
+ * Retry a Kubernetes API call on transient API-server errors (429/5xx),
+ * honoring the server's `retry-after` header when present (API Priority &
+ * Fairness sends one with every 429). Non-transient errors (404, 403, 409,
+ * validation failures, …) are rethrown immediately.
+ */
+export async function withK8sApiRetry<T>(
+  fn: () => Promise<T>,
+  options?: { attempts?: number; label?: string },
+): Promise<T> {
+  const attempts = options?.attempts ?? K8S_RETRY_DEFAULT_ATTEMPTS;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (!isTransientK8sApiError(error) || attempt >= attempts) {
+        throw error;
+      }
+      const retryAfterSeconds = getK8sRetryAfterSeconds(error);
+      const baseDelayMs =
+        retryAfterSeconds !== undefined
+          ? retryAfterSeconds * 1000
+          : K8S_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+      const delayMs =
+        Math.min(baseDelayMs, K8S_RETRY_MAX_DELAY_MS) +
+        Math.floor(Math.random() * K8S_RETRY_JITTER_MS);
+      logger.warn(
+        { err: error, attempt, attempts, delayMs, label: options?.label },
+        "Transient Kubernetes API error; retrying",
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   }
-
-  return false;
 }
 
 /**
@@ -345,3 +396,57 @@ export function sanitizeMetadataLabels(
   }
   return sanitized;
 }
+
+// === Internal helpers ===
+
+/**
+ * Extract the HTTP status code from a Kubernetes client error, if any.
+ * Depending on the client codepath the code lands on `statusCode`, `code`
+ * (the generated ApiException), or `response.statusCode`.
+ */
+function getK8sErrorStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  if ("statusCode" in error && typeof error.statusCode === "number") {
+    return error.statusCode;
+  }
+
+  if ("code" in error && typeof error.code === "number") {
+    return error.code;
+  }
+
+  if ("response" in error) {
+    const statusCode = (error as { response?: { statusCode?: unknown } })
+      .response?.statusCode;
+    if (typeof statusCode === "number") {
+      return statusCode;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Parse the `retry-after` header (delay-seconds form) from a Kubernetes
+ * ApiException, if present.
+ */
+function getK8sRetryAfterSeconds(error: unknown): number | undefined {
+  if (!error || typeof error !== "object" || !("headers" in error)) {
+    return undefined;
+  }
+  const headers = (error as { headers?: unknown }).headers;
+  if (!headers || typeof headers !== "object") {
+    return undefined;
+  }
+  const raw = (headers as Record<string, unknown>)["retry-after"];
+  const seconds =
+    typeof raw === "string" || typeof raw === "number" ? Number(raw) : NaN;
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+}
+
+const K8S_RETRY_DEFAULT_ATTEMPTS = 3;
+const K8S_RETRY_BASE_DELAY_MS = 1_000;
+const K8S_RETRY_MAX_DELAY_MS = 15_000;
+const K8S_RETRY_JITTER_MS = 250;

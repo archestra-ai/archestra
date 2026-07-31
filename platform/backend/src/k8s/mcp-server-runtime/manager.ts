@@ -5,6 +5,7 @@ import {
   checkNamespaceDeployAccess,
   createK8sClients,
   loadKubeConfig,
+  mapWithConcurrency,
   namespaceAccessMessage,
   sanitizeLabelValue,
 } from "@/k8s/shared";
@@ -228,15 +229,19 @@ export class McpServerRuntimeManager {
       const networkPolicyResolutionCache =
         await this.buildNetworkPolicyResolutionCache(localCatalogItems);
 
-      // Start all local servers in parallel
-      const startPromises = localServers.map(async (mcpServer) => {
-        await this.startServer(mcpServer, undefined, undefined, {
-          networkPolicyCapabilities,
-          networkPolicyResolutionCache,
-        });
-      });
-
-      const results = await Promise.allSettled(startPromises);
+      // Start all local servers with bounded parallelism: each startServer
+      // fires a burst of K8s API calls, and reconciling every install at
+      // once can trip the API server's Priority & Fairness throttling
+      // (429 "Too many requests"), making healthy deployments look broken.
+      const results = await mapWithConcurrency(
+        localServers,
+        K8S_API_FANOUT_CONCURRENCY,
+        (mcpServer) =>
+          this.startServer(mcpServer, undefined, undefined, {
+            networkPolicyCapabilities,
+            networkPolicyResolutionCache,
+          }),
+      );
 
       // Count successes and failures
       const failures = results.filter((result) => result.status === "rejected");
@@ -1317,10 +1322,14 @@ export class McpServerRuntimeManager {
    * Detects state changes like a running pod entering CrashLoopBackOff.
    */
   async refreshAllStates(): Promise<void> {
-    const refreshPromises = Array.from(
-      this.mcpServerIdToDeploymentMap.values(),
-    ).map((deployment) => deployment.refreshState().catch(() => {}));
-    await Promise.all(refreshPromises);
+    // Bounded: each refresh makes several K8s API calls, and this runs every
+    // status-poll tick — unbounded parallelism across a large install base
+    // is a steady source of API Priority & Fairness throttling (429s).
+    await mapWithConcurrency(
+      Array.from(this.mcpServerIdToDeploymentMap.values()),
+      K8S_API_FANOUT_CONCURRENCY,
+      (deployment) => deployment.refreshState(),
+    );
   }
 
   /**
@@ -1971,5 +1980,13 @@ function getDockerConfigRegistryServers(secret: k8s.V1Secret): string[] {
     return [];
   }
 }
+
+/**
+ * Max concurrent per-server operations when fanning out over the whole
+ * install base (startup reconcile, periodic state refresh). Each operation
+ * makes several K8s API calls; unbounded fan-out trips the API server's
+ * Priority & Fairness throttling (429s) on large installs.
+ */
+const K8S_API_FANOUT_CONCURRENCY = 5;
 
 export default new McpServerRuntimeManager();

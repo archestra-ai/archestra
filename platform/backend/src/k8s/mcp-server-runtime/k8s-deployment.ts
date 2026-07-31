@@ -18,8 +18,10 @@ import {
   ensureStringIsRfc1123Compliant,
   isK8sConflictError,
   isK8sNotFoundError,
+  isTransientK8sApiError,
   sanitizeLabelValue,
   sanitizeMetadataLabels,
+  withK8sApiRetry,
 } from "@/k8s/shared";
 import logger from "@/logging";
 import { InternalMcpCatalogModel } from "@/models";
@@ -2492,13 +2494,19 @@ export default class K8sDeployment {
         }
       }
 
-      // Check if deployment already exists
+      // Check if deployment already exists. Retried on 429/5xx: at startup
+      // every install reconciles at once, and an API server throttling that
+      // burst (API Priority & Fairness) must not make an existing healthy
+      // deployment look broken.
       try {
-        const existingDeployment =
-          await this.k8sAppsApi.readNamespacedDeployment({
-            name: this.deploymentName,
-            namespace: this.namespace,
-          });
+        const existingDeployment = await withK8sApiRetry(
+          () =>
+            this.k8sAppsApi.readNamespacedDeployment({
+              name: this.deploymentName,
+              namespace: this.namespace,
+            }),
+          { label: `readNamespacedDeployment ${this.deploymentName}` },
+        );
 
         // SELF-HEAL: a Deployment created before the catalog-stable selector fix
         // (#6340) still labels its pods with the per-install `mcpServer.id`, while
@@ -2676,7 +2684,12 @@ export default class K8sDeployment {
       this.state = "pending";
       logger.info(`Deployment ${this.deploymentName} initiated`);
     } catch (error: unknown) {
-      this.state = "failed";
+      // A throttled/unavailable API server (429/5xx) says nothing about the
+      // workload — an already-running pod is most likely still healthy. Stay
+      // "pending" so the periodic status refresh re-reads the real state,
+      // instead of latching a terminal "failed" that sticks until a manual
+      // restart.
+      this.state = isTransientK8sApiError(error) ? "pending" : "failed";
       this.errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       logger.error(
@@ -3823,9 +3836,16 @@ export default class K8sDeployment {
         this.cachedPodName = anyPod.metadata?.name ?? null;
       }
 
-      // Don't re-evaluate state for terminal failed (user must reinstall)
-      // but DO keep refreshing pod metadata above
-      if (this.state !== "pending" && this.state !== "running") {
+      // "failed" is re-evaluated too: it can be a false positive — e.g. a
+      // transient API-server error (429/5xx) latched during a reconcile while
+      // the pod kept running fine, or a crashloop that has since recovered.
+      // A deployment that is verifiably available flips (back) to "running";
+      // one that is genuinely broken re-derives the same failed state below.
+      if (
+        this.state !== "pending" &&
+        this.state !== "running" &&
+        this.state !== "failed"
+      ) {
         return;
       }
 

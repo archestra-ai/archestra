@@ -451,3 +451,109 @@ describe("shared K8s utilities", () => {
     });
   });
 });
+
+describe("isTransientK8sApiError", () => {
+  test("throttling and API-server unavailability are transient", async () => {
+    const { isTransientK8sApiError } = await import("./shared");
+    expect(isTransientK8sApiError({ code: 429 })).toBe(true);
+    expect(isTransientK8sApiError({ statusCode: 429 })).toBe(true);
+    expect(isTransientK8sApiError({ response: { statusCode: 503 } })).toBe(
+      true,
+    );
+    expect(isTransientK8sApiError({ code: 500 })).toBe(true);
+    expect(isTransientK8sApiError({ code: 502 })).toBe(true);
+    expect(isTransientK8sApiError({ code: 504 })).toBe(true);
+  });
+
+  test("caller errors and unknown shapes are not transient", async () => {
+    const { isTransientK8sApiError } = await import("./shared");
+    expect(isTransientK8sApiError({ code: 404 })).toBe(false);
+    expect(isTransientK8sApiError({ code: 403 })).toBe(false);
+    expect(isTransientK8sApiError({ code: 409 })).toBe(false);
+    expect(isTransientK8sApiError(new Error("boom"))).toBe(false);
+    expect(isTransientK8sApiError(undefined)).toBe(false);
+    expect(isTransientK8sApiError("429")).toBe(false);
+  });
+});
+
+describe("withK8sApiRetry", () => {
+  test("retries a 429 honoring retry-after and returns the eventual result", async () => {
+    const { withK8sApiRetry } = await import("./shared");
+    const throttled = {
+      code: 429,
+      message: "Too many requests, please try again later.",
+      headers: { "retry-after": "0.001" },
+    };
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(throttled)
+      .mockRejectedValueOnce(throttled)
+      .mockResolvedValue("ok");
+
+    await expect(withK8sApiRetry(fn)).resolves.toBe("ok");
+    expect(fn).toHaveBeenCalledTimes(3);
+  });
+
+  test("throws the last error once attempts are exhausted", async () => {
+    const { withK8sApiRetry } = await import("./shared");
+    const throttled = {
+      code: 429,
+      message: "Too many requests, please try again later.",
+      headers: { "retry-after": "0.001" },
+    };
+    const fn = vi.fn().mockRejectedValue(throttled);
+
+    await expect(withK8sApiRetry(fn, { attempts: 2 })).rejects.toEqual(
+      throttled,
+    );
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  test("does not retry non-transient errors", async () => {
+    const { withK8sApiRetry } = await import("./shared");
+    const notFound = { code: 404, message: "not found" };
+    const fn = vi.fn().mockRejectedValue(notFound);
+
+    await expect(withK8sApiRetry(fn)).rejects.toEqual(notFound);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("mapWithConcurrency", () => {
+  test("preserves item order and captures per-item rejections", async () => {
+    const { mapWithConcurrency } = await import("./shared");
+    const results = await mapWithConcurrency([1, 2, 3], 2, async (n) => {
+      if (n === 2) throw new Error("nope");
+      return n * 10;
+    });
+
+    expect(results).toEqual([
+      { status: "fulfilled", value: 10 },
+      { status: "rejected", reason: new Error("nope") },
+      { status: "fulfilled", value: 30 },
+    ]);
+  });
+
+  test("never runs more than `limit` items at once", async () => {
+    const { mapWithConcurrency } = await import("./shared");
+    let inFlight = 0;
+    let maxInFlight = 0;
+
+    await mapWithConcurrency(
+      Array.from({ length: 10 }, (_, i) => i),
+      3,
+      () => {
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        return new Promise<void>((resolve) =>
+          setTimeout(() => {
+            inFlight--;
+            resolve();
+          }, 5),
+        );
+      },
+    );
+
+    expect(maxInFlight).toBe(3);
+  });
+});

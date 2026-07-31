@@ -87,8 +87,24 @@ spec:
     ServiceAccount existing or carry a token into a deliberately isolated pod.
   */}}
   automountServiceAccountToken: false
-  {{- /* Hard cap so an orphaned probe pod cannot linger. */}}
-  activeDeadlineSeconds: 300
+  {{- /*
+    Set on the pod rather than inherited from a ServiceAccount: these pods
+    deliberately have none, so on a private registry they would land on the
+    namespace default SA, fail to pull, and — since Helm waits for hook pods —
+    fail every install and upgrade for exactly the operators told to mirror
+    `initContainers.busyboxImage`.
+  */}}
+  {{- with $.Values.archestra.orchestrator.kubernetes.serviceAccount.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- /*
+    Bounds an orphaned pod without racing Helm: the script is structurally
+    capped near 100s, and Helm's own hook wait (5m by default) should be what
+    gives up first, so a slow cluster reports a timed-out wait rather than a
+    pod the deadline killed.
+  */}}
+  activeDeadlineSeconds: 600
   securityContext:
     runAsNonRoot: true
     runAsUser: 65534

@@ -289,13 +289,15 @@ tests:
           pattern: RELEASE-NAME-archestra-platform\.NAMESPACE\.svc\.cluster\.local\.
         documentIndex: 1
 
+  # Above Helm's default hook wait, so a slow cluster reports a timed-out wait
+  # rather than a pod this deadline killed — the script itself caps near 100s.
   - it: caps the lifetime of an orphaned probe pod
     asserts:
       - equal:
           path: spec.activeDeadlineSeconds
-          value: 300
+          value: 600
         documentIndex: 1
       - equal:
           path: spec.activeDeadlineSeconds
-          value: 300
+          value: 600
         documentIndex: 2

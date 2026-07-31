@@ -13819,6 +13819,258 @@ export type UpdateAgentResponses = {
 
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
 
+export type GetAgentVersionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/agents/{id}/versions';
+};
+
+export type GetAgentVersionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentVersionsError = GetAgentVersionsErrors[keyof GetAgentVersionsErrors];
+
+export type GetAgentVersionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            agentId: string;
+            version: number;
+            contentHash: string;
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetAgentVersionsResponse = GetAgentVersionsResponses[keyof GetAgentVersionsResponses];
+
+export type GetAgentVersionData = {
+    body?: never;
+    path: {
+        id: string;
+        version: number;
+    };
+    query?: never;
+    url: '/api/agents/{id}/versions/{version}';
+};
+
+export type GetAgentVersionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentVersionError = GetAgentVersionErrors[keyof GetAgentVersionErrors];
+
+export type GetAgentVersionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        agentId: string;
+        version: number;
+        snapshot: {
+            agentType: string;
+            name: string;
+            description: string | null;
+            icon: string | null;
+            systemPrompt: string | null;
+            considerContextUntrusted: boolean;
+            toolExposureMode: string;
+            accessAllTools: boolean;
+            accessAllSubagents: boolean;
+            passthroughHeaders: Array<string>;
+            incomingEmailEnabled: boolean;
+            incomingEmailSecurityMode: string;
+            incomingEmailAllowedDomain: string | null;
+            builtInAgentConfig: unknown;
+            model: {
+                id: string;
+                externalId: string;
+            } | null;
+            llmApiKey: {
+                id: string;
+                name: string;
+                provider: string;
+            } | null;
+            identityProviderId: string | null;
+            environmentId: string | null;
+            tools: Array<{
+                toolId: string;
+                name: string;
+                mcpServerId: string | null;
+                credentialResolutionMode: string;
+            }>;
+            excludedTools: Array<{
+                toolId: string;
+                name: string;
+            }>;
+            excludedSubagents: Array<{
+                agentId: string;
+                name: string;
+            }>;
+            suggestedPrompts: Array<{
+                summaryTitle: string;
+                prompt: string;
+            }>;
+            hooks: Array<{
+                event: string;
+                fileName: string;
+                content: string;
+                requirements: Array<string>;
+                enabled: boolean;
+            }>;
+            knowledgeBases: Array<{
+                id: string;
+                name: string;
+            }>;
+            connectors: Array<{
+                id: string;
+                name: string;
+            }>;
+        };
+        contentHash: string;
+        createdAt: string;
+    };
+};
+
+export type GetAgentVersionResponse = GetAgentVersionResponses[keyof GetAgentVersionResponses];
+
 export type CloneAgentData = {
     body: {
         /**
@@ -77369,6 +77621,208 @@ export type GetSkillUsageStatisticsResponses = {
 };
 
 export type GetSkillUsageStatisticsResponse = GetSkillUsageStatisticsResponses[keyof GetSkillUsageStatisticsResponses];
+
+export type GetSkillVersionsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        limit?: number;
+        offset?: number;
+    };
+    url: '/api/skills/{id}/versions';
+};
+
+export type GetSkillVersionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSkillVersionsError = GetSkillVersionsErrors[keyof GetSkillVersionsErrors];
+
+export type GetSkillVersionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            skillId: string | null;
+            version: number;
+            contentHash: string;
+            createdAt: string;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+    };
+};
+
+export type GetSkillVersionsResponse = GetSkillVersionsResponses[keyof GetSkillVersionsResponses];
+
+export type GetSkillVersionData = {
+    body?: never;
+    path: {
+        id: string;
+        version: number;
+    };
+    query?: never;
+    url: '/api/skills/{id}/versions/{version}';
+};
+
+export type GetSkillVersionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSkillVersionError = GetSkillVersionErrors[keyof GetSkillVersionErrors];
+
+export type GetSkillVersionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        skillId: string | null;
+        version: number;
+        content: string;
+        contentHash: string;
+        createdAt: string;
+        files: Array<{
+            id: string;
+            versionId: string;
+            path: string;
+            content: string;
+            encoding: 'utf8' | 'base64';
+            kind: 'reference' | 'script' | 'asset';
+            createdAt: string;
+        }>;
+    };
+};
+
+export type GetSkillVersionResponse = GetSkillVersionResponses[keyof GetSkillVersionResponses];
 
 export type GetSkillSourceReposData = {
     body?: never;

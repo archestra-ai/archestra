@@ -31,6 +31,7 @@ import {
   SkillTeamModel,
   SkillUsageEventModel,
   SkillUserModel,
+  SkillVersionModel,
   TaskModel,
   TeamModel,
   ToolModel,
@@ -75,11 +76,14 @@ import {
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
   SelectSkillSchema,
+  SelectSkillVersionFileSchema,
+  SelectSkillVersionSchema,
   type Skill,
   SkillFileEncodingSchema,
   SkillGithubSyncIntervalSchema,
   SkillSortBy,
   SkillUsageStatisticsSchema,
+  SkillVersionMetadataSchema,
   SkillWithFilesSchema,
   UuidIdSchema,
 } from "@/types";
@@ -163,6 +167,11 @@ const SkillDetailSchema = SkillWithFilesSchema.extend({
   teams: z.array(SkillTeamSchema),
   users: z.array(SkillUserSchema),
   environments: z.array(SkillEnvironmentSchema),
+});
+
+/** One immutable version with its resource-file snapshots. */
+const SkillVersionDetailSchema = SelectSkillVersionSchema.extend({
+  files: z.array(SelectSkillVersionFileSchema),
 });
 
 /** One crawled public-GitHub skill returned by a catalog search. */
@@ -687,21 +696,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      const skill = await findSkillOrThrow(id, organizationId);
-      const checker = await getSkillPermissionChecker({
+      const skill = await requireReadableSkill({
+        id,
         userId: user.id,
         organizationId,
       });
-      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
       return reply.send(await loadSkillDetail(skill));
     },
   );
@@ -719,21 +718,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, organizationId, user }, reply) => {
-      const skill = await findSkillOrThrow(id, organizationId);
-      const checker = await getSkillPermissionChecker({
+      const skill = await requireReadableSkill({
+        id,
         userId: user.id,
         organizationId,
       });
-      // 404 (not 403) so scope is not leaked to users who cannot see the skill.
-      const hasAccess = await SkillTeamModel.userHasSkillAccess({
-        organizationId,
-        userId: user.id,
-        skill,
-        isSkillAdmin: checker.isAdmin,
-      });
-      if (!hasAccess) {
-        throw new ApiError(404, "Skill not found");
-      }
       const since = new Date(Date.now() - USAGE_STATISTICS_WINDOW_MS);
       return reply.send(
         await SkillUsageEventModel.getUsageStatistics({
@@ -741,6 +730,77 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           since,
         }),
       );
+    },
+  );
+
+  fastify.get(
+    "/api/skills/:id/versions",
+    {
+      schema: {
+        operationId: RouteId.GetSkillVersions,
+        description:
+          "List a skill's version history, newest first, as metadata only " +
+          "(no SKILL.md body). Version numbers are contiguous from 1. " +
+          "Paginated.",
+        tags: ["Skills"],
+        params: z.object({ id: UuidIdSchema }),
+        querystring: PaginationQuerySchema,
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(SkillVersionMetadataSchema),
+        ),
+      },
+    },
+    async ({ params: { id }, query, organizationId, user }, reply) => {
+      const skill = await requireReadableSkill({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(
+        await SkillVersionModel.listForSkill({
+          skillId: skill.id,
+          organizationId,
+          pagination: query,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/skills/:id/versions/:version",
+    {
+      schema: {
+        operationId: RouteId.GetSkillVersion,
+        description:
+          "Get one immutable skill version: the SKILL.md body it captured " +
+          "plus its resource-file snapshots.",
+        tags: ["Skills"],
+        params: z.object({
+          id: UuidIdSchema,
+          // capped at int4 max so impossible versions 400 instead of
+          // reaching Postgres as an out-of-range bind
+          version: z.coerce.number().int().positive().max(2_147_483_647),
+        }),
+        response: constructResponseSchema(SkillVersionDetailSchema),
+      },
+    },
+    async ({ params: { id, version }, organizationId, user }, reply) => {
+      const skill = await requireReadableSkill({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      const row = await SkillVersionModel.findBySkillAndVersion(
+        skill.id,
+        version,
+      );
+      if (!row) {
+        throw new ApiError(404, `Skill has no version ${version}`);
+      }
+      return reply.send({
+        ...row,
+        files: await SkillVersionModel.findFiles(row.id),
+      });
     },
   );
 
@@ -1589,6 +1649,35 @@ function assertSyncedSkillContentUnchanged(params: {
 async function findSkillOrThrow(id: string, organizationId: string) {
   const skill = await SkillModel.findById(id);
   if (!skill || skill.organizationId !== organizationId) {
+    throw new ApiError(404, "Skill not found");
+  }
+  return skill;
+}
+
+/**
+ * Resolve a live skill and enforce the full read-access path: org scoping
+ * plus scope/team/author visibility. Every failure is a 404 so existence is
+ * never leaked to users who cannot see the skill. Version reads don't filter
+ * soft-deletes themselves, so resolving the live skill here (findSkillOrThrow
+ * excludes deleted rows) is what keeps a deleted skill's history unreachable.
+ */
+async function requireReadableSkill(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}): Promise<Skill> {
+  const skill = await findSkillOrThrow(params.id, params.organizationId);
+  const checker = await getSkillPermissionChecker({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  const hasAccess = await SkillTeamModel.userHasSkillAccess({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    skill,
+    isSkillAdmin: checker.isAdmin,
+  });
+  if (!hasAccess) {
     throw new ApiError(404, "Skill not found");
   }
   return skill;

@@ -27,6 +27,8 @@ import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
   AgentLabelModel,
   AgentModel,
+  AgentTeamModel,
+  AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   MemberModel,
@@ -39,6 +41,7 @@ import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclus
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
 import {
+  type Agent,
   AgentExportPayloadSchema,
   type AgentScope,
   AgentScopeFilterSchema,
@@ -56,6 +59,10 @@ import {
   UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
+import {
+  AgentVersionMetadataSchema,
+  SelectAgentVersionSchema,
+} from "@/types/agent-version";
 import { isForeignKeyConstraintError } from "@/utils/db";
 
 const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -569,43 +576,74 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {
-      // Fetch agent first to determine its type
-      // Use admin=true for the lookup so we can check type, then enforce type-specific RBAC
-      const agent = await AgentModel.findById(id, user.id, true);
-
-      if (!agent) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Defense-in-depth: never allow cross-organization access, even for admins.
-      // Permissions are scoped to the current organizationId.
-      if (agent.organizationId !== organizationId) {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      // Single DB query for all permission checks on this agent type
-      const checker = await getAgentTypePermissionChecker({
+      const agent = await requireReadableAgent({
+        id,
         userId: user.id,
         organizationId,
       });
-
-      // Check read permission (return 404 to avoid leaking existence)
-      try {
-        checker.require(agent.agentType, "read");
-      } catch {
-        throw new ApiError(404, "Agent not found");
-      }
-
-      if (!checker.isAdmin(agent.agentType)) {
-        // Re-fetch with team filtering
-        const filteredAgent = await AgentModel.findById(id, user.id, false);
-        if (!filteredAgent) {
-          throw new ApiError(404, "Agent not found");
-        }
-        return reply.send(filteredAgent);
-      }
-
       return reply.send(agent);
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/versions",
+    {
+      schema: {
+        operationId: RouteId.GetAgentVersions,
+        description:
+          "List an agent's config version history, newest first, as " +
+          "metadata only (no snapshot). Retention keeps the last 100 " +
+          "versions, so the oldest listed version may be greater than 1.",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        querystring: PaginationQuerySchema,
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(AgentVersionMetadataSchema),
+        ),
+      },
+    },
+    async ({ params: { id }, query, user, organizationId }, reply) => {
+      await requireReadableAgent({ id, userId: user.id, organizationId });
+      return reply.send(
+        await AgentVersionModel.listForAgent({
+          agentId: id,
+          organizationId,
+          pagination: query,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/versions/:version",
+    {
+      schema: {
+        operationId: RouteId.GetAgentVersion,
+        description:
+          "Get one immutable agent config version (full snapshot; key " +
+          "material is never captured). Versions dropped by retention are " +
+          "404.",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+          // capped at int4 max so impossible versions 400 instead of
+          // reaching Postgres as an out-of-range bind
+          version: z.coerce.number().int().positive().max(2_147_483_647),
+        }),
+        response: constructResponseSchema(SelectAgentVersionSchema),
+      },
+    },
+    async ({ params: { id, version }, user, organizationId }, reply) => {
+      await requireReadableAgent({ id, userId: user.id, organizationId });
+      const row = await AgentVersionModel.findByAgentAndVersion({
+        agentId: id,
+        version,
+        organizationId,
+      });
+      if (!row) {
+        throw new ApiError(404, `Agent has no version ${version}`);
+      }
+      return reply.send(row);
     },
   );
 
@@ -1603,6 +1641,52 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 };
 
 export default agentRoutes;
+
+/**
+ * Resolve a live agent and enforce the full read-access path shared by
+ * GetAgent and the version-history routes: org scoping, per-type RBAC, and —
+ * for non-admins — team-filtered visibility. Every failure is a 404 so
+ * existence is never leaked. Version reads don't filter soft-deletes
+ * themselves, so resolving the live agent here (findById excludes deleted
+ * rows) is what keeps a deleted agent's history unreachable.
+ */
+async function requireReadableAgent(params: {
+  id: string;
+  userId: string;
+  organizationId: string;
+}): Promise<Agent> {
+  // admin lookup first to learn the type, then enforce type-specific RBAC
+  const agent = await AgentModel.findById(params.id, params.userId, true);
+  if (!agent || agent.organizationId !== params.organizationId) {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  const checker = await getAgentTypePermissionChecker({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  try {
+    checker.require(agent.agentType, "read");
+  } catch {
+    throw new ApiError(404, "Agent not found");
+  }
+
+  if (!checker.isAdmin(agent.agentType)) {
+    // Team/author visibility, mirroring GetAgent's non-admin filter. The
+    // already-fetched agent serves as the access context — no re-fetch.
+    const hasAccess = await AgentTeamModel.userHasAgentAccess(
+      params.userId,
+      params.id,
+      false,
+      agent,
+    );
+    if (!hasAccess) {
+      throw new ApiError(404, "Agent not found");
+    }
+  }
+
+  return agent;
+}
 
 async function validateKnowledgeBaseAccess(params: {
   kbId: string;

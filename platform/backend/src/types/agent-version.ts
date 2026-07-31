@@ -80,3 +80,13 @@ export const SelectAgentVersionSchema = createSelectSchema(
 );
 
 export type AgentVersion = z.infer<typeof SelectAgentVersionSchema>;
+
+/**
+ * List projection of a version: everything but the heavy `snapshot` payload,
+ * so history lists stay cheap while get-one carries the full config.
+ */
+export const AgentVersionMetadataSchema = SelectAgentVersionSchema.omit({
+  snapshot: true,
+});
+
+export type AgentVersionMetadata = z.infer<typeof AgentVersionMetadataSchema>;

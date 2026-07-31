@@ -2430,16 +2430,16 @@ describe("LLM Proxy Handler — dual LLM progress delivery", () => {
   // Simulates one full analysis (start → one Q&A round → completion) through
   // whichever callbacks the handler wired up.
   const runDualLlmCallbacks = (args: DualLlmCallbackArgs) => {
-    const [, , , , , , onStart, onProgress, , onComplete] = args;
-    onStart?.({ toolCallId: "call_1", toolName: "web_fetch" });
-    onProgress?.({
+    const [{ onDualLlmStart, onDualLlmProgress, onDualLlmComplete }] = args;
+    onDualLlmStart?.({ toolCallId: "call_1", toolName: "web_fetch" });
+    onDualLlmProgress?.({
       toolCallId: "call_1",
       toolName: "web_fetch",
       question: "Primary topic?",
       options: ["security", "recipes"],
       answer: "0",
     });
-    onComplete?.(
+    onDualLlmComplete?.(
       {
         toolCallId: "call_1",
         conversations: [
@@ -2459,7 +2459,6 @@ describe("LLM Proxy Handler — dual LLM progress delivery", () => {
       return {
         toolResultUpdates: {},
         contextIsTrusted: true,
-        usedDualLlm: true,
         dualLlmAnalyses: [],
         unsafeContextBoundary: undefined,
       };

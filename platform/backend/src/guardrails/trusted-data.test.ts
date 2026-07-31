@@ -2,7 +2,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   SEEDED_APP_RENDER_META_KEY,
 } from "@archestra/shared";
-import { vi } from "vitest";
+import { onTestFinished, vi } from "vitest";
 import {
   DualLlmAgentCallError,
   DualLlmSubagent,
@@ -50,6 +50,40 @@ describe("sensitiveContextOriginFromBoundary", () => {
   });
 });
 
+/** The `sanitize_with_dual_llm` policy every sanitization test starts from. */
+async function createSanitizePolicy(toolId: string) {
+  await TrustedDataPolicyModel.create({
+    toolId,
+    conditions: [{ key: "source", operator: "equal", value: "external" }],
+    action: "sanitize_with_dual_llm",
+    description: "Sanitize external data",
+  });
+}
+
+/**
+ * Back the distributed cache with an in-memory store: the real cacheManager
+ * points at a Postgres the unit suite has no connection to.
+ */
+function stubCacheStore(): void {
+  const store = new Map<string, unknown>();
+  const get = vi
+    .spyOn(cacheManager, "get")
+    .mockImplementation(async (key) => store.get(key));
+  const set = vi
+    .spyOn(cacheManager, "set")
+    .mockImplementation(async (key, value) => {
+      store.set(key, value);
+      return value;
+    });
+  // The suite does not enable `restoreMocks`, so an un-restored spy would
+  // leak into every later test in the worker. Registering the teardown here
+  // also survives a test that throws before reaching its own cleanup.
+  onTestFinished(() => {
+    get.mockRestore();
+    set.mockRestore();
+  });
+}
+
 describe("trusted-data evaluation (provider-agnostic)", () => {
   let agentId: string;
   let organizationId: string;
@@ -83,14 +117,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         { role: "assistant" },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.toolResultUpdates).toEqual({});
@@ -123,14 +156,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(false);
       expect(result.unsafeContextBoundary).toEqual({
@@ -174,14 +206,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.toolResultUpdates).toEqual({});
@@ -205,14 +236,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(false);
       expect(result.unsafeContextBoundary).toEqual({
@@ -256,14 +286,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         { role: "assistant" },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       // Context should be untrusted and tool result should be blocked
       expect(result.contextIsTrusted).toBe(false);
@@ -314,26 +343,20 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.toolResultUpdates).toEqual({});
     });
 
     test("sanitizes with dual LLM and stores analysis metadata", async () => {
-      await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [{ key: "source", operator: "equal", value: "external" }],
-        action: "sanitize_with_dual_llm",
-        description: "Sanitize external data",
-      });
+      await createSanitizePolicy(toolId);
 
       const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
         processWithMainAgent: vi.fn().mockResolvedValue({
@@ -361,18 +384,17 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(createSpy).toHaveBeenCalledOnce();
       expect(result.contextIsTrusted).toBe(true);
-      expect(result.usedDualLlm).toBe(true);
+      expect(result.dualLlmAnalyses).toHaveLength(1);
       expect(result.toolResultUpdates).toEqual({
         call_dual: "Sanitized summary",
       });
@@ -391,12 +413,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     });
 
     test("preserves untrusted context when a later tool call is sanitized", async () => {
-      await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [{ key: "source", operator: "equal", value: "external" }],
-        action: "sanitize_with_dual_llm",
-        description: "Sanitize external data",
-      });
+      await createSanitizePolicy(toolId);
 
       const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
         processWithMainAgent: vi.fn().mockResolvedValue({
@@ -427,14 +444,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(createSpy).toHaveBeenCalledOnce();
       expect(result.contextIsTrusted).toBe(false);
@@ -446,12 +462,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     });
 
     test("passes the latest user message text to the dual LLM subagent", async () => {
-      await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [{ key: "source", operator: "equal", value: "external" }],
-        action: "sanitize_with_dual_llm",
-        description: "Sanitize external data",
-      });
+      await createSanitizePolicy(toolId);
 
       const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
         processWithMainAgent: vi.fn().mockResolvedValue({
@@ -478,14 +489,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(createSpy).toHaveBeenCalledWith({
         dualLlmParams: {
@@ -507,24 +517,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     });
 
     test("reuses the cached dual LLM analysis instead of re-analyzing the same tool result", async () => {
-      await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [{ key: "source", operator: "equal", value: "external" }],
-        action: "sanitize_with_dual_llm",
-        description: "Sanitize external data",
-      });
+      await createSanitizePolicy(toolId);
 
-      // Back the distributed cache with an in-memory store for the test.
-      const store = new Map<string, unknown>();
-      const getSpy = vi
-        .spyOn(cacheManager, "get")
-        .mockImplementation(async (key) => store.get(key));
-      const setSpy = vi
-        .spyOn(cacheManager, "set")
-        .mockImplementation(async (key, value) => {
-          store.set(key, value);
-          return value;
-        });
+      stubCacheStore();
 
       const analysis = {
         toolCallId: "call_dual",
@@ -554,14 +549,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       ];
 
       const evaluate = () =>
-        evaluateIfContextIsTrusted(
-          commonMessages,
-          agentId,
-          organizationId,
-          undefined,
-          false,
-          { teamIds: [] },
-        );
+        evaluateIfContextIsTrusted({
+          messages: commonMessages,
+          agentId: agentId,
+          organizationId: organizationId,
+          considerContextUntrusted: false,
+          policyContext: { teamIds: [] },
+        });
 
       // The agentic loop replays the same history: only the first evaluation
       // may run the (expensive) analysis; later ones reuse the cached one.
@@ -573,42 +567,23 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         call_dual: "Sanitized summary",
       });
       expect(second.toolResultUpdates).toEqual(first.toolResultUpdates);
-      expect(second.usedDualLlm).toBe(true);
       expect(second.dualLlmAnalyses).toEqual([analysis]);
       expect(second.contextIsTrusted).toBe(true);
 
       // A changed result under the same tool call id is different content —
       // it must be re-analyzed, not served from the stale entry.
-      commonMessages[1].toolCalls![0].content = {
-        source: "external",
-        payload: "changed",
-      };
+      const [toolCall] = commonMessages[1].toolCalls ?? [];
+      toolCall.content = { source: "external", payload: "changed" };
       await evaluate();
       expect(createSpy).toHaveBeenCalledTimes(2);
 
       createSpy.mockRestore();
-      getSpy.mockRestore();
-      setSpy.mockRestore();
     });
 
     test("emits per-analysis progress events with tool identity; cached reuse emits only completion", async () => {
-      await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [{ key: "source", operator: "equal", value: "external" }],
-        action: "sanitize_with_dual_llm",
-        description: "Sanitize external data",
-      });
+      await createSanitizePolicy(toolId);
 
-      const store = new Map<string, unknown>();
-      const getSpy = vi
-        .spyOn(cacheManager, "get")
-        .mockImplementation(async (key) => store.get(key));
-      const setSpy = vi
-        .spyOn(cacheManager, "set")
-        .mockImplementation(async (key, value) => {
-          store.set(key, value);
-          return value;
-        });
+      stubCacheStore();
       const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
         processWithMainAgent: vi
           .fn()
@@ -654,23 +629,23 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
 
       const events: Record<string, unknown>[] = [];
       const evaluate = () =>
-        evaluateIfContextIsTrusted(
-          commonMessages,
-          agentId,
-          organizationId,
-          undefined,
-          false,
-          { teamIds: [] },
-          (info) => events.push({ kind: "start", ...info }),
-          (progress) => events.push({ kind: "qa", ...progress }),
-          (info) => events.push({ kind: "error", ...info }),
-          (analysis, info) =>
+        evaluateIfContextIsTrusted({
+          messages: commonMessages,
+          agentId: agentId,
+          organizationId: organizationId,
+          considerContextUntrusted: false,
+          policyContext: { teamIds: [] },
+          onDualLlmStart: (info) => events.push({ kind: "start", ...info }),
+          onDualLlmProgress: (progress) =>
+            events.push({ kind: "qa", ...progress }),
+          onDualLlmError: (info) => events.push({ kind: "error", ...info }),
+          onDualLlmComplete: (analysis, info) =>
             events.push({
               kind: "complete",
               toolCallId: analysis.toolCallId,
               ...info,
             }),
-        );
+        });
 
       await evaluate();
       expect(events).toEqual([
@@ -706,28 +681,12 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       expect(createSpy).toHaveBeenCalledOnce();
 
       createSpy.mockRestore();
-      getSpy.mockRestore();
-      setSpy.mockRestore();
     });
 
     test("cache-only mode never runs the dual LLM workflow: unsanitized results read as untrusted, cached ones as trusted", async () => {
-      await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [{ key: "source", operator: "equal", value: "external" }],
-        action: "sanitize_with_dual_llm",
-        description: "Sanitize external data",
-      });
+      await createSanitizePolicy(toolId);
 
-      const store = new Map<string, unknown>();
-      const getSpy = vi
-        .spyOn(cacheManager, "get")
-        .mockImplementation(async (key) => store.get(key));
-      const setSpy = vi
-        .spyOn(cacheManager, "set")
-        .mockImplementation(async (key, value) => {
-          store.set(key, value);
-          return value;
-        });
+      stubCacheStore();
       const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
         processWithMainAgent: vi.fn().mockResolvedValue({
           toolCallId: "call_dual",
@@ -752,27 +711,21 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       ];
 
       const evaluate = (sanitizeCacheOnly: boolean) =>
-        evaluateIfContextIsTrusted(
-          commonMessages,
-          agentId,
-          organizationId,
-          undefined,
-          false,
-          { teamIds: [] },
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          sanitizeCacheOnly,
-        );
+        evaluateIfContextIsTrusted({
+          messages: commonMessages,
+          agentId: agentId,
+          organizationId: organizationId,
+          considerContextUntrusted: false,
+          policyContext: { teamIds: [] },
+          sanitizeCacheOnly: sanitizeCacheOnly,
+        });
 
       // Nothing cached yet: the pre-execution style check must not run the
       // workflow (or fail) — the result simply counts as untrusted.
       const beforeSanitization = await evaluate(true);
       expect(createSpy).not.toHaveBeenCalled();
       expect(beforeSanitization.contextIsTrusted).toBe(false);
-      expect(beforeSanitization.usedDualLlm).toBe(false);
+      expect(beforeSanitization.dualLlmAnalyses).toHaveLength(0);
       expect(beforeSanitization.toolResultUpdates).toEqual({});
 
       // A live evaluation (the proxy path) sanitizes and populates the cache.
@@ -784,23 +737,16 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       const afterSanitization = await evaluate(true);
       expect(createSpy).toHaveBeenCalledOnce();
       expect(afterSanitization.contextIsTrusted).toBe(true);
-      expect(afterSanitization.usedDualLlm).toBe(true);
+      expect(afterSanitization.dualLlmAnalyses).toHaveLength(1);
       expect(afterSanitization.toolResultUpdates).toEqual({
         call_dual: "Sanitized summary",
       });
 
       createSpy.mockRestore();
-      getSpy.mockRestore();
-      setSpy.mockRestore();
     });
 
     test("fails the request closed and surfaces the failure when dual LLM sanitization errors", async () => {
-      await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [{ key: "source", operator: "equal", value: "external" }],
-        action: "sanitize_with_dual_llm",
-        description: "Sanitize external data",
-      });
+      await createSanitizePolicy(toolId);
 
       const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
         processWithMainAgent: vi
@@ -824,17 +770,14 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       ];
 
       const streamedErrors: string[] = [];
-      const rejection = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-        undefined,
-        undefined,
-        ({ message }) => streamedErrors.push(message),
-      ).then(
+      const rejection = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+        onDualLlmError: ({ message }) => streamedErrors.push(message),
+      }).then(
         () => null,
         (error) => error,
       );
@@ -856,12 +799,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
     });
 
     test("surfaces the actual upstream provider failure through the sanitization error", async () => {
-      await TrustedDataPolicyModel.create({
-        toolId,
-        conditions: [{ key: "source", operator: "equal", value: "external" }],
-        action: "sanitize_with_dual_llm",
-        description: "Sanitize external data",
-      });
+      await createSanitizePolicy(toolId);
 
       // Shape of a real AI SDK failure: a retry wrapper whose lastError is the
       // provider HTTP call error carrying status and the provider's own body.
@@ -906,14 +844,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const rejection = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      ).then(
+      const rejection = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      }).then(
         () => null,
         (error) => error,
       );
@@ -971,14 +908,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       // Context should be untrusted when no policies match
       expect(result.contextIsTrusted).toBe(false);
@@ -1021,14 +957,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.unsafeContextBoundary).toBeUndefined();
@@ -1053,14 +988,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(false);
     });
@@ -1099,14 +1033,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.unsafeContextBoundary).toBeUndefined();
@@ -1157,14 +1090,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(false);
     });
@@ -1197,14 +1129,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.unsafeContextBoundary).toBeUndefined();
@@ -1219,8 +1150,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         label: "External PM / show_board",
       });
 
-      const result = await evaluateIfContextIsTrusted(
-        [
+      const result = await evaluateIfContextIsTrusted({
+        messages: [
           { role: "assistant" },
           {
             role: "tool",
@@ -1234,12 +1165,11 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
             ],
           },
         ],
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.unsafeContextBoundary).toBeUndefined();
@@ -1250,8 +1180,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       // (live upstream results have it stripped there). A marker smuggled inside
       // the tool's own text payload must not exempt the result — that text never
       // passes through the reserved-meta stripping.
-      const result = await evaluateIfContextIsTrusted(
-        [
+      const result = await evaluateIfContextIsTrusted({
+        messages: [
           { role: "assistant" },
           {
             role: "tool",
@@ -1267,30 +1197,24 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
             ],
           },
         ],
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(false);
     });
 
     test("records a preexisting unsafe boundary when context starts untrusted", async () => {
-      const result = await evaluateIfContextIsTrusted(
-        [{ role: "user", content: "Summarize this thread" }],
-        agentId,
-        organizationId,
-        undefined,
-        true,
-        { teamIds: [] },
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        "inherited_from_parent",
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: [{ role: "user", content: "Summarize this thread" }],
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: true,
+        policyContext: { teamIds: [] },
+        initialUntrustedReason: "inherited_from_parent",
+      });
 
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({});
@@ -1343,14 +1267,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       // Context should be untrusted if any tool result is blocked or untrusted
       expect(result.contextIsTrusted).toBe(false);
@@ -1382,14 +1305,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(false);
       expect(result.unsafeContextBoundary).toEqual({
@@ -1415,14 +1337,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       // Should mark as untrusted when tool is not found
       expect(result.contextIsTrusted).toBe(false);
@@ -1444,14 +1365,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       // Should handle gracefully and mark as untrusted
       expect(result.contextIsTrusted).toBe(false);
@@ -1465,14 +1385,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         { role: "system" },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.toolResultUpdates).toEqual({});
@@ -1516,14 +1435,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(true);
       expect(result.toolResultUpdates).toEqual({});
@@ -1574,14 +1492,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({
@@ -1611,14 +1528,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       // Both should be untrusted (no policies match)
       expect(result.contextIsTrusted).toBe(false);
@@ -1641,14 +1557,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       // With no policies, data should be untrusted (the engine always enforces)
       expect(result.contextIsTrusted).toBe(false);
@@ -1673,14 +1588,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
 
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
 
       // Even an error result from KB should not elevate trust
       expect(result.contextIsTrusted).toBe(false);
@@ -1723,14 +1637,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         openaiAdapterFactory.createRequestAdapter(openAiRequest);
       const commonMessages = requestAdapter.getMessages();
       expect(commonMessages[0]?.content).toBe("Get emails");
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
       requestAdapter.applyToolResultUpdates(result.toolResultUpdates);
       const updatedRequest = requestAdapter.toProviderRequest();
 
@@ -1778,14 +1691,13 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         anthropicAdapterFactory.createRequestAdapter(anthropicRequest);
       const commonMessages = requestAdapter.getMessages();
       expect(commonMessages[0]?.content).toBe("Get emails");
-      const result = await evaluateIfContextIsTrusted(
-        commonMessages,
-        agentId,
-        organizationId,
-        undefined,
-        false,
-        { teamIds: [] },
-      );
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
       requestAdapter.applyToolResultUpdates(result.toolResultUpdates);
       const updatedRequest = requestAdapter.toProviderRequest();
 

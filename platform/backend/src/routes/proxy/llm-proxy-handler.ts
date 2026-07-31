@@ -934,58 +934,48 @@ export async function handleLLMProxy<
             reply.raw.write(DUAL_LLM_KEEPALIVE_SSE_COMMENT);
           }
         : undefined;
-    const wantsDualLlmCallbacks =
-      publishDualLlmEvent !== undefined || writeDualLlmKeepAlive !== undefined;
 
     const {
       toolResultUpdates,
       contextIsTrusted,
       dualLlmAnalyses,
       unsafeContextBoundary,
-    } = await utils.trustedData.evaluateIfContextIsTrusted(
-      commonMessages,
-      resolvedAgentId,
-      resolvedAgent.organizationId,
+    } = await utils.trustedData.evaluateIfContextIsTrusted({
+      messages: commonMessages,
+      agentId: resolvedAgentId,
+      organizationId: resolvedAgent.organizationId,
       userId,
-      effectiveConsiderContextUntrusted,
-      { teamIds, externalAgentId },
-      wantsDualLlmCallbacks
-        ? (info) => {
-            writeDualLlmKeepAlive?.();
-            publishDualLlmEvent?.({ kind: "start", ...info });
-          }
-        : undefined,
-      wantsDualLlmCallbacks
-        ? (progress) => {
-            writeDualLlmKeepAlive?.();
-            publishDualLlmEvent?.({ kind: "qa", ...progress });
-          }
-        : undefined,
+      considerContextUntrusted: effectiveConsiderContextUntrusted,
+      policyContext: { teamIds, externalAgentId },
+      onDualLlmStart: (info) => {
+        writeDualLlmKeepAlive?.();
+        publishDualLlmEvent?.({ kind: "start", ...info });
+      },
+      onDualLlmProgress: (progress) => {
+        writeDualLlmKeepAlive?.();
+        publishDualLlmEvent?.({ kind: "qa", ...progress });
+      },
       // A failed analysis fails the request closed. Chat renders the failure
       // from the structured event; for other clients the message is written
       // as a text delta — safe here because the request errors out and no
       // model output follows that could fuse with it.
-      wantsDualLlmCallbacks
-        ? (info) => {
-            publishDualLlmEvent?.({ kind: "error", ...info });
-            if (!publishDualLlmEvent && requestAdapter.isStreaming()) {
-              ensureStreamHeaders();
-              reply.raw.write(streamAdapter.formatTextDeltaSSE(info.message));
-            }
-          }
-        : undefined,
-      publishDualLlmEvent
-        ? (analysis, info) =>
-            publishDualLlmEvent({
-              kind: "complete",
-              toolCallId: analysis.toolCallId,
-              toolName: info.toolName,
-              analysis,
-              cached: info.cached,
-            })
-        : undefined,
+      onDualLlmError: (info) => {
+        publishDualLlmEvent?.({ kind: "error", ...info });
+        if (!publishDualLlmEvent && requestAdapter.isStreaming()) {
+          ensureStreamHeaders();
+          reply.raw.write(streamAdapter.formatTextDeltaSSE(info.message));
+        }
+      },
+      onDualLlmComplete: (analysis, info) =>
+        publishDualLlmEvent?.({
+          kind: "complete",
+          toolCallId: analysis.toolCallId,
+          toolName: info.toolName,
+          analysis,
+          cached: info.cached,
+        }),
       initialUntrustedReason,
-    );
+    });
 
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);

@@ -17,7 +17,7 @@ import {
   resolveRunToolDispatch,
   resolveRunToolTarget,
 } from "@/archestra-mcp-server/run-tool-target";
-import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { TrustedDataPolicyModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
@@ -67,54 +67,61 @@ export class DualLlmSanitizationError extends ApiError {
   }
 }
 
-/**
- * Evaluate if context is trusted and return updates for tool results
- *
- * @param messages - Messages in common format
- * @param agentId - The agent ID
- * @param apiKey - API key for the LLM provider (optional for Gemini with Vertex AI)
- * @param provider - The LLM provider
- * @param considerContextUntrusted - If true, marks context as untrusted from the beginning
- * @param onDualLlmStart - Optional callback when a tool result's dual LLM analysis starts
- * @param onDualLlmProgress - Optional callback for dual LLM Q&A progress
- * @param onDualLlmError - Optional callback to surface a failed analysis before the request fails closed
- * @param onDualLlmComplete - Optional callback when an analysis settles, fresh or reused from the sanitize-once cache
- * @param sanitizeCacheOnly - Consult only cached sanitizations: a sanitize-marked result without one counts as untrusted instead of triggering a live (expensive, fallible) analysis. For callers that need a trust verdict but have no surface to show the dual LLM workflow (tool-execution checks).
- * @returns Object with tool result updates and trust status
- */
-export async function evaluateIfContextIsTrusted(
-  messages: CommonMessage[],
-  agentId: string,
-  organizationId: string,
-  userId: string | undefined,
-  considerContextUntrusted: boolean = false,
-  policyContext: PolicyEvaluationContext,
-  onDualLlmStart?: (info: { toolCallId: string; toolName: string }) => void,
-  onDualLlmProgress?: (progress: {
-    toolCallId: string;
-    toolName: string;
-    question: string;
-    options: string[];
-    answer: string;
-  }) => void,
-  onDualLlmError?: (info: {
-    toolCallId: string;
-    toolName: string;
-    message: string;
-  }) => void,
+/** One tool result's dual LLM analysis, as the progress callbacks report it. */
+type DualLlmAnalysisRef = { toolCallId: string; toolName: string };
+
+export async function evaluateIfContextIsTrusted(params: {
+  messages: CommonMessage[];
+  agentId: string;
+  organizationId: string;
+  userId?: string;
+  /** Marks context untrusted from the start, skipping evaluation entirely. */
+  considerContextUntrusted?: boolean;
+  policyContext: PolicyEvaluationContext;
+  onDualLlmStart?: (info: DualLlmAnalysisRef) => void;
+  onDualLlmProgress?: (
+    progress: DualLlmAnalysisRef & {
+      question: string;
+      options: string[];
+      answer: string;
+    },
+  ) => void;
+  /** Surfaces a failed analysis before the request fails closed. */
+  onDualLlmError?: (info: DualLlmAnalysisRef & { message: string }) => void;
+  /** Fires when an analysis settles, fresh or reused from the sanitize-once cache. */
   onDualLlmComplete?: (
     analysis: DualLlmAnalysis,
     info: { toolName: string; cached: boolean },
-  ) => void,
-  initialUntrustedReason?: UnsafeContextBoundaryReason,
-  sanitizeCacheOnly: boolean = false,
-): Promise<{
+  ) => void;
+  initialUntrustedReason?: UnsafeContextBoundaryReason;
+  /**
+   * Consult only cached sanitizations: a sanitize-marked result without one
+   * counts as untrusted instead of triggering a live (expensive, fallible)
+   * analysis. For callers that need a trust verdict but have no surface to
+   * show the dual LLM workflow on (tool-execution checks).
+   */
+  sanitizeCacheOnly?: boolean;
+}): Promise<{
   toolResultUpdates: ToolResultUpdates;
   contextIsTrusted: boolean;
-  usedDualLlm: boolean;
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
 }> {
+  const {
+    messages,
+    agentId,
+    organizationId,
+    userId,
+    considerContextUntrusted = false,
+    policyContext,
+    onDualLlmStart,
+    onDualLlmProgress,
+    onDualLlmError,
+    onDualLlmComplete,
+    initialUntrustedReason,
+    sanitizeCacheOnly = false,
+  } = params;
+
   logger.debug(
     {
       agentId,
@@ -127,7 +134,6 @@ export async function evaluateIfContextIsTrusted(
   const toolResultUpdates: ToolResultUpdates = {};
   const dualLlmAnalyses: DualLlmAnalysis[] = [];
   let hasUntrustedData = false;
-  let usedDualLlm = false;
   let unsafeContextBoundary: UnsafeContextBoundary | undefined;
 
   // If agent configured to consider context untrusted from the beginning,
@@ -140,7 +146,6 @@ export async function evaluateIfContextIsTrusted(
     return {
       toolResultUpdates: {},
       contextIsTrusted: false,
-      usedDualLlm: false,
       dualLlmAnalyses: [],
       unsafeContextBoundary: {
         kind: "preexisting_untrusted",
@@ -215,7 +220,6 @@ export async function evaluateIfContextIsTrusted(
     return {
       toolResultUpdates,
       contextIsTrusted: true,
-      usedDualLlm: false,
       dualLlmAnalyses: [],
       unsafeContextBoundary,
     };
@@ -347,7 +351,6 @@ export async function evaluateIfContextIsTrusted(
         dualLlmAnalyses.push({ ...cachedAnalysis, toolCallId });
         toolResultUpdates[toolCallId] = cachedAnalysis.result;
         toolResultIsTrusted = true;
-        usedDualLlm = true;
         onDualLlmComplete?.(
           { ...cachedAnalysis, toolCallId },
           { toolName, cached: true },
@@ -363,7 +366,6 @@ export async function evaluateIfContextIsTrusted(
         );
         toolResultIsTrusted = false;
       } else {
-        usedDualLlm = true;
         if (onDualLlmStart) {
           logger.debug(
             { agentId, toolCallId },
@@ -463,7 +465,6 @@ export async function evaluateIfContextIsTrusted(
       agentId,
       updateCount: Object.keys(toolResultUpdates).length,
       contextIsTrusted: !hasUntrustedData,
-      usedDualLlm,
       dualLlmAnalysisCount: dualLlmAnalyses.length,
     },
     "[trustedData] evaluateIfContextIsTrusted: evaluation complete",
@@ -472,7 +473,6 @@ export async function evaluateIfContextIsTrusted(
   return {
     toolResultUpdates,
     contextIsTrusted: !hasUntrustedData,
-    usedDualLlm,
     dualLlmAnalyses,
     unsafeContextBoundary,
   };
@@ -539,7 +539,7 @@ function buildSanitizationCacheKey(params: {
   userRequest: string;
 }): AllowedCacheKey {
   const contentHash = buildSanitizationContentHash(params);
-  return `dual-llm-sanitized-result-${params.organizationId}-${params.toolCallId}-${contentHash}`;
+  return `${CacheKey.DualLlmSanitizedResult}-${params.organizationId}-${params.toolCallId}-${contentHash}`;
 }
 
 /**
@@ -554,7 +554,7 @@ function buildPartialTranscriptCacheKey(params: {
   userRequest: string;
 }): AllowedCacheKey {
   const contentHash = buildSanitizationContentHash(params);
-  return `dual-llm-partial-transcript-${params.organizationId}-${contentHash}`;
+  return `${CacheKey.DualLlmPartialTranscript}-${params.organizationId}-${contentHash}`;
 }
 
 function buildSanitizationContentHash(params: {

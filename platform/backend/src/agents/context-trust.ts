@@ -20,26 +20,18 @@ export async function evaluateToolExecutionContextTrust(params: {
 }> {
   const commonMessages = toCommonMessages(params.messages);
   const teamIds = await AgentTeamModel.getTeamsForAgent(params.agentId);
-  const evaluation = await evaluateIfContextIsTrusted(
-    commonMessages,
-    params.agentId,
-    params.organizationId,
-    params.userId,
-    params.considerContextUntrusted,
-    {
-      ...params.policyContext,
-      teamIds,
-    },
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    // Cache-only sanitization: this pre-execution check has no surface to
-    // show (or fail) the dual LLM workflow — the LLM proxy request owns live
-    // sanitization. A not-yet-sanitized result just reads as untrusted here.
-    true,
-  );
+  const evaluation = await evaluateIfContextIsTrusted({
+    messages: commonMessages,
+    agentId: params.agentId,
+    organizationId: params.organizationId,
+    userId: params.userId,
+    considerContextUntrusted: params.considerContextUntrusted,
+    policyContext: { ...params.policyContext, teamIds },
+    // This pre-execution check has no surface to show (or fail) the dual LLM
+    // workflow on — the LLM proxy request owns live sanitization. A
+    // not-yet-sanitized result just reads as untrusted here.
+    sanitizeCacheOnly: true,
+  });
 
   return {
     contextIsTrusted: evaluation.contextIsTrusted,

@@ -83,10 +83,21 @@ export function PageLayout({
               instead of squeezing them into a sliver beside the buttons. */}
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
             <div className="min-w-0 sm:flex-1">
+              {/* Sibling pages of a tabbed section render PageLayout at the
+                  same tree position, so React reconciles it across
+                  client-side navigations instead of remounting. A rich
+                  description (text mixed with links, like the Costs page)
+                  then has its bare text nodes deleted one by one when the
+                  page changes — which crashes React once Chrome
+                  page-translate has re-parented them into <font> wrappers
+                  (facebook/react#11538). Keying the wrappers by pathname
+                  swaps a whole element per page instead. */}
               <h1 className="mb-2 text-2xl font-semibold tracking-tight">
-                {title}
+                <span key={pathname}>{title}</span>
               </h1>
-              <div className="text-sm text-muted-foreground">{description}</div>
+              <div className="text-sm text-muted-foreground">
+                <span key={pathname}>{description}</span>
+              </div>
             </div>
             {actionButton && <div className="shrink-0">{actionButton}</div>}
           </div>

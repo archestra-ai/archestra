@@ -78,6 +78,7 @@ export class DualLlmSanitizationError extends ApiError {
  * @param onDualLlmStart - Optional callback when dual LLM processing starts
  * @param onDualLlmProgress - Optional callback for dual LLM Q&A progress
  * @param onDualLlmError - Optional callback to surface a failed analysis in the stream before the request fails closed
+ * @param sanitizeCacheOnly - Consult only cached sanitizations: a sanitize-marked result without one counts as untrusted instead of triggering a live (expensive, fallible) analysis. For callers that need a trust verdict but have no surface to show the dual LLM workflow (tool-execution checks).
  * @returns Object with tool result updates and trust status
  */
 export async function evaluateIfContextIsTrusted(
@@ -95,6 +96,7 @@ export async function evaluateIfContextIsTrusted(
   }) => void,
   onDualLlmError?: (message: string) => void,
   initialUntrustedReason?: UnsafeContextBoundaryReason,
+  sanitizeCacheOnly: boolean = false,
 ): Promise<{
   toolResultUpdates: ToolResultUpdates;
   contextIsTrusted: boolean;
@@ -313,8 +315,6 @@ export async function evaluateIfContextIsTrusted(
         toolName,
       });
     } else if (shouldSanitizeWithDualLlm) {
-      usedDualLlm = true;
-
       const userRequest = extractUserRequest(messages);
 
       // The agentic loop resends the full history on every round trip, so the
@@ -337,7 +337,19 @@ export async function evaluateIfContextIsTrusted(
         dualLlmAnalyses.push({ ...cachedAnalysis, toolCallId });
         toolResultUpdates[toolCallId] = cachedAnalysis.result;
         toolResultIsTrusted = true;
+        usedDualLlm = true;
+      } else if (sanitizeCacheOnly) {
+        // This caller has no surface to run the dual LLM workflow on (e.g. a
+        // pre-execution tool trust check). An unsanitized untrusted result
+        // simply leaves the context untrusted — never a live analysis, never
+        // a sanitization failure surfaced without its block.
+        logger.debug(
+          { agentId, toolCallId },
+          "[trustedData] evaluateIfContextIsTrusted: no cached sanitization in cache-only mode, treating as untrusted",
+        );
+        toolResultIsTrusted = false;
       } else {
+        usedDualLlm = true;
         if (!streamedDualLlmStart && onDualLlmStart) {
           logger.debug(
             { agentId, toolCallId },

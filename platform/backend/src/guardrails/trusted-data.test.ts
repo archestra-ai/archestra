@@ -588,6 +588,89 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       setSpy.mockRestore();
     });
 
+    test("cache-only mode never runs the dual LLM workflow: unsanitized results read as untrusted, cached ones as trusted", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "external" }],
+        action: "sanitize_with_dual_llm",
+        description: "Sanitize external data",
+      });
+
+      const store = new Map<string, unknown>();
+      const getSpy = vi
+        .spyOn(cacheManager, "get")
+        .mockImplementation(async (key) => store.get(key));
+      const setSpy = vi
+        .spyOn(cacheManager, "set")
+        .mockImplementation(async (key, value) => {
+          store.set(key, value);
+          return value;
+        });
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi.fn().mockResolvedValue({
+          toolCallId: "call_dual",
+          conversations: [],
+          result: "Sanitized summary",
+        }),
+      } as unknown as DualLlmSubagent);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Summarize the tool results" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_dual",
+              name: "get_emails",
+              content: { source: "external", payload: "raw" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const evaluate = (sanitizeCacheOnly: boolean) =>
+        evaluateIfContextIsTrusted(
+          commonMessages,
+          agentId,
+          organizationId,
+          undefined,
+          false,
+          { teamIds: [] },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          sanitizeCacheOnly,
+        );
+
+      // Nothing cached yet: the pre-execution style check must not run the
+      // workflow (or fail) — the result simply counts as untrusted.
+      const beforeSanitization = await evaluate(true);
+      expect(createSpy).not.toHaveBeenCalled();
+      expect(beforeSanitization.contextIsTrusted).toBe(false);
+      expect(beforeSanitization.usedDualLlm).toBe(false);
+      expect(beforeSanitization.toolResultUpdates).toEqual({});
+
+      // A live evaluation (the proxy path) sanitizes and populates the cache.
+      await evaluate(false);
+      expect(createSpy).toHaveBeenCalledOnce();
+
+      // Now the cache-only check mirrors the proxy's verdict without any
+      // further workflow runs.
+      const afterSanitization = await evaluate(true);
+      expect(createSpy).toHaveBeenCalledOnce();
+      expect(afterSanitization.contextIsTrusted).toBe(true);
+      expect(afterSanitization.usedDualLlm).toBe(true);
+      expect(afterSanitization.toolResultUpdates).toEqual({
+        call_dual: "Sanitized summary",
+      });
+
+      createSpy.mockRestore();
+      getSpy.mockRestore();
+      setSpy.mockRestore();
+    });
+
     test("fails the request closed and surfaces the failure when dual LLM sanitization errors", async () => {
       await TrustedDataPolicyModel.create({
         toolId,

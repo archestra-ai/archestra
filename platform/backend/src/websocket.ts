@@ -75,6 +75,11 @@ class WebSocketService {
   // subscription map is non-empty.
   private mcpDeploymentStatusPollInterval: NodeJS.Timeout | null = null;
   private mcpDeploymentStatusRefreshInFlight = false;
+  // Event-driven push: the runtime manager notifies us after a K8s
+  // watch-triggered state refresh; we fan the fresh statuses out
+  // immediately instead of waiting for the next poll tick.
+  private mcpDeploymentStatusRefreshUnsubscribe: (() => void) | null = null;
+  private lastMcpDeploymentRefreshAt = 0;
 
   /**
    * Proxy object for browser subscriptions - exposes Map-like interface for testing.
@@ -716,16 +721,27 @@ class WebSocketService {
     if (this.mcpDeploymentStatusSubscriptions.delete(ws)) {
       logger.info("MCP deployment status client unsubscribed");
     }
-    if (
-      this.mcpDeploymentStatusSubscriptions.size === 0 &&
-      this.mcpDeploymentStatusPollInterval
-    ) {
-      clearInterval(this.mcpDeploymentStatusPollInterval);
-      this.mcpDeploymentStatusPollInterval = null;
+    if (this.mcpDeploymentStatusSubscriptions.size === 0) {
+      if (this.mcpDeploymentStatusPollInterval) {
+        clearInterval(this.mcpDeploymentStatusPollInterval);
+        this.mcpDeploymentStatusPollInterval = null;
+      }
+      this.mcpDeploymentStatusRefreshUnsubscribe?.();
+      this.mcpDeploymentStatusRefreshUnsubscribe = null;
     }
   }
 
   private startMcpDeploymentStatusPollingIfNeeded(): void {
+    if (!this.mcpDeploymentStatusRefreshUnsubscribe) {
+      // Event-driven path: the runtime manager refreshes states on K8s watch
+      // events and notifies us — push the fresh statuses right away instead
+      // of leaving subscribers to wait out the poll interval.
+      this.mcpDeploymentStatusRefreshUnsubscribe =
+        McpServerRuntimeManager.onDeploymentStatesRefreshed(() => {
+          this.lastMcpDeploymentRefreshAt = Date.now();
+          this.pushMcpDeploymentStatusesToSubscribers();
+        });
+    }
     if (this.mcpDeploymentStatusPollInterval) {
       return;
     }
@@ -745,6 +761,18 @@ class WebSocketService {
       return;
     }
 
+    // With healthy K8s watch streams the runtime manager refreshes on
+    // cluster events and notifies us to push — the poll is only a slow
+    // resync safety net against missed events. Without watchers (missing
+    // `watch` RBAC, streams down) it stays the primary refresh path.
+    if (
+      McpServerRuntimeManager.deploymentStateWatchersActive &&
+      Date.now() - this.lastMcpDeploymentRefreshAt <
+        MCP_DEPLOYMENT_STATUS_WATCH_RESYNC_MS
+    ) {
+      return;
+    }
+
     try {
       await this.refreshMcpDeploymentStates();
     } catch (error) {
@@ -752,6 +780,15 @@ class WebSocketService {
       return;
     }
 
+    this.pushMcpDeploymentStatusesToSubscribers();
+  }
+
+  /**
+   * Diff-push the manager's current statusSummary to every subscriber. Safe
+   * to call spuriously: per-subscriber JSON dedupe means an unchanged
+   * summary sends nothing.
+   */
+  private pushMcpDeploymentStatusesToSubscribers(): void {
     const summary = McpServerRuntimeManager.statusSummary;
     for (const [ws, sub] of this.mcpDeploymentStatusSubscriptions) {
       // Isolate subscribers: one failing send must not stop the others
@@ -809,6 +846,8 @@ class WebSocketService {
           { timeoutMs: MCP_DEPLOYMENT_STATUS_REFRESH_TIMEOUT_MS },
           "MCP deployment state refresh timed out; releasing poll guard",
         );
+      } else {
+        this.lastMcpDeploymentRefreshAt = Date.now();
       }
     } finally {
       clearTimeout(timeoutTimer);
@@ -877,6 +916,9 @@ class WebSocketService {
   }
 
   stop() {
+    this.mcpDeploymentStatusRefreshUnsubscribe?.();
+    this.mcpDeploymentStatusRefreshUnsubscribe = null;
+
     if (this.deploymentMetricsInterval) {
       clearInterval(this.deploymentMetricsInterval);
       this.deploymentMetricsInterval = null;
@@ -1050,6 +1092,12 @@ export default websocketService;
 // Upper bound on one shared deployment-status refresh: releases the poll
 // guard even if a K8s call never settles.
 const MCP_DEPLOYMENT_STATUS_REFRESH_TIMEOUT_MS = 60_000;
+/**
+ * Minimum age of the last state refresh before a poll tick re-polls K8s
+ * while the runtime's watch streams are healthy. Watch events drive
+ * refreshes; this only bounds staleness if an event is missed.
+ */
+const MCP_DEPLOYMENT_STATUS_WATCH_RESYNC_MS = 60_000;
 
 // How much exec output we keep to diagnose why a session ended. The OCI
 // start-failure error is short and arrives first, so a small head is plenty.

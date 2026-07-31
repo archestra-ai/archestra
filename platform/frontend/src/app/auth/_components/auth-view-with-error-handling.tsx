@@ -552,7 +552,7 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
                 Learn how to reset admin password.
               </ExternalDocsLink>
             ) : (
-              "Ask your administrator to reset it."
+              <span>Ask your administrator to reset it.</span>
             )}
           </AlertDescription>
         </Alert>
@@ -615,7 +615,7 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
                 {signIn.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Sign In
+                <span>Sign In</span>
               </Button>
             </form>
           </Form>

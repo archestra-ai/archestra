@@ -104,11 +104,10 @@ export function DefaultCredentialsWarning({
             Set ENV
           </ExternalDocsLink>
           {alwaysShow ? (
-            " to change"
+            <span>{" to change"}</span>
           ) : (
             <>
-              {" "}
-              or{" "}
+              <span>{" or "}</span>
               <a
                 href="/account?highlight=change-password"
                 className="inline-flex items-center underline"

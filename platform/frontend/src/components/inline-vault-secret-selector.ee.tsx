@@ -93,7 +93,7 @@ export default function InlineVaultSecretSelector({
   if (!teamId) {
     return (
       <div className="text-sm text-muted-foreground italic">
-        {noTeamMessage}
+        <span>{noTeamMessage}</span>
       </div>
     );
   }
@@ -103,7 +103,7 @@ export default function InlineVaultSecretSelector({
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Loading secrets...
+        <span>Loading secrets...</span>
       </div>
     );
   }

@@ -187,7 +187,7 @@ export function TeamsList() {
         const count = row.original.members?.length || 0;
         return (
           <div className="text-sm">
-            {count} member{count !== 1 ? "s" : ""}
+            {count} member{count !== 1 ? <span>s</span> : null}
           </div>
         );
       },

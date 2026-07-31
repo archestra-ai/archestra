@@ -1,0 +1,119 @@
+// Project-specific Biome (GritQL) lint plugin — machine-translation crash guard.
+//
+// Chrome's page translate (and similar machine-translation features)
+// re-parents DOM text nodes into injected <font> wrappers. React keeps
+// references to the original text nodes, so a commit that deletes such a
+// text node, or inserts before it, throws
+// "NotFoundError: Failed to execute 'removeChild'/'insertBefore' on 'Node'"
+// and crashes the page (facebook/react#11538). React has no upstream fix;
+// the project convention is to never let React add/remove/replace a BARE
+// text node — conditional text must be wrapped in an element (usually a
+// <span>), so React only ever swaps elements, which translation never moves.
+// Whole-element removals and text-to-text in-place updates are safe.
+//
+// Three rules, matching the crash shapes found in the July 2026 audit:
+//   1. TERNARY — a JSX-child ternary with a (possibly parenthesized,
+//      non-empty) string branch whose other branch is definitely not the
+//      same text node: an element/fragment, null/undefined/boolean, or the
+//      EMPTY string (renders no node, so the flip creates/deletes one).
+//      e.g. {a ? <Icon/> : "More"}   {a ? "shown" : null}
+//           {a ? <><Loader2/>Loading…</> : ("Load more")}
+//           {n > 0 ? " and N more" : ""}
+//   2. LOGICAL — {cond && "text"}: the text node appears/disappears.
+//   3. SIBLING — a conditional-ELEMENT expression immediately followed by
+//      literal label text in the same parent: flipping the condition makes
+//      React insertBefore the new element in front of the translated text.
+//      e.g. <Button>{pending ? <Loader2/> : <Icon/>} Save</Button>
+//
+// Deliberately NOT flagged (plugin diagnostics cannot be suppressed with
+// biome-ignore, so false positives would hard-block CI): ternaries whose
+// branches are both non-empty text at runtime (string vs string/template/
+// expression — React updates the text node in place), and string branches
+// against unknowable variables (if the variable can be a ReactNode, apply
+// the span convention manually).
+//
+// Fix: wrap the bare text in an element, e.g.
+//   {active ? <Icon/> : <span>More</span>}    {saved && <span>Saved!</span>}
+//   <Button>{pending ? <Loader2/> : <Icon/>}<span>Save</span></Button>
+// If both branches render elements of the same type, key them differently so
+// React swaps the elements instead of reconciling their text children.
+language js
+
+pattern text_branch() {
+  or {
+    and { string(), not `""` },
+    `($ps)` where { $ps <: string(), $ps <: not `""` }
+  }
+}
+
+pattern nontext_branch() {
+  or {
+    contains jsx_element(),
+    contains jsx_self_closing_element(),
+    contains `<>$pfc</>`,
+    `null`,
+    `undefined`,
+    `false`,
+    `true`
+  }
+}
+
+pattern empty_text_branch() {
+  or { `""`, `("")` }
+}
+
+pattern element_conditional() {
+  or {
+    `$pc ? $pa : $pb` where {
+      or {
+        $pa <: or { contains jsx_element(), contains jsx_self_closing_element() },
+        $pb <: or { contains jsx_element(), contains jsx_self_closing_element() }
+      }
+    },
+    `$pc && $pel` where {
+      $pel <: or { contains jsx_element(), contains jsx_self_closing_element() }
+    }
+  }
+}
+
+or {
+  `$cond ? $then : $else` as $ternary where {
+    $ternary <: within jsx_expression(),
+    $ternary <: not within jsx_attribute(),
+    or {
+      and { $then <: text_branch(), $else <: or { nontext_branch(), empty_text_branch() } },
+      and { $else <: text_branch(), $then <: or { nontext_branch(), empty_text_branch() } }
+    },
+    register_diagnostic(
+      span = $ternary,
+      message = "Conditional bare text in JSX crashes React when the page is machine-translated (Chrome translate re-parents text nodes, facebook/react#11538): wrap the string branch in an element, e.g. <span>text</span>."
+    )
+  },
+  `$cond && $text` as $logical where {
+    $logical <: within jsx_expression(),
+    $logical <: not within jsx_attribute(),
+    $text <: text_branch(),
+    register_diagnostic(
+      span = $logical,
+      message = "Conditional bare text in JSX crashes React when the page is machine-translated (Chrome translate re-parents text nodes, facebook/react#11538): wrap the string in an element, e.g. {cond && <span>text</span>}."
+    )
+  },
+  `<$tag $attrs>$children</$tag>` where {
+    $children <: [..., jsx_expression() as $expr, jsx_text() as $label, ...],
+    $expr <: contains element_conditional(),
+    $label <: not r"^\s*$",
+    register_diagnostic(
+      span = $label,
+      message = "Bare label text after a conditional element crashes React when the page is machine-translated (Chrome translate re-parents text nodes, facebook/react#11538): flipping the condition inserts the new element before this translated text node — wrap the text in a <span>."
+    )
+  },
+  `<>$fchildren</>` where {
+    $fchildren <: [..., jsx_expression() as $fexpr, jsx_text() as $flabel, ...],
+    $fexpr <: contains element_conditional(),
+    $flabel <: not r"^\s*$",
+    register_diagnostic(
+      span = $flabel,
+      message = "Bare label text after a conditional element crashes React when the page is machine-translated (Chrome translate re-parents text nodes, facebook/react#11538): flipping the condition inserts the new element before this translated text node — wrap the text in a <span>."
+    )
+  }
+}

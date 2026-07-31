@@ -430,7 +430,7 @@ export function SkillEditorDialog({
     >
       {(isPreview && isPreviewLoading) || (isEdit && isLoading) ? (
         <div className="py-10 text-center text-sm text-muted-foreground">
-          Loading skill...
+          <span>Loading skill...</span>
         </div>
       ) : (
         <div className="flex h-full min-h-0 flex-col gap-4">
@@ -447,7 +447,7 @@ export function SkillEditorDialog({
                       {githubSourceRepo}
                     </code>
                   ) : (
-                    "GitHub"
+                    <span>GitHub</span>
                   )}{" "}
                   as a one-time copy. Saving changes here won’t update the repo,
                   and {appName} won’t pull later changes from it.
@@ -1232,7 +1232,7 @@ function TemplatedManifestHint() {
           for available variables.
         </>
       ) : (
-        "."
+        <span>.</span>
       )}
     </p>
   );

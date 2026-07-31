@@ -249,7 +249,7 @@ export function CreateConnectorDialog({
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
                 )}
-                Add Connector
+                <span>Add Connector</span>
               </DialogTitle>
               <DialogDescription>
                 Select a Connector type to get started.
@@ -313,12 +313,16 @@ export function CreateConnectorDialog({
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
                   Configure{" "}
-                  {selectedType ? getConnectorTypeLabel(selectedType) : ""}{" "}
+                  {selectedType ? (
+                    <span>{getConnectorTypeLabel(selectedType)}</span>
+                  ) : null}{" "}
                   Connector
                 </DialogTitle>
                 <DialogDescription>
                   Enter the connection details for your{" "}
-                  {selectedType ? getConnectorTypeLabel(selectedType) : ""}{" "}
+                  {selectedType ? (
+                    <span>{getConnectorTypeLabel(selectedType)}</span>
+                  ) : null}{" "}
                   instance.{" "}
                   <ExternalDocsLink
                     href={connectorDocsUrl}

@@ -394,7 +394,7 @@ export function McpAppEntryContent({
     if (surface === "panel") {
       return (
         <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
-          This app rendered nothing to display.
+          <span>This app rendered nothing to display.</span>
         </div>
       );
     }

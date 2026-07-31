@@ -155,7 +155,10 @@ export function TeamManagementExternalSyncSection({
             before configuring external group sync.
           </>
         ) : (
-          "Ask your admin to add an identity provider before configuring external group sync."
+          <span>
+            Ask your admin to add an identity provider before configuring
+            external group sync.
+          </span>
         )}
       </div>
     );
@@ -212,9 +215,13 @@ export function TeamManagementExternalSyncSection({
               />
               <p className="text-sm text-muted-foreground">
                 {selectedGroupsExpression ? (
-                  "Configured on the selected identity provider. Use the decoded claims below to find a group value that this template extracts."
+                  <span key="configured">
+                    Configured on the selected identity provider. Use the
+                    decoded claims below to find a group value that this
+                    template extracts.
+                  </span>
                 ) : (
-                  <>
+                  <span key="not-configured">
                     No custom template is configured on this identity provider
                     {canUpdateIdentityProviders ? (
                       <>
@@ -227,11 +234,13 @@ export function TeamManagementExternalSyncSection({
                         </Link>
                       </>
                     ) : (
-                      ", ask your admin to configure it"
+                      <span>, ask your admin to configure it</span>
                     )}
-                    . {appName} will look for common group claims in the decoded
-                    token.
-                  </>
+                    <span>
+                      . {appName} will look for common group claims in the
+                      decoded token.
+                    </span>
+                  </span>
                 )}
               </p>
             </div>
@@ -289,7 +298,7 @@ export function TeamManagementExternalSyncSection({
           <Label>Linked External Groups ({externalGroups.length})</Label>
           {isLoading ? (
             <div className="py-4 text-center text-sm text-muted-foreground">
-              Loading...
+              <span>Loading...</span>
             </div>
           ) : externalGroups.length === 0 ? (
             <div className="rounded-lg border border-dashed p-4 text-center">

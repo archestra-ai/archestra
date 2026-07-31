@@ -137,10 +137,12 @@ export function GatewayServersSummary({
               !expanded && "-rotate-90",
             )}
           />
-          {accessAll ? "All " : ""}
-          {servers.length} MCP server{servers.length === 1 ? "" : "s"}
-          {" · "}
-          {totalTools} tool{totalTools === 1 ? "" : "s"}
+          {accessAll ? <span>All </span> : null}
+          <span>{servers.length} MCP server</span>
+          {servers.length === 1 ? null : <span>s</span>}
+          <span> · </span>
+          <span>{totalTools} tool</span>
+          {totalTools === 1 ? null : <span>s</span>}
         </button>
         {accessAll && (
           <span className="text-muted-foreground/70">
@@ -184,7 +186,8 @@ function ServerRowItem({ server }: { server: ServerRow }) {
         {server.name}
       </span>
       <span className="shrink-0 text-muted-foreground">
-        {server.toolCount} tool{server.toolCount === 1 ? "" : "s"}
+        <span>{server.toolCount} tool</span>
+        {server.toolCount === 1 ? null : <span>s</span>}
       </span>
       {server.description && (
         <span className="min-w-0 truncate text-muted-foreground/70">

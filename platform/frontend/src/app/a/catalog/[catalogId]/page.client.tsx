@@ -208,7 +208,7 @@ function NeedsInputHandoff({
         ) : (
           <MessageSquare className="h-4 w-4" />
         )}
-        Open in chat
+        <span>Open in chat</span>
       </Button>
     </div>
   );

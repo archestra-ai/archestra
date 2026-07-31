@@ -497,7 +497,7 @@ export function AuditLogTable() {
                     {formatResourceType(rt)}
                   </span>
                 )}
-                {rt && name ? ": " : ""}
+                {rt && name ? <span>: </span> : null}
                 {name && <span title={name}>{displayName}</span>}
               </span>
             </Badge>

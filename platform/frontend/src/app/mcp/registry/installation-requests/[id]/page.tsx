@@ -410,7 +410,7 @@ export default function InstallationRequestDetailPage({
                           {approveMutation.isPending && (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           )}
-                          Confirm Approval
+                          <span>Confirm Approval</span>
                         </PermissionButton>
                         <Button
                           variant="outline"
@@ -447,7 +447,7 @@ export default function InstallationRequestDetailPage({
                           {declineMutation.isPending && (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           )}
-                          Confirm Decline
+                          <span>Confirm Decline</span>
                         </PermissionButton>
                         <Button
                           variant="outline"
@@ -488,7 +488,7 @@ export default function InstallationRequestDetailPage({
                     ) : (
                       <Send className="h-4 w-4" />
                     )}
-                    Add Note
+                    <span>Add Note</span>
                   </Button>
                 </div>
 

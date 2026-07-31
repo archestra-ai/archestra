@@ -438,7 +438,7 @@ export function BrowserPreviewContent({
             {isNavigating || isCreatingConversation ? (
               <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
-              "Go"
+              <span>Go</span>
             )}
           </Button>
         </form>
@@ -521,10 +521,10 @@ export function BrowserPreviewContent({
                     {isInstallingBrowser ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Installing
+                        <span>Installing</span>
                       </>
                     ) : (
-                      "Install Browser"
+                      <span>Install Browser</span>
                     )}
                   </Button>
                   <p className="text-xs text-muted-foreground">
@@ -573,10 +573,10 @@ export function BrowserPreviewContent({
                     {isInstallingBrowser ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Reinstalling
+                        <span>Reinstalling</span>
                       </>
                     ) : (
-                      "Reinstall Browser"
+                      <span>Reinstall Browser</span>
                     )}
                   </Button>
                   <p className="text-xs text-muted-foreground">

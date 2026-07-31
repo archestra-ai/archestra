@@ -86,7 +86,7 @@ function SkillsMarketplaceBody({ client }: { client: ConnectClient }) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Loading…
+        <span>Loading…</span>
       </div>
     );
   }
@@ -158,9 +158,9 @@ function CreateLinkPanel({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        Snapshot {totalSkills} skill{totalSkills === 1 ? "" : "s"} into a single
-        marketplace URL. New skills added later won't appear until you refresh
-        the link.
+        Snapshot {totalSkills} skill
+        {totalSkills === 1 ? null : <span>s</span>} into a single marketplace
+        URL. New skills added later won't appear until you refresh the link.
       </p>
       <div className="flex flex-wrap items-center gap-3">
         <label className="text-sm font-medium" htmlFor="skill-marketplace-ttl">

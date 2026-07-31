@@ -171,7 +171,12 @@ describe("ConnectCommandPanel", () => {
     // the summary reflects the defaults without any clicks
     expect(screen.getByText(/My Gateway/)).toBeInTheDocument();
     expect(screen.getByText(/My Proxy/)).toBeInTheDocument();
-    expect(screen.getByText(/2 shared skills/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.tagName === "SPAN" && el.textContent === "2 shared skills",
+      ),
+    ).toBeInTheDocument();
     // single endpoint: not worth naming
     expect(
       screen.queryByText("http://localhost:9000/v1"),
@@ -317,7 +322,12 @@ describe("ConnectCommandPanel", () => {
         /skill-0, skill-1, skill-2, skill-3, skill-4, skill-5 and 2 more/,
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText(/8 shared skills/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.tagName === "SPAN" && el.textContent === "8 shared skills",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("lists the MCP servers behind the selected gateway", async () => {

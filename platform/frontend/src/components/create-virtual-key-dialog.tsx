@@ -446,7 +446,7 @@ export function CreateVirtualKeyDialog({
               {createMutation.isPending && (
                 <Loader2 className="h-4 w-4 animate-spin" />
               )}
-              Create
+              <span>Create</span>
             </Button>
           )}
         </DialogStickyFooter>

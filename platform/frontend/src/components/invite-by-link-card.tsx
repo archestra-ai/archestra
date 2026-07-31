@@ -160,7 +160,7 @@ function InviteByLinkCardContent({
               ) : (
                 <Copy className="h-4 w-4" />
               )}
-              Copy Link
+              <span>Copy Link</span>
             </Button>
           </>
         ) : (
@@ -175,7 +175,7 @@ function InviteByLinkCardContent({
               {createMutation.isPending && (
                 <Loader2 className="h-4 w-4 animate-spin" />
               )}
-              Generate Invitation Link
+              <span>Generate Invitation Link</span>
             </PermissionButton>
           </>
         )}

@@ -100,11 +100,11 @@ export function SkillUsageDialog({
     >
       {isPending ? (
         <div className="py-10 text-center text-sm text-muted-foreground">
-          Loading usage...
+          <span>Loading usage...</span>
         </div>
       ) : totalUses === 0 ? (
         <div className="py-10 text-center text-sm text-muted-foreground">
-          No uses in the last {WINDOW_DAYS} days.
+          <span>No uses in the last {WINDOW_DAYS} days.</span>
         </div>
       ) : (
         <div className="flex flex-col gap-4">

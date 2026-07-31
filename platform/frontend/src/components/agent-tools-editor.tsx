@@ -1304,7 +1304,7 @@ function McpServerPill({
         </div>
       ) : totalCount === 0 ? (
         <div className="p-4 text-sm text-muted-foreground">
-          No tools available for this server.
+          <span>No tools available for this server.</span>
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">

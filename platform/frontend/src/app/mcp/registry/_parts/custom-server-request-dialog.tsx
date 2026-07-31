@@ -328,7 +328,7 @@ export function CustomServerRequestDialog({
                 {createRequest.isPending && (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 )}
-                Submit Request
+                <span>Submit Request</span>
               </Button>
             </DialogStickyFooter>
           </DialogForm>

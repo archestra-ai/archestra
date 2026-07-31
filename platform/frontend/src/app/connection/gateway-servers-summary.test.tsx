@@ -85,8 +85,8 @@ describe("GatewayServersSummary", () => {
     render(<GatewayServersSummary gatewayId="g1" />);
 
     // header count: 2 servers, 3 tools total
-    expect(screen.getByText(/2 MCP servers/)).toBeInTheDocument();
-    expect(screen.getByText(/3 tools/)).toBeInTheDocument();
+    expect(screen.getByRole("button")).toHaveTextContent(/2 MCP servers/);
+    expect(screen.getByRole("button")).toHaveTextContent(/3 tools/);
 
     await expandList();
 
@@ -137,14 +137,16 @@ describe("GatewayServersSummary", () => {
 
     render(<GatewayServersSummary gatewayId="g1" />);
 
-    expect(screen.getByText(/All 2 MCP servers/)).toBeInTheDocument();
+    expect(screen.getByRole("button")).toHaveTextContent(/All 2 MCP servers/);
     expect(
       screen.getByText(/new servers included automatically/),
     ).toBeInTheDocument();
 
     await expandList();
     // catalog tool counts are used (91), and rows link to detail pages
-    expect(screen.getByText(/91 tools/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /GitHub/ })).toHaveTextContent(
+      /91 tools/,
+    );
     expect(screen.getByRole("link", { name: /GitHub/ })).toHaveAttribute(
       "href",
       "/mcp/registry/c-github",

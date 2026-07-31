@@ -248,9 +248,9 @@ export function RolePermissionBuilder({
             <p className="text-sm font-medium">Selected Permissions</p>
             <p className="text-xs text-muted-foreground">
               {getTotalPermissionCount()} permission
-              {getTotalPermissionCount() !== 1 ? "s" : ""} across{" "}
+              {getTotalPermissionCount() !== 1 ? <span>s</span> : null} across{" "}
               {Object.keys(permission).length} resource
-              {Object.keys(permission).length !== 1 ? "s" : ""}
+              {Object.keys(permission).length !== 1 ? <span>s</span> : null}
             </p>
           </div>
           <Tooltip>

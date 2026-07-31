@@ -332,10 +332,10 @@ function PlaywrightInstallContent({
               {isDisabling ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  Disabling...
+                  <span>Disabling...</span>
                 </>
               ) : (
-                "Disable Browser Tools"
+                <span>Disable Browser Tools</span>
               )}
             </Button>
           </div>

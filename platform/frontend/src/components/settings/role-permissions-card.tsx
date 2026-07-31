@@ -281,7 +281,8 @@ function CategorySection({
         )}
         <span className="font-semibold text-sm">{category}</span>
         <span className="ml-auto text-xs text-muted-foreground">
-          {resources.length} resource{resources.length !== 1 ? "s" : ""}
+          {resources.length} resource
+          {resources.length !== 1 ? <span>s</span> : null}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent>

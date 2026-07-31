@@ -140,7 +140,13 @@ describe("SkillsMarketplaceStep", () => {
     await waitFor(() =>
       expect(screen.getByTestId("skills-marketplace-create")).toBeVisible(),
     );
-    expect(screen.getByText(/Snapshot 2 skills/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.tagName === "P" &&
+          /Snapshot 2 skills/i.test(el.textContent ?? ""),
+      ),
+    ).toBeInTheDocument();
   });
 
   it("creates a link with the full org skill set and shows snippets", async () => {

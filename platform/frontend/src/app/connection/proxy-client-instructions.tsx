@@ -441,7 +441,7 @@ function GenericProxyInstructions({
           <p className="text-xs text-muted-foreground">
             {authMethod === "provider-key" ? (
               canCreateVirtualKey && !providerHasKey ? (
-                <>
+                <span key="needs-provider-key">
                   Passthrough — you keep using your own {providerLabel} key. A
                   virtual key needs a configured {providerLabel} provider key
                   first
@@ -459,14 +459,20 @@ function GenericProxyInstructions({
                       ).
                     </>
                   ) : (
-                    " (ask an admin to add one)."
+                    <span> (ask an admin to add one).</span>
                   )}
-                </>
+                </span>
               ) : (
-                "Passthrough — you keep using your own provider API key; only the base URL changes."
+                <span key="passthrough">
+                  Passthrough — you keep using your own provider API key; only
+                  the base URL changes.
+                </span>
               )
             ) : (
-              "A personal virtual key mapped to your provider key is created automatically and shown below."
+              <span key="virtual">
+                A personal virtual key mapped to your provider key is created
+                automatically and shown below.
+              </span>
             )}
           </p>
           {authMethod === "virtual-key" &&
@@ -487,7 +493,7 @@ function GenericProxyInstructions({
             ) : (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin" />
-                Creating your virtual key…
+                <span>Creating your virtual key…</span>
               </div>
             ))}
         </div>
@@ -647,9 +653,9 @@ function ModelRouterInstructions() {
               )}
               <p className="text-xs text-muted-foreground">
                 A personal virtual key mapped to your
-                {mappedProvider
-                  ? ` ${providerDisplayNames[mappedProvider]}`
-                  : ""}{" "}
+                {mappedProvider ? (
+                  <span> {providerDisplayNames[mappedProvider]}</span>
+                ) : null}{" "}
                 provider key is created automatically and shown below. Models
                 from other providers need a key mapped to that provider.
               </p>
@@ -670,7 +676,7 @@ function ModelRouterInstructions() {
               ) : (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="size-3.5 animate-spin" />
-                  Creating your virtual key…
+                  <span>Creating your virtual key…</span>
                 </div>
               )}
             </div>
@@ -1034,7 +1040,7 @@ function PassthroughKeyField({
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Loader2 className="size-3.5 animate-spin" />
-        Creating your passthrough key…
+        <span>Creating your passthrough key…</span>
       </div>
     );
   }

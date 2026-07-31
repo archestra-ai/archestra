@@ -209,7 +209,7 @@ export default function EmailPage() {
                   {renewMutation.isPending && (
                     <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Renew subscription
+                  <span>Renew subscription</span>
                 </PermissionButton>
                 <PermissionButton
                   permissions={{ agentTrigger: ["delete"] }}

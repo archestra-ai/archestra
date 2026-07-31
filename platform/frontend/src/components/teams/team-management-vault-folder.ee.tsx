@@ -219,12 +219,12 @@ export function TeamManagementVaultFolderSection({
               {setFolderMutation.isPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
+                  <span>Saving...</span>
                 </>
               ) : hasExistingFolder ? (
-                "Update Path"
+                <span>Update Path</span>
               ) : (
-                "Save Path"
+                <span>Save Path</span>
               )}
             </Button>
 
@@ -238,10 +238,10 @@ export function TeamManagementVaultFolderSection({
                 {checkConnectivityMutation.isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Testing...
+                    <span>Testing...</span>
                   </>
                 ) : (
-                  "Test Connection"
+                  <span>Test Connection</span>
                 )}
               </Button>
             )}
@@ -274,9 +274,19 @@ export function TeamManagementVaultFolderSection({
                   : "Connection Failed"}
               </AlertTitle>
               <AlertDescription>
-                {connectivityResult.connected
-                  ? `Found ${connectivityResult.secretCount} secret${connectivityResult.secretCount !== 1 ? "s" : ""} in this folder.`
-                  : connectivityResult.error || "Unable to connect to Vault"}
+                {connectivityResult.connected ? (
+                  <span>
+                    Found {connectivityResult.secretCount} secret
+                    {connectivityResult.secretCount !== 1 ? (
+                      <span>s</span>
+                    ) : null}{" "}
+                    in this folder.
+                  </span>
+                ) : (
+                  <span>
+                    {connectivityResult.error || "Unable to connect to Vault"}
+                  </span>
+                )}
               </AlertDescription>
             </Alert>
           )}

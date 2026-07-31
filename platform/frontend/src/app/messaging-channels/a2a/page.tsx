@@ -33,10 +33,12 @@ export default function A2APage() {
               <Link href="/agents" className="underline hover:text-foreground">
                 Create an agent
               </Link>{" "}
-              to expose it via A2A.
+              <span>to expose it via A2A.</span>
             </>
           ) : (
-            "Ask an admin to create an agent so it can be exposed via A2A."
+            <span>
+              Ask an admin to create an agent so it can be exposed via A2A.
+            </span>
           )}
         </p>
       </div>

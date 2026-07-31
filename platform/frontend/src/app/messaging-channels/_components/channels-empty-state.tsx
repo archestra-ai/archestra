@@ -45,10 +45,10 @@ export function ChannelsEmptyState({
           {isRefreshing ? (
             <>
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Refreshing…
+              <span>Refreshing…</span>
             </>
           ) : (
-            "Refresh"
+            <span>Refresh</span>
           )}
         </Button>
       </EmptyContent>

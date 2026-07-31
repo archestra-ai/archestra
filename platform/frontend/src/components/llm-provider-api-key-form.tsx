@@ -1124,9 +1124,11 @@ export function LlmProviderApiKeyForm({
                             : provider === "microsoft-365-copilot"
                               ? "Your Microsoft 365 Copilot license is linked through your Microsoft account."
                               : "Your Codex/ChatGPT subscription is linked through your ChatGPT account."}
-                          {isEditMode && !isOpenaiChatgptSub
-                            ? " Sign in again below to refresh the token."
-                            : ""}
+                          {isEditMode && !isOpenaiChatgptSub ? (
+                            <span>
+                              {" Sign in again below to refresh the token."}
+                            </span>
+                          ) : null}
                         </p>
                       </div>
                     </div>

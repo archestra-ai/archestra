@@ -980,7 +980,9 @@ const PromptInputContent = ({
               </TooltipTrigger>
               <TooltipContent side="top">
                 {subscriptionConnectRequired ? (
-                  "Connect the subscription or choose another credential"
+                  <span>
+                    Connect the subscription or choose another credential
+                  </span>
                 ) : isResponseInFlight && onStop ? (
                   <span className="flex items-center gap-1.5">
                     Stop <Kbd>Esc</Kbd>

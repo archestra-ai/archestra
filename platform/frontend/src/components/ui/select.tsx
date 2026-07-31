@@ -19,9 +19,27 @@ function SelectGroup({
 }
 
 function SelectValue({
+  placeholder,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Value>) {
-  return <SelectPrimitive.Value data-slot="select-value" {...props} />;
+  return (
+    <SelectPrimitive.Value
+      data-slot="select-value"
+      // A string placeholder renders as a bare text child of the value span
+      // and Radix removes it when the first value is selected — which crashes
+      // React once Chrome page-translate has re-parented that text into a
+      // <font> wrapper (facebook/react#11538). Wrapping it keeps the removed
+      // unit an element.
+      placeholder={
+        typeof placeholder === "string" ? (
+          <span>{placeholder}</span>
+        ) : (
+          placeholder
+        )
+      }
+      {...props}
+    />
+  );
 }
 
 function SelectTrigger({

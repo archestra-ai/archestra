@@ -404,7 +404,7 @@ export function ChannelsSection({
                 onClick={() => handleStatusChange("all")}
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
-                All{counts ? ` (${totalCount})` : ""}
+                All{counts ? <span> ({totalCount})</span> : null}
               </Button>
               <Button
                 variant="ghost"
@@ -418,7 +418,7 @@ export function ChannelsSection({
                 onClick={() => handleStatusChange("configured")}
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Configured{counts ? ` (${counts.configured})` : ""}
+                Configured{counts ? <span> ({counts.configured})</span> : null}
               </Button>
               <Button
                 variant="ghost"
@@ -432,7 +432,7 @@ export function ChannelsSection({
                 onClick={() => handleStatusChange("unassigned")}
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                Unassigned{counts ? ` (${counts.unassigned})` : ""}
+                Unassigned{counts ? <span> ({counts.unassigned})</span> : null}
               </Button>
 
               {hasMultipleWorkspaces && (

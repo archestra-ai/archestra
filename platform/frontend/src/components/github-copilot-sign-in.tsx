@@ -193,7 +193,7 @@ export function GithubCopilotSignIn({
         ) : (
           <Github className="mr-2 h-4 w-4" />
         )}
-        Sign in with GitHub
+        <span>Sign in with GitHub</span>
       </Button>
       {expired && (
         <p className="text-xs text-destructive">

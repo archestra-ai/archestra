@@ -308,7 +308,7 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
           ) : (
             <RefreshCw className="h-3 w-3" />
           )}
-          Refresh Tools
+          <span>Refresh Tools</span>
         </Button>
       </div>
 
@@ -474,7 +474,7 @@ export function McpInspector({ serverId, isActive }: McpInspectorProps) {
                   ) : (
                     <Play className="h-3.5 w-3.5 fill-current" />
                   )}
-                  Call Tool
+                  <span>Call Tool</span>
                 </Button>
 
                 {/* Latest response for this tool */}

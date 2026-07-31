@@ -105,7 +105,7 @@ export function McpOauthManagement({
                 <tr key={client.id} className="border-b last:border-0">
                   <td className="px-3 py-1.5 font-medium">
                     {client.name}
-                    {client.disabled ? " (disabled)" : ""}
+                    {client.disabled ? <span>{" (disabled)"}</span> : null}
                   </td>
                   <td className="px-3 py-1.5">
                     <span className="flex items-center gap-1 font-mono">

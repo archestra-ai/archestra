@@ -141,7 +141,7 @@ export function TwoFactorView() {
               {verifyTotp.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Verify
+              <span>Verify</span>
             </Button>
             {!isSetup && (
               <div className="text-center text-sm">

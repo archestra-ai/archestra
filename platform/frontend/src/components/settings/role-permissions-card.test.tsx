@@ -46,6 +46,63 @@ describe("RolePermissionsCard", () => {
     } as unknown as ReturnType<typeof useSession>);
   });
 
+  it("keeps the skeleton up while the organization is still resolving", () => {
+    vi.mocked(useActiveOrganization).mockReturnValue({
+      data: undefined,
+      isPending: true,
+    } as unknown as ReturnType<typeof useActiveOrganization>);
+    // A dependent query that is still disabled reports isLoading false with no
+    // data, so the gate cannot rely on isLoading alone.
+    vi.mocked(useActiveMemberRole).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isPending: true,
+    } as unknown as ReturnType<typeof useActiveMemberRole>);
+
+    const { container } = render(<RolePermissionsCard />);
+
+    expect(
+      container.querySelectorAll('[data-slot="skeleton"]').length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("Original Name")).toBeNull();
+  });
+
+  it("keeps the skeleton up until the role arrives for a resolved organization", () => {
+    // isLoading false with no data covers both halves of the wait: the query
+    // still disabled, and the moment it enables. Gating on isLoading renders
+    // the card here and then snaps it back to a skeleton.
+    vi.mocked(useActiveMemberRole).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isPending: true,
+    } as unknown as ReturnType<typeof useActiveMemberRole>);
+
+    const { container } = render(<RolePermissionsCard />);
+
+    expect(
+      container.querySelectorAll('[data-slot="skeleton"]').length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("Original Name")).toBeNull();
+  });
+
+  it("renders the account details when the user has no active organization", () => {
+    vi.mocked(useActiveOrganization).mockReturnValue({
+      data: null,
+      isPending: false,
+    } as unknown as ReturnType<typeof useActiveOrganization>);
+    // With no organization id the role query never enables, so it stays pending
+    // forever — the card must not wait on it.
+    vi.mocked(useActiveMemberRole).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isPending: true,
+    } as unknown as ReturnType<typeof useActiveMemberRole>);
+
+    render(<RolePermissionsCard />);
+
+    expect(screen.getByText("Original Name")).toBeInTheDocument();
+  });
+
   it("updates the account name from the top account section", async () => {
     render(<RolePermissionsCard />);
 

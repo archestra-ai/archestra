@@ -72,14 +72,20 @@ const actionLabels: Record<Action, string> = {
 
 export function RolePermissionsCard() {
   const { data: session } = useSession();
-  const { data: activeOrg } = useActiveOrganization();
-  const { data: role, isLoading: isRoleLoading } = useActiveMemberRole(
+  const { data: activeOrg, isPending: isOrgPending } = useActiveOrganization();
+  const { data: role, isPending: isRolePending } = useActiveMemberRole(
     activeOrg?.id,
   );
   const { data: permissions, isLoading: isPermissionsLoading } =
     useAllPermissions();
 
-  const isLoading = isRoleLoading || isPermissionsLoading;
+  // The role query only enables once the organization resolves, and a disabled
+  // query reports isLoading false with no data — gating on that renders the
+  // card, then snaps it back to a skeleton when the role finally fetches.
+  // isPending stays true across both waits; guard it on the organization id so
+  // a user without one is not stuck on a skeleton the role can never clear.
+  const isLoading =
+    isOrgPending || (!!activeOrg?.id && isRolePending) || isPermissionsLoading;
 
   if (isLoading) {
     return (

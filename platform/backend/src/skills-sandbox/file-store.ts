@@ -4,6 +4,7 @@ import {
   PROJECT_INSTRUCTIONS_FILENAME,
 } from "@archestra/shared";
 import config from "@/config";
+import type { Transaction } from "@/database";
 import {
   FileModel,
   FileNameExistsError,
@@ -305,16 +306,41 @@ class FileStore {
     organizationId: string;
     conversationId: string;
   }): Promise<void> {
-    const rows = await FileModel.listNoProjectFilesForConversation(params);
-    await Promise.all(
-      rows.map(async (row) => {
-        await FileModel.deleteById(row.id);
-        await deleteRowBytes({
-          provider: row.storageProvider,
-          objectKey: row.objectKey,
-        }).catch(() => {});
-      }),
+    const purgeBytes = await this.purgeConversationFileRows(params);
+    await purgeBytes();
+  }
+
+  /**
+   * Row-deletion half of {@link purgeConversationFiles}, composable with a
+   * caller-owned transaction (the retention sweep deletes file rows and the
+   * conversation under one row lock). Returns a closure that best-effort
+   * deletes the external bytes — with a transaction, call it AFTER commit so
+   * bytes never vanish for rows a rollback resurrects.
+   */
+  async purgeConversationFileRows(
+    params: {
+      organizationId: string;
+      conversationId: string;
+    },
+    executor?: Transaction,
+  ): Promise<() => Promise<void>> {
+    const rows = await FileModel.listNoProjectFilesForConversation(
+      params,
+      executor,
     );
+    for (const row of rows) {
+      await FileModel.deleteById(row.id, executor);
+    }
+    return async () => {
+      await Promise.all(
+        rows.map((row) =>
+          deleteRowBytes({
+            provider: row.storageProvider,
+            objectKey: row.objectKey,
+          }).catch(() => {}),
+        ),
+      );
+    };
   }
 
   /**

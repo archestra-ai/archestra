@@ -1152,25 +1152,28 @@ export function parseProcessType(value: string | undefined): ProcessType {
 }
 
 /**
- * Parse ARCHESTRA_AUDIT_LOG_RETENTION_DAYS into a non-negative integer.
- * Default is 0 (retention disabled — audit rows are never auto-deleted).
- * Org admins opt in by setting a positive number of days.
+ * Parse a `*_RETENTION_DAYS` env var into a non-negative integer.
+ * Default is 0 (retention disabled — rows are never auto-deleted).
+ * Operators opt in by setting a positive number of days.
  * @public — exported for testability
  */
-export const parseAuditLogRetentionDays = (
+export const parseRetentionDays = (
+  envVarName: string,
   envValue: string | undefined,
 ): number => {
   const DEFAULT_RETENTION_DAYS = 0;
   const value = envValue?.trim();
   if (!value) return DEFAULT_RETENTION_DAYS;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed) || parsed < 0) {
+  // Strictly digits: retention drives deletion, so a typo like "30days" or
+  // "1.5" must disable the sweep, never silently truncate to an unintended
+  // window.
+  if (!/^\d+$/.test(value)) {
     logger.warn(
-      `Invalid ARCHESTRA_AUDIT_LOG_RETENTION_DAYS value "${value}", using default ${DEFAULT_RETENTION_DAYS} (disabled)`,
+      `Invalid ${envVarName} value "${value}", using default ${DEFAULT_RETENTION_DAYS} (disabled)`,
     );
     return DEFAULT_RETENTION_DAYS;
   }
-  return parsed;
+  return Number.parseInt(value, 10);
 };
 
 /**
@@ -2649,6 +2652,23 @@ const config = {
     acceptNewEncryptionKey:
       process.env.ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY === "true",
   },
+  /**
+   * Enterprise content-encryption-at-rest for interactions and chat messages
+   * (content-encryption/). Both secrets are operator-supplied with NO
+   * fallback: an unset current secret means the feature is off for writes,
+   * deliberately unlike the secrets-manager key. `secretPrevious` is an
+   * additional decrypt-only key — it makes enabling and rotating safe across
+   * rolling deployments (distribute a key to every replica as decrypt-capable
+   * first, then activate it for writes) and lets the backfill re-encrypt
+   * rotated rows.
+   */
+  contentEncryption: {
+    secret:
+      process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET?.trim() || undefined,
+    secretPrevious:
+      process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS?.trim() ||
+      undefined,
+  },
   test: {
     enableE2eTestEndpoints: process.env.ENABLE_E2E_TEST_ENDPOINTS === "true",
     enableTestMcpServer: process.env.ENABLE_TEST_MCP_SERVER === "true",
@@ -2697,9 +2717,30 @@ const config = {
   // maintenanceMode it does not affect request handling.
   siteNotificationMessage:
     process.env.ARCHESTRA_SITE_NOTIFICATION_MESSAGE || null,
+  // Enterprise-licensed like the `retention` block below — the boot-time
+  // assertion in data-retention/license-gate.ee.ts covers this window too.
   auditLog: {
-    retentionDays: parseAuditLogRetentionDays(
+    retentionDays: parseRetentionDays(
+      "ARCHESTRA_AUDIT_LOG_RETENTION_DAYS",
       process.env.ARCHESTRA_AUDIT_LOG_RETENTION_DAYS,
+    ),
+  },
+  // Data-retention windows for content-bearing tables. All default to 0
+  // (disabled). Enterprise-licensed — the boot-time assertion in
+  // data-retention/license-gate.ee.ts fails startup when any of these is set
+  // without an active enterprise license.
+  retention: {
+    llmLogsDays: parseRetentionDays(
+      "ARCHESTRA_LLM_LOGS_RETENTION_DAYS",
+      process.env.ARCHESTRA_LLM_LOGS_RETENTION_DAYS,
+    ),
+    mcpLogsDays: parseRetentionDays(
+      "ARCHESTRA_MCP_LOGS_RETENTION_DAYS",
+      process.env.ARCHESTRA_MCP_LOGS_RETENTION_DAYS,
+    ),
+    chatConversationsDays: parseRetentionDays(
+      "ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS",
+      process.env.ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS,
     ),
   },
 };

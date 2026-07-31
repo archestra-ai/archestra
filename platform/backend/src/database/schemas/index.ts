@@ -83,6 +83,8 @@ export {
   default as connectionSetupsTable,
 } from "./connection-setup";
 export { default as connectorRunsTable } from "./connector-run";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed schema; inert without the feature
+export { default as contentEncryptionStateTable } from "./content-encryption-state.ee";
 export { default as conversationsTable } from "./conversation";
 export { default as conversationAttachmentsTable } from "./conversation-attachment";
 export { default as conversationChatErrorsTable } from "./conversation-chat-error";

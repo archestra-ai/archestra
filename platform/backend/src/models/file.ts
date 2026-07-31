@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type {
   PersistedFile,
   SandboxArtifactRow,
@@ -224,11 +224,14 @@ class FileModel {
    * conversation's files when it is deleted — project files (which outlive the
    * conversation) are excluded.
    */
-  static async listNoProjectFilesForConversation(params: {
-    organizationId: string;
-    conversationId: string;
-  }): Promise<SandboxArtifactRow[]> {
-    return db
+  static async listNoProjectFilesForConversation(
+    params: {
+      organizationId: string;
+      conversationId: string;
+    },
+    executor: typeof db | Transaction = db,
+  ): Promise<SandboxArtifactRow[]> {
+    return executor
       .select(artifactColumns)
       .from(schema.filesTable)
       .where(
@@ -283,8 +286,13 @@ class FileModel {
       .orderBy(asc(schema.filesTable.createdAt), asc(schema.filesTable.id));
   }
 
-  static async deleteById(id: string): Promise<void> {
-    await db.delete(schema.filesTable).where(eq(schema.filesTable.id, id));
+  static async deleteById(
+    id: string,
+    executor: typeof db | Transaction = db,
+  ): Promise<void> {
+    await executor
+      .delete(schema.filesTable)
+      .where(eq(schema.filesTable.id, id));
   }
 }
 

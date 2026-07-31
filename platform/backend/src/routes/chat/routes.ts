@@ -3242,6 +3242,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         params: z.object({ id: z.string() }),
         body: z.object({
+          conversationId: z.string(),
           partIndex: z.number().int().min(0),
           text: z.string().min(1),
           deleteSubsequentMessages: z.boolean().optional(),
@@ -3252,30 +3253,33 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         params: { id },
-        body: { partIndex, text, deleteSubsequentMessages },
+        body: { conversationId, partIndex, text, deleteSubsequentMessages },
         user,
         organizationId,
       },
       reply,
     ) => {
-      // Fetch the message to get its conversation ID
-      // Use findByAnyId to support both DB UUIDs and AI SDK nanoid content IDs
-      // (in-session messages retain their nanoid IDs until page reload)
-      const message = await MessageModel.findByAnyId(id);
-
-      if (!message) {
-        throw new ApiError(404, "Message not found");
-      }
-
-      // Verify the user has access to the conversation
+      // Verify the user has access to the conversation FIRST — the message
+      // lookup is scoped to it. Content ids (AI SDK nanoids, used until page
+      // reload) are client-supplied and non-unique across conversations, and
+      // the scoped lookup also stays correct under content encryption.
       const conversation = await ConversationModel.findById({
-        id: message.conversationId,
+        id: conversationId,
         userId: user.id,
         organizationId: organizationId,
       });
 
       if (!conversation) {
         throw new ApiError(404, "Message not found or access denied");
+      }
+
+      const message = await MessageModel.findByAnyIdInConversation(
+        id,
+        conversationId,
+      );
+
+      if (!message) {
+        throw new ApiError(404, "Message not found");
       }
 
       // run the message edit, optional subsequent-message deletion, and

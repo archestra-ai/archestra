@@ -108142,6 +108142,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "conversationId": {
+                    "type": "string"
+                  },
                   "partIndex": {
                     "type": "integer",
                     "minimum": 0,
@@ -108156,6 +108159,7 @@
                   }
                 },
                 "required": [
+                  "conversationId",
                   "partIndex",
                   "text"
                 ]

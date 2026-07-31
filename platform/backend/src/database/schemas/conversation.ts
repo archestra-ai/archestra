@@ -118,6 +118,11 @@ const conversationsTable = softDeletablePgTable(
     index("conversations_active_owner_last_message_idx")
       .on(table.userId, table.organizationId, desc(table.lastMessageAt))
       .where(sql`${table.deletedAt} IS NULL`),
+    // The enterprise retention sweep selects expiry candidates by last
+    // activity across ALL rows — soft-deleted ones included, since retention
+    // is the hard floor beneath the trash — which the partial owner-scoped
+    // index above cannot serve.
+    index("conversations_last_message_at_idx").on(table.lastMessageAt),
   ],
 );
 

@@ -59,8 +59,15 @@ import config, {
   shouldRunWebServer,
   shouldRunWorker,
 } from "@/config";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
+import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
+import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
-import { dropLegacyPayloadTrgmIndexes } from "@/database/index-maintenance";
+import {
+  dropLegacyPayloadTrgmIndexes,
+  dropMessagesContentTrgmIndexUnderEncryption,
+} from "@/database/index-maintenance";
 import { getTransientDbErrorCode } from "@/database/retry";
 import { seedRequiredStartingData } from "@/database/seed";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -1220,8 +1227,25 @@ const startWebServer = async () => {
   registerAuditLogHook(fastify);
 
   try {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Fails startup when retention windows are configured without a license —
+    // an operator relying on retention for compliance must never run with it
+    // silently disabled.
+    assertRetentionConfigLicensed();
+    // SPDX-SnippetEnd
+
     // Initialize database connection first
     await initializeDatabase();
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Fail-closed content-key verification, before any write could encrypt
+    // (or silently plaintext) interaction/message content.
+    await verifyContentEncryptionKey();
+    // SPDX-SnippetEnd
 
     await seedRequiredStartingData();
 
@@ -1327,6 +1351,11 @@ const startWebServer = async () => {
       // migration 0116 stopped creating them. Idempotent; errors are logged
       // inside and retried next boot.
       void dropLegacyPayloadTrgmIndexes();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      void dropMessagesContentTrgmIndexUnderEncryption();
+      // SPDX-SnippetEnd
     }
 
     // Background job to renew email subscriptions before they expire
@@ -1638,7 +1667,22 @@ const startWorker = async () => {
   logger.info("Starting in worker-only mode (ARCHESTRA_PROCESS_TYPE=worker)");
 
   try {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Same gate as `start` — the retention sweep runs on the worker.
+    assertRetentionConfigLicensed();
+    // SPDX-SnippetEnd
+
     await initializeDatabase();
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Workers write messages and interactions (scheduled runs, triggers), so
+    // the content-key guard must hold here too.
+    await verifyContentEncryptionKey();
+    // SPDX-SnippetEnd
     cacheManager.start();
     await enterpriseTier.start();
 
@@ -1668,6 +1712,11 @@ const startWorker = async () => {
     // See the shouldRunWorker branch in `start` — same legacy-index cleanup,
     // for the dedicated worker Deployment.
     void dropLegacyPayloadTrgmIndexes();
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    void dropMessagesContentTrgmIndexUnderEncryption();
+    // SPDX-SnippetEnd
 
     posthogErrorTrackingService.init().catch((error) => {
       logger.warn(

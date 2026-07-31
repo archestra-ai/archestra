@@ -11,7 +11,11 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import db, { schema } from "@/database";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
+import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
+import { decryptMessageRow } from "@/content-encryption/rows.ee";
+import db, { schema, type Transaction } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import type {
@@ -106,6 +110,14 @@ class ConversationModel {
 
       // 1. Conversation title (text column) - uses conversations_title_trgm_idx
       // 2. Message content (JSONB cast to text) - uses messages_content_trgm_idx
+      //
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // Under content encryption message bodies are ciphertext, so search
+      // degrades to titles only (documented on the secrets-management page).
+      const searchMessageContent = !isContentEncryptionEnabled();
+      // SPDX-SnippetEnd
       const searchConditions = or(
         // Search in title (handles null titles gracefully)
         and(
@@ -114,11 +126,13 @@ class ConversationModel {
         ),
         // Search through messages JSONB content
         // Uses EXISTS for early termination
-        sql`EXISTS (
+        searchMessageContent
+          ? sql`EXISTS (
           SELECT 1 FROM ${schema.messagesTable}
           WHERE ${schema.messagesTable.conversationId} = ${schema.conversationsTable.id}
           AND ${schema.messagesTable.content}::text ILIKE ${searchPattern}
-        )`,
+        )`
+          : sql`false`,
       );
 
       if (searchConditions) {
@@ -169,7 +183,7 @@ class ConversationModel {
             // Only include messages that match the search pattern (for relevance)
             // or the first few messages (for context)
             sql`(
-              ${schema.messagesTable.content}::text ILIKE ${searchPattern}
+              (${isContentEncryptionEnabled() ? sql`false` : sql`${schema.messagesTable.content}::text ILIKE ${searchPattern}`})
               OR ${schema.messagesTable.id} IN (
                 SELECT m.id FROM ${schema.messagesTable} m
                 WHERE m.conversation_id = ${schema.conversationsTable.id}
@@ -225,6 +239,9 @@ class ConversationModel {
         }
 
         const conversation = conversationMap.get(conversationId);
+        if (row?.message) {
+          decryptMessageRow(row.message);
+        }
         if (
           conversation &&
           row?.message?.content &&
@@ -396,6 +413,9 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
+      if (row.message) {
+        decryptMessageRow(row.message);
+      }
       if (
         row.message?.content &&
         shouldReturnPersistedMessageRow(row.message)
@@ -612,6 +632,9 @@ class ConversationModel {
     const messages = [];
 
     for (const row of rows) {
+      if (row.message) {
+        decryptMessageRow(row.message);
+      }
       if (
         row.message?.content &&
         shouldReturnPersistedMessageRow(row.message)
@@ -881,6 +904,73 @@ class ConversationModel {
       ),
     );
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Enterprise data-retention: conversations whose last message activity is
+   * older than the retention window, oldest first. Cross-org by design — the
+   * sweep is an instance-level operator policy, not a user action — and
+   * deliberately includes soft-deleted (trashed) conversations: retention is
+   * the hard floor beneath the trash, so sitting in the trash never extends a
+   * conversation's lifetime. SQL-side cutoff because `last_message_at` is
+   * timestamp-without-time-zone.
+   */
+  static async findExpired(params: {
+    retentionDays: number;
+    limit: number;
+  }): Promise<Array<{ id: string; organizationId: string }>> {
+    const result = await db.execute<{ id: string; organization_id: string }>(
+      sql`
+        SELECT id, organization_id
+        FROM ${schema.conversationsTable}
+        WHERE last_message_at < now()::timestamp - make_interval(days => ${params.retentionDays})
+        ORDER BY last_message_at ASC
+        LIMIT ${params.limit}
+      `,
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      organizationId: row.organization_id,
+    }));
+  }
+
+  /**
+   * Lock a retention candidate and re-check expiry under the lock. Returns
+   * null when the conversation vanished or received activity since selection.
+   * While the returned row lock is held, a concurrent message insert blocks on
+   * its FK check, so the caller can purge and delete without a lost-update
+   * window.
+   */
+  static async lockIfExpired(
+    tx: Transaction,
+    params: { id: string; retentionDays: number },
+  ): Promise<{ id: string; organizationId: string } | null> {
+    const result = await tx.execute<{ id: string; organization_id: string }>(
+      sql`
+        SELECT id, organization_id
+        FROM ${schema.conversationsTable}
+        WHERE id = ${params.id}
+          AND last_message_at < now()::timestamp - make_interval(days => ${params.retentionDays})
+        FOR UPDATE
+      `,
+    );
+    const row = result.rows[0];
+    return row ? { id: row.id, organizationId: row.organization_id } : null;
+  }
+
+  /**
+   * System-level delete by id, no user/org scoping — retention-sweep only.
+   * Runs on the caller's transaction so it composes with the row lock and the
+   * file-row purge taken in the same transaction.
+   */
+  static async deleteExpiredLocked(tx: Transaction, id: string): Promise<void> {
+    await tx
+      .delete(schema.conversationsTable)
+      .where(eq(schema.conversationsTable.id, id));
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Get the agentId for a conversation (without user context checks)

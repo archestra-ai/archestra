@@ -1176,6 +1176,30 @@ export const parseRetentionDays = (
   return Number.parseInt(value, 10);
 };
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Whether OTel spans may carry message/tool content (gen_ai.content.*).
+ *
+ * Content encryption at rest flips the DEFAULT to false: exporting the same
+ * content in plaintext to a telemetry backend would bypass the at-rest
+ * guarantee through a side door. An EXPLICIT `true` still wins — the operator
+ * may run an equally protected telemetry pipeline — and the encryption boot
+ * guard logs a warning for that combination so the choice is always visible.
+ * @public — exported for testability
+ */
+export const parseOtelCaptureContent = (params: {
+  envValue: string | undefined;
+  contentEncryptionConfigured: boolean;
+}): boolean => {
+  const value = params.envValue?.trim();
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return !params.contentEncryptionConfigured;
+};
+// SPDX-SnippetEnd
+
 /**
  * Parse a Kubernetes resource quantity (memory/CPU/ephemeral-storage) from an
  * environment variable, falling back to the default when unset or invalid.
@@ -2497,7 +2521,12 @@ const config = {
   },
   observability: {
     otel: {
-      captureContent: process.env.ARCHESTRA_OTEL_CAPTURE_CONTENT !== "false",
+      captureContent: parseOtelCaptureContent({
+        envValue: process.env.ARCHESTRA_OTEL_CAPTURE_CONTENT,
+        contentEncryptionConfigured: Boolean(
+          process.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET,
+        ),
+      }),
       contentMaxLength: parseContentMaxLength(
         process.env.ARCHESTRA_OTEL_CONTENT_MAX_LENGTH,
       ),

@@ -5,6 +5,7 @@ vi.mock("@/logging");
 import { sql } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
+import logger from "@/logging";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed code under test
 import ContentEncryptionStateModel from "@/models/content-encryption-state.ee";
 import EncryptionKeyCanaryModel from "@/models/encryption-key-canary";
@@ -306,6 +307,27 @@ describe("content encryption", () => {
       setKeys(SECRET_A);
       await verifyContentEncryptionKey();
       expect(await EncryptionKeyCanaryModel.get("content")).not.toBeNull();
+    });
+
+    test("explicit OTel content capture under encryption warns at boot", async () => {
+      const originalCapture = config.observability.otel.captureContent;
+      try {
+        setKeys(SECRET_A);
+        config.observability.otel.captureContent = true;
+        await verifyContentEncryptionKey();
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.stringContaining("ARCHESTRA_OTEL_CAPTURE_CONTENT"),
+        );
+
+        vi.clearAllMocks();
+        config.observability.otel.captureContent = false;
+        await verifyContentEncryptionKey();
+        expect(logger.warn).not.toHaveBeenCalledWith(
+          expect.stringContaining("ARCHESTRA_OTEL_CAPTURE_CONTENT"),
+        );
+      } finally {
+        config.observability.otel.captureContent = originalCapture;
+      }
     });
 
     test("canary present but key removed fails startup (fail-closed)", async () => {

@@ -50,6 +50,7 @@ import config, {
   parseMetricsPort,
   parseNonNegativeInt,
   parseOptionalPort,
+  parseOtelCaptureContent,
   parseProcessType,
   parseRefreshTokenReuseGraceSeconds,
   parseRetentionDays,
@@ -2866,5 +2867,46 @@ describe("parseNonNegativeInt", () => {
   test("accepts positive values and rejects negative ones", () => {
     expect(parseNonNegativeInt("30", 90)).toBe(30);
     expect(parseNonNegativeInt("-5", 90)).toBe(90);
+  });
+});
+
+describe("parseOtelCaptureContent", () => {
+  test("defaults on without content encryption, off with it", () => {
+    expect(
+      parseOtelCaptureContent({
+        envValue: undefined,
+        contentEncryptionConfigured: false,
+      }),
+    ).toBe(true);
+    expect(
+      parseOtelCaptureContent({
+        envValue: undefined,
+        contentEncryptionConfigured: true,
+      }),
+    ).toBe(false);
+  });
+
+  test("an explicit value always wins over the encryption default", () => {
+    expect(
+      parseOtelCaptureContent({
+        envValue: "true",
+        contentEncryptionConfigured: true,
+      }),
+    ).toBe(true);
+    expect(
+      parseOtelCaptureContent({
+        envValue: "false",
+        contentEncryptionConfigured: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("junk values take the default path, not the explicit one", () => {
+    expect(
+      parseOtelCaptureContent({
+        envValue: "yes",
+        contentEncryptionConfigured: true,
+      }),
+    ).toBe(false);
   });
 });

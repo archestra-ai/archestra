@@ -55,6 +55,7 @@ import {
   getDefaultArchestraToolIds,
   isCatalogInEnvironment,
   type SharedPersonalPin,
+  setsEqual,
   shouldResetCredentialPin,
   sortAndFilterTools,
   sortCatalogItems,
@@ -1096,6 +1097,21 @@ function McpServerPill({
   const skillToolsEnabled = organization?.skillToolsEnabled === true;
   const sandboxEnabled = useFeature("sandbox") === true;
 
+  // Creation-default subset for the built-in catalog: powers the checklist's
+  // "Reset to defaults" action, so restoring a drifted selection no longer
+  // requires removing and re-adding the server. Undefined for every other
+  // server — they have no default subset, so the action is hidden.
+  const defaultToolIds = useMemo(
+    () =>
+      catalogItem.id === ARCHESTRA_MCP_CATALOG_ID
+        ? filterDefaultArchestraToolIds(allTools, {
+            skillsEnabled: skillToolsEnabled,
+            sandboxEnabled,
+          })
+        : undefined,
+    [catalogItem.id, allTools, skillToolsEnabled, sandboxEnabled],
+  );
+
   // Fetch available credentials for this catalog
   const credentials = useMcpServersGroupedByCatalog({
     catalogId: catalogItem.id,
@@ -1299,6 +1315,7 @@ function McpServerPill({
               setSelectedToolIds(ids);
               setChangedInSession(true);
             }}
+            defaultToolIds={defaultToolIds}
           />
         </div>
       )}
@@ -1325,6 +1342,14 @@ export interface ToolChecklistProps {
    * styling all say so.
    */
   variant?: "assign" | "disable";
+  /**
+   * The creation-default tool IDs for servers that have such a subset (the
+   * built-in Archestra catalog). When provided and non-empty, the header gains
+   * a "Reset to defaults" action that replaces the whole selection with
+   * exactly this set — unlike Select All/Deselect All it ignores any active
+   * search filter, since a partial reset is not a reset.
+   */
+  defaultToolIds?: Set<string>;
 }
 
 function formatToolName(toolName: string) {
@@ -1510,9 +1535,15 @@ export function ToolChecklist({
   selectedToolIds,
   onSelectionChange,
   variant = "assign",
+  defaultToolIds,
 }: ToolChecklistProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const disableVariant = variant === "disable";
+
+  // Hidden when the set is empty so the action can never reset to zero tools.
+  const showResetToDefaults = defaultToolIds != null && defaultToolIds.size > 0;
+  const selectionAtDefaults =
+    defaultToolIds != null && setsEqual(selectedToolIds, defaultToolIds);
 
   // Snapshot the initial selection for sort order so tools don't jump
   // around as the user toggles checkboxes. Updates synchronously during
@@ -1643,6 +1674,18 @@ export function ToolChecklist({
           >
             {disableVariant ? "Enable all" : "Deselect All"}
           </Button>
+          {showResetToDefaults && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs h-6 px-2"
+              onClick={() => onSelectionChange(new Set(defaultToolIds))}
+              disabled={selectionAtDefaults}
+              title="Replace the selection with the default set assigned at creation"
+            >
+              Reset to defaults
+            </Button>
+          )}
         </div>
       </div>
       {tools.length > 5 && (

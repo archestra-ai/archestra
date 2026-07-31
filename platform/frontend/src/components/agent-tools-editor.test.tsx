@@ -46,9 +46,11 @@ function createMockTool(
 function ToolChecklistWrapper({
   tools,
   initialSelectedIds = new Set(),
+  defaultToolIds,
 }: {
   tools: ToolChecklistProps["tools"];
   initialSelectedIds?: Set<string>;
+  defaultToolIds?: Set<string>;
 }) {
   const [selectedToolIds, setSelectedToolIds] =
     useState<Set<string>>(initialSelectedIds);
@@ -58,6 +60,7 @@ function ToolChecklistWrapper({
       tools={tools}
       selectedToolIds={selectedToolIds}
       onSelectionChange={setSelectedToolIds}
+      defaultToolIds={defaultToolIds}
     />
   );
 }
@@ -548,6 +551,100 @@ describe("ToolChecklist", () => {
       expect(within(otherSection).getByText("0/1")).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: /^Other/ }));
       expect(screen.getByText("future_tool")).toBeInTheDocument();
+    });
+  });
+
+  describe("reset to defaults", () => {
+    const tools = [
+      createMockTool("default-1", "server__default_one", "Default one"),
+      createMockTool("default-2", "server__default_two", "Default two"),
+      createMockTool("extra-1", "server__extra_one", "Extra one"),
+      ...createMockTools(3), // Push past 5 tools so the search bar renders
+    ];
+    const defaultToolIds = new Set(["default-1", "default-2"]);
+
+    it("replaces the selection with exactly the default set", async () => {
+      const user = userEvent.setup();
+      // Starts with one default missing and one non-default extra selected.
+      render(
+        <ToolChecklistWrapper
+          tools={tools}
+          initialSelectedIds={new Set(["default-1", "extra-1"])}
+          defaultToolIds={defaultToolIds}
+        />,
+      );
+
+      await user.click(
+        screen.getByRole("button", { name: "Reset to defaults" }),
+      );
+
+      expect(
+        screen.getByRole("checkbox", { name: /default_one/i }),
+      ).toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: /default_two/i }),
+      ).toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: /extra_one/i }),
+      ).not.toBeChecked();
+    });
+
+    it("resets the whole selection even while a search filter is active", async () => {
+      const user = userEvent.setup();
+      render(
+        <ToolChecklistWrapper
+          tools={tools}
+          initialSelectedIds={new Set(["extra-1"])}
+          defaultToolIds={defaultToolIds}
+        />,
+      );
+
+      // Filter to a list that contains neither the extra nor default_two;
+      // reset must still fix both — a partial reset is not a reset.
+      await user.type(
+        screen.getByPlaceholderText("Search tools..."),
+        "default_one",
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Reset to defaults" }),
+      );
+      await user.clear(screen.getByPlaceholderText("Search tools..."));
+
+      expect(
+        screen.getByRole("checkbox", { name: /default_two/i }),
+      ).toBeChecked();
+      expect(
+        screen.getByRole("checkbox", { name: /extra_one/i }),
+      ).not.toBeChecked();
+    });
+
+    it("is disabled when the selection already matches the defaults", () => {
+      render(
+        <ToolChecklistWrapper
+          tools={tools}
+          initialSelectedIds={new Set(defaultToolIds)}
+          defaultToolIds={defaultToolIds}
+        />,
+      );
+
+      expect(
+        screen.getByRole("button", { name: "Reset to defaults" }),
+      ).toBeDisabled();
+    });
+
+    it("is absent without a default set, and for an empty one", () => {
+      const { rerender } = render(<ToolChecklistWrapper tools={tools} />);
+      expect(
+        screen.queryByRole("button", { name: "Reset to defaults" }),
+      ).not.toBeInTheDocument();
+
+      // An empty set must hide the action too — never offer a reset to zero.
+      rerender(
+        <ToolChecklistWrapper tools={tools} defaultToolIds={new Set()} />,
+      );
+      expect(
+        screen.queryByRole("button", { name: "Reset to defaults" }),
+      ).not.toBeInTheDocument();
     });
   });
 });

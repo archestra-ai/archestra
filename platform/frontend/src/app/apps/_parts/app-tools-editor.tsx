@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ToolChecklist } from "@/components/agent-tools-editor";
 import {
   isCatalogInAppEnvironment,
+  setsEqual,
   sortCatalogItems,
 } from "@/components/agent-tools-editor.utils";
 import { LoadingWrapper } from "@/components/loading";
@@ -400,12 +401,6 @@ export function AppToolsEditor({
       </LoadingWrapper>
     </div>
   );
-}
-
-function setsEqual(a: Set<string>, b: Set<string>) {
-  if (a.size !== b.size) return false;
-  for (const value of a) if (!b.has(value)) return false;
-  return true;
 }
 
 function OrphanedAssignedTools({

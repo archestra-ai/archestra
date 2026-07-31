@@ -17,6 +17,7 @@ import {
   getDefaultArchestraToolIds,
   isCatalogInAppEnvironment,
   isCatalogInEnvironment,
+  setsEqual,
   shouldResetCredentialPin,
   sortAndFilterTools,
   sortCatalogItems,
@@ -787,5 +788,17 @@ describe("computeSharedPersonalPins", () => {
         isCurrentUser: false,
       },
     ]);
+  });
+});
+
+describe("setsEqual", () => {
+  it("treats sets with the same members as equal regardless of order", () => {
+    expect(setsEqual(new Set(["a", "b"]), new Set(["b", "a"]))).toBe(true);
+    expect(setsEqual(new Set(), new Set())).toBe(true);
+  });
+
+  it("detects differing members and differing sizes", () => {
+    expect(setsEqual(new Set(["a", "b"]), new Set(["a", "c"]))).toBe(false);
+    expect(setsEqual(new Set(["a"]), new Set(["a", "b"]))).toBe(false);
   });
 });

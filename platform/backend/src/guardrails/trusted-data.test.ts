@@ -1,5 +1,6 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  buildTrustedDataSanitizedContentNotice,
   SEEDED_APP_RENDER_META_KEY,
 } from "@archestra/shared";
 import { onTestFinished, vi } from "vitest";
@@ -7,6 +8,7 @@ import {
   DualLlmAgentCallError,
   DualLlmSubagent,
 } from "@/agents/subagents/dual-llm";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { cacheManager } from "@/cache-manager";
 import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
@@ -49,6 +51,14 @@ describe("sensitiveContextOriginFromBoundary", () => {
     expect(sensitiveContextOriginFromBoundary(undefined)).toBeUndefined();
   });
 });
+
+/** What the model receives in place of a sanitized result: notice + summary. */
+function sanitized(summary: string): string {
+  return buildTrustedDataSanitizedContentNotice({
+    summary,
+    productName: archestraMcpBranding.catalogName,
+  });
+}
 
 /** The `sanitize_with_dual_llm` policy every sanitization test starts from. */
 async function createSanitizePolicy(toolId: string) {
@@ -396,7 +406,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       expect(result.contextIsTrusted).toBe(true);
       expect(result.dualLlmAnalyses).toHaveLength(1);
       expect(result.toolResultUpdates).toEqual({
-        call_dual: "Sanitized summary",
+        call_dual: sanitized("Sanitized summary"),
       });
       expect(result.dualLlmAnalyses).toEqual([
         {
@@ -455,7 +465,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       expect(createSpy).toHaveBeenCalledOnce();
       expect(result.contextIsTrusted).toBe(false);
       expect(result.toolResultUpdates).toEqual({
-        call_sanitized: "Sanitized summary",
+        call_sanitized: sanitized("Sanitized summary"),
       });
 
       createSpy.mockRestore();
@@ -564,7 +574,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
 
       expect(createSpy).toHaveBeenCalledOnce();
       expect(first.toolResultUpdates).toEqual({
-        call_dual: "Sanitized summary",
+        call_dual: sanitized("Sanitized summary"),
       });
       expect(second.toolResultUpdates).toEqual(first.toolResultUpdates);
       expect(second.dualLlmAnalyses).toEqual([analysis]);
@@ -739,7 +749,7 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       expect(afterSanitization.contextIsTrusted).toBe(true);
       expect(afterSanitization.dualLlmAnalyses).toHaveLength(1);
       expect(afterSanitization.toolResultUpdates).toEqual({
-        call_dual: "Sanitized summary",
+        call_dual: sanitized("Sanitized summary"),
       });
 
       createSpy.mockRestore();

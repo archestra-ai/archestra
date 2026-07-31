@@ -104,6 +104,32 @@ export function buildTrustedDataBlockedContentNotice(params: {
   return `[${attribution}${params.reason ? `: ${params.reason}` : ""}]`;
 }
 
+/**
+ * Replacement text for a tool result a trusted data policy sanitized with the
+ * Dual LLM workflow. Like the blocked notice, this is what the model sees in
+ * place of the original — and it has to say so, because an unlabelled summary
+ * is indistinguishable from a malfunctioning tool. Models that got the bare
+ * summary reported the MCP server as broken ("returns vague prose instead of
+ * titles/URLs"), retried the call, and offered to switch to an ungoverned tool
+ * to get the real thing — so the notice explicitly rules out both escapes.
+ *
+ * A client that executes tools itself (a local coding agent through the MCP
+ * gateway) holds the raw result and only the forwarded request is rewritten,
+ * so the notice is the model's only signal that anything was substituted.
+ */
+export function buildTrustedDataSanitizedContentNotice(params: {
+  summary: string;
+  /** Display name of the enforcing product; custom app name under full white-labeling. */
+  productName?: string;
+}): string {
+  const productName = params.productName || DEFAULT_APP_NAME;
+  return (
+    `[Content summarized by ${productName} security guardrails: the tool ran normally, ` +
+    `but its raw output is quarantined and cannot be shown to you. Retrying the call or ` +
+    `reaching for another tool returns this same summary.]\n${params.summary}`
+  );
+}
+
 export type ArchestraToolRefusalInfo = {
   toolName?: string;
   toolArguments?: string;

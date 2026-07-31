@@ -3,6 +3,7 @@ import {
   ApiError,
   ArchestraInternalErrorCode,
   buildTrustedDataBlockedContentNotice,
+  buildTrustedDataSanitizedContentNotice,
   extractMcpToolError,
   isSeededAppRenderToolResult,
   type SensitiveContextOrigin,
@@ -349,7 +350,10 @@ export async function evaluateIfContextIsTrusted(params: {
           "[trustedData] evaluateIfContextIsTrusted: reusing cached dual LLM analysis",
         );
         dualLlmAnalyses.push({ ...cachedAnalysis, toolCallId });
-        toolResultUpdates[toolCallId] = cachedAnalysis.result;
+        toolResultUpdates[toolCallId] = buildTrustedDataSanitizedContentNotice({
+          summary: cachedAnalysis.result,
+          productName: archestraMcpBranding.catalogName,
+        });
         toolResultIsTrusted = true;
         onDualLlmComplete?.(
           { ...cachedAnalysis, toolCallId },
@@ -436,7 +440,10 @@ export async function evaluateIfContextIsTrusted(params: {
           throw sanitizationError;
         }
         dualLlmAnalyses.push(analysis);
-        toolResultUpdates[toolCallId] = analysis.result;
+        toolResultUpdates[toolCallId] = buildTrustedDataSanitizedContentNotice({
+          summary: analysis.result,
+          productName: archestraMcpBranding.catalogName,
+        });
         onDualLlmComplete?.(analysis, { toolName, cached: false });
         logger.debug(
           { agentId, toolCallId, summaryLength: analysis.result.length },

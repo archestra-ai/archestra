@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { PublicEnvScript } from "next-runtime-env";
 import { AppShell } from "./_parts/app-shell";
+import { MachineTranslationDomGuard } from "./_parts/machine-translation-dom-guard";
 import { MswInit } from "./_parts/msw-init";
 import { PostHogProviderWrapper } from "./_parts/posthog-provider";
 import { ArchestraQueryClientProvider } from "./_parts/query-client-provider";
@@ -200,6 +201,7 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" />
       </head>
       <body className="font-sans antialiased">
+        <MachineTranslationDomGuard />
         <VisualViewportHeight />
         <MswInit>
           <ArchestraQueryClientProvider>

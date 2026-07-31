@@ -25,8 +25,6 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { isRunToolName } from "@/archestra-mcp-server/run-tool-target";
-import { LRUCacheManager } from "@/cache-manager";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
@@ -41,7 +39,6 @@ import {
   ModelModel,
   OrganizationModel,
   TeamModel,
-  ToolInvocationPolicyModel,
   UserModel,
 } from "@/models";
 import { metrics } from "@/observability";
@@ -107,16 +104,6 @@ const {
     otel: { captureContent, contentMaxLength },
   },
 } = config;
-
-/**
- * Module-level LRU cache for per-tool blocking policy lookups.
- * Keyed by `${agentId}:${toolName}:${contextIsTrusted}` to scope per agent/trust context.
- * Shared across requests to avoid repeated DB queries for the same tool.
- */
-const toolPolicyCache = new LRUCacheManager<boolean>({
-  maxSize: 500,
-  defaultTtl: 60_000, // 60 seconds
-});
 
 /**
  * Shared context passed to streaming and non-streaming handlers.
@@ -1091,12 +1078,23 @@ export async function handleLLMProxy<
     // Build final request
     const finalRequest = requestAdapter.toProviderRequest();
 
-    // Extract enabled tool names for filtering in evaluatePolicies —
-    // canonicalized so they compare against canonicalized tool-call names.
+    // Which called tool names count as available to evaluatePolicies, in the
+    // canonical form tool-call names are compared in. Declared names rather
+    // than `getTools()`, which keeps only schema-carrying custom tools: a
+    // provider built-in the caller declared and executes itself (Anthropic's
+    // bash/text_editor/computer) is absent from that list, so every call to
+    // one would be refused.
+    //
+    // Those names resolve to no `toolsTable` row, so no policy speaks for them
+    // and this set is the only thing that could refuse them. Counting them
+    // keeps them reachable, which is what the caller asked for by declaring
+    // them, and leaves the client — which is the one executing them — as the
+    // boundary that governs them.
     const enabledToolNames = new Set(
-      requestAdapter
-        .getTools()
-        .map((t) => t.name)
+      (
+        requestAdapter.getDeclaredToolNames?.() ??
+        requestAdapter.getTools().map((t) => t.name)
+      )
         .filter(Boolean)
         .map(canonicalizeToolName),
     );
@@ -1280,11 +1278,6 @@ async function handleStreaming<
   // us to record llm_request_duration_seconds. Guard against a second (error-path)
   // observation once the stream has been established.
   let requestDurationRecorded = false;
-  const streamedEventIndices = new Set<number>();
-  // Once a blocking tool is encountered, buffer all subsequent tool call chunks
-  // to prevent streaming data for tools that appear after a blocked tool.
-  let bufferAllToolCalls = false;
-
   // The finally-block persist is gated on usage, so any stream that ends without
   // the provider ever reporting usage — a mid-stream failure, or a stream the
   // provider truncates cleanly — would otherwise leave no trace in LLM logs /
@@ -1376,8 +1369,6 @@ async function handleStreaming<
         }
 
         // Process chunks
-        // Per-tool buffer/stream decisions: only "Allow always" tools stream immediately.
-        // Policy lookups are cached in the module-level toolPolicyCache (LRU with TTL).
 
         for await (const chunk of stream) {
           // Track first chunk time
@@ -1395,85 +1386,24 @@ async function handleStreaming<
 
           const result = streamAdapter.processChunk(chunk);
 
-          // Stream text deltas immediately. For tool call chunks, check
-          // the specific tool's policy to decide buffer vs stream:
-          //  - "Allow always" tools: stream immediately for low latency
-          //    (important for MCP Apps streaming UX).
-          //  - Tools with blocking policies: buffer until policy evaluation
-          //    completes so blocked call data is never exposed.
+          // An adapter reports a tool-call chunk by withholding `sseData`, so
+          // the call accumulates and is released, or discarded, once
+          // `evaluatePolicies` has run. Releasing one earlier would mean
+          // predicting the gate's verdict from cheaper signals, and any
+          // disagreement hands the client a runnable call the gate refused —
+          // the MCP gateway's re-check resolves against the agent's assigned
+          // tools and does not re-apply this turn's decision. A refusal covers
+          // the whole batch too, so a call released before its siblings arrive
+          // could not be taken back.
+          //
+          // Whatever an adapter does put in `sseData` is forwarded verbatim,
+          // so an adapter that emits a chunk carrying both text and a tool call
+          // defeats this (gemini.ts, minimax.ts, and openai.ts's `delta.content`
+          // branch still do; zhipuai.ts guards it), as does one whose terminal
+          // frame echoes the turn's calls (the Responses adapters).
           if (result.sseData) {
             ensureStreamHeaders();
             reply.raw.write(result.sseData);
-          } else if (result.isToolCallChunk) {
-            // Determine whether the accumulated tool calls can be streamed.
-            // Tools with no blocking policy stream immediately for low latency;
-            // tools with blocking policies buffer until evaluation completes.
-            //
-            // Every known tool call is checked, not just the most recent one: a
-            // single chunk can carry several calls (Ollama's native wire
-            // delivers parallel calls in one `tool_calls` array rather than as
-            // per-index deltas), and streaming on the last one alone would
-            // write a blocked call's arguments to the client before
-            // `evaluatePolicies` ever ran. Repeat lookups are served by
-            // `toolPolicyCache`, so re-checking earlier calls is free.
-            let shouldStream = false;
-            if (!bufferAllToolCalls) {
-              let anyBlocking = false;
-              let sawNamedToolCall = false;
-              for (const toolCall of streamAdapter.state.toolCalls) {
-                if (!toolCall?.name) {
-                  continue;
-                }
-                sawNamedToolCall = true;
-                const canonicalToolName = canonicalizeToolName(toolCall.name);
-                // A run_tool dispatch's target only becomes known once its
-                // arguments finish streaming, so the wrapper always buffers —
-                // the target's blocking policies cannot be consulted yet.
-                if (isRunToolName(canonicalToolName)) {
-                  anyBlocking = true;
-                  continue;
-                }
-                const cacheKey = `${agent.id}:${canonicalToolName}:${contextIsTrusted}`;
-                let hasBlocking = toolPolicyCache.get(cacheKey);
-                if (hasBlocking === undefined) {
-                  try {
-                    hasBlocking =
-                      await ToolInvocationPolicyModel.hasBlockingPolicy(
-                        canonicalToolName,
-                        contextIsTrusted,
-                      );
-                  } catch (err) {
-                    logger.warn(
-                      { err, toolName: canonicalToolName },
-                      "hasBlockingPolicy lookup failed, defaulting to buffer",
-                    );
-                    hasBlocking = true;
-                  }
-                  toolPolicyCache.set(cacheKey, hasBlocking);
-                }
-                if (hasBlocking) {
-                  anyBlocking = true;
-                }
-              }
-              if (anyBlocking) {
-                bufferAllToolCalls = true;
-              }
-              shouldStream = sawNamedToolCall && !anyBlocking;
-            }
-
-            if (shouldStream) {
-              const allEvents = streamAdapter.getRawToolCallEvents();
-              ensureStreamHeaders();
-              for (let i = 0; i < allEvents.length; i++) {
-                if (!streamedEventIndices.has(i)) {
-                  reply.raw.write(allEvents[i]);
-                  streamedEventIndices.add(i);
-                }
-              }
-            }
-            // Buffered tools: events accumulate in
-            // streamAdapter.state.rawToolCallEvents and are flushed
-            // (or discarded) after policy evaluation below.
           }
 
           if (result.isFinal) {
@@ -1617,10 +1547,8 @@ async function handleStreaming<
       const { contentMessage, reason, allToolCallNames } =
         toolInvocationRefusal;
 
-      // When not buffering, tool call chunks were already streamed — append
-      // refusal so clients know not to execute them. When buffering,
-      // tool call chunks were held back and discarded — send only the refusal
-      // so blocked tool call data is never exposed.
+      // The tool-call events were held back, so they are simply dropped and
+      // the client is sent the refusal alone.
       ensureStreamHeaders();
       const refusalEvents = streamAdapter.formatCompleteTextSSE(contentMessage);
       for (const event of refusalEvents) {
@@ -1641,17 +1569,19 @@ async function handleStreaming<
         source,
       });
     } else if (toolCalls.length > 0) {
-      // Some tool call chunks were buffered during streaming (per-tool
-      // blocking policies). Policy allowed them, so flush un-streamed events
-      // now. Read the events once: getRawToolCallEvents must not be called in
-      // a condition and again for the flush, or a snapshot-per-call adapter
-      // would still work but a draining one would silently discard events.
-      const allEvents = streamAdapter.getRawToolCallEvents();
-      if (streamedEventIndices.size < allEvents.length) {
-        ensureStreamHeaders();
-        for (let i = 0; i < allEvents.length; i++) {
-          if (!streamedEventIndices.has(i)) {
-            reply.raw.write(allEvents[i]);
+      // Policy allowed them, so hand the buffered events over now. Read once:
+      // getRawToolCallEvents must not be called in a condition and again for
+      // the flush, or a snapshot-per-call adapter would still work but a
+      // draining one would silently discard events. Reading is also what tells
+      // the adapter these calls became the client's, so a turn whose client
+      // already hung up must not read at all — the write would go to a closed
+      // socket and the reconstructed turn would claim a delivery.
+      if (!reply.raw.destroyed) {
+        const allEvents = streamAdapter.getRawToolCallEvents();
+        if (allEvents.length > 0) {
+          ensureStreamHeaders();
+          for (const event of allEvents) {
+            reply.raw.write(event);
           }
         }
       }

@@ -3,7 +3,7 @@ title: "Environments"
 category: Administration
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-07-31
+lastUpdated: 2026-07-30
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -88,29 +88,6 @@ A **remote MCP server** runs outside Archestra and is reached over HTTP, so the 
 See Kubernetes [NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies/), Cilium [DNS policy](https://docs.cilium.io/en/latest/security/dns/), GKE [FQDN network policy](https://cloud.google.com/kubernetes-engine/docs/how-to/fqdn-network-policies), and EKS Auto Mode [network policy](https://docs.aws.amazon.com/eks/latest/userguide/auto-net-pol.html) docs for provider details. AWS DNS-based rules apply only to workloads running on EKS Auto Mode-launched EC2 instances.
 
 On EKS Auto Mode, `ApplicationNetworkPolicy` only supports IP and domain egress peers, so Archestra automatically adds a DNS bootstrap rule allowing port 53 to the cluster DNS service IP (recorded in the `archestra.io/network-policy-cluster-dns` annotation).
-
-### Enforcement Check
-
-A Kubernetes cluster accepts `NetworkPolicy` objects whether or not anything acts on them. On a cluster with no enforcer, every egress rule you set here is stored and then ignored.
-
-Archestra measures this instead of guessing. After each `helm install` or `helm upgrade`, two short-lived pods probe the same address — a deny-all policy selects one of them, and nothing selects the other. If the restricted pod gets through, the cluster is not enforcing. The result is printed in the Helm output:
-
-```text
-[archestra] network policy check: OK, enforcement confirmed (a deny-all policy blocked all 5 attempts)
-```
-
-On a cluster that does not enforce, the same line reads:
-
-```text
-[archestra] network policy check: WARNING, this cluster does NOT enforce NetworkPolicy. A test pod
-under a deny-all egress policy still reached ...
-```
-
-A third outcome says the check was inconclusive — the control pod never reached the target, so nothing was proven either way. That is not the same as "not enforced".
-
-Helm prints these from 3.18 and 4.0 onwards. On older versions, read them with `kubectl logs -l app.kubernetes.io/component=netpol-probe`.
-
-The probe never fails a release, and you can turn it off with `archestra.networkPolicyProbe.enabled=false`. It reuses the chart's busybox image, so a private mirror set through `archestra.initContainers.busyboxImage` covers it too. The pods are Helm hook resources, so `helm uninstall` leaves them behind; the install notes include the command to remove them.
 
 ### Domain Presets
 

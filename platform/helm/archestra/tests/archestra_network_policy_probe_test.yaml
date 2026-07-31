@@ -242,7 +242,13 @@ tests:
         documentIndex: 2
       - matchRegex:
           path: spec.containers[0].args[0]
-          pattern: 'WARNING, this cluster does NOT enforce NetworkPolicy'
+          pattern: 'WARNING, network policy not enforced'
+        documentIndex: 2
+      # The warning is one line with nowhere to explain itself, so it has to
+      # carry the way out.
+      - matchRegex:
+          path: spec.containers[0].args[0]
+          pattern: 'https://archestra\.ai/docs/platform-environments#network-egress-policies'
         documentIndex: 2
 
   # A working cluster should cost one line. The control arm speaks only to void

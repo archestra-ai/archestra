@@ -561,7 +561,7 @@ args:
       fragments.
     */}}
     if [ "$result" = reachable ]; then
-      echo "[archestra] network policy check: WARNING, this cluster does NOT enforce NetworkPolicy. A test pod under a deny-all egress policy still reached {{ .host }}:{{ .port }} on $ok of {{ .attempts }} attempts, so egress rules configured in Archestra are accepted and then ignored."
+      echo "[archestra] network policy check: WARNING, network policy not enforced. See https://archestra.ai/docs/platform-environments#network-egress-policies"
     else
       echo "[archestra] network policy check: OK, enforcement enabled"
     fi

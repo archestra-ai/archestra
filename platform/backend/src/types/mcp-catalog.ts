@@ -220,6 +220,8 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
   .omit({
     createdAt: true,
     updatedAt: true,
+    // Soft-delete bookkeeping, written only by delete/restore, never from input.
+    deletedAt: true,
     organizationId: true,
     authorId: true,
     // Frozen K8s deployment identity (multitenant) — computed by
@@ -259,6 +261,8 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
     id: true,
     createdAt: true,
     updatedAt: true,
+    // Soft-delete bookkeeping, written only by delete/restore, never from input.
+    deletedAt: true,
     organizationId: true,
     authorId: true,
     // Tenancy is locked after creation

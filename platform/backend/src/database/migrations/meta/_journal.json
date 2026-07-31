@@ -2710,6 +2710,13 @@
       "when": 1785478863890,
       "tag": "0386_kb_soft_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 387,
+      "version": "7",
+      "when": 1785488958393,
+      "tag": "0387_flowery_spirit",
+      "breakpoints": true
     }
   ]
 }

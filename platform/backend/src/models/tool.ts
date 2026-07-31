@@ -46,6 +46,7 @@ import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
+import { restore, softDelete } from "@/database/soft-delete";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -491,7 +492,13 @@ class ToolModel {
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.id, id));
+      .where(
+        and(
+          eq(schema.toolsTable.id, id),
+          // A soft-deleted catalog's tool reads as gone.
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     if (!tool) {
       return null;
@@ -533,7 +540,13 @@ class ToolModel {
         agentId: schema.toolsTable.agentId,
       })
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.id, params.id));
+      .where(
+        and(
+          eq(schema.toolsTable.id, params.id),
+          // A soft-deleted catalog's tool reads as gone.
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     if (!tool) {
       return null;
@@ -641,6 +654,7 @@ class ToolModel {
         name: schema.toolsTable.name,
         rawName: schema.toolsTable.rawName,
         catalogId: schema.toolsTable.catalogId,
+        deletedAt: schema.toolsTable.deletedAt,
         parameters: schema.toolsTable.parameters,
         description: schema.toolsTable.description,
         createdAt: schema.toolsTable.createdAt,
@@ -712,7 +726,13 @@ class ToolModel {
     const [tool] = await db
       .select()
       .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.name, name));
+      .where(
+        and(
+          eq(schema.toolsTable.name, name),
+          // A soft-deleted catalog's tool reads as gone.
+          notDeleted(schema.toolsTable),
+        ),
+      );
 
     if (!tool) {
       return null;
@@ -762,6 +782,10 @@ class ToolModel {
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           eq(schema.toolsTable.name, name),
+          // A soft-deleted tool (its catalog was deleted) must not authorize a
+          // call: the agent_tools binding is retained by design, so the parent's
+          // liveness is expressed here via the tool's own deleted_at.
+          notDeleted(schema.toolsTable),
         ),
       )
       .limit(1);
@@ -795,6 +819,8 @@ class ToolModel {
           eq(schema.agentToolsTable.agentId, agentId),
           // Always hide query_knowledge_sources from UI — it's auto-injected behind the scenes
           ne(schema.toolsTable.name, brandedKnowledgeToolName),
+          // Hide tools whose catalog was soft-deleted (retained binding).
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));
@@ -857,6 +883,8 @@ class ToolModel {
                 ),
                 toolInEnvironmentPredicate(agentEnvironmentId),
                 notDisabledAppLaunchTool(),
+                // Hide tools whose catalog was soft-deleted (retained binding).
+                notDeleted(schema.toolsTable),
               ),
             )
             .orderBy(
@@ -972,6 +1000,8 @@ class ToolModel {
             ? isNotNull(toolUiResourceUriSql())
             : undefined,
           notDisabledAppLaunchTool(),
+          // Hide tools whose catalog was soft-deleted from dynamic discovery.
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt), asc(schema.toolsTable.id));
@@ -1302,6 +1332,10 @@ class ToolModel {
   }): Promise<{ confirmedToolIds: string[] }> {
     const { catalogId, discoveredToolNames } = params;
 
+    // Provisional read is intentionally NOT `notDeleted`: a `(catalogId, name)`
+    // row soft-deleted by a prior cascade must be MATCHED here and revived when
+    // confirmed, not left behind for the sync to duplicate (the composite unique
+    // is NULLS-DISTINCT, so a dead row does not block inserting a live twin).
     const provisional = await db
       .select()
       .from(schema.toolsTable)
@@ -1327,9 +1361,11 @@ class ToolModel {
     }
 
     if (confirmedToolIds.length > 0) {
+      // Match-and-restore: confirming clears the provisional flag AND `deletedAt`
+      // so a revived tool comes back live (mirrors syncToolsForCatalog).
       await db
         .update(schema.toolsTable)
-        .set({ clonedPendingDiscovery: false })
+        .set({ clonedPendingDiscovery: false, deletedAt: null })
         .where(inArray(schema.toolsTable.id, confirmedToolIds));
     }
     if (toDelete.length > 0) {
@@ -1524,8 +1560,11 @@ class ToolModel {
         .insert(schema.toolsTable)
         .values(toolsToInsert)
         .onConflictDoUpdate({
+          // targetWhere MUST mirror the partial index predicate exactly
+          // (tools_archestra_catalog_name_uidx, now gated on deleted_at is null)
+          // or Postgres cannot infer the arbiter index (42P10).
           target: [schema.toolsTable.catalogId, schema.toolsTable.name],
-          targetWhere: sql`${schema.toolsTable.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null`,
+          targetWhere: sql`${schema.toolsTable.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${schema.toolsTable.agentId} is null and ${schema.toolsTable.delegateToAgentId} is null and ${schema.toolsTable.deletedAt} is null`,
           set: {
             description: sql`excluded.description`,
             parameters: sql`excluded.parameters`,
@@ -2033,6 +2072,8 @@ class ToolModel {
         and(
           eq(schema.agentToolsTable.agentId, agentId),
           isNotNull(schema.toolsTable.catalogId), // Only MCP tools
+          // A soft-deleted catalog's tools stop resolving (retained binding).
+          notDeleted(schema.toolsTable),
         ),
       );
 
@@ -2082,6 +2123,8 @@ class ToolModel {
           isNotNull(schema.toolsTable.catalogId), // Only MCP tools (have catalogId)
           toolInEnvironmentPredicate(agentEnvironmentId),
           notDisabledAppLaunchTool(),
+          // A soft-deleted catalog's tools must not resolve for execution.
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(
@@ -2130,6 +2173,10 @@ class ToolModel {
           isNotNull(schema.toolsTable.catalogId),
           toolInEnvironmentPredicate(agentEnvironmentId),
           notDisabledAppLaunchTool(),
+          // Keep in sync with getMcpToolsAssignedToAgent: a soft-deleted
+          // catalog's tools resolve to no row (so no policy runs against a dead
+          // tool, matching execution which also skips it).
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(
@@ -2196,6 +2243,8 @@ class ToolModel {
           isNotNull(schema.toolsTable.catalogId),
           toolInEnvironmentPredicate(agentEnvironmentId),
           notDisabledAppLaunchTool(),
+          // A soft-deleted catalog's tools must not resolve for execution.
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(
@@ -2241,6 +2290,8 @@ class ToolModel {
           ne(schema.toolsTable.catalogId, ARCHESTRA_MCP_CATALOG_ID),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
           toolInEnvironmentOrDefaultPredicate(environmentId),
+          // A soft-deleted catalog's tools are not app-assignable.
+          notDeleted(schema.toolsTable),
           or(
             eq(schema.internalMcpCatalogTable.organizationId, organizationId),
             isNull(schema.internalMcpCatalogTable.organizationId),
@@ -2279,6 +2330,8 @@ class ToolModel {
             isNull(schema.internalMcpCatalogTable.organizationId),
           ),
           notDisabledAppLaunchTool(),
+          // A soft-deleted catalog's tool is not app-assignable.
+          notDeleted(schema.toolsTable),
         ),
       )
       .limit(1);
@@ -2304,6 +2357,8 @@ class ToolModel {
         and(
           eq(schema.toolsTable.id, toolId),
           toolInEnvironmentOrDefaultPredicate(environmentId),
+          // A soft-deleted catalog's tool is not callable within an app.
+          notDeleted(schema.toolsTable),
         ),
       )
       .limit(1);
@@ -2328,6 +2383,8 @@ class ToolModel {
         and(
           inArray(schema.toolsTable.id, toolIds),
           toolInEnvironmentOrDefaultPredicate(environmentId),
+          // A soft-deleted catalog's tool is not callable within an app.
+          notDeleted(schema.toolsTable),
         ),
       );
     return new Set(rows.map((r) => r.id));
@@ -2373,6 +2430,8 @@ class ToolModel {
           inArray(schema.toolsTable.name, toolNames),
           isNotNull(schema.toolsTable.catalogId),
           notDisabledAppLaunchTool(),
+          // A soft-deleted catalog's tools must not resolve for app execution.
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(
@@ -2419,6 +2478,8 @@ class ToolModel {
           sql`RIGHT(${schema.toolsTable.name}, ${suffix.length}) = ${suffix}`,
           isNotNull(schema.toolsTable.catalogId),
           notDisabledAppLaunchTool(),
+          // A soft-deleted catalog's tools must not resolve for app execution.
+          notDeleted(schema.toolsTable),
         ),
       )
       .orderBy(
@@ -2503,6 +2564,9 @@ class ToolModel {
         and(
           eq(schema.toolsTable.catalogId, catalogId),
           eq(schema.toolsTable.clonedPendingDiscovery, false),
+          // Active tools only — a soft-deleted catalog's tools stop listing
+          // (defense-in-depth; the catalog pre-check also blocks the caller).
+          notDeleted(schema.toolsTable),
           ...hiddenToolNames.map((toolName) =>
             ne(schema.toolsTable.name, toolName),
           ),
@@ -2847,7 +2911,14 @@ class ToolModel {
         // Backfill/refresh the stored raw name (legacy rows have it null).
         const rawNameChanged = existingTool.rawName !== rawName;
 
+        // Match-and-restore: `existingTools` intentionally includes soft-deleted
+        // rows (its read is NOT `notDeleted`). A reinstall that re-advertises a
+        // soft-deleted tool must RESTORE that row (clear deleted_at), never insert
+        // a fresh one — the composite unique is NULLS-DISTINCT for MCP tools and
+        // would otherwise let a duplicate live row in beside the dead one.
+        const wasSoftDeleted = existingTool.deletedAt !== null;
         if (
+          wasSoftDeleted ||
           nameChanged ||
           descriptionChanged ||
           parametersChanged ||
@@ -2863,6 +2934,7 @@ class ToolModel {
                 description: tool.description,
                 parameters: tool.parameters,
                 meta: tool.meta,
+                deletedAt: null,
                 updatedAt: new Date(),
               })
               .where(eq(schema.toolsTable.id, existingTool.id))
@@ -3011,11 +3083,56 @@ class ToolModel {
     return (result.rowCount || 0) > 0;
   }
 
+  /**
+   * Soft-delete every tool row for a catalog, stamped with the cascade's shared
+   * `at` timestamp (the restore correlation key). Called by the catalog delete
+   * cascade — tools are catalog-scoped, so this fires on catalog delete only, not
+   * on a single-server uninstall (installs share a catalog's tools by design).
+   */
+  static async softDeleteByCatalog(
+    catalogId: string,
+    at: Date,
+    tx?: Transaction,
+  ): Promise<number> {
+    return softDelete(
+      tx ?? db,
+      schema.toolsTable,
+      eq(schema.toolsTable.catalogId, catalogId),
+      at,
+    );
+  }
+
+  /**
+   * Restore exactly the tools a catalog delete cascaded, matched by the shared
+   * `deletedAt` timestamp so tools deleted individually earlier are not revived.
+   */
+  static async restoreByCatalog(
+    catalogId: string,
+    deletedAt: Date,
+    tx?: Transaction,
+  ): Promise<number> {
+    return restore(
+      tx ?? db,
+      schema.toolsTable,
+      and(
+        eq(schema.toolsTable.catalogId, catalogId),
+        eq(schema.toolsTable.deletedAt, deletedAt),
+      ),
+    );
+  }
+
   static async getByIds(ids: string[]): Promise<Tool[]> {
     return db
       .select()
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.id, ids));
+      .where(
+        and(
+          inArray(schema.toolsTable.id, ids),
+          // Active tools only — validating caller-supplied ids (e.g. agent tool
+          // assignment) must not accept a soft-deleted catalog's tool.
+          notDeleted(schema.toolsTable),
+        ),
+      );
   }
 
   /**
@@ -3264,6 +3381,9 @@ class ToolModel {
             isNotNull(schema.toolsTable.delegateToAgentId),
           ),
           toolInEnvironmentPredicate(agentEnvironmentId),
+          // Mirror getMcpToolsByAgent: a soft-deleted catalog's tool must not be
+          // reachable via resources/read either.
+          notDeleted(schema.toolsTable),
           or(
             sql`${schema.toolsTable.meta}->'_meta'->'ui'->>'resourceUri' = ${resourceUri}`,
             sql`${schema.toolsTable.meta}->'_meta'->>'ui/resourceUri' = ${resourceUri}`,
@@ -3386,6 +3506,9 @@ class ToolModel {
 
     // Build WHERE conditions for tools
     const toolWhereConditions: ReturnType<typeof sql>[] = [];
+
+    // A soft-deleted catalog's tools are ghosts — keep them out of the listing.
+    toolWhereConditions.push(notDeleted(schema.toolsTable));
 
     // Filter by search query (tool name)
     if (filters?.search) {

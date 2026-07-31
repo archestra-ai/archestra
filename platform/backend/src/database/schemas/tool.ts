@@ -4,7 +4,6 @@ import {
   boolean,
   index,
   jsonb,
-  pgTable,
   text,
   timestamp,
   unique,
@@ -14,12 +13,13 @@ import {
 import type { ToolParametersContent } from "@/types";
 import agentsTable from "./agent";
 import mcpCatalogTable from "./internal-mcp-catalog";
+import { softDeletablePgTable } from "./soft-deletable-table";
 
 /** Partial unique index enforcing one row per (catalog_id, name) for built-in Archestra tools. */
 export const ARCHESTRA_TOOL_NAME_UNIQUE_INDEX =
   "tools_archestra_catalog_name_uidx";
 
-const toolsTable = pgTable(
+const toolsTable = softDeletablePgTable(
   "tools",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -106,13 +106,14 @@ const toolsTable = pgTable(
     uniqueIndex(ARCHESTRA_TOOL_NAME_UNIQUE_INDEX)
       .on(table.catalogId, table.name)
       .where(
-        sql`${table.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${table.agentId} is null and ${table.delegateToAgentId} is null`,
+        sql`${table.catalogId} = ${sql.raw(`'${ARCHESTRA_MCP_CATALOG_ID}'`)} and ${table.agentId} is null and ${table.delegateToAgentId} is null and ${table.deletedAt} is null`,
       ),
     // Index for delegation tool lookups
     index("tools_delegate_to_agent_id_idx").on(table.delegateToAgentId),
     index("tools_cloned_pending_discovery_idx").on(
       table.clonedPendingDiscovery,
     ),
+    index("tools_deleted_at_idx").on(table.deletedAt),
   ],
 );
 

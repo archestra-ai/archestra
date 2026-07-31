@@ -1,5 +1,6 @@
 import { and, asc, count, eq, isNull, ne, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type {
   Environment,
   NetworkPolicy,
@@ -52,9 +53,15 @@ class EnvironmentModel {
       .from(schema.environmentsTable)
       .leftJoin(
         schema.internalMcpCatalogTable,
-        eq(
-          schema.internalMcpCatalogTable.environmentId,
-          schema.environmentsTable.id,
+        // Soft-deleted catalogs must not inflate the count; keep the predicate in
+        // the JOIN (not WHERE) so an environment with only deleted catalogs still
+        // lists with a count of 0.
+        and(
+          eq(
+            schema.internalMcpCatalogTable.environmentId,
+            schema.environmentsTable.id,
+          ),
+          notDeleted(schema.internalMcpCatalogTable),
         ),
       )
       .where(eq(schema.environmentsTable.organizationId, organizationId))
@@ -188,7 +195,12 @@ class EnvironmentModel {
     const [row] = await db
       .select({ count: count(schema.internalMcpCatalogTable.id) })
       .from(schema.internalMcpCatalogTable)
-      .where(eq(schema.internalMcpCatalogTable.environmentId, environmentId));
+      .where(
+        and(
+          eq(schema.internalMcpCatalogTable.environmentId, environmentId),
+          notDeleted(schema.internalMcpCatalogTable),
+        ),
+      );
     return row?.count ?? 0;
   }
 
@@ -209,6 +221,7 @@ class EnvironmentModel {
           isNull(schema.internalMcpCatalogTable.environmentId),
           isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
           ne(schema.internalMcpCatalogTable.serverType, "builtin"),
+          notDeleted(schema.internalMcpCatalogTable),
           or(
             eq(schema.internalMcpCatalogTable.organizationId, organizationId),
             isNull(schema.internalMcpCatalogTable.organizationId),

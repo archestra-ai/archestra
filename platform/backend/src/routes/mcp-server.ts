@@ -80,12 +80,41 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
               z.array(z.string()),
             )
             .optional(),
+          status: z
+            .enum(["active", "deleted"])
+            .default("active")
+            .describe(
+              "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the delete permission.",
+            ),
         }),
         response: constructResponseSchema(z.array(SelectMcpServerSchema)),
       },
     },
     async ({ user, headers, query, organizationId }, reply) => {
-      const { assignmentScope, assignmentTeamIds, catalogId } = query;
+      const { assignmentScope, assignmentTeamIds, catalogId, status } = query;
+
+      // Soft-deleted installs are a delete-class view: gate them behind the
+      // delete permission and list org-scoped deleted rows (a backend affordance
+      // for discovering restorable ids — there is no UI toggle this change).
+      if (status === "deleted") {
+        const { success: canDelete } = await hasPermission(
+          { mcpServerInstallation: ["delete"] },
+          headers,
+        );
+        if (!canDelete) {
+          throw new ApiError(
+            403,
+            "You do not have permission to list deleted MCP servers.",
+          );
+        }
+        let deleted =
+          await McpServerModel.findDeletedForOrganization(organizationId);
+        if (catalogId) {
+          deleted = deleted.filter((s) => s.catalogId === catalogId);
+        }
+        return reply.send(deleted);
+      }
+
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         headers,
@@ -1089,8 +1118,20 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           localInstallationError: null,
         });
       } catch (toolError) {
-        // If fetching/creating tools fails, clean up everything we created
-        await McpServerModel.delete(mcpServer.id);
+        // A never-succeeded install must not leave a soft-deleted ghost row, so
+        // HARD-delete it (unlike the recoverable uninstall path). Tear down any
+        // deployment created before the failure first, since hardDelete does not.
+        if (mcpServer.serverType === "local") {
+          try {
+            await McpServerRuntimeManager.removeMcpServer(mcpServer.id);
+          } catch (cleanupError) {
+            logger.error(
+              { err: cleanupError, mcpServerId: mcpServer.id },
+              "Failed to tear down K8s deployment during install rollback",
+            );
+          }
+        }
+        await McpServerModel.hardDelete(mcpServer.id);
 
         // Also clean up the secret if we created one
         if (createdSecretId) {
@@ -1490,28 +1531,93 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Delete database secret if it exists and is for a local server
-      // (don't delete OAuth tokens for remote servers)
-      if (mcpServer.secretId && mcpServer.serverType === "local") {
-        try {
-          await secretManager().deleteSecret(mcpServer.secretId);
-          logger.info(
-            { mcpServerId },
-            "Deleted database secret for local MCP server",
-          );
-        } catch (error) {
-          logger.error(
-            { err: error, mcpServerId },
-            "Failed to delete database secret",
-          );
-          // Continue with MCP server deletion even if secret deletion fails
-        }
-      }
+      // Soft-delete RETAINS the DB secret row so restore recovers stored
+      // credentials — only the live K8s Secret was torn down by stopServer above.
+      // (A future purge is responsible for deleting retained secret rows.)
 
-      // Delete the MCP server record
+      // Soft-delete the MCP server record (uninstall = recoverable delete).
       const success = await McpServerModel.delete(mcpServerId);
 
       return reply.send({ success });
+    },
+  );
+
+  fastify.post(
+    "/api/mcp_server/:id/restore",
+    {
+      schema: {
+        operationId: RouteId.RestoreMcpServer,
+        description:
+          "Restore a soft-deleted (uninstalled) MCP server. Flag-only: the server is marked for manual reinstall, not re-provisioned.",
+        tags: ["MCP Server"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(SelectMcpServerSchema),
+      },
+    },
+    async (
+      { params: { id: mcpServerId }, user, headers, organizationId },
+      reply,
+    ) => {
+      const mcpServer = await McpServerModel.findDeletedByIdForOrganization(
+        mcpServerId,
+        organizationId,
+      );
+      if (!mcpServer) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      // Mirror the delete-route guards: these server types are not user-managed
+      // via this route (restoring one would resurrect a row another lifecycle owns).
+      if (mcpServer.serverType === "builtin") {
+        throw new ApiError(400, "Cannot restore built-in MCP servers");
+      }
+      if (mcpServer.serverType === "app") {
+        throw new ApiError(
+          400,
+          "App servers are managed via the Apps API; restore the app instead.",
+        );
+      }
+
+      await assertScopedLifecycleAuthorization({
+        mcpServer,
+        userId: user.id,
+        headers,
+        action: "revoke",
+      });
+
+      // A standalone server-restore requires its parent catalog to be active:
+      // tools resolve through the catalog, and catalog reads filter notDeleted, so
+      // restoring a server under a still-deleted catalog would come back broken.
+      if (mcpServer.catalogId) {
+        const catalog = await InternalMcpCatalogModel.findById(
+          mcpServer.catalogId,
+        );
+        if (!catalog) {
+          throw new ApiError(
+            409,
+            "Cannot restore because this server's catalog item has been deleted. Restore the catalog item first.",
+          );
+        }
+      }
+
+      const conflict =
+        await McpServerModel.getRestoreConflictMessage(mcpServer);
+      if (conflict) {
+        throw new ApiError(409, conflict);
+      }
+
+      const success = await McpServerModel.restore(mcpServerId);
+      if (!success) {
+        throw new ApiError(404, "MCP server not found");
+      }
+
+      const restored = await McpServerModel.findById(mcpServerId);
+      if (!restored) {
+        throw new ApiError(404, "MCP server not found");
+      }
+      return reply.send(restored);
     },
   );
 

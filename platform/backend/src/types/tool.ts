@@ -47,9 +47,14 @@ export const ExtendedSelectToolSchema = SelectToolSchema.omit({
 
 export const InsertToolSchema = createInsertSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema,
+}).omit({
+  // Soft-delete bookkeeping, written only by delete/restore, never from input.
+  deletedAt: true,
 });
 export const UpdateToolSchema = createUpdateSchema(schema.toolsTable, {
   parameters: ToolParametersContentSchema.optional(),
+}).omit({
+  deletedAt: true,
 });
 
 export type Tool = z.infer<typeof SelectToolSchema>;

@@ -3,7 +3,6 @@ import {
   index,
   jsonb,
   pgEnum,
-  pgTable,
   text,
   timestamp,
   uuid,
@@ -16,6 +15,7 @@ import type {
 } from "@/types";
 import mcpCatalogTable from "./internal-mcp-catalog";
 import secretTable from "./secret";
+import { softDeletablePgTable } from "./soft-deletable-table";
 import { team } from "./team";
 import usersTable from "./user";
 
@@ -27,7 +27,7 @@ export const oauthRefreshErrorEnum = pgEnum("oauth_refresh_error_enum", [
   "no_refresh_token",
 ]);
 
-const mcpServerTable = pgTable(
+const mcpServerTable = softDeletablePgTable(
   "mcp_server",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -106,7 +106,10 @@ const mcpServerTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (table) => [index("mcp_server_scope_idx").on(table.scope)],
+  (table) => [
+    index("mcp_server_scope_idx").on(table.scope),
+    index("mcp_server_deleted_at_idx").on(table.deletedAt),
+  ],
 );
 
 export default mcpServerTable;

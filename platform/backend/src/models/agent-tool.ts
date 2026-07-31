@@ -297,7 +297,13 @@ class AgentToolModel {
         schema.teamMembersTable,
         eq(schema.mcpServersTable.teamId, schema.teamMembersTable.teamId),
       )
-      .where(eq(schema.teamMembersTable.userId, userId));
+      .where(
+        and(
+          eq(schema.teamMembersTable.userId, userId),
+          // Active installs only — a soft-deleted install grants no access.
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
 
     const teamAccessibleIds = teamAccessibleServers.map((s) => s.mcpServerId);
 
@@ -320,6 +326,8 @@ class AgentToolModel {
             and(
               eq(schema.mcpServersTable.scope, "org"),
               eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+              // Active installs only — a soft-deleted install grants no access.
+              notDeleted(schema.mcpServersTable),
             ),
           )
           .then((rows) => rows.map((s) => s.mcpServerId))
@@ -464,6 +472,8 @@ class AgentToolModel {
           eq(schema.agentToolsTable.agentId, agentId),
           isNotNull(schema.toolsTable.catalogId),
           isNull(schema.toolsTable.delegateToAgentId),
+          // A soft-deleted catalog's tools are not resolvable for the agent.
+          notDeleted(schema.toolsTable),
         ),
       );
     return results.map((r) => r.toolId);

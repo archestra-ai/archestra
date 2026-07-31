@@ -2,6 +2,7 @@ import { ARCHESTRA_MCP_CATALOG_ID, parseFullToolName } from "@archestra/shared";
 import {
   and,
   asc,
+  desc,
   eq,
   inArray,
   isNotNull,
@@ -14,6 +15,8 @@ import {
 import { alias } from "drizzle-orm/pg-core";
 import mcpClient from "@/clients/mcp-client";
 import db, { schema, type Transaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
+import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import { constructFrozenMcpDeploymentName } from "@/k8s/shared";
 import logger from "@/logging";
@@ -173,6 +176,8 @@ class McpServerModel {
         and(
           eq(schema.teamMembersTable.userId, userId),
           eq(schema.mcpServersTable.scope, "team"),
+          // Active installs only — a soft-deleted team install grants no access.
+          notDeleted(schema.mcpServersTable),
         ),
       );
 
@@ -187,7 +192,13 @@ class McpServerModel {
     const rows = await db
       .select({ id: schema.mcpServersTable.id })
       .from(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.scope, "org"));
+      .where(
+        and(
+          eq(schema.mcpServersTable.scope, "org"),
+          // Active installs only — a soft-deleted org install grants no access.
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
     return rows.map((r) => r.id);
   }
 
@@ -205,6 +216,8 @@ class McpServerModel {
         and(
           eq(schema.mcpServersTable.id, mcpServerId),
           eq(schema.mcpServersTable.scope, "org"),
+          // Active installs only — a soft-deleted org install grants no access.
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);
@@ -231,6 +244,8 @@ class McpServerModel {
           eq(schema.mcpServersTable.id, mcpServerId),
           eq(schema.teamMembersTable.userId, userId),
           eq(schema.mcpServersTable.scope, "team"),
+          // Active installs only — a soft-deleted team install grants no access.
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);
@@ -266,6 +281,9 @@ class McpServerModel {
         and(
           isNotNull(schema.mcpServersTable.catalogId),
           inArray(schema.mcpServersTable.serverType, ["local", "remote"]),
+          // Active installs only — a soft-deleted install must not drive a tool
+          // refresh (its tools are gone with the uninstall).
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .orderBy(
@@ -328,7 +346,10 @@ class McpServerModel {
       )
       .$dynamic();
 
-    const conditions: SQL[] = [];
+    const conditions: SQL[] = [
+      // Hide soft-deleted installs from every listing path, admin included.
+      notDeleted(schema.mcpServersTable),
+    ];
 
     if (environmentId !== undefined) {
       // A server inherits its environment from the joined catalog row; the LEFT
@@ -744,6 +765,8 @@ class McpServerModel {
         and(
           inArray(schema.mcpServersTable.id, accessibleServerIds),
           eq(schema.mcpServersTable.catalogId, params.catalogId),
+          // Active installs only — a soft-deleted install is not a live app.
+          notDeleted(schema.mcpServersTable),
         ),
       );
     // Stable selector order: scope precedence, then name.
@@ -807,6 +830,10 @@ class McpServerModel {
           // serverType "app" backings are owned apps, served viewer-scoped under
           // the platform CSP — never surfaced as external apps.
           ne(schema.internalMcpCatalogTable.serverType, "app"),
+          // A soft-deleted catalog (and its soft-deleted tools) must not surface
+          // as an app.
+          notDeleted(schema.internalMcpCatalogTable),
+          notDeleted(schema.toolsTable),
           sql`${uiResourceUri} IS NOT NULL`,
         ),
       );
@@ -874,6 +901,8 @@ class McpServerModel {
         and(
           inArray(schema.mcpServersTable.id, accessibleServerIds),
           inArray(schema.mcpServersTable.catalogId, params.catalogIds),
+          // Active installs only — a soft-deleted install is not a live app.
+          notDeleted(schema.mcpServersTable),
         ),
       );
     rows.sort(
@@ -952,7 +981,12 @@ class McpServerModel {
         schema.secretsTable,
         eq(schema.mcpServersTable.secretId, schema.secretsTable.id),
       )
-      .where(eq(schema.mcpServersTable.id, id));
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
 
     if (!result) {
       return null;
@@ -1011,7 +1045,12 @@ class McpServerModel {
     return db
       .select()
       .from(schema.mcpServersTable)
-      .where(inArray(schema.mcpServersTable.id, ids));
+      .where(
+        and(
+          inArray(schema.mcpServersTable.id, ids),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   /**
@@ -1041,6 +1080,7 @@ class McpServerModel {
       .where(
         and(
           eq(schema.mcpServersTable.id, id),
+          notDeleted(schema.mcpServersTable),
           or(
             eq(schema.teamsTable.organizationId, organizationId),
             isNotNull(schema.membersTable.id),
@@ -1059,10 +1099,19 @@ class McpServerModel {
     catalogId: string,
     tx?: Transaction,
   ): Promise<McpServer[]> {
+    // Active installs only. This feeds the catalog delete cascade (which wants
+    // live installs to soft-delete) AND the multitenant sibling count in
+    // `isSharedMultitenantDeployment` — without `notDeleted` a soft-deleted
+    // sibling would keep the shared pod alive forever after a cascade delete.
     return await (tx ?? db)
       .select()
       .from(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.catalogId, catalogId));
+      .where(
+        and(
+          eq(schema.mcpServersTable.catalogId, catalogId),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   static async findByCatalogIds(catalogIds: string[]): Promise<McpServer[]> {
@@ -1070,7 +1119,12 @@ class McpServerModel {
     return await db
       .select()
       .from(schema.mcpServersTable)
-      .where(inArray(schema.mcpServersTable.catalogId, catalogIds));
+      .where(
+        and(
+          inArray(schema.mcpServersTable.catalogId, catalogIds),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   static async findCustomServers(): Promise<McpServer[]> {
@@ -1078,7 +1132,12 @@ class McpServerModel {
     return await db
       .select()
       .from(schema.mcpServersTable)
-      .where(isNull(schema.mcpServersTable.catalogId));
+      .where(
+        and(
+          isNull(schema.mcpServersTable.catalogId),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
   }
 
   static async update(
@@ -1158,8 +1217,10 @@ class McpServerModel {
     return updatedServer || null;
   }
 
-  static async delete(id: string): Promise<boolean> {
-    // First, get the MCP server to find its associated secret
+  static async delete(id: string, opts?: { at?: Date }): Promise<boolean> {
+    // Fetch the (active) server for teardown context. Idempotent: an
+    // already-soft-deleted server is not found (findById filters notDeleted),
+    // so a repeat delete is a no-op and returns false.
     const mcpServer = await McpServerModel.findById(id);
 
     if (!mcpServer) {
@@ -1179,10 +1240,11 @@ class McpServerModel {
     }
 
     // Uninstall retains the catalog's tools, their policies, and the agent ↔ tool
-    // assignments so reconnecting the catalog item restores them. The mcp_server
-    // delete below nulls each assignment's server binding via the agent_tools FK
-    // (onDelete: set null); a tool's availability is derived from whether the
-    // catalog still has an install, not from removing these rows.
+    // assignments so reconnecting the catalog item restores them. The soft delete
+    // below keeps the mcp_server row, so each assignment's server binding stays
+    // pointed at the soft-deleted install (the agent_tools FK never fires); a
+    // tool's availability is derived from whether the catalog still has an
+    // active install, not from removing these rows.
 
     // For local servers, stop and remove the K8s deployment
     if (mcpServer.serverType === "local") {
@@ -1200,20 +1262,163 @@ class McpServerModel {
       }
     }
 
-    // Delete the MCP server from database
-    logger.info(`Deleting MCP server: ${mcpServer.name} with id: ${id}`);
-    const result = await db
-      .delete(schema.mcpServersTable)
-      .where(eq(schema.mcpServersTable.id, id));
+    // Soft-delete: keep the DB row AND its secret bag so restore can recover the
+    // definition + stored credentials. The live K8s deployment + K8s Secret were
+    // torn down above; a manual Reinstall re-materializes them from the retained
+    // secret. `opts.at` lets a catalog cascade stamp this install (with its
+    // siblings and tools) with one shared timestamp — the restore correlation key.
+    logger.info(`Soft-deleting MCP server: ${mcpServer.name} with id: ${id}`);
+    const count = await softDelete(
+      db,
+      schema.mcpServersTable,
+      eq(schema.mcpServersTable.id, id),
+      opts?.at,
+    );
+    return count > 0;
+  }
 
-    const deleted = result.rowCount !== null && result.rowCount > 0;
-
-    // If the MCP server was deleted and it had an associated secret, delete the secret
-    if (deleted && mcpServer.secretId) {
-      await secretManager().deleteSecret(mcpServer.secretId);
+  /**
+   * Restore a single soft-deleted install (standalone server-restore route).
+   * Flag-only: does NOT re-provision — stamps `reinstallRequired` so the user
+   * completes a manual Reinstall (which uses the retained DB secret).
+   */
+  static async restore(id: string): Promise<boolean> {
+    const count = await restore(
+      db,
+      schema.mcpServersTable,
+      eq(schema.mcpServersTable.id, id),
+    );
+    if (count > 0) {
+      await db
+        .update(schema.mcpServersTable)
+        .set({ reinstallRequired: true, reinstallReason: "new-input" })
+        .where(eq(schema.mcpServersTable.id, id));
     }
+    return count > 0;
+  }
 
-    return deleted;
+  /**
+   * Restore exactly the installs a catalog delete cascaded, matched by the
+   * shared `deletedAt` timestamp (the correlation key). Installs deleted
+   * individually before the catalog carry a different timestamp and are NOT
+   * revived. Flag-only: single-tenant installs are flagged for per-install
+   * reinstall; multitenant installs come back via the catalog-level reinstall
+   * (`catalogReinstallRequired`, stamped by the catalog restore), so they are
+   * not per-install flagged here.
+   */
+  static async restoreCascadedForCatalog(
+    params: { catalogId: string; deletedAt: Date; multitenant: boolean },
+    tx?: Transaction,
+  ): Promise<number> {
+    const restored = await (tx ?? db)
+      .update(schema.mcpServersTable)
+      .set(
+        params.multitenant
+          ? { deletedAt: null }
+          : {
+              deletedAt: null,
+              reinstallRequired: true,
+              reinstallReason: "new-input",
+            },
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.catalogId, params.catalogId),
+          eq(schema.mcpServersTable.deletedAt, params.deletedAt),
+        ),
+      )
+      .returning({ id: schema.mcpServersTable.id });
+    return restored.length;
+  }
+
+  /** Physical delete — reserved for install-create rollback (never a ghost row). */
+  static async hardDelete(id: string): Promise<boolean> {
+    const count = await hardDelete(
+      db,
+      schema.mcpServersTable,
+      eq(schema.mcpServersTable.id, id),
+    );
+    return count > 0;
+  }
+
+  /**
+   * Org-scoped lookup of a SOFT-DELETED install for the restore route.
+   * `mcp_server` has no `organization_id` column, so org membership is inferred
+   * via the same team/member join as {@link findByIdInOrg}; the predicate flips
+   * to `deleted_at IS NOT NULL`. `teamId`/`ownerId` survive soft-delete (they are
+   * `set null` FKs only a hard delete clears), so the inference join still resolves.
+   */
+  static async findDeletedByIdForOrganization(
+    id: string,
+    organizationId: string,
+  ): Promise<McpServer | null> {
+    const [row] = await db
+      .select({ server: schema.mcpServersTable })
+      .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
+      .leftJoin(
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.userId, schema.mcpServersTable.ownerId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.id, id),
+          isNotNull(schema.mcpServersTable.deletedAt),
+          or(
+            eq(schema.teamsTable.organizationId, organizationId),
+            isNotNull(schema.membersTable.id),
+            and(
+              isNull(schema.mcpServersTable.teamId),
+              isNull(schema.mcpServersTable.ownerId),
+            ),
+          ),
+        ),
+      )
+      .limit(1);
+    return row?.server ?? null;
+  }
+
+  /**
+   * Restore-conflict guard mirroring the install-time at-most-one-active-install
+   * invariant (routes/mcp-server.ts) across ALL scopes — not just personal.
+   * Returns a user-facing message when restoring `server` would create a second
+   * active install for the same catalog + scope, else null. Compares against
+   * active (non-deleted) installs and excludes the server being restored.
+   */
+  static async getRestoreConflictMessage(
+    server: McpServer,
+  ): Promise<string | null> {
+    if (!server.catalogId) return null;
+    const active = (
+      await McpServerModel.findByCatalogId(server.catalogId)
+    ).filter((s) => s.id !== server.id);
+
+    if (server.scope === "personal") {
+      if (
+        active.some(
+          (s) => s.scope === "personal" && s.ownerId === server.ownerId,
+        )
+      ) {
+        return "Cannot restore because you already have an active installation of this MCP server.";
+      }
+    } else if (server.scope === "team") {
+      if (
+        active.some((s) => s.scope === "team" && s.teamId === server.teamId)
+      ) {
+        return "Cannot restore because this team already has an active installation of this MCP server.";
+      }
+    } else if (server.scope === "org") {
+      if (active.some((s) => s.scope === "org")) {
+        return "Cannot restore because this organization already has an active installation of this MCP server.";
+      }
+    }
+    return null;
   }
 
   /**
@@ -1305,6 +1510,9 @@ class McpServerModel {
           eq(schema.mcpServersTable.catalogId, catalogId),
           inArray(schema.mcpServersTable.teamId, teamIds),
           isNotNull(schema.mcpServersTable.secretId),
+          // Active installs only — a soft-deleted team install must not be
+          // resolved as a live credential source.
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);
@@ -1342,6 +1550,7 @@ class McpServerModel {
           eq(schema.mcpServersTable.catalogId, catalogId),
           eq(schema.mcpServersTable.ownerId, userId),
           eq(schema.mcpServersTable.scope, "personal"),
+          notDeleted(schema.mcpServersTable),
         ),
       )
       .limit(1);
@@ -1369,6 +1578,7 @@ class McpServerModel {
           inArray(schema.mcpServersTable.catalogId, catalogIds),
           eq(schema.mcpServersTable.ownerId, userId),
           eq(schema.mcpServersTable.scope, "personal"),
+          notDeleted(schema.mcpServersTable),
         ),
       );
 
@@ -1513,8 +1723,80 @@ class McpServerModel {
       hasSecret: Boolean(s.secretId),
       localInstallationStatus: s.localInstallationStatus,
       oauthRefreshError: s.oauthRefreshError ?? null,
+      // Lifecycle fields so the soft-delete/restore diff is non-empty: a
+      // (flag-only) restore flips deletedAt → null and reinstallRequired → true.
+      deletedAt: s.deletedAt ? s.deletedAt.toISOString() : null,
+      reinstallRequired: s.reinstallRequired,
       createdAt: s.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * Org-scoped listing of SOFT-DELETED installs, for the `status=deleted`
+   * registry filter (a backend affordance for enumerating restorable ids).
+   * Does NOT filter `notDeleted` — it is a deleted-only read. `mcp_server` has
+   * no `organization_id` column, so org membership is inferred through the same
+   * team/member join as {@link findDeletedByIdForOrganization}. App-backed
+   * servers are excluded (managed on the Apps surface, like the active listing).
+   */
+  static async findDeletedForOrganization(
+    organizationId: string,
+  ): Promise<McpServer[]> {
+    const rows = await db
+      .select({
+        server: schema.mcpServersTable,
+        ownerEmail: schema.usersTable.email,
+        catalogName: schema.internalMcpCatalogTable.name,
+        teamName: schema.teamsTable.name,
+      })
+      .from(schema.mcpServersTable)
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.mcpServersTable.ownerId, schema.usersTable.id),
+      )
+      .leftJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .leftJoin(
+        schema.teamsTable,
+        eq(schema.mcpServersTable.teamId, schema.teamsTable.id),
+      )
+      .leftJoin(
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.userId, schema.mcpServersTable.ownerId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .where(
+        and(
+          isNotNull(schema.mcpServersTable.deletedAt),
+          ne(schema.mcpServersTable.serverType, "app"),
+          or(
+            eq(schema.teamsTable.organizationId, organizationId),
+            isNotNull(schema.membersTable.id),
+            and(
+              isNull(schema.mcpServersTable.teamId),
+              isNull(schema.mcpServersTable.ownerId),
+            ),
+          ),
+        ),
+      )
+      .orderBy(desc(schema.mcpServersTable.deletedAt));
+
+    return rows.map((row) => ({
+      ...row.server,
+      ownerEmail: row.ownerEmail,
+      catalogName: row.catalogName,
+      teamDetails: row.server.teamId
+        ? {
+            teamId: row.server.teamId,
+            name: row.teamName || "",
+            createdAt: row.server.createdAt,
+          }
+        : null,
+    }));
   }
 }
 

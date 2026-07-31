@@ -72,6 +72,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "internalMcpCatalog.created": "Internal catalog created",
   "internalMcpCatalog.updated": "Internal catalog updated",
   "internalMcpCatalog.deleted": "Internal catalog deleted",
+  "internalMcpCatalog.restored": "Internal catalog restored",
   "internalMcpCatalog.reinstalled": "Internal catalog reinstalled",
   // Invitation
   "invitation.created": "Invitation sent",
@@ -104,6 +105,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "mcpServer.created": "MCP server created",
   "mcpServer.updated": "MCP server updated",
   "mcpServer.deleted": "MCP server deleted",
+  "mcpServer.restored": "MCP server restored",
   "mcpServer.reinstalled": "MCP server reinstalled",
   // MCP install request
   "mcpServerInstallationRequest.created": "MCP install request created",

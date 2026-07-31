@@ -806,6 +806,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteInternalMcpCatalogItemByName]: {
     mcpRegistry: ["delete"],
   },
+  [RouteId.RestoreInternalMcpCatalogItem]: {
+    mcpRegistry: ["delete"],
+  },
   [RouteId.GetInternalMcpCatalogLabelKeys]: {
     mcpRegistry: ["read"],
   },
@@ -846,6 +849,9 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpServerInstallation: ["create"],
   },
   [RouteId.DeleteMcpServer]: {
+    mcpServerInstallation: ["delete"],
+  },
+  [RouteId.RestoreMcpServer]: {
     mcpServerInstallation: ["delete"],
   },
   [RouteId.ReauthenticateMcpServer]: {

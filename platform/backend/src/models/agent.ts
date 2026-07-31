@@ -44,15 +44,16 @@ import {
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
-import type {
-  Agent,
-  AgentScope,
-  AgentScopeFilter,
-  AgentType,
-  GatewayAgent,
-  InsertAgent,
-  SortingQuery,
-  UpdateAgent,
+import {
+  type Agent,
+  type AgentScope,
+  type AgentScopeFilter,
+  type AgentType,
+  GATEWAY_CAPABLE_AGENT_TYPES,
+  type GatewayAgent,
+  type InsertAgent,
+  type SortingQuery,
+  type UpdateAgent,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
 import { isUuid } from "@/utils/uuid";
@@ -1600,6 +1601,31 @@ class AgentModel {
       .from(schema.agentsTable)
       .where(eq(schema.agentsTable.id, id))
       .for("update");
+  }
+
+  /**
+   * Names of every live agent that can serve as an MCP gateway in this
+   * organization. External clients register gateways under a server name
+   * derived from these (see `toMcpClientServerName`), so the LLM proxy uses
+   * them to recognize client-decorated gateway tool names.
+   */
+  static async findGatewayNamesByOrganizationId(
+    organizationId: string,
+  ): Promise<string[]> {
+    const agents = await db
+      .select({ name: schema.agentsTable.name })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          notDeleted(schema.agentsTable),
+          inArray(schema.agentsTable.agentType, [
+            ...GATEWAY_CAPABLE_AGENT_TYPES,
+          ]),
+        ),
+      );
+
+    return agents.map((agent) => agent.name);
   }
 
   static async findIdsByOrganizationId(

@@ -25,6 +25,7 @@ import {
 } from "@/services/openai-codex-credentials";
 import { createOpenAiCodexFetch } from "@/services/openai-codex-token";
 import { ApiError, type CreateClientOptions, type OpenAi } from "@/types";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type ResponsesRequest = OpenAi.Types.ResponsesRequest;
 type ResponsesResponse = OpenAi.Types.ResponsesResponse;
@@ -66,6 +67,7 @@ class OpenAiCodexResponsesClient {
   }) {
     const { credential, options, innerFetch } = params;
     this.openai = new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       // The Codex backend authenticates via the fetch wrapper's OAuth bearer;
       // the SDK still needs a non-empty key.
       apiKey: "chatgpt-oauth",

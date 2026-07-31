@@ -29,6 +29,7 @@ import {
   codexResponsesStreamToChatChunks,
   foldChatChunksToResponse,
 } from "./openai-codex-translator";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type ChatCompletionsRequest = OpenAi.Types.ChatCompletionsRequest;
 type ChatCompletionsResponse = OpenAi.Types.ChatCompletionsResponse;
@@ -76,6 +77,7 @@ class OpenAiCodexClient {
   }) {
     const { credential, options, innerFetch } = params;
     this.openai = new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       // The Codex backend authenticates via the fetch wrapper's OAuth bearer;
       // the SDK still needs a non-empty key.
       apiKey: "chatgpt-oauth",

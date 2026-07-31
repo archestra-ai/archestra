@@ -160,6 +160,60 @@ describe("normalizeToolCallsForPolicy", () => {
       },
     ]);
   });
+
+  test("unwraps a run_tool dispatch to the target tool it names", () => {
+    const result = normalizeToolCallsForPolicy([
+      {
+        name: "archestra__run_tool",
+        arguments: JSON.stringify({
+          tool_name: "github__create_or_update_file",
+          tool_args: { path: "README.md" },
+        }),
+      },
+    ]);
+    expect(result).toEqual([
+      {
+        toolCallName: "github__create_or_update_file",
+        toolCallArgs: '{"path":"README.md"}',
+        isRunToolDispatchTarget: true,
+      },
+    ]);
+  });
+
+  test("canonicalizes client-decorated names before dispatch resolution", () => {
+    const canonicalize = (name: string) =>
+      name.startsWith("mcp__gw__") ? name.slice("mcp__gw__".length) : name;
+    const result = normalizeToolCallsForPolicy(
+      [
+        {
+          name: "mcp__gw__archestra__run_tool",
+          arguments: JSON.stringify({
+            tool_name: "github__create_issue",
+            tool_args: {},
+          }),
+        },
+        { name: "mcp__gw__github__direct_tool", arguments: "{}" },
+      ],
+      canonicalize,
+    );
+    expect(result).toEqual([
+      {
+        toolCallName: "github__create_issue",
+        toolCallArgs: "{}",
+        isRunToolDispatchTarget: true,
+      },
+      { toolCallName: "github__direct_tool", toolCallArgs: "{}" },
+    ]);
+  });
+
+  test("keeps an unresolvable run_tool dispatch under the wrapper name", () => {
+    const result = normalizeToolCallsForPolicy([
+      { name: "archestra__run_tool", arguments: '{"tool_args":{}}' },
+    ]);
+    expect(result).toEqual([
+      { toolCallName: "archestra__run_tool", toolCallArgs: '{"tool_args":{}}' },
+    ]);
+  });
 });
 
 // --------------------------------------------------------------------------

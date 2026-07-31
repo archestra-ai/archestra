@@ -42,6 +42,7 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type AzureResponsesRequest = Azure.Types.ResponsesRequest;
 type AzureResponsesResponse = Azure.Types.ResponsesResponse;
@@ -115,6 +116,7 @@ export const azureResponsesAdapterFactory: LLMProvider<
 
     if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
       return new OpenAIProvider({
+        maxRetries: PROXY_SDK_MAX_RETRIES,
         apiKey: getAzureOpenAiBearerTokenProvider(options.baseUrl),
         baseURL: resolvedBaseUrl,
         defaultQuery: getAzureResponsesDefaultQuery(options.baseUrl),
@@ -130,6 +132,7 @@ export const azureResponsesAdapterFactory: LLMProvider<
     const normalizedApiKey = normalizeAzureApiKey(apiKey);
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: normalizedApiKey,
       baseURL: resolvedBaseUrl,
       defaultQuery: getAzureResponsesDefaultQuery(options.baseUrl),

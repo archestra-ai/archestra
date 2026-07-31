@@ -15,6 +15,10 @@ import {
 } from "@archestra/shared";
 import { context as otelContext } from "@opentelemetry/api";
 import type { FastifyReply } from "fastify";
+import {
+  resolveRunToolDispatch,
+  resolveRunToolTarget,
+} from "@/archestra-mcp-server/run-tool-target";
 import { isNativeAnthropicModelShape } from "@/clients/anthropic-endpoint";
 import logger from "@/logging";
 import { metrics } from "@/observability";
@@ -23,6 +27,7 @@ import type { SpanTeamInfo, SpanUserInfo } from "@/observability/tracing";
 import { getTokenizer } from "@/tokenizers";
 import type {
   CommonMcpToolDefinition,
+  CommonMessage,
   DualLlmAnalysis,
   GatewayAgent,
   InsertInteraction,
@@ -41,6 +46,7 @@ import {
 } from "@/utils/network-errors";
 import * as utils from "./utils";
 import { estimateToolTokens } from "./utils/cost-optimization";
+import type { ToolNameCanonicalizer } from "./utils/gateway-tool-names";
 import type { SessionSource } from "./utils/headers/session-id";
 
 /**
@@ -75,23 +81,72 @@ export function shouldForwardAnthropicBeta(
  *
  * - String arguments: validated as JSON, wrapped in `{ raw: ... }` if invalid
  * - Object arguments: serialized with JSON.stringify
+ * - Names are canonicalized (client-decorated gateway names stripped back to
+ *   the platform's own names), and a `run_tool` dispatch is unwrapped to the
+ *   target tool it names — policies must evaluate the tool that will actually
+ *   execute, not the opaque wrapper (whose name matches no `tools` row and
+ *   would fail open as "no policies found").
  */
 export function normalizeToolCallsForPolicy(
   toolCalls: Array<{ name: string; arguments: string | object }>,
-): Array<{ toolCallName: string; toolCallArgs: string }> {
+  canonicalizeToolName: ToolNameCanonicalizer = (name) => name,
+): Array<{
+  toolCallName: string;
+  toolCallArgs: string;
+  isRunToolDispatchTarget?: boolean;
+}> {
   return toolCalls.map((tc) => {
+    let args: unknown;
     let argsString: string;
     if (typeof tc.arguments === "string") {
       try {
-        JSON.parse(tc.arguments);
+        args = JSON.parse(tc.arguments);
         argsString = tc.arguments;
       } catch {
+        args = undefined;
         argsString = JSON.stringify({ raw: tc.arguments });
       }
     } else {
+      args = tc.arguments;
       argsString = JSON.stringify(tc.arguments);
     }
-    return { toolCallName: tc.name, toolCallArgs: argsString };
+
+    const canonicalName = canonicalizeToolName(tc.name);
+    const dispatch = resolveRunToolDispatch(canonicalName, args);
+    if (dispatch.kind === "target") {
+      const { toolInput } = resolveRunToolTarget(canonicalName, args);
+      return {
+        toolCallName: dispatch.toolName,
+        toolCallArgs: JSON.stringify(toolInput),
+        isRunToolDispatchTarget: true,
+      };
+    }
+    return { toolCallName: canonicalName, toolCallArgs: argsString };
+  });
+}
+
+/**
+ * Return a copy of the request's common messages with every tool-call name
+ * canonicalized, so trusted-data evaluation sees the platform's own tool
+ * names instead of the client-decorated twins (which match no tool row and
+ * would flip every gateway conversation to untrusted — including over
+ * platform-authored built-in results like `search_tools`).
+ */
+export function canonicalizeCommonMessageToolNames(
+  messages: CommonMessage[],
+  canonicalizeToolName: ToolNameCanonicalizer,
+): CommonMessage[] {
+  return messages.map((message) => {
+    if (!message.toolCalls || message.toolCalls.length === 0) {
+      return message;
+    }
+    return {
+      ...message,
+      toolCalls: message.toolCalls.map((toolCall) => ({
+        ...toolCall,
+        name: canonicalizeToolName(toolCall.name),
+      })),
+    };
   });
 }
 

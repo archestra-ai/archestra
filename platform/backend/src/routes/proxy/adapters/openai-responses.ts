@@ -38,6 +38,7 @@ import {
   extractCommonToolCallArguments,
 } from "@/types";
 import { createOpenAiCodexResponsesClient } from "./openai-codex-responses-client";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type OpenAiResponsesRequest = OpenAi.Types.ResponsesRequest;
 type OpenAiResponsesResponse = OpenAi.Types.ResponsesResponse;
@@ -129,6 +130,7 @@ export const openAiResponsesAdapterFactory: LLMProvider<
       : undefined;
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: resolvedBaseUrl,
       fetch: customFetch,

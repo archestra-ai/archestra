@@ -181,7 +181,17 @@ export async function evaluateSingleMcpToolInvocationPolicy(params: {
  *                      the session id to reference; defaults to the LLM proxy.
  */
 export const evaluatePolicies = async (
-  toolCalls: Array<{ toolCallName: string; toolCallArgs: string }>,
+  toolCalls: Array<{
+    toolCallName: string;
+    toolCallArgs: string;
+    /**
+     * True when this entry is the resolved target of a `run_tool` dispatch
+     * rather than a directly-requested tool. The target is reachable through
+     * the enabled wrapper, so it is exempt from the enabled-tools filter —
+     * the gateway enforces the target's own availability at dispatch time.
+     */
+    isRunToolDispatchTarget?: boolean;
+  }>,
   agentId: string,
   context: PolicyEvaluationContext,
   contextIsTrusted: boolean,
@@ -206,19 +216,18 @@ export const evaluatePolicies = async (
   // This is required because otherwise the tool invocation policies will be evaluated
   // for tools that are disabled during chat session.
   // Note: archestra__* tools are always enabled (built-in tools that bypass policies)
-  const isToolEnabled = (toolName: string) =>
-    archestraMcpBranding.isToolName(toolName) ||
-    enabledToolNames?.has(toolName);
+  const isToolEnabled = (toolCall: (typeof toolCalls)[number]) =>
+    archestraMcpBranding.isToolName(toolCall.toolCallName) ||
+    toolCall.isRunToolDispatchTarget === true ||
+    enabledToolNames?.has(toolCall.toolCallName);
 
   let disabledToolNames: string[] = [];
   let filteredToolCalls = toolCalls;
   if (enabledToolNames && enabledToolNames.size > 0) {
     disabledToolNames = toolCalls
-      .filter((tc) => !isToolEnabled(tc.toolCallName))
+      .filter((tc) => !isToolEnabled(tc))
       .map((tc) => tc.toolCallName);
-    filteredToolCalls = toolCalls.filter((tc) =>
-      isToolEnabled(tc.toolCallName),
-    );
+    filteredToolCalls = toolCalls.filter((tc) => isToolEnabled(tc));
     if (disabledToolNames.length > 0) {
       logger.info(
         { disabledTools: disabledToolNames },

@@ -1030,6 +1030,17 @@ export function getArchestraToolPrefix(
   return `${getArchestraMcpServerName(options)}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 }
 
+/**
+ * The MCP server name a gateway is registered under in an external client
+ * (`claude mcp add <this> <url>`, `codex mcp add <this> …`). Clients build
+ * their model-facing tool names from it (Claude Code: `mcp__<this>__<tool>`),
+ * so everything that needs to recognize a gateway's decorated tool names must
+ * derive the name exactly like the connection-setup script does.
+ */
+export function toMcpClientServerName(gatewayName: string): string {
+  return gatewayName.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
 function parseArchestraToolName(params: {
   toolName: string;
   options?: ArchestraMcpIdentityOptions & { includeDefaultPrefix?: boolean };

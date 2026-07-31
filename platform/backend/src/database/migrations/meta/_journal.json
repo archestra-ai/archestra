@@ -2717,6 +2717,13 @@
       "when": 1785488958393,
       "tag": "0387_flowery_spirit",
       "breakpoints": true
+    },
+    {
+      "idx": 388,
+      "version": "7",
+      "when": 1785511163876,
+      "tag": "0388_safe_norrin_radd",
+      "breakpoints": true
     }
   ]
 }

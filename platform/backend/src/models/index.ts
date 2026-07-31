@@ -48,6 +48,7 @@ export { default as HookFileModel } from "./hook-file";
 export { default as InstanceUsageModel } from "./instance-usage";
 export { default as InteractionModel } from "./interaction";
 export { default as InternalMcpCatalogModel } from "./internal-mcp-catalog";
+export { default as InternalMcpCatalogVersionModel } from "./internal-mcp-catalog-version";
 export { default as InvitationModel } from "./invitation";
 export { default as KbChunkModel } from "./kb-chunk";
 export { default as KbContainerAclModel } from "./kb-container-acl";

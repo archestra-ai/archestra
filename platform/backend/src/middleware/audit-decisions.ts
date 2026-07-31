@@ -357,6 +357,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "child of app; immutable version snapshot, parent audited",
   },
+  internalMcpCatalogVersionsTable: {
+    audited: false,
+    reason: "child of catalog; immutable version snapshot, parent audited",
+  },
   appToolsTable: {
     audited: false,
     reason: "tools attached to an app; parent (app) carries the signal",

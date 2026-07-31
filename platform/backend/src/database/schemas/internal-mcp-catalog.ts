@@ -2,6 +2,7 @@ import {
   type AnyPgColumn,
   boolean,
   index,
+  integer,
   jsonb,
   pgEnum,
   text,
@@ -208,6 +209,15 @@ const internalMcpCatalogTable = softDeletablePgTable(
       "catalog_item_approval_reviewed_at",
       { mode: "date" },
     ),
+    /**
+     * Head pointer into `mcp_catalog_versions` (this item's config history).
+     * 0 = legacy row that predates versioning; the first config write after
+     * that forks version 1. Not to be confused with the free-text `version`
+     * column above, which is a user-supplied display label, not a history
+     * mechanism. Stays 0 forever for `serverType: "app"` rows — app-backed
+     * catalogs are excluded from versioning (see internal-mcp-catalog-version).
+     */
+    latestVersion: integer("latest_version").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

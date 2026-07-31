@@ -69,7 +69,10 @@ export const UserConfigFieldSchema = z.object({
 // Define a version of LocalConfigSchema for SELECT operations
 // where required and description fields are optional (database may not have them)
 // Note: We can't use .extend() on LocalConfigSchema because it has .refine()
-const LocalConfigSelectSchema = z.object({
+// Exported for the catalog-version snapshot builder, which parses stored
+// localConfig through this schema so rows written before and after the legacy
+// imagePullSecrets normalization hash to one canonical shape.
+export const LocalConfigSelectSchema = z.object({
   command: z.string().optional(),
   arguments: z.array(z.string()).optional(),
   environment: z

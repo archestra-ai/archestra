@@ -31,6 +31,7 @@ import {
   type SecretValue,
   type UpdateInternalMcpCatalog,
 } from "@/types";
+import InternalMcpCatalogVersionModel from "./internal-mcp-catalog-version";
 import LimitModel from "./limit";
 import McpCatalogLabelModel from "./mcp-catalog-label";
 import McpCatalogTeamModel from "./mcp-catalog-team";
@@ -121,6 +122,16 @@ class InternalMcpCatalogModel {
       });
       createdItem =
         await InternalMcpCatalogModel.cloneSecretsFromSource(createdItem);
+    }
+
+    // Fork version 1 now that the full config of this create (row, cloned
+    // secret ids) is in place. Best-effort: a versioning failure must never
+    // fail the create itself.
+    const fork = await InternalMcpCatalogVersionModel.forkIfChangedBestEffort(
+      createdItem.id,
+    );
+    if (fork) {
+      createdItem.latestVersion = fork.version;
     }
 
     const result: InternalMcpCatalog = {
@@ -761,6 +772,10 @@ class InternalMcpCatalogModel {
       // (5) Name-string-keyed limits.
       await LimitModel.renameNameKeys({ serverNamePairs, toolNamePairs }, tx);
     });
+
+    // The name is part of the canonical config, so a rename forks a version.
+    // After the cascade's transaction: the fork takes its own FOR UPDATE lock.
+    await InternalMcpCatalogVersionModel.forkIfChangedBestEffort(id);
   }
 
   static async update(
@@ -849,6 +864,15 @@ class InternalMcpCatalogModel {
 
     if (teams !== undefined) {
       await McpCatalogTeamModel.syncCatalogTeams(id, teams);
+    }
+
+    // The row write above may have changed the canonical config — fork a
+    // version if so. Sharing-only updates (labels/teams) dedup to a no-op.
+    // Best-effort: a versioning failure must never fail the update itself.
+    const fork =
+      await InternalMcpCatalogVersionModel.forkIfChangedBestEffort(id);
+    if (fork) {
+      dbItem.latestVersion = fork.version;
     }
 
     const itemLabels = await McpCatalogLabelModel.getLabelsForCatalogItem(id);
@@ -1085,6 +1109,12 @@ class InternalMcpCatalogModel {
           .where(eq(schema.internalMcpCatalogTable.id, id));
       }
     });
+
+    // Capture any config drift missed while the row was soft-deleted (fork
+    // hooks skip nothing today, but the revived row is a config boundary).
+    // Usually dedups to a no-op. After the restore transaction: the fork
+    // takes its own FOR UPDATE lock.
+    await InternalMcpCatalogVersionModel.forkIfChangedBestEffort(id);
     return true;
   }
 

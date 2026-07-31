@@ -1,0 +1,42 @@
+{
+  "name": "notion__remote-mcp",
+  "display_name": "Notion",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIwLjk2ZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjU2IDI2OCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTE2LjA5MiAxMS41MzhMMTY0LjA5LjYwOGMxOC4xNzktMS41NiAyMi44NS0uNTA4IDM0LjI4IDcuODAxbDQ3LjI0MyAzMy4yODJDMjUzLjQwNiA0Ny40MTQgMjU2IDQ4Ljk3NSAyNTYgNTUuMjA3djE4Mi41MjdjMCAxMS40MzktNC4xNTUgMTguMjA1LTE4LjY5NiAxOS4yNEw2NS40NCAyNjcuMzc4Yy0xMC45MTMuNTE3LTE2LjExLTEuMDQzLTIxLjgyNS04LjMyN0w4LjgyNiAyMTMuODE0QzIuNTg2IDIwNS40ODcgMCAxOTkuMjU0IDAgMTkxLjk3VjI5LjcyNmMwLTkuMzUyIDQuMTU1LTE3LjE1MyAxNi4wOTItMTguMTg4Ii8+PHBhdGggZD0iTTE2NC4wOS42MDhMMTYuMDkyIDExLjUzOEM0LjE1NSAxMi41NzMgMCAyMC4zNzQgMCAyOS43MjZ2MTYyLjI0NWMwIDcuMjg0IDIuNTg1IDEzLjUxNiA4LjgyNiAyMS44NDNsMzQuNzg5IDQ1LjIzN2M1LjcxNSA3LjI4NCAxMC45MTIgOC44NDQgMjEuODI1IDguMzI3bDE3MS44NjQtMTAuNDA0YzE0LjUzMi0xLjAzNSAxOC42OTYtNy44MDEgMTguNjk2LTE5LjI0VjU1LjIwN2MwLTUuOTExLTIuMzM2LTcuNjE0LTkuMjEtMTIuNjZsLTEuMTg1LS44NTZMMTk4LjM3IDguNDA5QzE4Ni45NC4xIDE4Mi4yNy0uOTUyIDE2NC4wOS42MDhNNjkuMzI3IDUyLjIyYy0xNC4wMzMuOTQ1LTE3LjIxNiAxLjE1OS0yNS4xODYtNS4zMjNMMjMuODc2IDMwLjc3OGMtMi4wNi0yLjA4Ni0xLjAyNi00LjY5IDQuMTYzLTUuMjA3bDE0Mi4yNzQtMTAuMzk1YzExLjk0Ny0xLjA0MyAxOC4xNyAzLjEyIDIyLjg0MiA2Ljc1OGwyNC40MDEgMTcuNjhjMS4wNDMuNTI1IDMuNjM4IDMuNjM3LjUxNyAzLjYzN0w3MS4xNDYgNTIuMDk1em0tMTYuMzYgMTgzLjk1NFY4MS4yMjJjMC02Ljc2NyAyLjA3Ny05Ljg4NyA4LjMtMTAuNDEzTDIzMC4wMiA2MC45M2M1LjcyNC0uNTE3IDguMzEgMy4xMiA4LjMxIDkuODc5djE1My45MTdjMCA2Ljc2Ny0xLjA0NCAxMi40OS0xMC4zODcgMTMuMDA4bC0xNjEuNDg3IDkuMzYxYy05LjM0My41MTctMTMuNDg5LTIuNTk0LTEzLjQ4OS0xMC45MjFNMjEyLjM3NyA4OS41M2MxLjAzNCA0LjY4MSAwIDkuMzYyLTQuNjgxIDkuODk3bC03Ljc4MyAxLjU0MnYxMTQuNDA0Yy02Ljc1OCAzLjYzNy0xMi45ODEgNS43MTUtMTguMTggNS43MTVjLTguMzA4IDAtMTAuMzg2LTIuNjA0LTE2LjYwOS0xMC4zOTZsLTUwLjg5OC04MC4wNzl2NzcuNDc2bDE2LjEgMy42NDZzMCA5LjM2Mi0xMi45ODkgOS4zNjJsLTM1LjgxNCAyLjA3N2MtMS4wNDMtMi4wODYgMC03LjI4NCAzLjYzLTguMzE4bDkuMzUxLTIuNTk1VjEwOS44MjNsLTEyLjk4LTEuMDUyYy0xLjA0NC00LjY4IDEuNTUtMTEuNDM5IDguODI2LTExLjk2NWwzOC40MjYtMi41ODVsNTIuOTU4IDgxLjExM3YtNzEuNzZsLTEzLjQ5OC0xLjU1MmMtMS4wNDMtNS43MzMgMy4xMTEtOS44OTYgOC4zLTEwLjQwNHoiLz48L3N2Zz4=",
+  "description": "Notion's official hosted remote MCP server. Gives AI agents OAuth-scoped access to a Notion workspace, with tools such as notion-search and notion-fetch for finding and reading pages and databases, plus tools for creating and updating content.",
+  "oauth_config": {
+    "name": "Notion MCP",
+    "server_url": "https://mcp.notion.com/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["default"],
+    "description": "Notion MCP Server (dynamic registration)",
+    "default_scopes": ["default"],
+    "supports_resource_metadata": true
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": ["notion", "notes", "docs", "wiki", "knowledge base", "workspace", "productivity"],
+  "user_config": {},
+  "readme": null,
+  "category": "Knowledge",
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "author": {
+    "name": "Notion",
+    "url": "https://www.notion.com"
+  },
+  "documentation": "https://developers.notion.com/docs/mcp",
+  "server": {
+    "type": "remote",
+    "url": "https://mcp.notion.com/mcp",
+    "docs_url": "https://developers.notion.com/docs/mcp"
+  },
+  "github_info": null,
+  "programming_language": null
+}

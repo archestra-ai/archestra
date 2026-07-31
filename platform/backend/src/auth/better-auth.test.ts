@@ -446,7 +446,8 @@ describe("handleBeforeHook", () => {
     // read what their own role withholds, and switch back.
     const restrictedAdminPermission = Object.fromEntries(
       Object.entries(allAvailableActions).map(([resource, actions]) => {
-        if (resource === "log" || resource === "auditLog") return [resource, []];
+        if (resource === "log" || resource === "auditLog")
+          return [resource, []];
         if (resource === "member")
           return [resource, actions.filter((a) => a !== "impersonate")];
         return [resource, actions];
@@ -600,9 +601,9 @@ describe("handleBeforeHook", () => {
           },
         });
 
-      await expect(handleBeforeHook(inviteCtx(ADMIN_ROLE_NAME))).rejects.toThrow(
-        APIError,
-      );
+      await expect(
+        handleBeforeHook(inviteCtx(ADMIN_ROLE_NAME)),
+      ).rejects.toThrow(APIError);
       // Within the subset, the invitation passes through.
       const allowed = inviteCtx(MEMBER_ROLE_NAME);
       expect(await handleBeforeHook(allowed)).toBe(allowed);

@@ -33,6 +33,12 @@ export interface AnthropicStubOptions {
    * that expect text.
    */
   includeToolUseNonStreaming?: boolean;
+  /**
+   * Emit this tool_use block (instead of the fixed `get_weather` one) from the
+   * buffered (non-streaming) response, e.g. a gateway `run_tool` dispatch with
+   * a client-decorated name. Implies a `tool_use` stop reason.
+   */
+  nonStreamingToolUse?: { name: string; input: Record<string, unknown> };
 }
 
 export interface GeminiStubOptions {
@@ -126,27 +132,35 @@ export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
           type: "message",
           container: null,
           role: "assistant",
-          content: options.includeToolUseNonStreaming
-            ? [
-                { type: "text", text: "Checking the weather.", citations: [] },
-                {
-                  type: "tool_use",
-                  id: "toolu_test_weather",
-                  name: "get_weather",
-                  input: { location: "SF" },
-                },
-              ]
-            : [
-                {
-                  type: "text",
-                  text: "Hello! How can I help you today?",
-                  citations: [],
-                },
-              ],
+          content:
+            options.includeToolUseNonStreaming || options.nonStreamingToolUse
+              ? [
+                  {
+                    type: "text",
+                    text: "Checking the weather.",
+                    citations: [],
+                  },
+                  {
+                    type: "tool_use",
+                    id: "toolu_test_weather",
+                    name: options.nonStreamingToolUse?.name ?? "get_weather",
+                    input: options.nonStreamingToolUse?.input ?? {
+                      location: "SF",
+                    },
+                  },
+                ]
+              : [
+                  {
+                    type: "text",
+                    text: "Hello! How can I help you today?",
+                    citations: [],
+                  },
+                ],
           model: "claude-3-5-sonnet-20241022",
-          stop_reason: options.includeToolUseNonStreaming
-            ? "tool_use"
-            : "end_turn",
+          stop_reason:
+            options.includeToolUseNonStreaming || options.nonStreamingToolUse
+              ? "tool_use"
+              : "end_turn",
           stop_sequence: null,
           usage: {
             input_tokens: options.zeroInputTokens ? 0 : 12,

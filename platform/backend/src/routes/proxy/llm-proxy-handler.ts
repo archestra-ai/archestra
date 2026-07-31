@@ -25,6 +25,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { isRunToolName } from "@/archestra-mcp-server/run-tool-target";
 import { LRUCacheManager } from "@/cache-manager";
 import { anthropicWorkloadIdentity } from "@/clients/anthropic-workload-identity";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -90,6 +91,7 @@ import {
   applyInputTokenFallback,
   buildInteractionRecord,
   calculateInteractionCosts,
+  canonicalizeCommonMessageToolNames,
   handleError,
   normalizeToolCallsForPolicy,
   recordBlockedToolCallMetrics,
@@ -128,6 +130,8 @@ export interface LLMProxyContext<TRequest> {
   actualModel: string;
   contextIsTrusted: boolean;
   enabledToolNames: Set<string>;
+  /** Maps client-decorated gateway tool names to the platform's own names. */
+  canonicalizeToolName: utils.gatewayToolNames.ToolNameCanonicalizer;
   toonStats: ToolCompressionStats;
   toonSkipReason: ToonSkipReason | null;
   dualLlmAnalyses: DualLlmAnalysis[];
@@ -887,7 +891,19 @@ export async function handleLLMProxy<
       `[${providerName}Proxy] Evaluating trusted data policies`,
     );
 
-    const commonMessages = requestAdapter.getMessages();
+    // Map client-decorated gateway tool names (e.g. Claude Code's
+    // `mcp__<gateway>__archestra__run_tool`) back to the platform's own names
+    // before any guardrail evaluation — trusted-data and tool-invocation
+    // lookups otherwise miss the real tool behind the decoration and the
+    // dispatch wrapper.
+    const canonicalizeToolName =
+      await utils.gatewayToolNames.buildGatewayToolNameCanonicalizer(
+        resolvedAgent.organizationId,
+      );
+    const commonMessages = canonicalizeCommonMessageToolNames(
+      requestAdapter.getMessages(),
+      canonicalizeToolName,
+    );
     const effectiveConsiderContextUntrusted =
       resolvedAgent.considerContextUntrusted || inheritedContextUntrusted;
     const initialUntrustedReason = resolvedAgent.considerContextUntrusted
@@ -1075,12 +1091,14 @@ export async function handleLLMProxy<
     // Build final request
     const finalRequest = requestAdapter.toProviderRequest();
 
-    // Extract enabled tool names for filtering in evaluatePolicies
+    // Extract enabled tool names for filtering in evaluatePolicies —
+    // canonicalized so they compare against canonicalized tool-call names.
     const enabledToolNames = new Set(
       requestAdapter
         .getTools()
         .map((t) => t.name)
-        .filter(Boolean),
+        .filter(Boolean)
+        .map(canonicalizeToolName),
     );
 
     // Convert headers to Record<string, string> for policy evaluation context
@@ -1110,6 +1128,7 @@ export async function handleLLMProxy<
       actualModel,
       contextIsTrusted,
       enabledToolNames,
+      canonicalizeToolName,
       toonStats,
       toonSkipReason,
       dualLlmAnalyses,
@@ -1230,6 +1249,7 @@ async function handleStreaming<
     actualModel,
     contextIsTrusted,
     enabledToolNames,
+    canonicalizeToolName,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -1405,18 +1425,26 @@ async function handleStreaming<
                   continue;
                 }
                 sawNamedToolCall = true;
-                const cacheKey = `${agent.id}:${toolCall.name}:${contextIsTrusted}`;
+                const canonicalToolName = canonicalizeToolName(toolCall.name);
+                // A run_tool dispatch's target only becomes known once its
+                // arguments finish streaming, so the wrapper always buffers —
+                // the target's blocking policies cannot be consulted yet.
+                if (isRunToolName(canonicalToolName)) {
+                  anyBlocking = true;
+                  continue;
+                }
+                const cacheKey = `${agent.id}:${canonicalToolName}:${contextIsTrusted}`;
                 let hasBlocking = toolPolicyCache.get(cacheKey);
                 if (hasBlocking === undefined) {
                   try {
                     hasBlocking =
                       await ToolInvocationPolicyModel.hasBlockingPolicy(
-                        toolCall.name,
+                        canonicalToolName,
                         contextIsTrusted,
                       );
                   } catch (err) {
                     logger.warn(
-                      { err, toolName: toolCall.name },
+                      { err, toolName: canonicalToolName },
                       "hasBlockingPolicy lookup failed, defaulting to buffer",
                     );
                     hasBlocking = true;
@@ -1564,7 +1592,7 @@ async function handleStreaming<
       );
 
       toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
-        normalizeToolCallsForPolicy(toolCalls),
+        normalizeToolCallsForPolicy(toolCalls, canonicalizeToolName),
         agent.id,
         {
           teamIds: teamIds ?? [],
@@ -1807,6 +1835,7 @@ async function handleNonStreaming<
     actualModel,
     contextIsTrusted,
     enabledToolNames,
+    canonicalizeToolName,
     toonStats,
     toonSkipReason,
     dualLlmAnalyses,
@@ -1984,7 +2013,7 @@ async function handleNonStreaming<
   // Evaluate tool invocation policies
   if (toolCalls.length > 0) {
     const toolInvocationRefusal = await utils.toolInvocation.evaluatePolicies(
-      normalizeToolCallsForPolicy(toolCalls),
+      normalizeToolCallsForPolicy(toolCalls, canonicalizeToolName),
       agent.id,
       {
         teamIds: teamIds ?? [],

@@ -401,6 +401,26 @@ export type ConversationUpdatedMessage = {
   };
 };
 
+/**
+ * A background task attached to a conversation settled: the backend persisted
+ * a harness notification message and is asking connected clients to hand
+ * control back to the model. A client viewing the conversation submits the
+ * notification as an ordinary user turn (same message id — persistence dedups
+ * by id), so the agent reacts to the result through the normal streaming path.
+ */
+export type ConversationWakeMessage = {
+  type: "conversation_wake";
+  payload: {
+    conversationId: string;
+    /** Content id of the persisted notification UIMessage. */
+    messageId: string;
+    /** Plain text of the notification, exactly as persisted. */
+    text: string;
+    /** UIMessage metadata, exactly as persisted (carries the task summary). */
+    metadata: Record<string, unknown>;
+  };
+};
+
 export type ServerWebSocketMessage =
   | BrowserScreenshotMessage
   | BrowserNavigateResultMessage
@@ -421,6 +441,7 @@ export type ServerWebSocketMessage =
   | McpDeploymentStatusesMessage
   | McpInstallationStatusMessage
   | ConversationUpdatedMessage
+  | ConversationWakeMessage
   | ErrorMessage;
 
 /**

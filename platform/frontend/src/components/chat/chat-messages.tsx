@@ -56,6 +56,10 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import {
+  BackgroundTaskNotificationChip,
+  getBackgroundTaskNotification,
+} from "@/components/chat/background-task-notification";
+import {
   HookRunChip,
   type HookRunChipData,
 } from "@/components/chat/hook-run-chip";
@@ -634,6 +638,20 @@ export function ChatMessages({
               }
 
               const { message, messageIndex: idx } = item;
+
+              // Harness notification messages carry a background task's
+              // result as a user-role text part (for the model); the human
+              // sees a chip instead of a user bubble.
+              const backgroundTaskNote = getBackgroundTaskNotification(message);
+              if (backgroundTaskNote) {
+                return (
+                  <BackgroundTaskNotificationChip
+                    key={message.id || idx}
+                    notification={backgroundTaskNote}
+                  />
+                );
+              }
+
               const isDimmed =
                 editingMessageIndex !== -1 && idx > editingMessageIndex;
 

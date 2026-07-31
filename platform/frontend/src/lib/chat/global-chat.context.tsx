@@ -66,6 +66,7 @@ import { lockedChatRequestHeaders } from "@/lib/chat/locked-chat";
 import { readThinkingEffort } from "@/lib/chat/thinking-effort-cache";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import websocketService from "@/lib/websocket/websocket";
 
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
@@ -1101,6 +1102,34 @@ function ChatSessionHook({
     resumeAttemptedRef.current = true;
     Promise.resolve(resumeStream()).finally(() => setResumeSettled(true));
   }, [resumeStream, shouldResume]);
+
+  // ---- Background-task wake ------------------------------------------------
+  // When a background task attached to this conversation settles, the backend
+  // persists a harness notification message and pushes conversation_wake.
+  // Submitting that same message (same id — backend persistence dedups by
+  // content id) hands control back to the model as a completely ordinary
+  // streaming turn. Only the idle case is handled: if a turn is in flight or
+  // no tab is watching, the notification is already durably persisted and
+  // surfaces the next time the conversation loads.
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  useEffect(() => {
+    websocketService.connect();
+    return websocketService.subscribe("conversation_wake", (message) => {
+      if (message.payload.conversationId !== conversationId) {
+        return;
+      }
+      if (statusRef.current !== "ready") {
+        return;
+      }
+      sendMessageRef.current?.({
+        id: message.payload.messageId,
+        role: "user",
+        parts: [{ type: "text", text: message.payload.text }],
+        metadata: message.payload.metadata,
+      });
+    });
+  }, [conversationId]);
 
   const messagesWithRestoredAssistantParts = restoreRenderableAssistantParts({
     previousMessages: previousMessagesRef.current,

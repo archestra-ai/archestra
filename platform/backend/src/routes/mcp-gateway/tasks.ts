@@ -115,6 +115,13 @@ export async function runToolCallMaybeTask(params: {
   toolName: string;
   execute: (signal: AbortSignal) => Promise<Record<string, unknown>>;
   thresholdMs?: number;
+  /**
+   * Fired once after the detached continuation has attempted to settle the
+   * row (completed, failed, or a concurrent cancel won). Fires only when the
+   * call actually became a task. The row is the source of truth — callers
+   * must re-read it rather than trust any in-process outcome.
+   */
+  onSettled?: (params: { taskId: string }) => void;
 }): Promise<Record<string, unknown>> {
   const {
     eligible,
@@ -123,6 +130,7 @@ export async function runToolCallMaybeTask(params: {
     toolName,
     execute,
     thresholdMs = taskSyncThresholdMs(),
+    onSettled,
   } = params;
 
   const controller = new AbortController();
@@ -207,6 +215,14 @@ export async function runToolCallMaybeTask(params: {
       );
     } finally {
       mcpGatewayTaskRunner.release(task.id);
+      try {
+        onSettled?.({ taskId: task.id });
+      } catch (error) {
+        logger.error(
+          { agentId, taskId: task.id, toolName, err: error },
+          "onSettled callback for a background MCP task threw",
+        );
+      }
     }
   })();
 

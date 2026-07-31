@@ -46,6 +46,18 @@ export async function verifyContentEncryptionKey(): Promise<void> {
     );
   }
 
+  // Encryption flips the content-capture DEFAULT off (config.ts); reaching
+  // here with capture on means the operator explicitly opted back in. Keep
+  // that visible: plaintext prompts/completions/tool payloads are leaving for
+  // the telemetry backend while the database copies are encrypted.
+  if (secret && config.observability.otel.captureContent) {
+    logger.warn(
+      "ARCHESTRA_OTEL_CAPTURE_CONTENT=true overrides the encryption-at-rest " +
+        "default: message and tool content is exported in plaintext on OTel " +
+        "spans. Ensure the telemetry backend is protected accordingly.",
+    );
+  }
+
   const canary = await EncryptionKeyCanaryModel.get("content");
 
   if (!canary) {

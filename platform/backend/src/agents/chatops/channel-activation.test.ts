@@ -182,6 +182,24 @@ describe("muteChannelThread (mute side-effects)", () => {
       await getThreadMuteMarker({ ...TEAMS, provider: "slack" }),
     ).toBeNull();
   });
+
+  test("persists the answer-all mute marker, so a mute survives in a channel with no activation to clear", async () => {
+    expect(await isChannelThreadMuted(TEAMS)).toBe(false);
+
+    // No prior activation — the case an answer-all channel is always in.
+    expect(await muteChannelThread(TEAMS)).toBe(false);
+
+    // Without this the thread would resume replying on the very next message.
+    expect(await isChannelThreadMuted(TEAMS)).toBe(true);
+  });
+
+  test("a re-mention lifts the mute", async () => {
+    await muteChannelThread(TEAMS);
+
+    await clearChannelThreadMuted(TEAMS);
+
+    expect(await isChannelThreadMuted(TEAMS)).toBe(false);
+  });
 });
 
 describe("claimThreadMuteHint", () => {

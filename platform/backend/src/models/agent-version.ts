@@ -7,7 +7,11 @@ import {
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import logger from "@/logging";
-import type { AgentConfigSnapshot, AgentVersion } from "@/types/agent-version";
+import type {
+  AgentConfigSnapshot,
+  AgentVersion,
+  AgentVersionMetadata,
+} from "@/types/agent-version";
 
 type AgentRow = typeof schema.agentsTable.$inferSelect;
 
@@ -324,22 +328,22 @@ class AgentVersionModel {
   }
 
   /**
-   * An agent's versions, newest first. Paginated: snapshots are full config
-   * payloads, so an unbounded read of an append-only table would return
-   * megabytes for a heavily-edited agent.
+   * An agent's versions, newest first, as metadata only — snapshots are full
+   * config payloads, so a list carrying them would return megabytes for a
+   * heavily-edited agent; `findByAgentAndVersion` serves the full snapshot.
    */
   static async listForAgent(params: {
     agentId: string;
     organizationId: string;
     pagination: PaginationQuery;
-  }): Promise<PaginatedResult<AgentVersion>> {
+  }): Promise<PaginatedResult<AgentVersionMetadata>> {
     const scope = and(
       eq(schema.agentVersionsTable.agentId, params.agentId),
       eq(schema.agentsTable.organizationId, params.organizationId),
     );
     const [rows, [totals]] = await Promise.all([
       db
-        .select(agentVersionColumns)
+        .select(agentVersionMetadataColumns)
         .from(schema.agentVersionsTable)
         .innerJoin(
           schema.agentsTable,
@@ -381,6 +385,15 @@ const agentVersionColumns = {
   agentId: schema.agentVersionsTable.agentId,
   version: schema.agentVersionsTable.version,
   snapshot: schema.agentVersionsTable.snapshot,
+  contentHash: schema.agentVersionsTable.contentHash,
+  createdAt: schema.agentVersionsTable.createdAt,
+};
+
+/** `agentVersionColumns` without the heavy `snapshot`, for list reads. */
+const agentVersionMetadataColumns = {
+  id: schema.agentVersionsTable.id,
+  agentId: schema.agentVersionsTable.agentId,
+  version: schema.agentVersionsTable.version,
   contentHash: schema.agentVersionsTable.contentHash,
   createdAt: schema.agentVersionsTable.createdAt,
 };

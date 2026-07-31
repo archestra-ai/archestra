@@ -115,6 +115,14 @@ export const InsertSkillVersionSchema = createInsertSchema(
   createdAt: true,
 });
 
+/**
+ * List projection of a version: everything but the SKILL.md body, so history
+ * lists stay cheap while get-one carries the full content and files.
+ */
+export const SkillVersionMetadataSchema = SelectSkillVersionSchema.omit({
+  content: true,
+});
+
 export const SelectSkillVersionFileSchema = createSelectSchema(
   schema.skillVersionFilesTable,
   {
@@ -191,6 +199,7 @@ export type UpdateSkill = z.infer<typeof UpdateSkillSchema>;
 export type SkillFile = z.infer<typeof SelectSkillFileSchema>;
 export type InsertSkillFile = z.infer<typeof InsertSkillFileSchema>;
 export type SkillVersion = z.infer<typeof SelectSkillVersionSchema>;
+export type SkillVersionMetadata = z.infer<typeof SkillVersionMetadataSchema>;
 export type InsertSkillVersion = z.infer<typeof InsertSkillVersionSchema>;
 export type SkillVersionFile = z.infer<typeof SelectSkillVersionFileSchema>;
 export type InsertSkillVersionFile = z.infer<

@@ -121,6 +121,7 @@ describe("DualLlmSubagent", () => {
           toolCallId: "tool-call-1",
           userRequest: "summarize this",
           toolResult: { raw: "data" },
+          toolName: "get_emails",
         },
         callingAgentId: "agent-1",
         organizationId: "org-1",
@@ -192,6 +193,8 @@ describe("DualLlmSubagent", () => {
         toolCallId: "tool-call-1",
         userRequest: "summarize this safely",
         toolResult: { raw: "sensitive data" },
+        toolName: "get_emails",
+        toolArguments: { folder: "inbox" },
       },
       callingAgentId: "agent-1",
       organizationId: "org-1",
@@ -204,6 +207,11 @@ describe("DualLlmSubagent", () => {
     // structured answer from the quarantine agent.
     expect(textPrompts).toHaveLength(3);
     expect(objectRequestCount).toBe(1);
+    // The main agent is told which tool call produced the hidden data —
+    // name and arguments are privileged-authored — in every mode.
+    for (const prompt of textPrompts) {
+      expect(prompt).toContain('get_emails({"folder":"inbox"})');
+    }
     expect(progress).toHaveBeenCalledWith({
       question: "What kind of data is present?",
       options: ["email metadata", "source code", "not determinable"],
@@ -284,6 +292,7 @@ describe("DualLlmSubagent", () => {
         toolCallId: "tool-call-1",
         userRequest: "summarize this safely",
         toolResult: { raw: "sensitive data" },
+        toolName: "get_emails",
       },
       callingAgentId: "agent-1",
       organizationId: "org-1",

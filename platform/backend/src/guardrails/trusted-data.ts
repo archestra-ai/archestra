@@ -1,12 +1,18 @@
+import { createHash } from "node:crypto";
 import {
   buildTrustedDataBlockedContentNotice,
   extractMcpToolError,
   isSeededAppRenderToolResult,
   type SensitiveContextOrigin,
+  TimeInMs,
 } from "@archestra/shared";
 import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { resolveRunToolDispatch } from "@/archestra-mcp-server/run-tool-target";
+import {
+  resolveRunToolDispatch,
+  resolveRunToolTarget,
+} from "@/archestra-mcp-server/run-tool-target";
+import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { TrustedDataPolicyModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
@@ -17,7 +23,7 @@ import type {
   UnsafeContextBoundary,
   UnsafeContextBoundaryReason,
 } from "@/types";
-import { UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
+import { DualLlmAnalysisSchema, UNSAFE_CONTEXT_BOUNDARY_REASON } from "@/types";
 
 /**
  * Evaluate if context is trusted and return updates for tool results
@@ -92,6 +98,7 @@ export async function evaluateIfContextIsTrusted(
   const allToolCalls: Array<{
     toolCallId: string;
     toolName: string;
+    toolArguments: Record<string, unknown>;
     isRunToolDispatchTarget: boolean;
     // biome-ignore lint/suspicious/noExplicitAny: tool outputs can be any shape
     toolResult: any;
@@ -116,6 +123,10 @@ export async function evaluateIfContextIsTrusted(
           toolCallId: toolCall.id,
           toolName:
             dispatch.kind === "target" ? dispatch.toolName : toolCall.name,
+          // For run_tool dispatches this unwraps to the target tool's own
+          // arguments, mirroring the name resolution above.
+          toolArguments: resolveRunToolTarget(toolCall.name, toolCall.arguments)
+            .toolInput,
           isRunToolDispatchTarget: dispatch.kind === "target",
           toolResult: toolCall.content,
           // Results the platform itself authored carry no external data and
@@ -174,11 +185,13 @@ export async function evaluateIfContextIsTrusted(
   );
 
   // Process evaluation results
+  let streamedDualLlmStart = false;
   for (let i = 0; i < allToolCalls.length; i++) {
     const {
       toolCallId,
       toolResult,
       toolName,
+      toolArguments,
       isPlatformAuthoredResult,
       isUnresolvedDispatch,
     } = allToolCalls[i];
@@ -256,46 +269,72 @@ export async function evaluateIfContextIsTrusted(
         toolName,
       });
     } else if (shouldSanitizeWithDualLlm) {
-      if (!usedDualLlm && onDualLlmStart) {
-        logger.debug(
-          { agentId, toolCallId },
-          "[trustedData] evaluateIfContextIsTrusted: starting dual LLM processing",
-        );
-        onDualLlmStart();
-      }
-
       usedDualLlm = true;
 
       const userRequest = extractUserRequest(messages);
 
-      logger.debug(
-        { agentId, toolCallId, organizationId, userId },
-        "[trustedData] evaluateIfContextIsTrusted: creating dual LLM subagent",
-      );
-      const dualLlmSubagent = await DualLlmSubagent.create({
-        dualLlmParams: {
-          toolCallId,
-          userRequest,
-          toolResult,
-        },
-        callingAgentId: agentId,
+      // The agentic loop resends the full history on every round trip, so the
+      // same tool result would be re-analyzed once per step (and each analysis
+      // is a sequence of LLM calls). Memoize the sanitized analysis across
+      // requests and pods; the key hashes everything the analysis depends on.
+      const cacheKey = buildSanitizationCacheKey({
         organizationId,
-        userId,
+        toolCallId,
+        toolName,
+        toolResult,
+        userRequest,
       });
+      const cachedAnalysis = await readCachedSanitization(cacheKey);
+      if (cachedAnalysis) {
+        logger.debug(
+          { agentId, toolCallId },
+          "[trustedData] evaluateIfContextIsTrusted: reusing cached dual LLM analysis",
+        );
+        dualLlmAnalyses.push({ ...cachedAnalysis, toolCallId });
+        toolResultUpdates[toolCallId] = cachedAnalysis.result;
+        toolResultIsTrusted = true;
+      } else {
+        if (!streamedDualLlmStart && onDualLlmStart) {
+          logger.debug(
+            { agentId, toolCallId },
+            "[trustedData] evaluateIfContextIsTrusted: starting dual LLM processing",
+          );
+          onDualLlmStart();
+          streamedDualLlmStart = true;
+        }
 
-      logger.debug(
-        { agentId, toolCallId },
-        "[trustedData] evaluateIfContextIsTrusted: processing with dual LLM subagent",
-      );
-      const analysis =
-        await dualLlmSubagent.processWithMainAgent(onDualLlmProgress);
-      dualLlmAnalyses.push(analysis);
-      toolResultUpdates[toolCallId] = analysis.result;
-      logger.debug(
-        { agentId, toolCallId, summaryLength: analysis.result.length },
-        "[trustedData] evaluateIfContextIsTrusted: dual LLM processing complete",
-      );
-      toolResultIsTrusted = true;
+        logger.debug(
+          { agentId, toolCallId, organizationId, userId },
+          "[trustedData] evaluateIfContextIsTrusted: creating dual LLM subagent",
+        );
+        const dualLlmSubagent = await DualLlmSubagent.create({
+          dualLlmParams: {
+            toolCallId,
+            userRequest,
+            toolResult,
+            toolName,
+            toolArguments,
+          },
+          callingAgentId: agentId,
+          organizationId,
+          userId,
+        });
+
+        logger.debug(
+          { agentId, toolCallId },
+          "[trustedData] evaluateIfContextIsTrusted: processing with dual LLM subagent",
+        );
+        const analysis =
+          await dualLlmSubagent.processWithMainAgent(onDualLlmProgress);
+        dualLlmAnalyses.push(analysis);
+        toolResultUpdates[toolCallId] = analysis.result;
+        logger.debug(
+          { agentId, toolCallId, summaryLength: analysis.result.length },
+          "[trustedData] evaluateIfContextIsTrusted: dual LLM processing complete",
+        );
+        toolResultIsTrusted = true;
+        await writeCachedSanitization(cacheKey, analysis);
+      }
     }
 
     if (!toolResultIsTrusted) {
@@ -377,4 +416,55 @@ function createToolResultBoundary(params: {
     toolCallId: params.toolCallId,
     toolName: params.toolName,
   };
+}
+
+// A conversation revisits the same tool results for hours; recomputing after
+// expiry is cheap (one analysis) and picks up edits to the built-in dual LLM
+// agents, so the TTL stays short of a full day.
+const SANITIZATION_CACHE_TTL_MS = 6 * TimeInMs.Hour;
+
+function buildSanitizationCacheKey(params: {
+  organizationId: string;
+  toolCallId: string;
+  toolName: string;
+  toolResult: unknown;
+  userRequest: string;
+}): AllowedCacheKey {
+  const contentHash = createHash("sha256")
+    .update(
+      JSON.stringify({
+        toolName: params.toolName,
+        toolResult: params.toolResult,
+        userRequest: params.userRequest,
+      }),
+    )
+    .digest("hex")
+    .slice(0, 32);
+  return `dual-llm-sanitized-result-${params.organizationId}-${params.toolCallId}-${contentHash}`;
+}
+
+async function readCachedSanitization(
+  cacheKey: AllowedCacheKey,
+): Promise<DualLlmAnalysis | undefined> {
+  const cached = await cacheManager.get<DualLlmAnalysis>(cacheKey);
+  if (!cached) {
+    return undefined;
+  }
+  const parsed = DualLlmAnalysisSchema.safeParse(cached);
+  return parsed.success ? parsed.data : undefined;
+}
+
+async function writeCachedSanitization(
+  cacheKey: AllowedCacheKey,
+  analysis: DualLlmAnalysis,
+): Promise<void> {
+  try {
+    await cacheManager.set(cacheKey, analysis, SANITIZATION_CACHE_TTL_MS);
+  } catch (error) {
+    // A failed cache write only costs a re-analysis on the next round trip.
+    logger.warn(
+      { error, cacheKey },
+      "[trustedData] failed to cache dual LLM analysis",
+    );
+  }
 }

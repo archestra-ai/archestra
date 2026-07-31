@@ -29,6 +29,7 @@ export class DualLlmSubagent {
     private readonly toolCallId: string,
     private readonly originalUserRequest: string,
     private readonly toolResult: unknown,
+    private readonly toolDescriptor: string,
     private readonly mainAgent: Agent,
     private readonly quarantineAgent: Agent,
     private readonly maxRounds: number,
@@ -71,6 +72,10 @@ export class DualLlmSubagent {
       dualLlmParams.toolCallId,
       dualLlmParams.userRequest,
       dualLlmParams.toolResult,
+      formatToolDescriptor({
+        toolName: dualLlmParams.toolName,
+        toolArguments: dualLlmParams.toolArguments,
+      }),
       mainAgent,
       quarantineAgent,
       maxRounds,
@@ -100,6 +105,7 @@ export class DualLlmSubagent {
         agent: this.mainAgent,
         prompt: buildQuestionPrompt({
           originalUserRequest: this.originalUserRequest,
+          toolDescriptor: this.toolDescriptor,
           conversation,
           round: round + 1,
           maxRounds: this.maxRounds,
@@ -152,6 +158,7 @@ export class DualLlmSubagent {
       agent: this.mainAgent,
       prompt: buildSummaryPrompt({
         originalUserRequest: this.originalUserRequest,
+        toolDescriptor: this.toolDescriptor,
         conversation,
       }),
     });
@@ -304,6 +311,7 @@ async function resolveBuiltInAgentSelection(params: {
 
 function buildQuestionPrompt(params: {
   originalUserRequest: string;
+  toolDescriptor: string;
   conversation: DualLlmMessage[];
   round: number;
   maxRounds: number;
@@ -318,16 +326,20 @@ function buildQuestionPrompt(params: {
 Original user request:
 ${params.originalUserRequest}
 
+The hidden data is the result of this tool call, which you (the calling agent) authored, so its name and arguments are trustworthy context:
+${params.toolDescriptor}
+
 Current round: ${params.round} of ${params.maxRounds}
 
 Transcript so far:
 ${transcript}
 
-Decide the next multiple-choice question, or reply with DONE if the transcript is sufficient.`;
+Ask about the content of that tool result — what it contains that is needed to fulfill the request. Decide the next multiple-choice question, or reply with DONE if the transcript is sufficient.`;
 }
 
 function buildSummaryPrompt(params: {
   originalUserRequest: string;
+  toolDescriptor: string;
   conversation: DualLlmMessage[];
 }): string {
   const transcript =
@@ -340,10 +352,39 @@ function buildSummaryPrompt(params: {
 Original user request:
 ${params.originalUserRequest}
 
+The hidden data is the result of this tool call:
+${params.toolDescriptor}
+
 Transcript:
 ${transcript}
 
 Write the final safe summary.`;
+}
+
+// Arguments are privileged-authored but can be large (file bodies, page
+// content); cap them so the descriptor stays a prompt anchor, not a payload.
+const TOOL_DESCRIPTOR_ARGUMENTS_MAX_LENGTH = 2_000;
+
+function formatToolDescriptor(params: {
+  toolName: string;
+  toolArguments?: Record<string, unknown>;
+}): string {
+  if (!params.toolArguments || Object.keys(params.toolArguments).length === 0) {
+    return params.toolName;
+  }
+
+  let serializedArguments: string;
+  try {
+    serializedArguments = JSON.stringify(params.toolArguments);
+  } catch {
+    return params.toolName;
+  }
+
+  if (serializedArguments.length > TOOL_DESCRIPTOR_ARGUMENTS_MAX_LENGTH) {
+    serializedArguments = `${serializedArguments.slice(0, TOOL_DESCRIPTOR_ARGUMENTS_MAX_LENGTH)}… (truncated)`;
+  }
+
+  return `${params.toolName}(${serializedArguments})`;
 }
 
 function buildQuarantinePrompt(params: {

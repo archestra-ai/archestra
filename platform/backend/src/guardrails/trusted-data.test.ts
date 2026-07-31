@@ -4,6 +4,7 @@ import {
 } from "@archestra/shared";
 import { vi } from "vitest";
 import { DualLlmSubagent } from "@/agents/subagents/dual-llm";
+import { cacheManager } from "@/cache-manager";
 import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -487,6 +488,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
           toolCallId: "call_dual",
           userRequest: "Extract the key facts only",
           toolResult: { source: "external", payload: "raw" },
+          toolName: "get_emails",
+          toolArguments: {},
         },
         callingAgentId: agentId,
         organizationId,
@@ -494,6 +497,91 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       });
 
       createSpy.mockRestore();
+    });
+
+    test("reuses the cached dual LLM analysis instead of re-analyzing the same tool result", async () => {
+      await TrustedDataPolicyModel.create({
+        toolId,
+        conditions: [{ key: "source", operator: "equal", value: "external" }],
+        action: "sanitize_with_dual_llm",
+        description: "Sanitize external data",
+      });
+
+      // Back the distributed cache with an in-memory store for the test.
+      const store = new Map<string, unknown>();
+      const getSpy = vi
+        .spyOn(cacheManager, "get")
+        .mockImplementation(async (key) => store.get(key));
+      const setSpy = vi
+        .spyOn(cacheManager, "set")
+        .mockImplementation(async (key, value) => {
+          store.set(key, value);
+          return value;
+        });
+
+      const analysis = {
+        toolCallId: "call_dual",
+        conversations: [
+          { role: "assistant" as const, content: "QUESTION: What is inside?" },
+          { role: "user" as const, content: "Answer: 0" },
+        ],
+        result: "Sanitized summary",
+      };
+      const createSpy = vi.spyOn(DualLlmSubagent, "create").mockResolvedValue({
+        processWithMainAgent: vi.fn().mockResolvedValue(analysis),
+      } as unknown as DualLlmSubagent);
+
+      const commonMessages: CommonMessage[] = [
+        { role: "user", content: "Summarize the tool results" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_dual",
+              name: "get_emails",
+              content: { source: "external", payload: "raw" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+
+      const evaluate = () =>
+        evaluateIfContextIsTrusted(
+          commonMessages,
+          agentId,
+          organizationId,
+          undefined,
+          false,
+          { teamIds: [] },
+        );
+
+      // The agentic loop replays the same history: only the first evaluation
+      // may run the (expensive) analysis; later ones reuse the cached one.
+      const first = await evaluate();
+      const second = await evaluate();
+
+      expect(createSpy).toHaveBeenCalledOnce();
+      expect(first.toolResultUpdates).toEqual({
+        call_dual: "Sanitized summary",
+      });
+      expect(second.toolResultUpdates).toEqual(first.toolResultUpdates);
+      expect(second.usedDualLlm).toBe(true);
+      expect(second.dualLlmAnalyses).toEqual([analysis]);
+      expect(second.contextIsTrusted).toBe(true);
+
+      // A changed result under the same tool call id is different content —
+      // it must be re-analyzed, not served from the stale entry.
+      commonMessages[1].toolCalls![0].content = {
+        source: "external",
+        payload: "changed",
+      };
+      await evaluate();
+      expect(createSpy).toHaveBeenCalledTimes(2);
+
+      createSpy.mockRestore();
+      getSpy.mockRestore();
+      setSpy.mockRestore();
     });
 
     test("marks context as untrusted when no policies match", async () => {

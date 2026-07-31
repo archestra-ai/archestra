@@ -84,6 +84,8 @@ export const CacheKey = {
   TeamsTeamAadGroupId: "teams-team-aad-group-id",
   /** MS Teams teams that have delivered an un-mentioned channel message — proof the RSC consent for reading channel messages exists */
   TeamsUnmentionedChannelTraffic: "teams-unmentioned-channel-traffic",
+  /** Dual LLM sanitized tool results, keyed by tool call + content hash */
+  DualLlmSanitizedResult: "dual-llm-sanitized-result",
   /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */

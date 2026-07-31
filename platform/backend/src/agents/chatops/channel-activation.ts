@@ -77,6 +77,13 @@ export async function clearChannelThreadActive(params: {
  *     requests immediately instead of letting them finish unseen.
  *  3. Drops the sticky auto-reply activation, so future un-mentioned messages
  *     stay quiet.
+ *  4. Records the answer-all mute marker, which is what keeps an answer-all
+ *     channel quiet — it has no mention-driven activation for step 3 to clear.
+ *     Set unconditionally: the marker is only read when a channel answers all
+ *     messages (see resolveChannelGateAction), so it is inert in a
+ *     mentions-only channel and already correct if the setting is later
+ *     enabled. Doing it here means every mute path — command, reaction, or
+ *     "Mute this thread" button — persists the mute by construction.
  *
  * Returns whether the thread was active (i.e. whether this actually muted it),
  * so callers post the "muted" confirmation ONLY on a true active→muted
@@ -89,6 +96,7 @@ export async function muteChannelThread(params: {
 }): Promise<boolean> {
   await recordThreadMute(params);
   chatOpsRunRegistry.cancelThread(params);
+  await markChannelThreadMuted(params);
   return await clearChannelThreadActive(params);
 }
 
@@ -136,6 +144,9 @@ export async function invalidateChannelAnswerAll(params: {
  * is that memory: the gate consults isChannelThreadMuted for un-mentioned
  * messages and stays quiet while it is set, and a fresh @mention clears it (see
  * clearChannelThreadMuted).
+ *
+ * @public — muteChannelThread is the only production caller; also exercised
+ * directly in channel-activation.test.ts (knip --production can't see tests).
  */
 export async function markChannelThreadMuted(params: {
   provider: ChatOpsProviderType;

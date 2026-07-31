@@ -30,6 +30,10 @@ import {
   queryService,
 } from "@/knowledge-base";
 import { toKnowledgeBaseUserMessage } from "@/knowledge-base/errors";
+import {
+  deleteConnector,
+  deleteKnowledgeBase,
+} from "@/knowledge-base/knowledge-source-deletion";
 import logger from "@/logging";
 import {
   AgentConnectorAssignmentModel,
@@ -813,7 +817,9 @@ async function handleDeleteKnowledgeBase(params: {
     if (!existing || existing.organizationId !== context.organizationId) {
       return knowledgeBaseNotFound(args.id);
     }
-    await KnowledgeBaseModel.delete(args.id);
+    // Shared service so this MCP path runs the same side-effects (cache
+    // invalidation) as the REST route — not a bare model soft-delete.
+    await deleteKnowledgeBase(args.id);
     return successResult(`Knowledge base deleted: ${args.id}`);
   } catch (error) {
     return catchError(error, "deleting knowledge base");
@@ -1159,7 +1165,10 @@ async function handleDeleteKnowledgeConnector(params: {
         );
       }
     }
-    await KnowledgeBaseConnectorModel.delete(args.id);
+    // Shared service so this MCP path cancels queued syncs + invalidates the
+    // cache identically to the REST route (a bare model soft-delete would skip
+    // both and orphan the queued syncs). The secret is preserved here too.
+    await deleteConnector(args.id);
     return successResult(`Knowledge connector deleted: ${args.id}`);
   } catch (error) {
     return catchError(error, "deleting knowledge connector");
@@ -1193,10 +1202,13 @@ async function handleAssignKnowledgeConnectorToKnowledgeBase(params: {
     ) {
       return knowledgeBaseNotFound(args.knowledge_base_id);
     }
-    await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
+    const assigned = await KnowledgeBaseConnectorModel.assignToKnowledgeBase(
       args.connector_id,
       args.knowledge_base_id,
     );
+    if (!assigned) {
+      return knowledgeBaseNotFound(args.knowledge_base_id);
+    }
     return successResult(
       `Knowledge connector ${args.connector_id} assigned to knowledge base ${args.knowledge_base_id}`,
     );
@@ -1250,10 +1262,32 @@ async function handleAssignKnowledgeBaseToAgent(params: {
   args: KnowledgeBaseAgentAssignmentArgs;
   context: ArchestraContext;
 }) {
-  const { args } = params;
+  const { args, context } = params;
 
   try {
-    await AgentKnowledgeBaseModel.assign(args.agent_id, args.knowledge_base_id);
+    if (!context.organizationId) {
+      return errorResult("Organization context not available");
+    }
+    // Resolve the KB in the caller's org first, mirroring the connector
+    // handlers: an unknown, out-of-org or soft-deleted KB is a not-found, not a
+    // silently-created link.
+    const knowledgeBase = await KnowledgeBaseModel.findById(
+      args.knowledge_base_id,
+    );
+    if (
+      !knowledgeBase ||
+      knowledgeBase.organizationId !== context.organizationId
+    ) {
+      return knowledgeBaseNotFound(args.knowledge_base_id);
+    }
+
+    const assigned = await AgentKnowledgeBaseModel.assign(
+      args.agent_id,
+      args.knowledge_base_id,
+    );
+    if (!assigned) {
+      return knowledgeBaseNotFound(args.knowledge_base_id);
+    }
     return successResult(
       `Knowledge base ${args.knowledge_base_id} assigned to agent ${args.agent_id}`,
     );
@@ -1319,10 +1353,13 @@ async function handleAssignKnowledgeConnectorToAgent(params: {
       );
     }
 
-    await AgentConnectorAssignmentModel.assign(
+    const assigned = await AgentConnectorAssignmentModel.assign(
       args.agent_id,
       args.connector_id,
     );
+    if (!assigned) {
+      return knowledgeConnectorNotFound(args.connector_id);
+    }
     return successResult(
       `Knowledge connector ${args.connector_id} assigned to agent ${args.agent_id}`,
     );

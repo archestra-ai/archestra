@@ -54,7 +54,6 @@ import {
   isMuteReaction,
   isThreadMuteCommand,
   markChannelThreadActive,
-  markChannelThreadMuted,
   mightBeAddressedMuteCommand,
   muteChannelThread,
   resolveChannelGateAction,
@@ -380,21 +379,22 @@ class SlackProvider implements ChatOpsProvider {
         })
       ) {
         case "mute": {
+          // muteThreadAndNotify persists the mute marker, so the thread's prior
+          // state has to be read before it.
+          const alreadyMuted = answerAll
+            ? await isChannelThreadMuted(activation)
+            : false;
           const wasActive = await this.muteThreadAndNotify(
             event.channel,
             threadTs,
           );
           // An answer-all channel replies without a mention, so clearing the
-          // mention-driven activation isn't enough — remember the mute on the
-          // thread itself so it stays quiet until re-mentioned. Confirm it once
-          // (muteThreadAndNotify only confirms an active→muted transition, and a
-          // fresh answer-all thread isn't "active").
-          if (answerAll) {
-            const alreadyMuted = await isChannelThreadMuted(activation);
-            await markChannelThreadMuted(activation);
-            if (!wasActive && !alreadyMuted) {
-              await this.postThreadMutedNotice(event.channel, threadTs);
-            }
+          // mention-driven activation isn't enough — the mute is remembered on
+          // the thread itself so it stays quiet until re-mentioned. Confirm it
+          // once (muteThreadAndNotify only confirms an active→muted transition,
+          // and a fresh answer-all thread isn't "active").
+          if (answerAll && !wasActive && !alreadyMuted) {
+            await this.postThreadMutedNotice(event.channel, threadTs);
           }
           return null;
         }

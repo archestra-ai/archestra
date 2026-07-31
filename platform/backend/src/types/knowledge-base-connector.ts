@@ -16,12 +16,15 @@ import {
 
 // ===== Knowledge Base Schemas =====
 
+// `deletedAt` is an internal soft-delete axis (see softDeletablePgTable); keep
+// it out of API responses and reject client-supplied values. A user-facing
+// restore/trash surface can expose it in a follow-up.
 export const SelectKnowledgeBaseSchema = createSelectSchema(
   schema.knowledgeBasesTable,
-);
+).omit({ deletedAt: true });
 export const InsertKnowledgeBaseSchema = createInsertSchema(
   schema.knowledgeBasesTable,
-).omit({ id: true, createdAt: true, updatedAt: true });
+).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
 export const UpdateKnowledgeBaseSchema = createUpdateSchema(
   schema.knowledgeBasesTable,
 ).pick({
@@ -48,7 +51,8 @@ export const SelectKnowledgeBaseConnectorSchema = createSelectSchema(
     lastSyncStatus: NullableConnectorSyncStatusSchema,
     lastPermissionSyncStatus: NullableConnectorSyncStatusSchema,
   },
-);
+  // Internal soft-delete axis; kept out of API responses (see KB schema above).
+).omit({ deletedAt: true });
 export const InsertKnowledgeBaseConnectorSchema = createInsertSchema(
   schema.knowledgeBaseConnectorsTable,
   {
@@ -60,7 +64,7 @@ export const InsertKnowledgeBaseConnectorSchema = createInsertSchema(
     lastSyncStatus: NullableConnectorSyncStatusSchema.optional(),
     lastPermissionSyncStatus: NullableConnectorSyncStatusSchema.optional(),
   },
-).omit({ id: true, createdAt: true, updatedAt: true });
+).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });
 export const UpdateKnowledgeBaseConnectorSchema = createUpdateSchema(
   schema.knowledgeBaseConnectorsTable,
   {

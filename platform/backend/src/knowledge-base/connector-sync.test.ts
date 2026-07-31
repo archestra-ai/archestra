@@ -6,9 +6,11 @@ vi.mock("./connectors/registry", () => ({
 }));
 
 const mockGetSecret = vi.hoisted(() => vi.fn());
+const mockDeleteSecret = vi.hoisted(() => vi.fn().mockResolvedValue(true));
 vi.mock("@/secrets-manager", () => ({
   secretManager: () => ({
     getSecret: mockGetSecret,
+    deleteSecret: mockDeleteSecret,
   }),
 }));
 
@@ -50,6 +52,7 @@ import {
 } from "@/models";
 import { describe, expect, test } from "@/test";
 import { connectorSyncService } from "./connector-sync";
+import { deleteConnector } from "./knowledge-source-deletion";
 
 async function createSecret(): Promise<string> {
   const [secret] = await db
@@ -166,6 +169,98 @@ describe("ConnectorSyncService", () => {
     const run = await ConnectorRunModel.findById(result.runId);
     expect(run?.itemErrors).toBe(0);
     expect(run?.documentsIngested).toBe(1);
+  });
+
+  test("deleting the connector mid-run stops the sync before the next batch", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    setupSecret();
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(2),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [{ id: "ext-1", title: "Doc 1", content: "Content 1" }],
+            checkpoint: { page: 1 },
+            hasMore: true,
+          };
+          // The user deletes the connector while the run is between batches.
+          await deleteConnector(connector.id);
+          yield {
+            documents: [{ id: "ext-2", title: "Doc 2", content: "Content 2" }],
+            checkpoint: { page: 2 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    });
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    // The delete fails the run's lease, which is what the loop checks at each
+    // batch boundary — the second batch is never ingested.
+    expect(result.status).toBe("superseded");
+    expect((await ConnectorRunModel.findById(result.runId))?.status).toBe(
+      "superseded",
+    );
+    const docs = await db
+      .select({ sourceId: schema.kbDocumentsTable.sourceId })
+      .from(schema.kbDocumentsTable)
+      .where(sql`connector_id = ${connector.id}`);
+    expect(docs.map((d) => d.sourceId)).toEqual(["ext-1"]);
+  });
+
+  test("a soft-deleted connector stops the sync even if its run keeps the lease", async ({
+    makeOrganization,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+  }) => {
+    const org = await makeOrganization();
+    const kb = await makeKnowledgeBase(org.id);
+    const secretId = await createSecret();
+    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+    await KnowledgeBaseConnectorModel.update(connector.id, { secretId });
+
+    setupSecret();
+    mockGetConnector.mockReturnValue({
+      estimateTotalItems: vi.fn().mockResolvedValue(2),
+      sync: vi.fn().mockImplementation(() =>
+        (async function* () {
+          yield {
+            documents: [{ id: "ext-1", title: "Doc 1", content: "Content 1" }],
+            checkpoint: { page: 1 },
+            hasMore: true,
+          };
+          // Bare model soft-delete: the stamp lands but the run row is left
+          // untouched, so the lease still renews. The per-batch connector
+          // re-read is the guard that has to stop the run here — it must not
+          // fall back to the start-of-run snapshot and keep writing.
+          await KnowledgeBaseConnectorModel.delete(connector.id);
+          yield {
+            documents: [{ id: "ext-2", title: "Doc 2", content: "Content 2" }],
+            checkpoint: { page: 2 },
+            hasMore: false,
+          };
+        })(),
+      ),
+    });
+
+    const result = await connectorSyncService.executeSync(connector.id);
+
+    expect(result.status).toBe("superseded");
+    const docs = await db
+      .select({ sourceId: schema.kbDocumentsTable.sourceId })
+      .from(schema.kbDocumentsTable)
+      .where(sql`connector_id = ${connector.id}`);
+    expect(docs.map((d) => d.sourceId)).toEqual(["ext-1"]);
   });
 
   test("executeSync throws when connector not found", async () => {

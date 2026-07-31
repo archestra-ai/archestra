@@ -3737,12 +3737,27 @@ class ToolModel {
       return cached;
     }
     const [kbRows, connectorIds] = await Promise.all([
+      // Join the KB parent so a soft-deleted KB does not keep this agent's
+      // query_knowledge_sources tool visible. (The connector half already
+      // filters via AgentConnectorAssignmentModel.getConnectorIds.)
       db
         .select({
           knowledgeBaseId: schema.agentKnowledgeBasesTable.knowledgeBaseId,
         })
         .from(schema.agentKnowledgeBasesTable)
-        .where(eq(schema.agentKnowledgeBasesTable.agentId, agentId))
+        .innerJoin(
+          schema.knowledgeBasesTable,
+          eq(
+            schema.agentKnowledgeBasesTable.knowledgeBaseId,
+            schema.knowledgeBasesTable.id,
+          ),
+        )
+        .where(
+          and(
+            eq(schema.agentKnowledgeBasesTable.agentId, agentId),
+            notDeleted(schema.knowledgeBasesTable),
+          ),
+        )
         .limit(1),
       AgentConnectorAssignmentModel.getConnectorIds(agentId),
     ]);

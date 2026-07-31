@@ -48,7 +48,10 @@ class InstanceUsageModel {
         .select({ total: count() })
         .from(schema.appsTable)
         .where(notDeleted(schema.appsTable)),
-      db.select({ total: count() }).from(schema.knowledgeBasesTable),
+      db
+        .select({ total: count() })
+        .from(schema.knowledgeBasesTable)
+        .where(notDeleted(schema.knowledgeBasesTable)),
     ]);
 
     const agentCountsByType: Record<AgentType, number> = {

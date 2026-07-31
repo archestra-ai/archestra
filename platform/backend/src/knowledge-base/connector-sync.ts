@@ -261,9 +261,20 @@ class ConnectorSyncService {
         // org-wide/team-scoped ACLs, while the permission-sync pass owns auto-sync
         // ACLs (content-sync becomes a no-op author for them). This closes the
         // TOCTOU window to at most one batch.
+        // A null re-read means the connector was deleted mid-run (findById is
+        // notDeleted-filtered). Stop before writing this batch rather than
+        // falling back to the start-of-run snapshot: the delete path already
+        // failed our lease, and this closes the same window for a delete that
+        // lands between the renewal above and these writes.
         const currentConnector =
-          (await KnowledgeBaseConnectorModel.findById(connectorId)) ??
-          connector;
+          await KnowledgeBaseConnectorModel.findById(connectorId);
+        if (!currentConnector) {
+          runLog.info(
+            { documentsProcessed, documentsIngested },
+            "Connector was deleted mid-run; stopping before ingesting the next batch",
+          );
+          return { runId: run.id, status: "superseded" };
+        }
         const documentAcl =
           this.buildDocumentAccessControlList(currentConnector);
         const isAutoSync =

@@ -1,10 +1,8 @@
 import { and, eq, ne, notExists } from "drizzle-orm";
 import config from "@/config";
+import { CREDENTIAL_PROVIDER_ID } from "@/constants";
 import db, { schema } from "@/database";
 import logger from "@/logging";
-
-/** better-auth's providerId for email/password accounts. */
-const CREDENTIAL_PROVIDER_ID = "credential";
 
 /**
  * When ARCHESTRA_AUTH_DISABLE_BASIC_AUTH is on, revoke the sessions of every
@@ -28,6 +26,10 @@ const CREDENTIAL_PROVIDER_ID = "credential";
  * creation time — a schema change, not a sweep. Such a user can already reach
  * the same access through SSO, so the gap is small, but it is not zero: this
  * is not "revoke every password session".
+ *
+ * Users with no accounts at all are swept too, since they also have no
+ * federated account. That is intended: they cannot sign in by any route, so
+ * leaving them a live session would serve nothing.
  */
 export async function revokeBasicAuthOnlySessions(): Promise<void> {
   if (!config.auth.disableBasicAuth) {

@@ -1173,12 +1173,22 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   // must always be able to end it. Sessions belonging to users who have no
   // federated account are revoked at boot by revokeBasicAuthOnlySessions().
   if (config.auth.disableBasicAuth) {
+    // Verified against better-auth 1.6.22: api/routes/password.mjs declares
+    // /request-password-reset, /reset-password and /verify-password.
+    // "/forget-password" is NOT a route — it appears only in the rate-limiter's
+    // path list — so blocking it matched nothing and left reset-initiation open.
+    //
+    // /admin/create-user is deliberately absent: creating users stays valid on
+    // an SSO-only deployment, and its optional password is inert while
+    // /sign-in/email is closed.
     const passwordPaths = [
       "/sign-in/email",
       "/sign-up/email",
-      "/forget-password",
+      "/request-password-reset",
       "/reset-password",
+      "/verify-password",
       "/change-password",
+      "/admin/set-user-password",
     ];
     if (passwordPaths.some((blocked) => path.startsWith(blocked))) {
       logger.warn(

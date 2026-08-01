@@ -546,7 +546,10 @@ jobs:
     name: Platform E2E Tests (Lite)
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # PROBE-ONLY: temporarily on the free GitHub-hosted runner (4 vCPU / 16 GB
+    # RAM / ~14 GB usable disk) to measure whether the lite stack fits.
+    # Normally: blacksmith-8vcpu-ubuntu-2404. Revert before merging.
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
@@ -557,6 +560,16 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 1
+
+      # PROBE-ONLY diagnostic: disk/memory headroom before anything is pulled.
+      - name: "[probe] Disk and memory at job start"
+        run: |
+          echo "=== df -h / ==="
+          df -h /
+          echo "=== docker system df -v (top 40 lines) ==="
+          docker system df -v | head -40
+          echo "=== free -h ==="
+          free -h
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
@@ -642,6 +655,17 @@ jobs:
 
           echo "=== Docker Container Status ==="
           docker ps -a
+
+      # PROBE-ONLY diagnostic: disk/memory headroom after the full run.
+      - name: "[probe] Disk and memory at job end"
+        if: ${{ always() }}
+        run: |
+          echo "=== df -h / ==="
+          df -h /
+          echo "=== docker system df -v (top 40 lines) ==="
+          docker system df -v | head -40
+          echo "=== free -h ==="
+          free -h
 
       # No teardown: the runner VM is thrown away after the job anyway.
 

@@ -547,7 +547,17 @@ function RoleFilterDropdown() {
   const currentRole = searchParams.get("role") || "all";
   const selectedRole = roles.find((role) => role.role === currentRole);
 
-  const handleChange = useCallback(
+  // Navigating from inside the Select's own change/close handler destroyed it
+  // mid-close, so Radix never ran the cleanup that removes `pointer-events:
+  // none` and `data-scroll-locked` from <body> — the filter applied once and
+  // then could not be reopened without a reload. (Closing with Escape, which
+  // navigates nothing, always cleaned up correctly.) The choice is held and
+  // applied from an effect instead, which runs after the close has committed
+  // and Radix's teardown has already flushed.
+  const [open, setOpen] = useState(false);
+  const [pendingRole, setPendingRole] = useState<string | null>(null);
+
+  const applyRole = useCallback(
     (value: string) => {
       const params = new URLSearchParams(searchParams.toString());
       if (value === "all") {
@@ -561,8 +571,20 @@ function RoleFilterDropdown() {
     [searchParams, router, pathname],
   );
 
+  useEffect(() => {
+    if (open || pendingRole === null) return;
+    const value = pendingRole;
+    setPendingRole(null);
+    applyRole(value);
+  }, [open, pendingRole, applyRole]);
+
   return (
-    <Select value={currentRole} onValueChange={handleChange}>
+    <Select
+      open={open}
+      onOpenChange={setOpen}
+      value={pendingRole ?? currentRole}
+      onValueChange={setPendingRole}
+    >
       <SelectTrigger className="w-[180px]">
         {selectedRole ? (
           <RoleOptionLabel

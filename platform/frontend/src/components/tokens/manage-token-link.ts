@@ -24,7 +24,7 @@ export function getManageTokenLink(params: {
   if (selectedTeamToken?.isOrganizationToken) {
     return {
       label: "Manage your organization token",
-      href: "/settings/organization?highlight=organization-token",
+      href: "/settings/auth?highlight=organization-token",
     };
   }
   if (selectedTeamToken?.team) {

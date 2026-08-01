@@ -1967,7 +1967,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/github": { githubAppConfig: ["read"] },
-  "/settings/organization": { organizationSettings: ["read"] },
+  "/settings/appearance": { organizationSettings: ["read"] },
+  "/settings/auth": { organizationSettings: ["read"] },
 };
 
 // === Internal helpers

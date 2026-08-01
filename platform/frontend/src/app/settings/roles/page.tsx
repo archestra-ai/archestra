@@ -103,10 +103,10 @@ export default function RolesSettingsPage() {
         New users who join via email/password self-signup or ChatOps
         auto-provisioning are assigned a default role. Change it in{" "}
         <Link
-          href="/settings/organization"
+          href="/settings/auth"
           className="font-medium underline underline-offset-4"
         >
-          Organization → Auth
+          Settings → Auth
         </Link>
         .
       </p>

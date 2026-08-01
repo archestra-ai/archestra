@@ -355,7 +355,8 @@ const contentNavGroups: NavGroup[] = [
         // /settings is a landing page that forwards to the first permitted
         // tab; show the item when the user can see any settings page.
         permissionUrls: [
-          "/settings/organization",
+          "/settings/appearance",
+          "/settings/auth",
           "/settings/service-accounts",
           "/settings/agents",
           "/settings/security",

@@ -91,7 +91,8 @@ describe("useSettingsTabs", () => {
       expect(labels).toContain("Users");
       expect(labels).toContain("Teams");
       expect(labels).toContain("Roles");
-      expect(labels).toContain("Organization");
+      expect(labels).toContain("Appearance");
+      expect(labels).toContain("Auth");
     });
   });
 
@@ -282,7 +283,8 @@ describe("useSettingsTabs", () => {
     await waitFor(() => {
       const labels = getTabLabels(result.current);
       expect(labels).toEqual([
-        "Organization",
+        "Appearance",
+        "Auth",
         "Service Accounts",
         "Chat",
         "LLM",

@@ -13,10 +13,8 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
-  useCreateSiteNotification,
   useDeleteSiteNotification,
   useSiteNotification,
-  useUpdateSiteNotification,
 } from "@/lib/site-notification.query";
 import { formatDate } from "@/lib/utils";
 
@@ -44,77 +42,45 @@ const markdownComponents: Components = {
   },
 };
 
-export function SiteNotificationsSection() {
+interface SiteNotificationsSectionProps {
+  /** Effective draft content (page-owned state falling back to the server value). */
+  content: string;
+  /** Effective draft expiration; `null` = no expiration. */
+  expiresAt: Date | null;
+  onContentChange: (content: string) => void;
+  onExpiresAtChange: (expiresAt: Date | null) => void;
+  /** Called after the notification is deleted so the page can drop its draft. */
+  onDeleted: () => void;
+}
+
+/**
+ * Site-notification editor. The draft state lives in the appearance page so
+ * changes here save through the page's single floating save bar; only the
+ * immediate delete action stays local.
+ */
+export function SiteNotificationsSection({
+  content,
+  expiresAt,
+  onContentChange,
+  onExpiresAtChange,
+  onDeleted,
+}: SiteNotificationsSectionProps) {
   const { data: canReadNotifications } = useHasPermissions({
     siteNotification: ["read"],
   });
   const { data: notification, isLoading } = useSiteNotification({
     enabled: canReadNotifications === true,
   });
-  const createMutation = useCreateSiteNotification();
-  const updateMutation = useUpdateSiteNotification();
   const deleteMutation = useDeleteSiteNotification();
 
-  const [content, setContent] = useState<string | null>(null);
-  const [expiresAt, setExpiresAt] = useState<Date | null | undefined>(
-    undefined,
-  );
   const [tab, setTab] = useState<"markdown" | "preview">("markdown");
-
-  const effectiveContent = content ?? notification?.content ?? "";
-  const effectiveExpiresAt =
-    expiresAt !== undefined
-      ? expiresAt
-      : notification?.expiresAt
-        ? new Date(notification.expiresAt)
-        : null;
-  const hasChanges = notification
-    ? content !== null || expiresAt !== undefined
-    : content !== null || expiresAt !== undefined;
-  const isSaving = createMutation.isPending || updateMutation.isPending;
-  const trimmedContent = effectiveContent.trim();
-
-  const resetDraft = useCallback(() => {
-    setContent(null);
-    setExpiresAt(undefined);
-  }, []);
-
-  const handleSave = useCallback(async () => {
-    if (!trimmedContent) {
-      return;
-    }
-
-    if (!notification) {
-      await createMutation.mutateAsync({
-        content: trimmedContent,
-        expiresAt: effectiveExpiresAt?.toISOString(),
-      });
-    } else {
-      await updateMutation.mutateAsync({
-        path: { id: notification.id },
-        body: {
-          content: trimmedContent,
-          expiresAt: effectiveExpiresAt?.toISOString() ?? null,
-          isActive: true,
-        },
-      });
-    }
-
-    resetDraft();
-  }, [
-    notification,
-    trimmedContent,
-    effectiveExpiresAt,
-    createMutation,
-    updateMutation,
-    resetDraft,
-  ]);
+  const trimmedContent = content.trim();
 
   const handleDelete = useCallback(async () => {
     if (!notification) return;
     await deleteMutation.mutateAsync({ path: { id: notification.id } });
-    resetDraft();
-  }, [notification, deleteMutation, resetDraft]);
+    onDeleted();
+  }, [notification, deleteMutation, onDeleted]);
 
   if (canReadNotifications === false) {
     return null;
@@ -135,8 +101,8 @@ export function SiteNotificationsSection() {
           <>
             <ExpirationDateTimeField
               label="Expiration Date"
-              value={effectiveExpiresAt}
-              onChange={setExpiresAt}
+              value={expiresAt}
+              onChange={onExpiresAtChange}
               placeholder="No expiration"
               noExpirationText="Notification will not expire"
               formatExpiration={(value) =>
@@ -166,8 +132,8 @@ export function SiteNotificationsSection() {
               {tab === "markdown" ? (
                 <Textarea
                   aria-label="Notification content"
-                  value={effectiveContent}
-                  onChange={(event) => setContent(event.target.value)}
+                  value={content}
+                  onChange={(event) => onContentChange(event.target.value)}
                   placeholder="Write your notification content using markdown."
                   className="border-0 rounded-none font-mono text-sm min-h-[160px] resize-none focus-visible:ring-0"
                 />
@@ -178,7 +144,7 @@ export function SiteNotificationsSection() {
                       remarkPlugins={[remarkGfm]}
                       components={markdownComponents}
                     >
-                      {effectiveContent}
+                      {content}
                     </ReactMarkdown>
                   ) : (
                     <p className="text-sm text-muted-foreground">
@@ -189,45 +155,21 @@ export function SiteNotificationsSection() {
               )}
             </div>
 
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                {notification && (
-                  <PermissionButton
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    permissions={{ siteNotification: ["delete"] }}
-                    onClick={handleDelete}
-                    disabled={deleteMutation.isPending}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete Notification
-                  </PermissionButton>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {hasChanges && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={resetDraft}
-                    disabled={isSaving}
-                  >
-                    Cancel
-                  </Button>
-                )}
+            {notification && (
+              <div className="flex items-center justify-between gap-3">
                 <PermissionButton
                   type="button"
-                  permissions={{
-                    siteNotification: notification ? ["update"] : ["create"],
-                  }}
-                  onClick={handleSave}
-                  disabled={!hasChanges || isSaving || !trimmedContent}
+                  variant="destructive"
+                  size="sm"
+                  permissions={{ siteNotification: ["delete"] }}
+                  onClick={handleDelete}
+                  disabled={deleteMutation.isPending}
                 >
-                  {isSaving ? "Saving..." : "Save Notification"}
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Notification
                 </PermissionButton>
               </div>
-            </div>
+            )}
           </>
         )}
       </CardContent>

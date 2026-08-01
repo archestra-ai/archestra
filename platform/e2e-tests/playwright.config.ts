@@ -57,6 +57,7 @@ const uiTestMatch = [
   "**/quickstart.spec.ts",
   "**/skill-share.spec.ts",
   "**/static-credentials-management.spec.ts",
+  "**/users-role-filter.spec.ts",
 ];
 
 // API specs that run in the lite environment (platform as a plain container

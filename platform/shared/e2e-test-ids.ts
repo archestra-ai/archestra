@@ -147,6 +147,8 @@ export const E2eTestId = {
   // Connectivity / offline status bar
   ConnectivityStatusBar: "connectivity-status-bar",
   ConnectivityStatusBarRetry: "connectivity-status-bar-retry",
+  // Users settings
+  UsersRoleFilter: "users-role-filter",
   // Role debugger / impersonation
   ImpersonationBanner: "impersonation-banner",
   ImpersonationDebugRoleButton: "impersonation-debug-role-button",

@@ -563,19 +563,34 @@ function RoleFilterDropdown() {
 
   return (
     <Select value={currentRole} onValueChange={handleChange}>
-      <SelectTrigger className="w-[180px]">
-        {selectedRole ? (
-          <RoleOptionLabel
-            predefined={selectedRole.predefined}
-            label={selectedRole.name}
-            className="pr-6"
-          />
-        ) : (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Shield className="h-4 w-4" />
-            <SelectValue placeholder="Filter by role" />
-          </div>
-        )}
+      <SelectTrigger
+        className="w-[180px]"
+        data-testid={E2eTestId.UsersRoleFilter}
+      >
+        {/*
+         * SelectValue must stay mounted in every state. Radix positions the
+         * item-aligned dropdown only once it has all of trigger, value node,
+         * content, viewport and selected item; with the value node missing it
+         * silently skips positioning and the list renders unstyled off-screen
+         * while `pointer-events: none` stays on <body> — so the filter looks
+         * dead. Rendering the custom label as SelectValue's children keeps the
+         * node mounted, which is the same shape the other custom-label selects
+         * here use.
+         */}
+        <SelectValue placeholder="Filter by role">
+          {selectedRole ? (
+            <RoleOptionLabel
+              predefined={selectedRole.predefined}
+              label={selectedRole.name}
+              className="pr-6"
+            />
+          ) : (
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <Shield className="h-4 w-4" />
+              Filter by role
+            </span>
+          )}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="all">All Roles</SelectItem>

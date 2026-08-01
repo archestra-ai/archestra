@@ -72,13 +72,16 @@ import {
 } from "../_parts/deployment-status";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
+import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
 import type { CatalogItem } from "../_parts/mcp-server-card";
+import { McpServerUsageTab } from "../_parts/mcp-server-usage-tab";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
 import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
 import { YamlConfigContent } from "../_parts/yaml-config-dialog";
 
 type DetailTab =
   | "overview"
+  | "usage"
   | "credentials"
   | "logs"
   | "inspector"
@@ -252,8 +255,11 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
   // none), mirroring the old settings dialog's Connections nav item.
   const showConnectionsTab = variant !== "builtin";
 
-  // Every tab beyond the always-present Overview dashboard.
+  // Every tab beyond the always-present Overview dashboard. Usage is always
+  // present: "nothing uses this yet" is itself an answer, and it keeps the
+  // ?tab=usage deep link from the registry card's hover card always resolvable.
   const tabIds: DetailTab[] = [
+    "usage",
     ...(showConnectionsTab ? (["credentials"] as DetailTab[]) : []),
     ...diagnosticTabs.map((panel) => panel.id),
   ];
@@ -366,6 +372,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
     canModify && variant === "local" && deploymentServerIds.length > 0;
 
   const connectionsCount = allServersForCatalog.length;
+  const agentUsageCount = deriveAgentUsage(allServersForCatalog).total;
   const statusText =
     variant === "local"
       ? deploymentSummary
@@ -499,6 +506,14 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
         >
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="usage">
+              Usage
+              {agentUsageCount > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground tabular-nums">
+                  {agentUsageCount}
+                </span>
+              )}
+            </TabsTrigger>
             {showConnectionsTab && (
               <TabsTrigger
                 value="credentials"
@@ -519,6 +534,10 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
             ))}
           </TabsList>
         </Tabs>
+      )}
+
+      {effectiveTab === "usage" && (
+        <McpServerUsageTab serversForCatalog={allServersForCatalog} />
       )}
 
       {effectiveTab === "overview" && (

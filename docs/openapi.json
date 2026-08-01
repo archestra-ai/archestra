@@ -240948,11 +240948,35 @@
                             },
                             "name": {
                               "type": "string"
+                            },
+                            "agentType": {
+                              "type": "string",
+                              "enum": [
+                                "profile",
+                                "mcp_gateway",
+                                "llm_proxy",
+                                "agent"
+                              ]
+                            },
+                            "scope": {
+                              "type": "string",
+                              "enum": [
+                                "personal",
+                                "team",
+                                "org"
+                              ]
+                            },
+                            "ownerEmail": {
+                              "nullable": true,
+                              "type": "string"
                             }
                           },
                           "required": [
                             "id",
-                            "name"
+                            "name",
+                            "agentType",
+                            "scope",
+                            "ownerEmail"
                           ],
                           "additionalProperties": false
                         }
@@ -240967,11 +240991,35 @@
                             },
                             "name": {
                               "type": "string"
+                            },
+                            "agentType": {
+                              "type": "string",
+                              "enum": [
+                                "profile",
+                                "mcp_gateway",
+                                "llm_proxy",
+                                "agent"
+                              ]
+                            },
+                            "scope": {
+                              "type": "string",
+                              "enum": [
+                                "personal",
+                                "team",
+                                "org"
+                              ]
+                            },
+                            "ownerEmail": {
+                              "nullable": true,
+                              "type": "string"
                             }
                           },
                           "required": [
                             "id",
-                            "name"
+                            "name",
+                            "agentType",
+                            "scope",
+                            "ownerEmail"
                           ],
                           "additionalProperties": false
                         }
@@ -241569,11 +241617,35 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "ownerEmail": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "agentType",
+                          "scope",
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -241588,11 +241660,35 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "ownerEmail": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "agentType",
+                          "scope",
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -242108,11 +242204,35 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "ownerEmail": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "agentType",
+                          "scope",
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -242127,11 +242247,35 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "ownerEmail": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "agentType",
+                          "scope",
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -242956,11 +243100,35 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "ownerEmail": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "agentType",
+                          "scope",
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -242975,11 +243143,35 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "ownerEmail": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "agentType",
+                          "scope",
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -243495,11 +243687,35 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "ownerEmail": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "agentType",
+                          "scope",
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -243514,11 +243730,35 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "ownerEmail": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "agentType",
+                          "scope",
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -244976,11 +245216,35 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "ownerEmail": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "agentType",
+                          "scope",
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -244995,11 +245259,35 @@
                           },
                           "name": {
                             "type": "string"
+                          },
+                          "agentType": {
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
+                          },
+                          "ownerEmail": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "id",
-                          "name"
+                          "name",
+                          "agentType",
+                          "scope",
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
                       }

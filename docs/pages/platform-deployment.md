@@ -921,6 +921,7 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Default: `false`
   - Set to `true` to block starting impersonated sessions and hide the impersonation pickers
   - Denied attempts are still recorded in the audit log; stopping an already-running impersonated session always remains possible
+
 - **`ARCHESTRA_AUTH_DISABLE_INVITATIONS`** - Disables user invitations functionality.
   - Default: `false`
   - Set to `true` to hide invitation-related UI and block invitation API endpoints

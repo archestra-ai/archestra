@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { E2eTestId, getRoleDisplayName } from "@archestra/shared";
 import { Eye } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useState } from "react";
@@ -8,15 +8,8 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
+import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import {
@@ -51,7 +44,7 @@ function RoleDebuggerDialog() {
   const userOptions = (candidates ?? []).map((candidate) => ({
     userId: candidate.id,
     name: candidate.role
-      ? `${candidate.name} · ${candidate.role}`
+      ? `${candidate.name} · ${getRoleDisplayName(candidate.role)}`
       : candidate.name,
     email: candidate.email,
   }));
@@ -65,58 +58,60 @@ function RoleDebuggerDialog() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          size="sm"
-          variant="outline"
-          data-testid={E2eTestId.ImpersonationDebugRoleButton}
-        >
-          <Eye className="mr-2 h-4 w-4" />
-          <span>Debug a role</span>
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>View the app as another user</DialogTitle>
-          <DialogDescription>
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        data-testid={E2eTestId.ImpersonationDebugRoleButton}
+        onClick={() => setOpen(true)}
+      >
+        <Eye className="mr-2 h-4 w-4" />
+        <span>Debug a role</span>
+      </Button>
+      <StandardDialog
+        open={open}
+        onOpenChange={setOpen}
+        size="small"
+        title="View the app as another user"
+        description={
+          <>
             The impersonated session expires after one hour or when you click{" "}
             <em>Return to admin</em> in the banner.
-          </DialogDescription>
-        </DialogHeader>
+          </>
+        }
+        footer={
+          <Button
+            variant="outline"
+            data-testid={E2eTestId.ImpersonationViewAsButton}
+            disabled={!selectedUserId || isPending}
+            onClick={() => {
+              if (selectedUserId) impersonate(selectedUserId);
+            }}
+          >
+            <Eye className="mr-2 h-4 w-4" />
+            <span>View as user</span>
+          </Button>
+        }
+      >
         {isCandidatesLoadError ? (
           <QueryLoadError
             title="Couldn't load users to impersonate"
             onRetry={() => refetchCandidates()}
           />
         ) : (
-          <div className="flex items-center gap-2">
-            <UserSearchableSelect
-              value={selectedUserId}
-              onValueChange={setSelectedUserId}
-              users={userOptions}
-              disabled={isLoading}
-              placeholder={isLoading ? "Loading users..." : "Select a user"}
-              searchPlaceholder="Search users by name or email"
-              className="min-w-0 flex-1"
-              emptyMessage="No matching users found."
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              data-testid={E2eTestId.ImpersonationViewAsButton}
-              disabled={!selectedUserId || isPending}
-              onClick={() => {
-                if (selectedUserId) impersonate(selectedUserId);
-              }}
-            >
-              <Eye className="mr-2 h-4 w-4" />
-              <span>View as user</span>
-            </Button>
-          </div>
+          <UserSearchableSelect
+            value={selectedUserId}
+            onValueChange={setSelectedUserId}
+            users={userOptions}
+            disabled={isLoading}
+            placeholder={isLoading ? "Loading users..." : "Select a user"}
+            searchPlaceholder="Search users by name or email"
+            className="w-full"
+            emptyMessage="No matching users found."
+          />
         )}
-      </DialogContent>
-    </Dialog>
+      </StandardDialog>
+    </>
   );
 }
 

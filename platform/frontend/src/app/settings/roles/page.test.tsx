@@ -121,7 +121,7 @@ describe("RolesSettingsPage", () => {
         users: [
           {
             userId: "user-1",
-            name: "Ada Lovelace · member",
+            name: "Ada Lovelace · Member",
             email: "ada@example.com",
           },
           {

@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import { parseDockerArgsToLocalConfig } from "./docker-args-parser";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
+import { parseMcpArguments } from "./mcp-config-import";
 
 type McpCatalogApiData =
   archestraApiTypes.CreateInternalMcpCatalogItemData["body"];
@@ -34,13 +35,8 @@ export function transformFormToApiData(
 
   // Handle local configuration
   if (values.serverType === "local" && values.localConfig) {
-    // Parse arguments string into array
-    const argumentsArray = values.localConfig.arguments
-      ? values.localConfig.arguments
-          .split("\n")
-          .map((arg) => arg.trim())
-          .filter((arg) => arg.length > 0)
-      : [];
+    // Accept both one argument per line and copy-pasted JSON arrays.
+    const argumentsArray = parseMcpArguments(values.localConfig.arguments);
 
     data.localConfig = {
       command: values.localConfig.command || undefined,

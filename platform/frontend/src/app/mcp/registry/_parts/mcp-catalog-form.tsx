@@ -107,6 +107,7 @@ import {
   transformCatalogItemToFormValues,
   transformFormToApiData,
 } from "./mcp-catalog-form.utils";
+import { parseMcpConfigJson } from "./mcp-config-import";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -310,6 +311,11 @@ export function McpCatalogForm({
           environmentId: null,
         }),
   });
+
+  const [configImportJson, setConfigImportJson] = useState("");
+  const [configImportStatus, setConfigImportStatus] = useState<
+    { kind: "success" | "error"; message: string } | undefined
+  >();
 
   // Expose imperative submit to parent
   useEffect(() => {
@@ -750,7 +756,12 @@ export function McpCatalogForm({
   const showByosOption = useFeature("byosEnabled");
 
   // Use field array for environment variables
-  const { fields, append, remove } = useFieldArray({
+  const {
+    fields,
+    append,
+    remove,
+    replace: replaceEnvironment,
+  } = useFieldArray({
     control: form.control,
     name: "localConfig.environment",
   });
@@ -780,10 +791,69 @@ export function McpCatalogForm({
     fields: additionalHeaderFields,
     append: appendAdditionalHeader,
     remove: removeAdditionalHeader,
+    replace: replaceAdditionalHeaders,
   } = useFieldArray({
     control: form.control,
     name: "additionalHeaders",
   });
+
+  const applyImportedConfig = () => {
+    try {
+      const imported = parseMcpConfigJson(configImportJson);
+      if (imported.serverType === "local" && !isLocalMcpEnabled) {
+        throw new Error(
+          "Self-hosted MCP servers are unavailable in this deployment.",
+        );
+      }
+
+      form.setValue("serverType", imported.serverType, { shouldDirty: true });
+      if (imported.name) {
+        form.setValue("name", imported.name, { shouldDirty: true });
+      }
+      if (imported.description) {
+        form.setValue("description", imported.description, {
+          shouldDirty: true,
+        });
+      }
+
+      form.setValue("authMethod", imported.authMethod, { shouldDirty: true });
+      form.setValue("includeBearerPrefix", imported.includeBearerPrefix, {
+        shouldDirty: true,
+      });
+      replaceAdditionalHeaders(imported.additionalHeaders);
+
+      if (imported.serverType === "remote") {
+        form.setValue("serverUrl", imported.serverUrl ?? "", {
+          shouldDirty: true,
+        });
+      } else {
+        form.setValue("serverUrl", "", { shouldDirty: true });
+        form.setValue("localConfig.command", imported.command ?? "", {
+          shouldDirty: true,
+        });
+        form.setValue("localConfig.arguments", imported.arguments, {
+          shouldDirty: true,
+        });
+        form.setValue("localConfig.dockerImage", imported.dockerImage ?? "", {
+          shouldDirty: true,
+        });
+        replaceEnvironment(imported.environment);
+      }
+
+      setConfigImportStatus({
+        kind: "success",
+        message: `Imported ${imported.serverType} MCP server configuration.`,
+      });
+    } catch (error) {
+      setConfigImportStatus({
+        kind: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Unable to import this MCP configuration.",
+      });
+    }
+  };
 
   const [headerDialog, setHeaderDialog] = useState<
     { mode: "add" } | { mode: "edit"; index: number } | null
@@ -1224,6 +1294,60 @@ export function McpCatalogForm({
                 </div>
               )}
               {mode === "create" && (
+                <div className="space-y-2 rounded-lg border border-border p-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="mcp-config-import">
+                      Paste MCP server configuration
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Supports common client configs, the official MCP Registry
+                      server.json format, and {appName} catalog manifests.
+                    </p>
+                  </div>
+                  <Textarea
+                    id="mcp-config-import"
+                    value={configImportJson}
+                    onChange={(event) => {
+                      setConfigImportJson(event.target.value);
+                      setConfigImportStatus(undefined);
+                    }}
+                    placeholder={`{
+  "mcpServers": {
+    "example": { "command": "npx", "args": ["-y", "@example/mcp"] }
+  }
+}`}
+                    className="min-h-28 font-mono text-xs"
+                    spellCheck={false}
+                  />
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={applyImportedConfig}
+                      disabled={!configImportJson.trim()}
+                    >
+                      Apply configuration
+                    </Button>
+                    {configImportStatus && (
+                      <p
+                        role={
+                          configImportStatus.kind === "error"
+                            ? "alert"
+                            : "status"
+                        }
+                        className={
+                          configImportStatus.kind === "error"
+                            ? "text-sm text-destructive"
+                            : "text-sm text-muted-foreground"
+                        }
+                      >
+                        {configImportStatus.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {mode === "create" && (
                 <div className="space-y-2">
                   <Label>Server Type</Label>
                   <div className="flex rounded-lg border border-border overflow-hidden">
@@ -1427,7 +1551,7 @@ export function McpCatalogForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>
-                          Arguments (one per line)
+                          Arguments (one per line or JSON array)
                           <ReinstallHint show={isArgumentsDirty} />
                         </FormLabel>
                         <FormControl>

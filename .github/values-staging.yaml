@@ -94,6 +94,18 @@ archestra:
     # through Google. Also blocks turning on the require-two-factor org policy,
     # since enrolment needs a password — 2FA comes from Workspace instead.
     ARCHESTRA_AUTH_DISABLE_BASIC_AUTH: "true"
+    # No new users by invitation: 403s /organization/invite-member and hides the
+    # invite UI on Settings -> Users.
+    # Scope, so this is not read as "no new users at all":
+    #   - It gates *issuing* an invitation, not *redeeming* one. Anything still
+    #     outstanding stays acceptable, and cancel-invitation is 403'd as well,
+    #     so it can no longer be revoked through the API while this is on.
+    #     Checked before enabling: staging has one live auto-provisioned invite
+    #     (ms-teams, expires 2026-08-30); every other row is accepted or expired.
+    #   - ChatOps auto-provisioning is unaffected. It inserts the user, member
+    #     and invitation rows directly instead of calling invite-member, so a
+    #     first-time Slack/Teams sender still lands in the org.
+    ARCHESTRA_AUTH_DISABLE_INVITATIONS: "true"
     ARCHESTRA_FRONTEND_URL: "https://frontend.archestra.dev"
     ARCHESTRA_TRUST_PROXY: "false"
     ARCHESTRA_SENTRY_ENVIRONMENT: "archestra.dev"

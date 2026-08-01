@@ -255,12 +255,14 @@ jobs:
     # bot-pr-guard (see above): contributor bot only — release-please PRs
     # need this job's codegen auto-commit.
     if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    # Backstop: every check here finishes in well under 10m, but leaked
-    # test-runner processes (vitest fork workers / esbuild) occasionally orphan
-    # and hold the step's log pipe open, leaving a *finished* job hanging until
-    # GitHub's 6h default. Fail fast instead.
-    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    # Backstop: on a turbo remote-cache hit every check here finishes well
+    # under 10m, but leaked test-runner processes (vitest fork workers /
+    # esbuild) occasionally orphan and hold the step's log pipe open, leaving
+    # a *finished* job hanging until GitHub's 6h default. Fail fast instead.
+    # 30 (not 20) because fork PRs run without cache secrets and pay a full
+    # cold build on a 4vcpu runner.
+    timeout-minutes: 30
     permissions:
       contents: write # Required to push generated code updates back to release-please PRs.
     defaults:

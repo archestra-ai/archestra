@@ -3,6 +3,14 @@ name: Docker Image Scanning
 # Runs automatically in merge queue and on demand when the "run-docker-scan"
 # label is added to a PR.
 # Remove and re-add the label to re-trigger after new commits.
+#
+# Merge-queue runs do NOT build anything: the Platform E2E Tests workflow in
+# the same merge group already builds and pushes both images to Artifact
+# Registry under the merge-group head SHA (anonymous pulls allowed), so the
+# scan jobs poll for those manifests (the e2e build may still be pushing when
+# this starts), pull, and scan. Label-triggered PR runs keep building locally:
+# the per-SHA registry image only exists if the e2e build also ran for that
+# exact SHA, which the run-docker-scan label alone does not guarantee.
 on:
   pull_request:
     types:
@@ -17,6 +25,12 @@ permissions: {}
 concurrency:
   group: "docker-image-scanning-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}"
   cancel-in-progress: true
+
+env:
+  # Must match platform-e2e-tests.yml's PLATFORM_IMAGE_REGISTRY /
+  # MCP_SERVER_BASE_IMAGE_REGISTRY: merge-queue scans pull the images that
+  # workflow pushes for the same merge-group head SHA.
+  IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
 
 jobs:
   # Required-check placeholders for ordinary PR updates. The real scans remain
@@ -38,7 +52,13 @@ jobs:
   docker-image-scanning:
     name: Docker Image Scanning (${{ matrix.name }})
     if: ${{ github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.label.name == 'run-docker-scan' && github.event.pull_request.head.repo.fork != true) }}
-    runs-on: ${{ matrix.runner }}
+    # Merge-queue runs only pull + scan — no build — so a small runner is
+    # enough. matrix.runner is sized for the label-triggered PR path, which
+    # still builds the image locally.
+    runs-on: ${{ github.event_name == 'merge_group' && 'blacksmith-4vcpu-ubuntu-2404' || matrix.runner }}
+    # Bounds the merge-queue manifest poll (15 min) plus pull + scan; the PR
+    # build path finishes well inside this too.
+    timeout-minutes: 25
     permissions:
       contents: read # Required to checkout the repository and read Docker build inputs.
     strategy:
@@ -50,6 +70,7 @@ jobs:
             context: ./platform
             dockerfile: ./platform/Dockerfile
             local-tag-prefix: archestra-platform
+            registry-image-name: platform
             use-build-action: true
             scan-exit-code: "true"
           - name: MCP Server Base
@@ -57,6 +78,7 @@ jobs:
             context: ./platform/mcp_server_docker_image
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
             local-tag-prefix: mcp-server-base
+            registry-image-name: mcp-server-base
             use-build-action: false
             scan-exit-code: "true"
     steps:
@@ -66,14 +88,42 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      # Merge queue: the Platform E2E Tests workflow in this same merge group
+      # builds and pushes this exact image (or registry-retags a cached one) to
+      # the anonymous-pull registry under the merge-group head SHA. Poll until
+      # the manifest lands — this workflow starts alongside the e2e build — then
+      # pull it for scanning. No registry auth needed: pulls are anonymous.
+      # 900s matches the e2e jobs' image-pull-timeout-seconds for the same wait.
+      - name: Wait for the already-built image and pull it
+        if: ${{ github.event_name == 'merge_group' }}
+        shell: bash
+        env:
+          IMAGE_REF: ${{ env.IMAGE_REGISTRY }}/${{ matrix.registry-image-name }}:${{ github.sha }}
+          PULL_TIMEOUT_SECONDS: "900"
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + PULL_TIMEOUT_SECONDS ))
+          until docker buildx imagetools inspect "${IMAGE_REF}" >/dev/null 2>&1; do
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "::error::Timed out waiting for the ${IMAGE_REF} manifest. Did the Platform E2E Tests build job fail or stop pushing per-SHA images?"
+              exit 1
+            fi
+            echo "Manifest for ${IMAGE_REF} not available yet, retrying in 10s..."
+            sleep 10
+          done
+          docker pull "${IMAGE_REF}"
+
+      # Label-triggered PR runs below: build locally, exactly as before. The
+      # e2e workflow only pushes per-SHA images on merge_group / run-e2e, so a
+      # run-docker-scan label on its own has no registry image to pull.
       - name: Setup environment
-        if: ${{ matrix.use-build-action }}
+        if: ${{ github.event_name == 'pull_request' && matrix.use-build-action }}
         uses: ./.github/actions/setup-env
         with:
           working-directory: ./platform
 
       - name: Build Platform image
-        if: ${{ matrix.use-build-action }}
+        if: ${{ github.event_name == 'pull_request' && matrix.use-build-action }}
         uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
@@ -84,11 +134,11 @@ jobs:
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
 
       - name: Setup Blacksmith Builder
-        if: ${{ !matrix.use-build-action }}
+        if: ${{ github.event_name == 'pull_request' && !matrix.use-build-action }}
         uses: ./.github/actions/setup-blacksmith-builder
 
       - name: Build MCP server base image
-        if: ${{ !matrix.use-build-action }}
+        if: ${{ github.event_name == 'pull_request' && !matrix.use-build-action }}
         uses: ./.github/actions/blacksmith-build-push
         with:
           context: ${{ matrix.context }}
@@ -101,7 +151,7 @@ jobs:
       - name: Scan image for CVEs
         uses: ./.github/actions/scan-docker-image
         with:
-          image: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          image: ${{ github.event_name == 'merge_group' && format('{0}/{1}:{2}', env.IMAGE_REGISTRY, matrix.registry-image-name, github.sha) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           exit-code: ${{ matrix.scan-exit-code }}

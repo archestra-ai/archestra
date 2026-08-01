@@ -15,7 +15,7 @@
  */
 
 import { vi } from "vitest";
-import { hasPermission } from "@/auth";
+import { hasPermission, userHasPermission } from "@/auth";
 import AuditLogModel from "@/models/audit-log";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -65,6 +65,8 @@ describe("GET /api/audit-logs", () => {
   beforeEach(async ({ makeOrganization, makeUser }) => {
     vi.clearAllMocks();
     hasPermissionMock.mockResolvedValue({ success: true, error: null });
+    // Suite default: org-wide view (auditLog:admin). Own-only tests flip this.
+    vi.mocked(userHasPermission).mockResolvedValue(true);
 
     const organization = await makeOrganization();
     organizationId = organization.id;
@@ -603,5 +605,47 @@ describe("GET /api/audit-logs", () => {
     for (let i = 1; i < sequences.length; i++) {
       expect(sequences[i]).toBeGreaterThanOrEqual(sequences[i - 1]);
     }
+  });
+
+  describe("own-vs-all visibility (auditLog:read vs auditLog:admin)", () => {
+    test("without auditLog:admin, only the caller's own actions are returned — an actorId filter for someone else is overridden", async ({
+      makeUser,
+    }) => {
+      const other = await makeUser();
+      await seedRow(organizationId, { actorId: user.id, actorEmail: "me@x" });
+      await seedRow(organizationId, { actorId: other.id, actorEmail: "o@x" });
+      await seedRow(organizationId, { actorId: null });
+
+      vi.mocked(userHasPermission).mockResolvedValue(false);
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/audit-logs?limit=10&offset=0",
+      });
+      expect(list.statusCode).toBe(200);
+      expect(list.json().pagination.total).toBe(1);
+      expect(list.json().data[0].actorId).toBe(user.id);
+
+      const forced = await app.inject({
+        method: "GET",
+        url: `/api/audit-logs?limit=10&offset=0&actorId=${other.id}`,
+      });
+      expect(forced.json().pagination.total).toBe(1);
+      expect(forced.json().data[0].actorId).toBe(user.id);
+    });
+
+    test("with auditLog:admin the whole trail is visible", async ({
+      makeUser,
+    }) => {
+      const other = await makeUser();
+      await seedRow(organizationId, { actorId: user.id });
+      await seedRow(organizationId, { actorId: other.id });
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/audit-logs?limit=10&offset=0",
+      });
+      expect(list.json().pagination.total).toBe(2);
+    });
   });
 });

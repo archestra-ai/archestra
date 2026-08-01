@@ -11,11 +11,13 @@ import {
   IDENTITY_TRUSTED_PROVIDER_IDS,
   OAUTH_PAGES,
   OAUTH_SCOPES,
+  PredefinedRoleNameSchema,
 } from "@archestra/shared";
 import {
   allAvailableActions,
   editorPermissions,
   memberPermissions,
+  platformAdminPermissions,
 } from "@archestra/shared/access-control";
 import { apiKey } from "@better-auth/api-key";
 import type { HookEndpointContext } from "@better-auth/core";
@@ -73,6 +75,7 @@ const {
 const ac = createAccessControl(allAvailableActions);
 
 const adminRole = ac.newRole(allAvailableActions);
+const platformAdminRole = ac.newRole(platformAdminPermissions);
 const editorRole = ac.newRole(editorPermissions);
 const memberRole = ac.newRole(memberPermissions);
 
@@ -129,10 +132,16 @@ export const auth = betterAuth({
           if (roleName.length > 50) {
             throw new Error("Role name must be less than 50 characters");
           }
+          if (PredefinedRoleNameSchema.safeParse(roleName).success) {
+            throw new Error(
+              `"${roleName}" is a predefined role name and cannot be used for a custom role`,
+            );
+          }
         },
       },
       roles: {
         admin: adminRole,
+        platform_admin: platformAdminRole,
         editor: editorRole,
         member: memberRole,
       },
@@ -156,6 +165,7 @@ export const auth = betterAuth({
           ac,
           roles: {
             admin: adminRole,
+            platform_admin: platformAdminRole,
             editor: editorRole,
             member: memberRole,
           },

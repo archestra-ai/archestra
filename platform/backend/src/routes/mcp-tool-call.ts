@@ -5,8 +5,9 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
-import { McpToolCallModel } from "@/models";
+import { hasPermission, userHasPermission } from "@/auth";
+import { createPaginatedResult } from "@/database/utils/pagination";
+import { AgentTeamModel, McpToolCallModel } from "@/models";
 import {
   ApiError,
   constructResponseSchema,
@@ -70,19 +71,42 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sortDirection,
         },
         user,
+        organizationId,
         headers,
       },
       reply,
     ) => {
       const pagination = { limit, offset };
       const sorting = { sortBy, sortDirection };
+      // log:read scopes the view to the caller's own attributed rows;
+      // log:admin lifts it (agent-visibility filtering still applies).
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
       const filters = {
         startDate: startDate ? new Date(startDate) : undefined,
         endDate: endDate ? new Date(endDate) : undefined,
         search: search || undefined,
+        ownUserId: canSeeAllLogs ? undefined : user.id,
       };
 
       if (agentId) {
+        // The per-agent listing previously skipped the access filter
+        // entirely; scope it like the main listing (own rows only without
+        // log:admin, and the agent must be visible to the caller).
+        const { success: isMcpServerAdmin } = await hasPermission(
+          { mcpServerInstallation: ["admin"] },
+          headers,
+        );
+        if (
+          !isMcpServerAdmin &&
+          !(await AgentTeamModel.userHasAgentAccess(user.id, agentId, false))
+        ) {
+          return reply.send(createPaginatedResult([], 0, pagination));
+        }
         return reply.send(
           await McpToolCallModel.getAllMcpToolCallsForAgentPaginated(
             agentId,
@@ -124,7 +148,10 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(SelectMcpToolCallSchema),
       },
     },
-    async ({ params: { mcpToolCallId }, user, headers }, reply) => {
+    async (
+      { params: { mcpToolCallId }, user, organizationId, headers },
+      reply,
+    ) => {
       const { success: isMcpServerAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         headers,
@@ -137,6 +164,18 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (!mcpToolCall) {
+        throw new ApiError(404, "MCP tool call not found");
+      }
+
+      // Own-logs view: someone else's (or unattributed) row does not exist
+      // for this caller — 404, not 403, so existence is not disclosed.
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+      if (!canSeeAllLogs && mcpToolCall.userId !== user.id) {
         throw new ApiError(404, "MCP tool call not found");
       }
 

@@ -578,6 +578,28 @@ describe("handleBeforeHook", () => {
       expect(await handleBeforeHook(unknownRole)).toBe(unknownRole);
     });
 
+    test("a platform_admin cannot grant the full admin role — the customer-shaped restriction holds", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const platformAdmin = await makeUser();
+      await makeMember(platformAdmin.id, org.id, { role: "platform_admin" });
+
+      const escalate = updateMemberCtx(platformAdmin, ADMIN_ROLE_NAME);
+      await expect(handleBeforeHook(escalate)).rejects.toThrow(APIError);
+      await expect(handleBeforeHook(escalate)).rejects.toMatchObject({
+        body: { message: expect.stringContaining("log:admin") },
+      });
+
+      // Managing users within their own permission set still works.
+      const lateral = updateMemberCtx(platformAdmin, "platform_admin");
+      expect(await handleBeforeHook(lateral)).toBe(lateral);
+      const downgrade = updateMemberCtx(platformAdmin, MEMBER_ROLE_NAME);
+      expect(await handleBeforeHook(downgrade)).toBe(downgrade);
+    });
+
     test("blocks inviting a user into a role stronger than the inviter's", async ({
       makeOrganization,
       makeUser,

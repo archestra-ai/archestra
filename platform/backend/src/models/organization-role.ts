@@ -4,6 +4,7 @@ import {
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
   type Permissions,
+  PLATFORM_ADMIN_ROLE_NAME,
   type PredefinedRoleName,
   PredefinedRoleNameSchema,
   type Resource,
@@ -378,6 +379,7 @@ class OrganizationRoleModel {
   static getPredefinedOnly(organizationId: string): Array<OrganizationRole> {
     return [
       generatePredefinedRole(ADMIN_ROLE_NAME, organizationId),
+      generatePredefinedRole(PLATFORM_ADMIN_ROLE_NAME, organizationId),
       generatePredefinedRole(EDITOR_ROLE_NAME, organizationId),
       generatePredefinedRole(MEMBER_ROLE_NAME, organizationId),
     ];

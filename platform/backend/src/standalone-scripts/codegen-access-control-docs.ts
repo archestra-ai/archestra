@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   ADMIN_ROLE_NAME,
   internalResources,
+  PLATFORM_ADMIN_ROLE_NAME,
   type PredefinedRoleName,
   type Resource,
   resourceLabels,
@@ -25,13 +26,27 @@ function generatePredefinedRolesSections(): string {
 
   for (const role of roles) {
     const permissions = predefinedPermissionsMap[role];
-    const capitalizedName = role.charAt(0).toUpperCase() + role.slice(1);
+    const capitalizedName = role
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
 
     let section = `### ${capitalizedName}\n\n`;
     section += `${roleDescriptions[role]}\n\n`;
 
     if (role === ADMIN_ROLE_NAME) {
       section += "The admin role has **all permissions** on every resource.\n";
+    } else if (role === PLATFORM_ADMIN_ROLE_NAME) {
+      section +=
+        "Platform Admin holds **all permissions except** `log:admin`, " +
+        "`auditLog:admin`, and `member:impersonate` — so holders run the " +
+        "platform (users, roles, settings, resources) while other members' " +
+        "LLM/MCP logs, the org-wide audit trail, and impersonation stay out " +
+        "of reach. They keep `log:read` and `auditLog:read`, which show " +
+        "**their own** records only. Combined with the " +
+        "[no-privilege-escalation rule](#no-privilege-escalation), a " +
+        "Platform Admin cannot grant themselves or anyone else a role " +
+        "carrying the withheld permissions.\n";
     } else {
       section += "| Resource | Actions |\n";
       section += "|----------|--------|\n";
@@ -218,6 +233,8 @@ Permissions in Archestra are defined using a \`resource:action\` format, where:
 - **Action**: The operation being performed (\`create\`, \`read\`, \`update\`, \`delete\`, \`admin\`)
 
 For example, the permission \`agent:create\` allows creating new agents, \`mcpGateway:update\` allows updating MCP gateways, whereas \`llmProxy:read\` would allow reading LLM proxies.
+
+Two resources distinguish an own-records view from an organization-wide one: \`log:read\` shows only the caller's own LLM proxy and MCP tool-call records, while \`log:admin\` shows every user's; \`auditLog:read\` and \`auditLog:admin\` split the audit trail the same way. This is what makes a deliberately-restricted admin role practical — its holders keep full visibility into their own activity without seeing anyone else's.
 
 ## Predefined Roles
 

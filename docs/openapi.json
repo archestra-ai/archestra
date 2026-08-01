@@ -73162,7 +73162,7 @@
         "tags": [
           "Audit Log"
         ],
-        "description": "Get paginated audit log events for the organization. Requires auditLog:read permission (Admin only by default).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`auditLog:read`: View the organization-wide audit log of administrative actions",
+        "description": "Get paginated audit log events for the organization. Requires auditLog:read permission (Admin only by default).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`auditLog:read`: View audit log records of your own administrative actions",
         "parameters": [
           {
             "schema": {
@@ -73995,7 +73995,7 @@
         "tags": [
           "Audit Log"
         ],
-        "description": "Get a single audit log event by ID. Requires auditLog:read permission (Admin only by default).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`auditLog:read`: View the organization-wide audit log of administrative actions",
+        "description": "Get a single audit log event by ID. Requires auditLog:read permission (Admin only by default).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`auditLog:read`: View audit log records of your own administrative actions",
         "parameters": [
           {
             "schema": {
@@ -134877,7 +134877,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all interactions with pagination and sorting\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get all interactions with pagination and sorting\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -164598,7 +164598,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all interaction sessions grouped by session ID with aggregated stats\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get all interaction sessions grouped by session ID with aggregated stats\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -165269,7 +165269,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get all unique external agent IDs with display names for filtering (from X-Archestra-Agent-Id header)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -165540,7 +165540,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get all unique user IDs with names for filtering (from X-Archestra-User-Id header)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get all unique user IDs with names for filtering (from X-Archestra-User-Id header)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -165811,7 +165811,7 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get interaction by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get interaction by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -245508,7 +245508,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get all MCP tool calls with pagination and sorting\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get all MCP tool calls with pagination and sorting\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -246010,7 +246010,7 @@
         "tags": [
           "MCP Tool Call"
         ],
-        "description": "Get MCP tool call by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View LLM proxy and MCP tool call logs",
+        "description": "Get MCP tool call by ID\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs",
         "parameters": [
           {
             "schema": {
@@ -266932,6 +266932,7 @@
                   "type": "string",
                   "enum": [
                     "admin",
+                    "platform_admin",
                     "editor",
                     "member"
                   ]
@@ -267327,6 +267328,7 @@
                   "type": "string",
                   "enum": [
                     "admin",
+                    "platform_admin",
                     "editor",
                     "member"
                   ]

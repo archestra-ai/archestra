@@ -8,6 +8,7 @@ import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
+  PLATFORM_ADMIN_ROLE_NAME,
   type PredefinedRoleName,
 } from "./roles";
 import { RouteId } from "./routes";
@@ -137,12 +138,12 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "read-all",
   ],
   file: ["manage"],
-  log: ["read"],
+  log: ["read", "admin"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
   serviceAccount: ["read", "create", "update", "delete"],
-  auditLog: ["read"],
+  auditLog: ["read", "admin"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
@@ -255,6 +256,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete", "share-org"],
   file: ["manage"],
+  // Editors see only their own logs; org-wide visibility is log:admin,
+  // reserved for admin-tier roles.
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -407,9 +410,26 @@ export const adminPermissions: Record<Resource, Action[]> = {
   simpleView: [],
 };
 
+/**
+ * Platform Admin: runs the deployment — full user, role, and settings
+ * management — while org-wide log visibility and impersonation stay withheld.
+ * They keep log:read / auditLog:read, so their OWN activity stays visible to
+ * them. Combined with the no-escalation rule (a role can only be granted by
+ * someone holding every permission it carries), holders cannot hand
+ * themselves or anyone else a role that would widen their visibility.
+ */
+export const platformAdminPermissions: Record<Resource, Action[]> = {
+  ...allAvailableActions,
+  simpleView: [],
+  log: ["read"],
+  auditLog: ["read"],
+  member: allAvailableActions.member.filter((a) => a !== "impersonate"),
+};
+
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
   {
     [ADMIN_ROLE_NAME]: adminPermissions,
+    [PLATFORM_ADMIN_ROLE_NAME]: platformAdminPermissions,
     [EDITOR_ROLE_NAME]: editorPermissions,
     [MEMBER_ROLE_NAME]: memberPermissions,
   };
@@ -593,7 +613,8 @@ export const permissionDescriptions: Record<string, string> = {
   "project:read-all":
     "View chats that other members started in any project you can access. Without this, you only see the chats you started yourself — including in projects you own.",
   "file:manage": "List, read, write, and delete files in chats and projects",
-  "log:read": "View LLM proxy and MCP tool call logs",
+  "log:read": "View your own LLM proxy and MCP tool call logs",
+  "log:admin": "View every user's LLM proxy and MCP tool call logs",
 
   // Administration
   "member:read": "View organization members and their roles",
@@ -625,8 +646,9 @@ export const permissionDescriptions: Record<string, string> = {
   "serviceAccount:create": "Create service accounts",
   "serviceAccount:update": "Modify service accounts",
   "serviceAccount:delete": "Delete service accounts",
-  "auditLog:read":
-    "View the organization-wide audit log of administrative actions",
+  "auditLog:read": "View audit log records of your own administrative actions",
+  "auditLog:admin":
+    "View the organization-wide audit log of every member's administrative actions",
   "organizationSettings:read":
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":

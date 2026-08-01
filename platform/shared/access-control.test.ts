@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
+  adminPermissions,
   allAvailableActions,
   buildForbiddenErrorMessage,
   editorPermissions,
+  findUngrantablePermissions,
   memberPermissions,
   permissionDescriptions,
   predefinedPermissionsMap,
@@ -71,7 +73,7 @@ describe("access-control", () => {
     });
 
     test("auditLog only exposes the read action", () => {
-      expect(allAvailableActions.auditLog).toEqual(["read"]);
+      expect(allAvailableActions.auditLog).toEqual(["read", "admin"]);
     });
   });
 
@@ -305,5 +307,50 @@ describe("buildForbiddenErrorMessage", () => {
     expect(buildForbiddenErrorMessage({})).toBe(
       "You don't have permission to perform this action.",
     );
+  });
+});
+
+describe("own-vs-all log split (log/auditLog read vs admin)", () => {
+  test("read and admin are distinct actions on both resources", () => {
+    expect(allAvailableActions.log).toEqual(["read", "admin"]);
+    expect(permissionDescriptions["log:admin"]).toBeTruthy();
+    expect(permissionDescriptions["auditLog:admin"]).toBeTruthy();
+  });
+
+  test("editor sees only own logs; member has neither log resource", () => {
+    expect(editorPermissions.log).toEqual(["read"]);
+    expect(editorPermissions.auditLog).toEqual([]);
+    expect(memberPermissions.log).toEqual([]);
+    expect(memberPermissions.auditLog).toEqual([]);
+  });
+});
+
+describe("platform_admin predefined role", () => {
+  test("holds everything except log:admin, auditLog:admin, and member:impersonate", () => {
+    const p = predefinedPermissionsMap.platform_admin;
+    expect(p.log).toEqual(["read"]);
+    expect(p.auditLog).toEqual(["read"]);
+    expect(p.member).not.toContain("impersonate");
+    // …and is otherwise the full admin set (modulo the UI-behavior resource).
+    for (const [resource, actions] of Object.entries(allAvailableActions)) {
+      if (["log", "auditLog", "member", "simpleView"].includes(resource)) {
+        continue;
+      }
+      expect(p[resource as keyof typeof p]).toEqual(actions);
+    }
+  });
+
+  test("cannot grant the withheld permissions (no-escalation rule)", () => {
+    const p = predefinedPermissionsMap.platform_admin;
+    expect(findUngrantablePermissions(p, adminPermissions)).toEqual(
+      expect.arrayContaining([
+        "log:admin",
+        "auditLog:admin",
+        "member:impersonate",
+      ]),
+    );
+    // …while granting its own role or member stays possible.
+    expect(findUngrantablePermissions(p, p)).toEqual([]);
+    expect(findUngrantablePermissions(p, memberPermissions)).toEqual([]);
   });
 });

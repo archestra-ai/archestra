@@ -38,6 +38,7 @@ import {
   UserFilterSelect,
 } from "@/components/user-client-filter-selects";
 import { useProfiles } from "@/lib/agent.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import {
@@ -266,6 +267,7 @@ function SessionsTable({
   });
 
   const { data: uniqueUsers } = useUniqueUserIds();
+  const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
 
   const sessions = sessionsResponse?.data ?? [];
   const paginationMeta = sessionsResponse?.pagination;
@@ -575,11 +577,15 @@ function SessionsTable({
           className="w-full sm:w-[200px]"
         />
 
-        <UserFilterSelect
-          value={userFilter}
-          onValueChange={handleUserFilterChange}
-          users={uniqueUsers}
-        />
+        {canSeeAllLogs ? (
+          // Without log:admin the server scopes every listing to the caller's
+          // own rows, so a user filter would be a one-entry dropdown.
+          <UserFilterSelect
+            value={userFilter}
+            onValueChange={handleUserFilterChange}
+            users={uniqueUsers}
+          />
+        ) : null}
 
         <SearchableSelect
           value={sourceFilter}

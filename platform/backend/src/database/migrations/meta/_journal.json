@@ -2731,6 +2731,13 @@
       "when": 1785528326657,
       "tag": "0389_ancient_the_hunter",
       "breakpoints": true
+    },
+    {
+      "idx": 390,
+      "version": "7",
+      "when": 1785537737417,
+      "tag": "0390_log_admin_split",
+      "breakpoints": true
     }
   ]
 }

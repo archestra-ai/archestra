@@ -16,6 +16,26 @@ describe("parseMcpArguments", () => {
 });
 
 describe("parseMcpConfigJson", () => {
+  it("imports the Context7 config from its setup instructions", () => {
+    const result = parseMcpConfigJson(
+      JSON.stringify({
+        mcpServers: {
+          context7: {
+            command: "npx",
+            args: ["-y", "@upstash/context7-mcp"],
+          },
+        },
+      }),
+    );
+
+    expect(result).toMatchObject({
+      name: "context7",
+      serverType: "local",
+      command: "npx",
+      arguments: "-y\n@upstash/context7-mcp",
+    });
+  });
+
   it("imports Claude-style local configs", () => {
     const result = parseMcpConfigJson(
       JSON.stringify({

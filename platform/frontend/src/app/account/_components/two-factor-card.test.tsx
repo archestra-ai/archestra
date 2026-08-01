@@ -55,41 +55,20 @@ describe("TwoFactorCard", () => {
     } as unknown as ReturnType<typeof useRouter>);
   });
 
-  it("enables 2FA, shows backup codes, then continues to authenticator setup", async () => {
+  it("sends enrollment to the shared setup wizard", async () => {
     const user = userEvent.setup();
     mockSession(false);
-    vi.mocked(authClient.twoFactor.enable).mockResolvedValue({
-      data: {
-        totpURI: "otpauth://totp/Test?secret=ABC",
-        backupCodes: ["code-one", "code-two"],
-      },
-      error: null,
-    } as Awaited<ReturnType<typeof authClient.twoFactor.enable>>);
 
     renderCard();
 
     await user.click(await screen.findByRole("button", { name: "Enable 2FA" }));
-    await user.type(screen.getByLabelText("Password"), "hunter22");
-    await user.click(screen.getByRole("button", { name: "Continue" }));
 
-    await waitFor(() => {
-      // `issuer` is what the user's authenticator app shows beside the code, so
-      // it must follow the deployment's brand rather than the built-in default.
-      expect(authClient.twoFactor.enable).toHaveBeenCalledWith({
-        password: "hunter22",
-        issuer: "Acme AI",
-      });
-    });
-
-    expect(await screen.findByText("Save Your Backup Codes")).toBeVisible();
-    expect(screen.getByText("code-one")).toBeInTheDocument();
-    expect(screen.getByText("code-two")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-
+    // Enrollment (password, QR, recovery codes) lives in one full-page
+    // wizard so both entry points present the same order.
     expect(mockRouterPush).toHaveBeenCalledWith(
-      `/auth/two-factor?totpURI=${encodeURIComponent("otpauth://totp/Test?secret=ABC")}&redirectTo=${encodeURIComponent("/account")}`,
+      `/auth/two-factor-setup?redirectTo=${encodeURIComponent("/account")}`,
     );
+    expect(authClient.twoFactor.enable).not.toHaveBeenCalled();
   });
 
   it("explains the enrollment mandate when the organization requires 2FA", async () => {

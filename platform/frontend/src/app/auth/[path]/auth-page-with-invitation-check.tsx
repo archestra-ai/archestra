@@ -106,8 +106,13 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
     !isBasicAuthDisabled;
 
   const isSignInOrSignUp = path === "sign-in" || isSignUpPath;
-  // The forced-2FA enrollment page mirrors the sign-in layout (logo on top).
-  const showLogo = isSignInOrSignUp || path === "two-factor-setup";
+  // Every standalone auth surface mirrors the sign-in layout (logo on top);
+  // only flows that continue an already-branded page skip it.
+  const showLogo =
+    isSignInOrSignUp ||
+    path === "two-factor" ||
+    path === "two-factor-setup" ||
+    path === "recover-account";
 
   return (
     <BackendConnectivityStatus>

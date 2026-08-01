@@ -525,9 +525,9 @@ function SignInView({ callbackURL }: { callbackURL?: string }) {
     setFailedAttempts(0);
 
     if (result.twoFactorRedirect) {
-      // Forward only the computed callback target (not the raw query string,
-      // which could carry an attacker-supplied totpURI) so the two-factor
-      // view can complete the original navigation after verification.
+      // Forward only the computed callback target, not the raw query string,
+      // so the two-factor view completes the original navigation after
+      // verification without inheriting attacker-supplied params.
       redirectAfterSignIn(
         callbackURL
           ? `/auth/two-factor?redirectTo=${encodeURIComponent(callbackURL)}`

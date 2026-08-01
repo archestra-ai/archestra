@@ -2295,13 +2295,21 @@ describe("cleanupLimitsIfNeeded", () => {
       500,
     );
 
-    const previousMonth = new Date();
-    previousMonth.setMonth(previousMonth.getMonth() - 1, 15);
-    const currentMonth = new Date();
-    currentMonth.setDate(1);
-    currentMonth.setHours(12, 0, 0, 0);
-    await LimitModel.patch(dueLimit.id, { lastCleanup: previousMonth });
-    await LimitModel.patch(currentMonthLimit.id, { lastCleanup: currentMonth });
+    // Straddle the month boundary the cleanup query itself computes. That
+    // boundary is `date_trunc('month', now())` evaluated in the database's
+    // timezone, so timestamps derived from the JS local calendar disagree with
+    // it whenever the runner's timezone and the database's sit on opposite
+    // sides of a month boundary — the two are hours apart around midnight on
+    // the 1st, which used to flip both assertions.
+    const monthStart = sql`date_trunc('month', now())`;
+    await db
+      .update(schema.limitsTable)
+      .set({ lastCleanup: sql`${monthStart} - interval '1 second'` })
+      .where(eq(schema.limitsTable.id, dueLimit.id));
+    await db
+      .update(schema.limitsTable)
+      .set({ lastCleanup: monthStart })
+      .where(eq(schema.limitsTable.id, currentMonthLimit.id));
 
     await LimitModel.cleanupLimitsIfNeeded({
       allForOrganizationId: org.id,

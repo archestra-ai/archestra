@@ -64,8 +64,8 @@ These cover every lane in `job.yaml`'s `BENCH_LANES` set. The `kimi` lane is not
 `KIMI_API_KEY` is not synced — add both if you ever put it on the CI roster.
 
 The WIF auth and GKE creds reuse the existing
-`DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME` /
-`DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER` secrets.
+`DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME` /
+`DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER` secrets.
 
 ## GCS layout
 

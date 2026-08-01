@@ -330,8 +330,10 @@ export class Authnz {
     );
 
     if (policies.sessionMaxAgeSeconds && request.sessionInfo) {
-      const ageSeconds =
-        (Date.now() - request.sessionInfo.createdAt.getTime()) / 1000;
+      // With better-auth's cookie cache the session arrives JSON-deserialized,
+      // so createdAt may be an ISO string rather than a Date.
+      const createdAtMs = new Date(request.sessionInfo.createdAt).getTime();
+      const ageSeconds = (Date.now() - createdAtMs) / 1000;
       if (ageSeconds > policies.sessionMaxAgeSeconds) {
         await SessionModel.deleteById(request.sessionInfo.id);
         logger.info(

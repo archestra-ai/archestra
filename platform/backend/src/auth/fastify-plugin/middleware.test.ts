@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/node";
 import { eq } from "drizzle-orm";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { OrganizationModel, SessionModel } from "@/models";
@@ -954,6 +955,12 @@ describe("Authnz", () => {
         },
       );
 
+      const originalEnvFlag = config.enterpriseFeatures.core;
+      Object.defineProperty(config.enterpriseFeatures, "core", {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
       enterpriseTier.setUserCountForTesting(9999); // over the free threshold
       try {
         // Enrollment is refused without a license, so enforcing would
@@ -968,6 +975,11 @@ describe("Authnz", () => {
         );
       } finally {
         enterpriseTier.setUserCountForTesting(0);
+        Object.defineProperty(config.enterpriseFeatures, "core", {
+          value: originalEnvFlag,
+          writable: true,
+          configurable: true,
+        });
       }
     });
 

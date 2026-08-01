@@ -15,7 +15,8 @@ declare module "fastify" {
      * Session bookkeeping for org auth-policy enforcement (session max age);
      * set by Authnz.populateUserInfo on session-authenticated requests.
      */
-    sessionInfo?: { id: string; createdAt: Date };
+    /** createdAt may be an ISO string when the session came from the cookie cache. */
+    sessionInfo?: { id: string; createdAt: Date | string };
     serviceAccount?: SelectServiceAccount;
     serviceAccountAuthResult?: {
       serviceAccount: SelectServiceAccount;

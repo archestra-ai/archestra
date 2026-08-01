@@ -13,6 +13,8 @@ import { Card } from "@/components/ui/card";
 import { Form, FormField } from "@/components/ui/form";
 import { RoleSelect } from "@/components/ui/role-select";
 import { Switch } from "@/components/ui/switch";
+import { useSession } from "@/lib/auth/auth.query";
+import { authClient } from "@/lib/clients/auth/auth-client";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import {
   useOrganization,
@@ -32,6 +34,7 @@ import { SessionLifetimeSection } from "./_components/session-lifetime-section";
 export default function AuthSettingsPage() {
   const { data: organization, isPending: isOrganizationPending } =
     useOrganization();
+  const { data: session } = useSession();
   const updateAuthSettingsMutation = useUpdateAuthSettings(
     "Auth settings updated",
     "Failed to update Auth settings",
@@ -119,6 +122,16 @@ export default function AuthSettingsPage() {
     const updatedOrganization =
       await updateAuthSettingsMutation.mutateAsync(data);
     if (!updatedOrganization) {
+      return;
+    }
+
+    // Turning the requirement on revokes every non-enrolled member's session
+    // server-side — including this one. Sign out cleanly (the cookie cache
+    // would otherwise keep the dead session alive for up to a minute) and
+    // send the admin through sign-in, which lands on the enrollment page.
+    if (data.requireTwoFactor === true && !session?.user.twoFactorEnabled) {
+      await authClient.signOut();
+      window.location.assign("/auth/sign-in");
       return;
     }
 

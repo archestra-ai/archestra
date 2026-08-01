@@ -62,6 +62,7 @@ import {
   useAllPermissions,
   useHasPermissions,
   useMissingPermissions,
+  useSession,
 } from "@/lib/auth/auth.query";
 import {
   useEnterpriseFeature,
@@ -88,6 +89,9 @@ function renderPage() {
 
 describe("AuthSettingsPage", () => {
   beforeEach(() => {
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1", twoFactorEnabled: true } },
+    } as unknown as ReturnType<typeof useSession>);
     vi.clearAllMocks();
     mockOrganization = {
       oauthAccessTokenLifetimeSeconds: 31_536_000,

@@ -150,7 +150,7 @@ jobs:
   merge-manifests:
     name: Create multi-arch manifest
     if: ${{ inputs.push_image }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     needs:
       - build-image
     permissions:
@@ -170,9 +170,8 @@ jobs:
           pattern: ${{ inputs.image_name }}-digests-*
           merge-multiple: true
 
-      - name: Setup Blacksmith Builder
-        uses: ./.github/actions/setup-blacksmith-builder
-
+      # No builder setup needed: `docker buildx imagetools` is a pure registry
+      # manifest operation and runs on the preinstalled buildx CLI.
       - name: Authenticate to Google Artifact Registry
         if: ${{ inputs.auth_provider == 'gar' }}
         uses: ./.github/actions/auth-to-gar

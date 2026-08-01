@@ -32,7 +32,7 @@ jobs:
   assign-issue:
     name: Assign Issues
     if: github.event_name == 'issues' || github.event_name == 'workflow_dispatch'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       issues: write # Required to assign issues.
 
@@ -108,7 +108,7 @@ jobs:
   request-recent-pr-reviewers:
     name: Request Recent PR Reviewers
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       pull-requests: write # Required to read PR metadata and request reviewers.
 

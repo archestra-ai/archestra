@@ -22,7 +22,7 @@ jobs:
     name: Release Freeze Check
     # Always run so it can be a required status check - passes immediately for
     # non-release-please PRs and merge queue runs.
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read # Required to inspect the repository context for release-please PRs.
       pull-requests: write # Required to request changes on frozen release PRs.
@@ -85,7 +85,7 @@ jobs:
 
   license-compliance-check:
     name: License Compliance Check
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     defaults:
@@ -126,7 +126,7 @@ jobs:
 
   supply-chain-policy:
     name: Supply Chain Policy
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -143,7 +143,7 @@ jobs:
 
   docs-image-policy:
     name: Docs Image Policy
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -158,7 +158,7 @@ jobs:
 
   docs-links:
     name: Docs Link Check
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -173,7 +173,7 @@ jobs:
 
   migration-kit-checks:
     name: Migration Kit Checks
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -194,7 +194,7 @@ jobs:
   dependency-review:
     name: Dependency Review
     if: ${{ github.event_name == 'pull_request' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read # Required for dependency-review-action to read the PR dependency graph via the API.
       pull-requests: write # Required for dependency-review-action PR comments.
@@ -221,7 +221,7 @@ jobs:
   dependency-review-merge-group:
     name: Dependency Review
     if: ${{ github.event_name == 'merge_group' }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions: {}
     steps:
       - name: Skip dependency review for merge queue
@@ -591,7 +591,7 @@ jobs:
   # can require a single check ("Backend Unit Tests") regardless of shard count.
   backend-unit-tests-gate:
     name: Backend Unit Tests
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     # always() so the gate still runs (and turns red) when a shard fails,
     # ANDed with the bot-pr-guard (see comment above
     # platform-lint-and-unit-tests): when the shards skip on a bot PR, the
@@ -700,7 +700,7 @@ jobs:
   mac-mini-watchdog:
     name: Mac Mini Watchdog
     if: github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 12
     permissions:
       actions: write # Required to cancel this workflow run on failover.
@@ -769,7 +769,7 @@ jobs:
 
   helm-chart-linting-and-tests:
     name: Helm Chart Linting and Tests
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: read # Required to checkout the repository and lint/package the Helm chart.
     defaults:

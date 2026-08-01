@@ -334,7 +334,7 @@ jobs:
     name: Cancel E2E on build failure
     needs: [platform-e2e-build]
     if: ${{ failure() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       actions: write # Required to cancel this workflow run.
@@ -904,7 +904,7 @@ jobs:
     # gate; the event guard keeps it running on merge_group / on-demand runs but
     # reporting skipped (and thus satisfying the ruleset) on ordinary PR pushes.
     if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     # No permissions needed: this job only inspects `needs.*.result`.
     permissions: {}
@@ -947,7 +947,7 @@ jobs:
         platform-quickstart-e2e-tests,
       ]
     if: ${{ always() && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read # Required to checkout the repository and merge Playwright reports.

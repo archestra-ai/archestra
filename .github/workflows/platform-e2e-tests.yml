@@ -127,6 +127,9 @@ jobs:
           provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          # Read-only cache: the buildcache tag is anonymously readable, but
+          # forks have no registry credentials to export back.
+          cache-from: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
@@ -215,15 +218,20 @@ jobs:
           provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          # Registry-backed layer cache: ephemeral runners have no persistent
+          # BuildKit state, so warm layers live in a buildcache tag next to
+          # the image (same-region GAR pulls are free).
+          cache-from: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache,mode=max
 
       # Slim variant for the K8s e2e job: the same image minus the ~352MB
       # Dagger engine tar that only the quickstart job uses. Every layer is already in
       # the builder cache from the full build above, so this push takes
-      # seconds. (blacksmith-build-push directly: the builder is already set
+      # seconds. (docker-build-push directly: the builder is already set
       # up from the full build.)
       - name: Build slim Platform image (K8s job, no Dagger engine tar) and push
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && steps.platform-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/blacksmith-build-push
+        uses: ./.github/actions/docker-build-push
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.context }}/Dockerfile
@@ -239,6 +247,9 @@ jobs:
           secrets: |
             turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
             turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          # All slim layers are a subset of the full build just done on this
+          # builder; the registry ref only backstops a same-run builder loss.
+          cache-from: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ !matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
@@ -278,13 +289,13 @@ jobs:
 
       # The builder is only needed for an actual build; the reuse check above
       # talks straight to the registry. Fork PRs always build.
-      - name: Setup Blacksmith Builder
+      - name: Setup Docker Builder
         if: ${{ !matrix.use-build-action && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) || steps.mcp-base-reuse.outputs.reuse != 'true') }}
-        uses: ./.github/actions/setup-blacksmith-builder
+        uses: ./.github/actions/setup-docker-builder
 
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action && steps.mcp-base-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/blacksmith-build-push
+        uses: ./.github/actions/docker-build-push
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -294,6 +305,9 @@ jobs:
           # Non-fork pushes tag both the commit SHA (what the jobs pull) and the
           # tree OID (what the reuse step above checks next time).
           tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2},{3}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha, steps.mcp-base-reuse.outputs.tree_tag) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          cache-from: type=registry,ref=${{ env.MCP_SERVER_BASE_IMAGE_REGISTRY }}/${{ env.MCP_SERVER_BASE_IMAGE_NAME }}:buildcache
+          # Forks have no registry credentials to export the cache back.
+          cache-to: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('type=registry,ref={0}/{1}:buildcache,mode=max', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || '' }}
 
       # Export as artifact for fast co-located downloads in E2E jobs. Fork PRs
       # only: they are the sole consumer (test jobs use source=artifact for forks,

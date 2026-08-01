@@ -1,0 +1,86 @@
+name: Docker Build Push
+description: |
+  Wrapper around docker/build-push-action pinned to a vetted version.
+  Layer caching is registry-backed (cache-from/cache-to refs, typically a
+  :buildcache tag next to the image) so it persists across ephemeral runners.
+inputs:
+  context:
+    description: Build context.
+    required: true
+  file:
+    description: Path to the Dockerfile.
+    required: false
+    default: ""
+  platforms:
+    description: Target platforms.
+    required: false
+    default: ""
+  push:
+    description: Whether to push the built image.
+    required: false
+    default: "false"
+  load:
+    description: Whether to load the built image into the local Docker daemon.
+    required: false
+    default: "false"
+  tags:
+    description: Image tags.
+    required: false
+    default: ""
+  outputs:
+    description: Build outputs configuration.
+    required: false
+    default: ""
+  target:
+    description: Optional Dockerfile target stage.
+    required: false
+    default: ""
+  provenance:
+    description: SLSA provenance attestation. Empty preserves buildx defaults; set 'false' to skip.
+    required: false
+    default: ""
+  network:
+    description: Network mode for the build.
+    required: false
+    default: ""
+  build-args:
+    description: Build arguments.
+    required: false
+    default: ""
+  secrets:
+    description: Build secrets.
+    required: false
+    default: ""
+  cache-from:
+    description: External cache sources (e.g. type=registry,ref=...).
+    required: false
+    default: ""
+  cache-to:
+    description: Cache export destinations (e.g. type=registry,ref=...,mode=max). Leave empty when the job has no push credentials for the cache registry.
+    required: false
+    default: ""
+outputs:
+  digest:
+    description: Built image digest.
+    value: ${{ steps.build.outputs.digest }}
+runs:
+  using: composite
+  steps:
+    - name: Build image
+      id: build
+      uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        platforms: ${{ inputs.platforms }}
+        push: ${{ inputs.push }}
+        load: ${{ inputs.load }}
+        tags: ${{ inputs.tags }}
+        outputs: ${{ inputs.outputs }}
+        target: ${{ inputs.target }}
+        provenance: ${{ inputs.provenance }}
+        network: ${{ inputs.network }}
+        build-args: ${{ inputs.build-args }}
+        secrets: ${{ inputs.secrets }}
+        cache-from: ${{ inputs.cache-from }}
+        cache-to: ${{ inputs.cache-to }}

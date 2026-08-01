@@ -1,5 +1,5 @@
 name: Build Docker Image
-description: Build a Docker image using the Blacksmith builder
+description: Build a Docker image with buildx and registry-backed layer caching
 
 inputs:
   context:
@@ -43,6 +43,14 @@ inputs:
     default: ""
   previous-image:
     description: "Optional previously published image to extract static assets from before building"
+    required: false
+    default: ""
+  cache-from:
+    description: "External cache sources (e.g. type=registry,ref=...)"
+    required: false
+    default: ""
+  cache-to:
+    description: "Cache export destinations. Leave empty when the job has no push credentials for the cache registry (fork PRs)."
     required: false
     default: ""
   # Secrets must be passed as regular inputs in composite actions
@@ -122,12 +130,12 @@ runs:
         INPUT_TURBO_TEAM: ${{ inputs.turbo-team }}
         INPUT_TURBO_TOKEN: ${{ inputs.turbo-token }}
 
-    - name: Setup Blacksmith Builder
-      uses: ./.github/actions/setup-blacksmith-builder
+    - name: Setup Docker Builder
+      uses: ./.github/actions/setup-docker-builder
 
     - name: Build Docker image
       id: build
-      uses: ./.github/actions/blacksmith-build-push
+      uses: ./.github/actions/docker-build-push
       with:
         context: ${{ inputs.context }}
         file: ${{ inputs.dockerfile != '' && inputs.dockerfile || format('{0}/Dockerfile', inputs.context) }}
@@ -141,3 +149,5 @@ runs:
         network: host
         build-args: ${{ inputs.version != '' && format('VERSION={0}', inputs.version) || '' }}
         secrets: ${{ steps.prepare-secrets.outputs.value }}
+        cache-from: ${{ inputs.cache-from }}
+        cache-to: ${{ inputs.cache-to }}

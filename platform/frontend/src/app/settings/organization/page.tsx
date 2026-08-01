@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
+import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
 import {
   SettingsCardHeader,
   SettingsSaveBar,
@@ -19,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { RoleSelect } from "@/components/ui/role-select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useOnUnmount } from "@/lib/hooks/use-lifecycle";
 import {
   organizationKeys,
@@ -44,6 +46,7 @@ import {
   validateOnboardingWizard,
 } from "./_components/onboarding-wizards-editor.utils";
 import { OrganizationTokenSection } from "./_components/organization-token-section";
+import { SessionLifetimeSection } from "./_components/session-lifetime-section";
 import { SiteNotificationsSection } from "./_components/site-notifications-section";
 import { ThemeSelector } from "./_components/theme-selector";
 
@@ -114,7 +117,10 @@ export default function OrganizationSettingsPage() {
   const [animateChatPlaceholders, setAnimateChatPlaceholders] = useState<
     boolean | null
   >(null);
-  const [showTwoFactor, setShowTwoFactor] = useState<boolean | null>(null);
+  const enterpriseCoreActive = useEnterpriseFeature("core");
+  const [requireTwoFactor, setRequireTwoFactor] = useState<boolean | null>(
+    null,
+  );
   const [defaultMemberRole, setDefaultMemberRole] = useState<string | null>(
     null,
   );
@@ -145,8 +151,8 @@ export default function OrganizationSettingsPage() {
     chatPlaceholders ?? organization?.chatPlaceholders ?? [];
   const effectiveAnimateChatPlaceholders =
     animateChatPlaceholders ?? organization?.animateChatPlaceholders ?? true;
-  const effectiveShowTwoFactor =
-    showTwoFactor ?? organization?.showTwoFactor ?? false;
+  const effectiveRequireTwoFactor =
+    requireTwoFactor ?? organization?.requireTwoFactor ?? false;
   // Null column means "fall back to member", so surface member as selected.
   const effectiveDefaultMemberRole =
     defaultMemberRole ?? organization?.defaultMemberRole ?? MEMBER_ROLE_NAME;
@@ -194,7 +200,7 @@ export default function OrganizationSettingsPage() {
     slimChatErrorUi !== null ||
     chatPlaceholders !== null ||
     animateChatPlaceholders !== null ||
-    showTwoFactor !== null ||
+    requireTwoFactor !== null ||
     defaultMemberRole !== null;
 
   const handleSaveFields = async () => {
@@ -239,24 +245,24 @@ export default function OrganizationSettingsPage() {
     setSlimChatErrorUi(null);
     setChatPlaceholders(null);
     setAnimateChatPlaceholders(null);
-    setShowTwoFactor(null);
+    setRequireTwoFactor(null);
     setDefaultMemberRole(null);
   };
 
   const handleSaveAuthFields = async () => {
-    if (showTwoFactor === null && defaultMemberRole === null) {
+    if (requireTwoFactor === null && defaultMemberRole === null) {
       return;
     }
 
     const updatedOrganization = await updateAuthSettingsMutation.mutateAsync({
-      ...(showTwoFactor !== null && { showTwoFactor }),
+      ...(requireTwoFactor !== null && { requireTwoFactor }),
       ...(defaultMemberRole !== null && { defaultMemberRole }),
     });
     if (!updatedOrganization) {
       return;
     }
 
-    setShowTwoFactor(null);
+    setRequireTwoFactor(null);
     setDefaultMemberRole(null);
   };
 
@@ -433,19 +439,23 @@ export default function OrganizationSettingsPage() {
         <SettingsSectionStack>
           <OAuthTokenLifetimeSection />
 
-          <Card>
-            <SettingsCardHeader
-              title="Two-Factor Authentication"
-              description="Show 2FA setup to members in their authentication settings."
-              action={
-                <Switch
-                  id="showTwoFactor"
-                  checked={effectiveShowTwoFactor}
-                  onCheckedChange={(checked) => setShowTwoFactor(checked)}
-                />
-              }
-            />
-          </Card>
+          <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
+            <Card>
+              <SettingsCardHeader
+                title="Require Two-Factor Authentication"
+                description="Every member must enroll in 2FA. Turning this on signs out members who haven't enrolled; their next sign-in requires setup before anything else."
+                action={
+                  <Switch
+                    id="requireTwoFactor"
+                    checked={effectiveRequireTwoFactor}
+                    onCheckedChange={(checked) => setRequireTwoFactor(checked)}
+                  />
+                }
+              />
+            </Card>
+
+            <SessionLifetimeSection />
+          </DisabledEnterpriseSection>
 
           <Card>
             <SettingsCardHeader
@@ -490,7 +500,7 @@ export default function OrganizationSettingsPage() {
           }
           if (
             hasFieldChanges &&
-            (showTwoFactor !== null || defaultMemberRole !== null)
+            (requireTwoFactor !== null || defaultMemberRole !== null)
           ) {
             await handleSaveAuthFields();
           }
@@ -524,7 +534,7 @@ export default function OrganizationSettingsPage() {
           setChatErrorSupportMessage(null);
           setChatPlaceholders(null);
           setAnimateChatPlaceholders(null);
-          setShowTwoFactor(null);
+          setRequireTwoFactor(null);
           setDefaultMemberRole(null);
         }}
         disabledSave={

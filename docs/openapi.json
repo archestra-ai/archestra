@@ -246457,6 +246457,9 @@
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "twoFactorEnabled": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -246466,7 +246469,8 @@
                           "email",
                           "image",
                           "role",
-                          "createdAt"
+                          "createdAt",
+                          "twoFactorEnabled"
                         ],
                         "additionalProperties": false
                       }
@@ -268281,8 +268285,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -268493,7 +268503,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -269266,8 +269277,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -269478,7 +269495,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -270544,8 +270562,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -270756,7 +270780,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -271385,8 +271410,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -271597,7 +271628,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -272219,8 +272251,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -272431,7 +272469,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -273053,8 +273092,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -273265,7 +273310,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -273902,8 +273948,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -274114,7 +274166,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -274830,8 +274883,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -275042,7 +275101,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -275737,8 +275797,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -275949,7 +276015,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -276231,8 +276298,14 @@
                     "minimum": 300,
                     "maximum": 31536000
                   },
-                  "showTwoFactor": {
+                  "requireTwoFactor": {
                     "type": "boolean"
+                  },
+                  "sessionMaxAgeSeconds": {
+                    "nullable": true,
+                    "type": "integer",
+                    "minimum": 3600,
+                    "maximum": 31536000
                   },
                   "defaultMemberRole": {
                     "nullable": true,
@@ -276581,8 +276654,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -276793,7 +276872,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -277433,8 +277513,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -277645,7 +277731,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -278252,8 +278339,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -278464,7 +278557,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",
@@ -279676,8 +279770,14 @@
                     "slimChatErrorUi": {
                       "type": "boolean"
                     },
-                    "showTwoFactor": {
+                    "requireTwoFactor": {
                       "type": "boolean"
+                    },
+                    "sessionMaxAgeSeconds": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
                     "oauthAccessTokenLifetimeSeconds": {
                       "type": "integer",
@@ -279888,7 +279988,8 @@
                     "iconLogoDark",
                     "chatErrorSupportMessage",
                     "slimChatErrorUi",
-                    "showTwoFactor",
+                    "requireTwoFactor",
+                    "sessionMaxAgeSeconds",
                     "oauthAccessTokenLifetimeSeconds",
                     "connectionDefaultMcpGatewayId",
                     "connectionDefaultLlmProxyId",

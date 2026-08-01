@@ -105,6 +105,67 @@ describe("handleBeforeHook", () => {
     mockDisableInvitations.value = false;
   });
 
+  describe("two-factor enrollment enterprise gate", () => {
+    test("refuses /two-factor/enable without an enterprise license", async () => {
+      const spy = vi
+        .spyOn(enterpriseTier, "isCoreActive")
+        .mockReturnValue(false);
+      try {
+        const ctx = createMockContext({
+          path: "/two-factor/enable",
+          method: "POST",
+          body: { password: "irrelevant" },
+        });
+
+        await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+        await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+          body: {
+            message: expect.stringContaining("enterprise feature"),
+          },
+        });
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    test("allows /two-factor/enable when the license is active", async () => {
+      const spy = vi
+        .spyOn(enterpriseTier, "isCoreActive")
+        .mockReturnValue(true);
+      try {
+        const ctx = createMockContext({
+          path: "/two-factor/enable",
+          method: "POST",
+          body: { password: "irrelevant" },
+        });
+
+        const result = await handleBeforeHook(ctx);
+        expect(result).toBe(ctx);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    test("leaves verify/disable open so a lapsed license never locks users out", async () => {
+      const spy = vi
+        .spyOn(enterpriseTier, "isCoreActive")
+        .mockReturnValue(false);
+      try {
+        for (const path of ["/two-factor/verify-totp", "/two-factor/disable"]) {
+          const ctx = createMockContext({
+            path,
+            method: "POST",
+            body: {},
+          });
+          const result = await handleBeforeHook(ctx);
+          expect(result).toBe(ctx);
+        }
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
   describe("invitation email validation", () => {
     test("should throw BAD_REQUEST for invalid email format", async () => {
       const ctx = createMockContext({

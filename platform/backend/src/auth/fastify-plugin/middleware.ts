@@ -1,4 +1,4 @@
-import { type RouteId, SupportedProviders } from "@archestra/shared";
+import { RouteId, SupportedProviders } from "@archestra/shared";
 import {
   buildForbiddenErrorMessage,
   requiredEndpointPermissionsMap,
@@ -8,7 +8,12 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
-import { ServiceAccountModel, UserModel } from "@/models";
+import {
+  OrganizationModel,
+  ServiceAccountModel,
+  SessionModel,
+  UserModel,
+} from "@/models";
 import { MODEL_ROUTER_PREFIX } from "@/routes/proxy/common";
 import { getPublicRequestOrigin } from "@/routes/request-origin";
 import {
@@ -30,6 +35,19 @@ import {
   connectorWwwAuthenticate,
 } from "@/services/apps/app-connector-resource";
 import { ApiError } from "@/types";
+
+/**
+ * Routes a session without 2FA may still reach while the organization
+ * requires enrollment: just enough for the account page's enrollment card to
+ * render (public/branding config, the caller's own permissions and org
+ * context). Everything else waits until 2FA is set up.
+ */
+const TWO_FACTOR_SETUP_EXEMPT_ROUTES = new Set<RouteId>([
+  RouteId.GetConfig,
+  RouteId.GetUserPermissions,
+  RouteId.GetOrganization,
+  RouteId.GetAppearanceSettings,
+]);
 
 export class Authnz {
   public handle = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -81,6 +99,11 @@ export class Authnz {
       },
       "[Authnz] User info populated, checking authorization",
     );
+
+    // Org auth policies (session max age, mandatory 2FA) apply to human
+    // sessions only — API keys and service-account tokens have their own
+    // lifecycles and no TOTP.
+    await this.enforceOrganizationAuthPolicies(request);
 
     const { success, error } = await this.isAuthorized(request);
     if (success) {
@@ -273,6 +296,61 @@ export class Authnz {
     return false;
   };
 
+  /**
+   * Enforce per-organization session policies on session-authenticated
+   * requests:
+   *
+   * - `sessionMaxAgeSeconds`: an ABSOLUTE cap measured from session creation.
+   *   better-auth's sliding refresh keeps active users signed in forever, so
+   *   expiry is enforced here (and the session revoked so every replica
+   *   agrees within the 60s cookie-cache TTL).
+   * - `requireTwoFactor`: members who have not enrolled may only reach the
+   *   handful of routes the enrollment surface needs; everything else is
+   *   refused until they set 2FA up. Enrollment itself happens on better-auth
+   *   routes, which bypass this middleware entirely.
+   */
+  private enforceOrganizationAuthPolicies = async (
+    request: FastifyRequest,
+  ): Promise<void> => {
+    if (request.authMethod !== "session" || !request.organizationId) {
+      return;
+    }
+
+    const policies = await OrganizationModel.getAuthEnforcementSettings(
+      request.organizationId,
+    );
+
+    if (policies.sessionMaxAgeSeconds && request.sessionInfo) {
+      const ageSeconds =
+        (Date.now() - request.sessionInfo.createdAt.getTime()) / 1000;
+      if (ageSeconds > policies.sessionMaxAgeSeconds) {
+        await SessionModel.deleteById(request.sessionInfo.id);
+        logger.info(
+          { userId: request.user?.id, ageSeconds },
+          "[Authnz] Session exceeded the organization's maximum age — revoked",
+        );
+        throw new ApiError(401, "Session expired. Please sign in again.");
+      }
+    }
+
+    if (
+      policies.requireTwoFactor &&
+      !(request.user?.twoFactorEnabled ?? false)
+    ) {
+      const routeId = request.routeOptions.schema?.operationId as
+        | RouteId
+        | undefined;
+      if (!routeId || !TWO_FACTOR_SETUP_EXEMPT_ROUTES.has(routeId)) {
+        throw new ApiError(
+          403,
+          "This organization requires two-factor authentication. Set it up " +
+            "from your account page to continue.",
+          "two_factor_setup_required",
+        );
+      }
+    }
+  };
+
   private isAuthorized = async (
     request: FastifyRequest,
   ): Promise<{ success: boolean; error: Error | null }> => {
@@ -387,6 +465,10 @@ export class Authnz {
           request.user = user;
           request.organizationId = organizationId;
           request.authMethod = "session";
+          request.sessionInfo = {
+            id: session.session.id,
+            createdAt: new Date(session.session.createdAt),
+          };
           logger.trace(
             { userId: user.id, organizationId },
             "[Authnz] populateUserInfo: populated from session",

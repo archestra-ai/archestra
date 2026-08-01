@@ -1,5 +1,5 @@
 {
-  "id": "8683e569-d660-48cc-b8d1-30f351008e06",
+  "id": "18203831-bbe5-4eaa-bc49-2656c92e9d50",
   "prevId": "ce88dcad-d3a5-4269-add5-772c0ba4aeea",
   "version": "7",
   "dialect": "postgresql",
@@ -11562,21 +11562,6 @@
           "method": "btree",
           "with": {}
         },
-        "mcp_tool_calls_user_id_idx": {
-          "name": "mcp_tool_calls_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "mcp_tool_calls_app_id_idx": {
           "name": "mcp_tool_calls_app_id_idx",
           "columns": [
@@ -13408,6 +13393,19 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
+        },
+        "require_two_factor": {
+          "name": "require_two_factor",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "session_max_age_seconds": {
+          "name": "session_max_age_seconds",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         },
         "oauth_access_token_lifetime_seconds": {
           "name": "oauth_access_token_lifetime_seconds",

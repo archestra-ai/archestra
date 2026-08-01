@@ -317,6 +317,32 @@ describe("MemberModel", () => {
       expect(result.data[0]).toHaveProperty("image");
     });
 
+    test("reports each member's 2FA enrollment (null column reads as false)", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const enrolled = await makeUser({
+        email: "enrolled@test.com",
+        twoFactorEnabled: true,
+      });
+      const notEnrolled = await makeUser({ email: "not-enrolled@test.com" });
+      await makeMember(enrolled.id, org.id);
+      await makeMember(notEnrolled.id, org.id);
+
+      const result = await MemberModel.findAllPaginated({
+        organizationId: org.id,
+        pagination: { limit: 10, offset: 0 },
+      });
+
+      const byEmail = new Map(
+        result.data.map((member) => [member.email, member.twoFactorEnabled]),
+      );
+      expect(byEmail.get("enrolled@test.com")).toBe(true);
+      expect(byEmail.get("not-enrolled@test.com")).toBe(false);
+    });
+
     test("supports offset pagination", async ({
       makeOrganization,
       makeUser,

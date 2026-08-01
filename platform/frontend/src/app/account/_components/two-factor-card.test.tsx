@@ -17,7 +17,7 @@ vi.mock("@/lib/hooks/use-app-name");
 
 const mockRouterPush = vi.fn();
 
-function renderCard() {
+function renderCard({ required = false } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -27,7 +27,7 @@ function renderCard() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <TwoFactorCard />
+      <TwoFactorCard required={required} />
     </QueryClientProvider>,
   );
 }
@@ -86,6 +86,36 @@ describe("TwoFactorCard", () => {
     expect(mockRouterPush).toHaveBeenCalledWith(
       `/auth/two-factor?totpURI=${encodeURIComponent("otpauth://totp/Test?secret=ABC")}&redirectTo=${encodeURIComponent("/account")}`,
     );
+  });
+
+  it("explains the enrollment mandate when the organization requires 2FA", async () => {
+    mockSession(false);
+
+    renderCard({ required: true });
+
+    expect(
+      await screen.findByText(
+        "Your organization requires two-factor authentication. Set it up now to continue using the platform.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Enable 2FA" }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show the mandate copy to already-enrolled users", async () => {
+    mockSession(true);
+
+    renderCard({ required: true });
+
+    expect(
+      await screen.findByRole("button", { name: "Disable 2FA" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Your organization requires two-factor authentication. Set it up now to continue using the platform.",
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it("disables 2FA with password confirmation", async () => {

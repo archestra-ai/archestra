@@ -27,5 +27,6 @@ The following components are licensed under the Enterprise License and are not p
 - Knowledge Base and RAG with access control
 - Data retention windows (automatic deletion of LLM logs, MCP logs, idle chats, and audit logs)
 - Content encryption at rest (LLM logs and chat messages under a separate, operator-held key)
+- Two-factor authentication (TOTP enrollment, organization-wide enforcement, and session lifetime caps)
 
 If you'd like to pilot the Enterprise feature set, reach out to sales@archestra.ai for a PoC license.

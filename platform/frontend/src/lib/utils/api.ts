@@ -82,6 +82,18 @@ export function toApiError(error: ApiSdkError): Error {
 export function handleApiError(error: ApiSdkError) {
   const sentryError = toApiError(error);
 
+  // Mandatory-2FA lockout: every API call fails with this code until the
+  // member enrolls, so route them to the enrollment card instead of raining
+  // error toasts. The account page itself stays reachable server-side.
+  if (
+    typeof window !== "undefined" &&
+    getApiErrorInternalCode(error) === "two_factor_setup_required" &&
+    window.location.pathname !== "/account"
+  ) {
+    window.location.assign("/account");
+    return;
+  }
+
   if (typeof window !== "undefined") {
     // Errors stay long enough to read and copy; the close button dismisses early.
     // The toast shows the humanized message; Sentry keeps the raw error.

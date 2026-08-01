@@ -41,10 +41,11 @@ type PasswordFormValues = z.infer<typeof PasswordFormSchema>;
  * (shown once in a dialog) and a TOTP URI; after saving the codes the user is
  * sent to /auth/two-factor to scan the QR code and confirm the authenticator.
  */
-export function TwoFactorCard() {
+export function TwoFactorCard({ required = false }: { required?: boolean }) {
   const router = useRouter();
   const { data: session } = useSession();
   const twoFactorEnabled = !!session?.user?.twoFactorEnabled;
+  const mustEnroll = required && !twoFactorEnabled;
 
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [enableResult, setEnableResult] = useState<{
@@ -59,12 +60,17 @@ export function TwoFactorCard() {
         description={
           twoFactorEnabled
             ? "Two-factor authentication is enabled for your account."
-            : "Add an extra layer of security by requiring a one-time code at sign-in."
+            : mustEnroll
+              ? "Your organization requires two-factor authentication. Set it up now to continue using the platform."
+              : "Add an extra layer of security by requiring a one-time code at sign-in."
         }
         control={
           <Button
             variant={twoFactorEnabled ? "outline" : "default"}
             onClick={() => setIsPasswordDialogOpen(true)}
+            // Disabling is still possible when required — the middleware will
+            // simply lock the account out again; better-auth offers no
+            // disable-block hook, so the card at least warns via copy.
           >
             {twoFactorEnabled ? "Disable 2FA" : "Enable 2FA"}
           </Button>

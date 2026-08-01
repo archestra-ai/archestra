@@ -109,7 +109,7 @@ describe("OrganizationRoleModel", () => {
 
       expect(result).toMatchObject({
         id: ADMIN_ROLE_NAME,
-        name: ADMIN_ROLE_NAME,
+        name: "Admin",
         organizationId: org.id,
         permission: predefinedPermissionsMap[ADMIN_ROLE_NAME],
         predefined: true,
@@ -129,7 +129,7 @@ describe("OrganizationRoleModel", () => {
 
       expect(result).toMatchObject({
         id: EDITOR_ROLE_NAME,
-        name: EDITOR_ROLE_NAME,
+        name: "Editor",
         organizationId: org.id,
         permission: predefinedPermissionsMap[EDITOR_ROLE_NAME],
         predefined: true,
@@ -147,7 +147,7 @@ describe("OrganizationRoleModel", () => {
 
       expect(result).toMatchObject({
         id: MEMBER_ROLE_NAME,
-        name: MEMBER_ROLE_NAME,
+        name: "Member",
         organizationId: org.id,
         permission: predefinedPermissionsMap[MEMBER_ROLE_NAME],
         predefined: true,

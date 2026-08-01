@@ -21253,6 +21253,24 @@ export type GetAuditLogResponses = {
 
 export type GetAuditLogResponse = GetAuditLogResponses[keyof GetAuditLogResponses];
 
+export type GetAuthStateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth-state';
+};
+
+export type GetAuthStateResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        twoFactorPending: boolean;
+    };
+};
+
+export type GetAuthStateResponse = GetAuthStateResponses[keyof GetAuthStateResponses];
+
 export type GetDefaultCredentialsStatusData = {
     body?: never;
     path?: never;
@@ -62776,6 +62794,7 @@ export type GetMembersResponses = {
             image: string | null;
             role: string;
             createdAt: string;
+            twoFactorEnabled: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -69201,7 +69220,8 @@ export type GetOrganizationResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -69502,7 +69522,8 @@ export type UpdateAppearanceSettingsResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -69679,7 +69700,8 @@ export type UpdateSecuritySettingsResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -69851,7 +69873,8 @@ export type UpdateLlmSettingsResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -70022,7 +70045,8 @@ export type UpdateMcpSettingsResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -70193,7 +70217,8 @@ export type UpdateSkillsSettingsResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -70366,7 +70391,8 @@ export type UpdateAgentSettingsResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -70550,7 +70576,8 @@ export type UpdateConnectionSettingsResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -70732,7 +70759,8 @@ export type UpdateDefaultEnvironmentResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -70772,7 +70800,8 @@ export type UpdateDefaultEnvironmentResponse = UpdateDefaultEnvironmentResponses
 export type UpdateAuthSettingsData = {
     body: {
         oauthAccessTokenLifetimeSeconds?: number;
-        showTwoFactor?: boolean;
+        requireTwoFactor?: boolean;
+        sessionMaxAgeSeconds?: number | null;
         defaultMemberRole?: string | null;
     };
     path?: never;
@@ -70905,7 +70934,8 @@ export type UpdateAuthSettingsResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -71079,7 +71109,8 @@ export type UpdateKnowledgeSettingsResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -71248,7 +71279,8 @@ export type DropEmbeddingConfigResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;
@@ -71593,7 +71625,8 @@ export type CompleteOnboardingResponses = {
         iconLogoDark: string | null;
         chatErrorSupportMessage: string | null;
         slimChatErrorUi: boolean;
-        showTwoFactor: boolean;
+        requireTwoFactor: boolean;
+        sessionMaxAgeSeconds: number | null;
         oauthAccessTokenLifetimeSeconds: number;
         connectionDefaultMcpGatewayId: string | null;
         connectionDefaultLlmProxyId: string | null;

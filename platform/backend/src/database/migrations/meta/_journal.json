@@ -2738,6 +2738,13 @@
       "when": 1785537737417,
       "tag": "0390_log_admin_split",
       "breakpoints": true
+    },
+    {
+      "idx": 391,
+      "version": "7",
+      "when": 1785582000526,
+      "tag": "0391_require_two_factor_and_session_max_age",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,12 @@ declare module "fastify" {
     organizationId: string;
     /** Auth method used for this request; set by Authnz.populateUserInfo. */
     authMethod?: "session" | "api_key" | "service_account";
+    /**
+     * Session bookkeeping for org auth-policy enforcement (session max age);
+     * set by Authnz.populateUserInfo on session-authenticated requests.
+     */
+    /** createdAt may be an ISO string when the session came from the cookie cache. */
+    sessionInfo?: { id: string; createdAt: Date | string };
     serviceAccount?: SelectServiceAccount;
     serviceAccountAuthResult?: {
       serviceAccount: SelectServiceAccount;

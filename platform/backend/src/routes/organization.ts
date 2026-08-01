@@ -14,8 +14,10 @@ import { getPermissionsForUserContext } from "@/auth/utils";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
+import { enterpriseTier } from "@/enterprise-tier";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import mcpServerRuntimeManager from "@/k8s/mcp-server-runtime/manager";
+import logger from "@/logging";
 import {
   AgentModel,
   InteractionModel,
@@ -29,6 +31,7 @@ import {
   MemberModel,
   OrganizationModel,
   OrganizationRoleModel,
+  SessionModel,
   TeamModel,
   ToolModel,
   UserModel,
@@ -599,10 +602,55 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
+      // Requiring 2FA is enterprise-licensed enforcement (see enterprise-tier
+      // for the small-team allowance). Session caps ride the same gate.
+      if (
+        (body.requireTwoFactor === true ||
+          typeof body.sessionMaxAgeSeconds === "number") &&
+        !enterpriseTier.isCoreActive()
+      ) {
+        throw new ApiError(
+          403,
+          "Requiring two-factor authentication and session lifetime caps " +
+            "are enterprise features. Please contact sales@archestra.ai to " +
+            "enable them.",
+        );
+      }
+
+      // Enrolling in 2FA requires confirming a password (better-auth's
+      // /two-factor/enable mandates it), so on a password-less deployment the
+      // requirement would lock every member out with no way to satisfy it.
+      // SSO deployments enforce MFA at the identity provider instead.
+      if (body.requireTwoFactor === true && config.auth.disableBasicAuth) {
+        throw new ApiError(
+          400,
+          "Two-factor authentication cannot be required while email/password " +
+            "sign-in is disabled: enrolling requires confirming a password. " +
+            "Enforce multi-factor authentication at your identity provider " +
+            "instead.",
+        );
+      }
+
+      const before = await OrganizationModel.getById(organizationId);
       const organization = await OrganizationModel.patch(organizationId, body);
 
       if (!organization) {
         throw new ApiError(404, "Organization not found");
+      }
+
+      // Flipping require-2FA ON revokes every session belonging to a member
+      // who has not enrolled — their next sign-in lands in mandatory setup.
+      // Enrolled members keep their sessions. (The signed session cookie
+      // cache means revocation can lag by up to its 60s TTL.)
+      if (body.requireTwoFactor === true && !before?.requireTwoFactor) {
+        const revoked =
+          await SessionModel.deleteAllForOrganizationMembersWithoutTwoFactor(
+            organizationId,
+          );
+        logger.info(
+          { organizationId, revoked },
+          "require-2FA enabled — revoked sessions of non-enrolled members",
+        );
       }
 
       return reply.send(organization);

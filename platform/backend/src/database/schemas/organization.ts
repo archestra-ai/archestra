@@ -238,8 +238,20 @@ const organizationsTable = pgTable("organization", {
   /** When enabled, chat shows only support text plus correlation IDs in error cards */
   slimChatErrorUi: boolean("slim_chat_error_ui").notNull().default(false),
 
-  /** Organization-level 2FA visibility toggle */
-  showTwoFactor: boolean("show_two_factor").notNull().default(false),
+  /**
+   * When true, every member must have two-factor authentication enrolled:
+   * non-enrolled members' sessions are revoked when the flag turns on, and
+   * until they enroll, session-authenticated API access is refused (the
+   * enrollment path itself stays reachable). Enterprise-licensed.
+   */
+  requireTwoFactor: boolean("require_two_factor").notNull().default(false),
+
+  /**
+   * Absolute cap on how long a session may live, measured from session
+   * creation — the sliding 7-day refresh otherwise keeps an active user
+   * signed in forever. Null = no cap (current behavior).
+   */
+  sessionMaxAgeSeconds: integer("session_max_age_seconds"),
 
   /**
    * Organization OAuth access token lifetime for user authorization-code flows.

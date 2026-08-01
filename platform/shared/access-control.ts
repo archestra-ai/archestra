@@ -1459,6 +1459,10 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route
    */
   [RouteId.GetPublicConfig]: {},
+  // Public: reports only whether a two-factor sign-in challenge is pending,
+  // so the auth pages can redirect when they don't apply. Auth is skipped in
+  // middleware for this path.
+  [RouteId.GetAuthState]: {},
   /**
    * Get public appearance settings (theme, logo, font) for login page
    * Available to unauthenticated users
@@ -1967,7 +1971,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/github": { githubAppConfig: ["read"] },
-  "/settings/organization": { organizationSettings: ["read"] },
+  "/settings/appearance": { organizationSettings: ["read"] },
+  "/settings/auth": { organizationSettings: ["read"] },
 };
 
 // === Internal helpers

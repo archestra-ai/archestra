@@ -15,6 +15,7 @@ const AUTH_VIEW_PATHS = [
   "sign-out",
   "sign-up",
   "two-factor",
+  "two-factor-setup",
   "recover-account",
 ] as const;
 

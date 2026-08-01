@@ -106,12 +106,19 @@ export function AuthPageWithInvitationCheck({ path }: { path: string }) {
     !isBasicAuthDisabled;
 
   const isSignInOrSignUp = path === "sign-in" || isSignUpPath;
+  // Every standalone auth surface mirrors the sign-in layout (logo on top);
+  // only flows that continue an already-branded page skip it.
+  const showLogo =
+    isSignInOrSignUp ||
+    path === "two-factor" ||
+    path === "two-factor-setup" ||
+    path === "recover-account";
 
   return (
     <BackendConnectivityStatus>
       <main className="h-full flex items-center justify-center p-4">
         <div className="space-y-4 w-full max-w-md">
-          {isSignInOrSignUp && <AppLogo />}
+          {showLogo && <AppLogo />}
           {showDefaultCredentialsWarning && (
             <div className="p-0 m-0 pb-4">
               <DefaultCredentialsWarning alwaysShow />

@@ -54,10 +54,15 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
     title: "Skills",
     description: "Configure how skills are discovered and added.",
   },
-  "/settings/organization": {
-    title: "Organization",
+  "/settings/appearance": {
+    title: "Appearance",
     description:
-      "Manage organization-wide appearance and authentication settings",
+      "Customize your organization's branding — logos, favicon, theme, and site-wide notifications.",
+  },
+  "/settings/auth": {
+    title: "Auth",
+    description:
+      "Authentication policies — token and session lifetimes, two-factor enforcement, and the default role for new users.",
   },
   "/settings/roles": {
     title: "Roles",

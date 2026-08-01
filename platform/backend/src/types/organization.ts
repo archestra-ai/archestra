@@ -4,6 +4,8 @@ import {
   OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS,
   OrganizationCustomFontSchema,
   OrganizationThemeSchema,
+  SESSION_MAX_AGE_MAX_SECONDS,
+  SESSION_MAX_AGE_MIN_SECONDS,
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -331,7 +333,8 @@ const extendedFields = {
   slimChatErrorUi: z.boolean(),
   chatPlaceholders: z.array(z.string()).nullable(),
   animateChatPlaceholders: z.boolean(),
-  showTwoFactor: z.boolean(),
+  requireTwoFactor: z.boolean(),
+  sessionMaxAgeSeconds: z.number().int().nullable(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
   connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
@@ -460,7 +463,15 @@ export const UpdateKnowledgeSettingsSchema = z.object({
 export const UpdateAuthSettingsSchema = z.object({
   oauthAccessTokenLifetimeSeconds:
     OAuthAccessTokenLifetimeSecondsSchema.optional(),
-  showTwoFactor: z.boolean().optional(),
+  requireTwoFactor: z.boolean().optional(),
+  // Absolute session lifetime cap in seconds; null = no cap.
+  sessionMaxAgeSeconds: z
+    .number()
+    .int()
+    .min(SESSION_MAX_AGE_MIN_SECONDS)
+    .max(SESSION_MAX_AGE_MAX_SECONDS)
+    .nullable()
+    .optional(),
   // Role slug (predefined or custom) assigned to new self-signup / ChatOps
   // members. `null` clears it back to the built-in "member" fallback.
   defaultMemberRole: z.string().min(1).nullable().optional(),

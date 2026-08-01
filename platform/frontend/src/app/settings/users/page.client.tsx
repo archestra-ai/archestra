@@ -1,9 +1,18 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { E2eTestId, getRoleDisplayName } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Copy, Eye, Plus, Shield, Trash2, UserCog } from "lucide-react";
+import {
+  Copy,
+  Eye,
+  Plus,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+  UserCog,
+} from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -54,6 +63,7 @@ import {
   useActiveOrganization,
   useDeletePendingSignupMember,
   useMemberSignupStatus,
+  useOrganization,
 } from "@/lib/organization.query";
 import { useRoles } from "@/lib/role.query";
 import { cn } from "@/lib/utils";
@@ -194,6 +204,7 @@ function MembersTab({
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const { data: organization } = useOrganization();
 
   const pageFromUrl = searchParams.get("page");
   const limitFromUrl = searchParams.get("limit");
@@ -256,6 +267,15 @@ function MembersTab({
   const tableRows =
     pageIndex === 0 ? [...pendingSignupMembers, ...members] : members;
 
+  // Show the column while the requirement is on, and keep showing it once
+  // anyone is enrolled — turning the requirement off should not blind admins
+  // to who still has 2FA.
+  const showTwoFactorColumn =
+    !!organization?.requireTwoFactor ||
+    members.some(
+      (member) => "twoFactorEnabled" in member && member.twoFactorEnabled,
+    );
+
   const columns: ColumnDef<Member | PendingSignupMember>[] = [
     {
       id: "avatar",
@@ -312,10 +332,38 @@ function MembersTab({
       header: "Role",
       cell: ({ row }) => (
         <Badge variant="outline" className="capitalize">
-          {row.original.role}
+          {getRoleDisplayName(row.original.role)}
         </Badge>
       ),
     },
+    ...(showTwoFactorColumn
+      ? [
+          {
+            id: "twoFactor",
+            header: "2FA",
+            cell: ({ row }) =>
+              "provider" in row.original ? (
+                <span className="text-sm text-muted-foreground">—</span>
+              ) : row.original.twoFactorEnabled ? (
+                <span
+                  className="inline-flex items-center gap-1 text-sm text-green-600 dark:text-green-500"
+                  title="Two-factor authentication enrolled"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>Enrolled</span>
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1 text-sm text-amber-600 dark:text-amber-500"
+                  title="Not yet enrolled — signed out until they set 2FA up"
+                >
+                  <ShieldAlert className="h-4 w-4" />
+                  <span>Not enrolled</span>
+                </span>
+              ),
+          } satisfies ColumnDef<Member | PendingSignupMember>,
+        ]
+      : []),
     {
       id: "joined",
       header: "Joined",
@@ -658,7 +706,7 @@ function InvitationsTab({
       header: "Role",
       cell: ({ row }) => (
         <Badge variant="outline" className="capitalize">
-          {row.original.role ?? "member"}
+          {getRoleDisplayName(row.original.role ?? "member")}
         </Badge>
       ),
     },

@@ -9,6 +9,7 @@ import {
   PredefinedRoleNameSchema,
   type Resource,
   roleDescriptions,
+  roleDisplayNames,
   TimeInMs,
 } from "@archestra/shared";
 import {
@@ -34,7 +35,7 @@ const generatePredefinedRole = (
 ): OrganizationRole => ({
   id: role,
   role: role,
-  name: role,
+  name: roleDisplayNames[role],
   description: roleDescriptions[role],
   organizationId,
   permission: OrganizationRoleModel.getPredefinedRolePermissions(role),

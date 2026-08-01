@@ -808,6 +808,21 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   // before impersonating; layer the org-level RBAC permission on top so
   // roles without member:impersonate cannot start an impersonated session.
   // (/admin/stop-impersonating stays ungated — exiting must always work.)
+  // Two-factor authentication is enterprise-licensed (small-team allowance
+  // applies): gate ENROLLMENT server-side, not just the settings card —
+  // better-auth mounts these routes unconditionally. Verification and
+  // disabling stay open so already-enrolled users are never locked out by a
+  // lapsed license.
+  if (path === "/two-factor/enable" && method === "POST") {
+    if (!enterpriseTier.isCoreActive()) {
+      throw new APIError("FORBIDDEN", {
+        message:
+          "Two-factor authentication is an enterprise feature. Please " +
+          "contact sales@archestra.ai to enable it.",
+      });
+    }
+  }
+
   if (path === "/admin/impersonate-user" && method === "POST") {
     await assertCallerCanImpersonate(ctx);
   }

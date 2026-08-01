@@ -7,8 +7,11 @@ export function useSettingsTabs() {
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
   const { data: secretsType } = useSecretsType();
   return [
-    ...(permissionMap?.["/settings/organization"]
-      ? [{ label: "Organization", href: "/settings/organization" }]
+    ...(permissionMap?.["/settings/appearance"]
+      ? [{ label: "Appearance", href: "/settings/appearance" }]
+      : []),
+    ...(permissionMap?.["/settings/auth"]
+      ? [{ label: "Auth", href: "/settings/auth" }]
       : []),
     ...(permissionMap?.["/settings/service-accounts"]
       ? [{ label: "Service Accounts", href: "/settings/service-accounts" }]

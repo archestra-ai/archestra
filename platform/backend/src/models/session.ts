@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import type { InsertSession, UpdateSession } from "@/types";
@@ -119,6 +119,45 @@ class SessionModel {
       .where(eq(schema.sessionsTable.userId, userId));
     logger.debug({ userId }, "SessionModel.deleteAllByUserId: completed");
     return result;
+  }
+
+  /**
+   * Revoke every session belonging to a member of the organization whose
+   * account has NOT enrolled in two-factor authentication. Used when an org
+   * turns require-2FA on: those members must sign in again and land in
+   * mandatory enrollment. Matching is by org MEMBERSHIP (not the session's
+   * activeOrganizationId, which can be null before the create-hook stamps
+   * it). Returns the number of revoked sessions.
+   */
+  static async deleteAllForOrganizationMembersWithoutTwoFactor(
+    organizationId: string,
+  ): Promise<number> {
+    const memberUserIdsWithoutTwoFactor = db
+      .select({ userId: schema.membersTable.userId })
+      .from(schema.membersTable)
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.membersTable.userId, schema.usersTable.id),
+      )
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, organizationId),
+          // The column is nullable with default false — null means not enrolled.
+          ne(sql`COALESCE(${schema.usersTable.twoFactorEnabled}, false)`, true),
+        ),
+      );
+
+    const deleted = await db
+      .delete(schema.sessionsTable)
+      .where(
+        inArray(schema.sessionsTable.userId, memberUserIdsWithoutTwoFactor),
+      )
+      .returning({ id: schema.sessionsTable.id });
+    logger.info(
+      { organizationId, revoked: deleted.length },
+      "SessionModel: revoked sessions of members without two-factor",
+    );
+    return deleted.length;
   }
 }
 

@@ -49,7 +49,7 @@ function AccountContent() {
         <RolePermissionsCard />
         <ApiKeysCard />
         <PersonalTokenCard />
-        {organization?.showTwoFactor && <TwoFactorCard />}
+        <TwoFactorCard required={organization?.requireTwoFactor ?? false} />
         <SessionsCard />
       </SettingsSectionStack>
       {showChangePasswordButton && (

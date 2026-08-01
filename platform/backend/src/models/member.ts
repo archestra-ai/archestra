@@ -305,6 +305,8 @@ class MemberModel {
           name: schema.usersTable.name,
           email: schema.usersTable.email,
           image: schema.usersTable.image,
+          // Nullable in the schema despite the default; coalesced below.
+          twoFactorEnabled: schema.usersTable.twoFactorEnabled,
         })
         .from(schema.membersTable)
         .innerJoin(
@@ -326,7 +328,14 @@ class MemberModel {
     ]);
 
     const total = totalResult[0]?.count ?? 0;
-    return createPaginatedResult(data, total, pagination);
+    return createPaginatedResult(
+      data.map((row) => ({
+        ...row,
+        twoFactorEnabled: row.twoFactorEnabled ?? false,
+      })),
+      total,
+      pagination,
+    );
   }
 
   /**

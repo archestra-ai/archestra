@@ -525,16 +525,22 @@ jobs:
         run: cargo test --workspace --locked
 
   # Backend unit tests, sharded across parallel runners. Vitest's --shard
-  # slices the file list deterministically (SHA1 of each path), so the four
-  # jobs partition the suite exactly once. Splitting this out of the lint job
-  # takes the suite off the workflow's critical path.
+  # slices the file list deterministically (SHA1 of each path), so the
+  # sixteen jobs partition the suite exactly once. Splitting this out of the
+  # lint job takes the suite off the workflow's critical path.
+  #
+  # EXPERIMENT (measurement PR): 16 shards on free GitHub-hosted ubuntu-latest
+  # (4 vcpu) instead of 4 shards on paid blacksmith-16vcpu. The gate job below
+  # keeps the stable check name either way. Rollback = revert this block to
+  # shard: [1..4] / blacksmith-16vcpu-ubuntu-2404 / --shard=N/4.
   backend-unit-tests:
-    name: Backend Unit Tests (shard ${{ matrix.shard }}/4)
+    name: Backend Unit Tests (shard ${{ matrix.shard }}/16)
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    # A full local suite run is ~4 min on comparable hardware; a shard is a
-    # quarter of that plus setup. 15 minutes means something is hung.
+    runs-on: ubuntu-latest
+    # A full suite run is ~4 min of vitest on 16 fast cores; a 1/16 shard on
+    # 4 slower cores is a few minutes plus setup. 15 minutes means something
+    # is hung.
     timeout-minutes: 15
     permissions:
       contents: read
@@ -549,7 +555,7 @@ jobs:
       # failure picture in one pass.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -581,17 +587,17 @@ jobs:
             pnpm exec turbo build --filter="@backend^..."
           }
 
-      - name: Run backend unit tests (shard ${{ matrix.shard }} of 4)
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of 16)
         working-directory: ./platform/backend
         env:
           SHARD: ${{ matrix.shard }}
-        run: pnpm exec vitest run --shard="${SHARD}/4"
+        run: pnpm exec vitest run --shard="${SHARD}/16"
 
   # Stable-named gate over the shard matrix so branch protection / merge queue
   # can require a single check ("Backend Unit Tests") regardless of shard count.
   backend-unit-tests-gate:
     name: Backend Unit Tests
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     # always() so the gate still runs (and turns red) when a shard fails,
     # ANDed with the bot-pr-guard (see comment above
     # platform-lint-and-unit-tests): when the shards skip on a bot PR, the

@@ -382,9 +382,9 @@ describe("custom role routes", () => {
     expect(Array.isArray(roles)).toBe(true);
     expect(roles.length).toBeGreaterThanOrEqual(3);
 
-    const adminRole = roles.find((r: { name: string }) => r.name === "admin");
-    const editorRole = roles.find((r: { name: string }) => r.name === "editor");
-    const memberRole = roles.find((r: { name: string }) => r.name === "member");
+    const adminRole = roles.find((r: { role: string }) => r.role === "admin");
+    const editorRole = roles.find((r: { role: string }) => r.role === "editor");
+    const memberRole = roles.find((r: { role: string }) => r.role === "member");
 
     expect(adminRole).toBeDefined();
     expect(adminRole.predefined).toBe(true);
@@ -428,7 +428,7 @@ describe("custom role routes", () => {
     expect(response.statusCode).toBe(200);
     const role = response.json();
     expect(role.id).toBe("admin");
-    expect(role.name).toBe("admin");
+    expect(role.name).toBe("Admin");
     expect(role.predefined).toBe(true);
     expect(role.permission).toBeDefined();
   });
@@ -567,7 +567,7 @@ describe("custom role routes", () => {
       method: "POST",
       url: "/api/roles",
       payload: {
-        name: "admin",
+        name: "Admin",
         permission: { agent: ["read"] },
       },
     });
@@ -800,7 +800,7 @@ describe("custom role routes", () => {
     expect(listResponse.statusCode).toBe(200);
     const roles = listResponse.json().data;
     expect(roles.length).toBeGreaterThanOrEqual(3);
-    const adminRole = roles.find((r: { name: string }) => r.name === "admin");
+    const adminRole = roles.find((r: { role: string }) => r.role === "admin");
     expect(adminRole).toBeDefined();
     expect(adminRole.predefined).toBe(true);
 

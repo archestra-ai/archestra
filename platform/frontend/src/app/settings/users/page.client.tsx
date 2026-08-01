@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { E2eTestId, getRoleDisplayName } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -323,7 +323,7 @@ function MembersTab({
       header: "Role",
       cell: ({ row }) => (
         <Badge variant="outline" className="capitalize">
-          {row.original.role}
+          {getRoleDisplayName(row.original.role)}
         </Badge>
       ),
     },
@@ -697,7 +697,7 @@ function InvitationsTab({
       header: "Role",
       cell: ({ row }) => (
         <Badge variant="outline" className="capitalize">
-          {row.original.role ?? "member"}
+          {getRoleDisplayName(row.original.role ?? "member")}
         </Badge>
       ),
     },

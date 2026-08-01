@@ -9,6 +9,7 @@ import {
 
 import type { ColumnDef } from "@tanstack/react-table";
 import { Copy, Download, Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
@@ -51,7 +52,7 @@ type Role = archestraApiTypes.GetRoleResponses["200"];
  * Enterprise Edition roles list with custom role management.
  * Shows both predefined roles (read-only) and custom roles (CRUD).
  */
-export function RolesList() {
+export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
   // The permission builder disables what the author cannot grant — the same
   // subset rule the server enforces on create/update.
   const { data: authorPermissions } = useAllPermissions();
@@ -364,11 +365,16 @@ export function RolesList() {
   return (
     <>
       <div className="space-y-6">
-        <SearchInput
-          objectNamePlural="roles"
-          searchFields={["name"]}
-          paramName="name"
-        />
+        <div className="flex items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <SearchInput
+              objectNamePlural="roles"
+              searchFields={["name"]}
+              paramName="name"
+            />
+          </div>
+          {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
+        </div>
 
         {isLoadingError ? (
           <QueryLoadError

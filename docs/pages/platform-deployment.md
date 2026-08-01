@@ -917,6 +917,11 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Set to `true` to disable basic authentication and require users to authenticate via SSO only
   - Note: Configure at least one Identity Provider before enabling this option. See [Identity Providers](/docs/platform-identity-providers) for SSO configuration.
 
+- **`ARCHESTRA_AUTH_DISABLE_IMPERSONATION`** - Disables user impersonation ("View as user" role debugging).
+  - Default: `false`
+  - Set to `true` to hide the impersonation pickers and refuse new impersonated sessions
+  - Leaving it `false` does not grant impersonation to everyone — it still requires the `member:impersonate` permission (see [Available Permissions](/docs/platform-access-control#available-permissions))
+
 - **`ARCHESTRA_AUTH_DISABLE_INVITATIONS`** - Disables user invitations functionality.
   - Default: `false`
   - Set to `true` to hide invitation-related UI and block invitation API endpoints

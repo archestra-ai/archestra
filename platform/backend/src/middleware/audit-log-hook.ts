@@ -132,6 +132,7 @@ export function registerAuditLogHook(fastify: FastifyInstanceWithZod): void {
       actorType,
       actorName: request.user.name ?? null,
       actorEmail: request.user.email,
+      impersonatedBy: request.impersonatedBy ?? null,
       action,
       outcome,
       resourceType: cfg?.resourceType ?? null,

@@ -171,6 +171,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "virtualApiKey.created": "Virtual API key created",
   "virtualApiKey.deleted": "Virtual API key deleted",
   // Auth surface
+  "auth.impersonation_started": "Impersonation started",
+  "auth.impersonation_stopped": "Impersonation stopped",
   "auth.signed_in": "Sign in",
   "auth.signed_out": "Sign out",
   "auth.signed_up": "Sign up",

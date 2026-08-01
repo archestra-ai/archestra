@@ -163,9 +163,20 @@ function WhenBlock({ event }: { event: AuditLog }) {
 }
 
 function ActorBlock({ event }: { event: AuditLog }) {
-  const { actorName, actorEmail, actorType } = event;
+  const { actorName, actorEmail, actorType, impersonatedBy } = event;
+  const impersonationNote = impersonatedBy ? (
+    <div className="text-xs text-amber-600 dark:text-amber-500">
+      Impersonated session — performed by{" "}
+      {event.impersonatedByEmail ?? "a since-deleted admin"}
+    </div>
+  ) : null;
   if (!actorName && !actorEmail) {
-    return <span className="text-muted-foreground">Deleted user</span>;
+    return (
+      <div className="space-y-0.5">
+        <span className="text-muted-foreground">Deleted user</span>
+        {impersonationNote}
+      </div>
+    );
   }
   return (
     <div className="space-y-0.5">
@@ -176,6 +187,7 @@ function ActorBlock({ event }: { event: AuditLog }) {
       <div className="text-xs text-muted-foreground">
         {ACTOR_TYPE_LABEL[actorType]}
       </div>
+      {impersonationNote}
     </div>
   );
 }

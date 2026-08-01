@@ -17,6 +17,12 @@ declare module "fastify" {
      */
     /** createdAt may be an ISO string when the session came from the cookie cache. */
     sessionInfo?: { id: string; createdAt: Date | string };
+    /**
+     * When the session is an impersonated one, the user id of the real human
+     * driving it (request.user is the impersonation target). Set by
+     * Authnz.populateUserInfo; consumed by the audit hook for attribution.
+     */
+    impersonatedBy?: string;
     serviceAccount?: SelectServiceAccount;
     serviceAccountAuthResult?: {
       serviceAccount: SelectServiceAccount;

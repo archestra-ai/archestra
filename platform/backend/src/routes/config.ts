@@ -221,6 +221,7 @@ export default configRoutes;
 const PublicConfigResponseSchema = z.strictObject({
   disableBasicAuth: z.boolean(),
   disableInvitations: z.boolean(),
+  disableImpersonation: z.boolean(),
   // Developer-only: when true, the login page auto-mints a session via
   // POST /api/auth/dev-auto-login instead of showing the sign-in form. Always
   // false in production (the driving env var is ignored there).
@@ -259,6 +260,7 @@ async function getPublicConfigResponse(): Promise<
   return {
     disableBasicAuth: config.auth.disableBasicAuth,
     disableInvitations: config.auth.disableInvitations,
+    disableImpersonation: config.auth.disableImpersonation,
     devAutoLoginEnabled: !!config.auth.devAutoAuthenticateEmail,
     maintenanceMode: config.maintenanceMode,
     siteNotificationMessage: config.siteNotificationMessage,

@@ -1,5 +1,6 @@
 import type { AnyRoleName } from "@archestra/shared";
 import { and, count, eq, inArray, or } from "drizzle-orm";
+import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
 import db, { schema, type Transaction } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
@@ -32,6 +33,7 @@ class MemberModel {
       { userId, organizationId, memberId: result[0]?.id },
       "MemberModel.create: completed",
     );
+    await syncSystemRoleWithOrgPermissions(userId, organizationId);
     return result;
   }
 
@@ -182,6 +184,9 @@ class MemberModel {
       { userId, organizationId, updated: !!result[0], newRole },
       "MemberModel.updateRole: completed",
     );
+    if (result[0]) {
+      await syncSystemRoleWithOrgPermissions(userId, organizationId);
+    }
     return result[0];
   }
 

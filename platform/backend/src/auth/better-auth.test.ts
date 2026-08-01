@@ -6,10 +6,12 @@ import {
 import { allAvailableActions } from "@archestra/shared/access-control";
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
 import { CREDENTIAL_PROVIDER_ID } from "@/constants";
+import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 
 vi.mock("@/logging");
@@ -28,6 +30,7 @@ import { beforeEach, describe, expect, test } from "@/test";
 
 // Create a hoisted ref to control disableInvitations in tests
 const mockDisableInvitations = vi.hoisted(() => ({ value: false }));
+const mockDisableImpersonation = vi.hoisted(() => ({ value: false }));
 
 // Mock config module before importing better-auth
 vi.mock("@/config", async (importOriginal) => {
@@ -41,6 +44,9 @@ vi.mock("@/config", async (importOriginal) => {
         trustedOrigins: ["https://app.example.com"],
         get disableInvitations() {
           return mockDisableInvitations.value;
+        },
+        get disableImpersonation() {
+          return mockDisableImpersonation.value;
         },
       },
     },
@@ -494,6 +500,283 @@ describe("handleBeforeHook", () => {
         method: "POST",
       });
 
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+
+    test("syncs the system-level user.role once the org RBAC gate passes", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      // Org admin promoted after bootstrap: no system-level role yet.
+      const orgAdmin = await makeUser();
+      await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+
+      await handleBeforeHook(impersonateCtx(orgAdmin));
+
+      const [row] = await db
+        .select({ role: schema.usersTable.role })
+        .from(schema.usersTable)
+        .where(eq(schema.usersTable.id, orgAdmin.id));
+      expect(row.role).toBe("admin");
+    });
+
+    test("records denied attempts in the audit log", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const plainMember = await makeUser();
+      await makeMember(plainMember.id, org.id, { role: MEMBER_ROLE_NAME });
+
+      await expect(
+        handleBeforeHook(impersonateCtx(plainMember)),
+      ).rejects.toThrow(APIError);
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, org.id));
+      const denied = rows.find(
+        (row) =>
+          row.action === "auth.impersonation_started" &&
+          row.outcome === "denied",
+      );
+      expect(denied).toBeDefined();
+      expect(denied?.actorId).toBe(plainMember.id);
+      expect(denied?.resourceId).toBe("some-target-user");
+    });
+
+    test("kill switch blocks impersonation and records the denial", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      mockDisableImpersonation.value = true;
+      try {
+        const org = await makeOrganization();
+        const orgAdmin = await makeUser({ role: "admin" });
+        await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+
+        await expect(
+          handleBeforeHook(impersonateCtx(orgAdmin)),
+        ).rejects.toMatchObject({
+          body: {
+            message: "User impersonation is disabled on this deployment",
+          },
+        });
+
+        const rows = await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.organizationId, org.id));
+        expect(
+          rows.some(
+            (row) =>
+              row.action === "auth.impersonation_started" &&
+              row.outcome === "denied",
+          ),
+        ).toBe(true);
+      } finally {
+        mockDisableImpersonation.value = false;
+      }
+    });
+
+    test("kill switch never blocks stop-impersonating", async () => {
+      mockDisableImpersonation.value = true;
+      try {
+        const ctx = createMockContext({
+          path: "/admin/stop-impersonating",
+          method: "POST",
+        });
+        const result = await handleBeforeHook(ctx);
+        expect(result).toBe(ctx);
+      } finally {
+        mockDisableImpersonation.value = false;
+      }
+    });
+
+    test("writes a success audit row once better-auth mints the impersonated session", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const orgAdmin = await makeUser({ role: "admin" });
+      await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+      const target = await makeUser();
+      await makeMember(target.id, org.id, { role: MEMBER_ROLE_NAME });
+
+      const request = new Request(
+        "http://localhost/api/auth/admin/impersonate-user",
+        { method: "POST" },
+      );
+      const beforeCtx = createMockContext({
+        path: "/admin/impersonate-user",
+        method: "POST",
+        body: { userId: target.id },
+        request,
+        context: {
+          session: {
+            user: orgAdmin,
+            session: { id: "session-id" },
+          },
+        },
+      });
+      await handleBeforeHook(beforeCtx);
+
+      const afterCtx = createMockContext({
+        path: "/admin/impersonate-user",
+        method: "POST",
+        body: { userId: target.id },
+        request,
+        context: {
+          newSession: {
+            user: { id: target.id, email: target.email },
+            session: { id: "impersonated-session" },
+          },
+        },
+      });
+      await handleAfterHook(afterCtx);
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, org.id));
+      const started = rows.find(
+        (row) =>
+          row.action === "auth.impersonation_started" &&
+          row.outcome === "success",
+      );
+      expect(started).toBeDefined();
+      expect(started?.actorId).toBe(orgAdmin.id);
+      expect(started?.resourceId).toBe(target.id);
+      expect(started?.after).toMatchObject({ targetUserId: target.id });
+    });
+
+    test("writes a stop audit row attributed to the impersonator", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const orgAdmin = await makeUser({ role: "admin" });
+      await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+      const target = await makeUser();
+      await makeMember(target.id, org.id, { role: MEMBER_ROLE_NAME });
+
+      const getSessionSpy = vi.spyOn(auth.api, "getSession").mockResolvedValue({
+        user: { id: target.id, email: target.email, name: target.name },
+        session: {
+          id: "impersonated-session",
+          impersonatedBy: orgAdmin.id,
+          activeOrganizationId: org.id,
+        },
+      } as unknown as Awaited<ReturnType<typeof auth.api.getSession>>);
+      try {
+        const request = new Request(
+          "http://localhost/api/auth/admin/stop-impersonating",
+          { method: "POST" },
+        );
+        const beforeCtx = createMockContext({
+          path: "/admin/stop-impersonating",
+          method: "POST",
+          request,
+        });
+        await handleBeforeHook(beforeCtx);
+        getSessionSpy.mockRestore();
+
+        const afterCtx = createMockContext({
+          path: "/admin/stop-impersonating",
+          method: "POST",
+          request,
+        });
+        await handleAfterHook(afterCtx);
+      } finally {
+        getSessionSpy.mockRestore();
+      }
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, org.id));
+      const stopped = rows.find(
+        (row) => row.action === "auth.impersonation_stopped",
+      );
+      expect(stopped).toBeDefined();
+      expect(stopped?.outcome).toBe("success");
+      expect(stopped?.actorId).toBe(orgAdmin.id);
+      expect(stopped?.resourceId).toBe(target.id);
+    });
+  });
+
+  describe("admin endpoint org-RBAC gate", () => {
+    const adminEndpointCtx = (
+      user: { id: string; email: string },
+      path = "/admin/list-users",
+    ) =>
+      createMockContext({
+        path,
+        method: "POST",
+        body: {},
+        context: {
+          session: {
+            user,
+            session: { id: "session-id" },
+          },
+        },
+      });
+
+    test("allows callers with full member-management permissions", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const orgAdmin = await makeUser({ role: "admin" });
+      await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+
+      const ctx = adminEndpointCtx(orgAdmin);
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+
+    test("blocks callers without member management even if user.role is admin", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      // The threat: a custom role granting only member:impersonate gets
+      // user.role="admin" from the sync; better-auth alone would then let it
+      // reach ban/set-role/remove-user.
+      const impersonatorOnly = await makeUser({ role: "admin" });
+      const customRole = await makeCustomRole(org.id, {
+        permission: { member: ["read", "impersonate"] },
+      });
+      await makeMember(impersonatorOnly.id, org.id, {
+        role: customRole.role,
+      });
+
+      await expect(
+        handleBeforeHook(adminEndpointCtx(impersonatorOnly, "/admin/set-role")),
+      ).rejects.toMatchObject({
+        body: {
+          message: "You do not have permission to use admin user management",
+        },
+      });
+    });
+
+    test("leaves unauthenticated admin-endpoint calls for better-auth", async () => {
+      const ctx = createMockContext({
+        path: "/admin/list-users",
+        method: "POST",
+        body: {},
+      });
       const result = await handleBeforeHook(ctx);
       expect(result).toBe(ctx);
     });

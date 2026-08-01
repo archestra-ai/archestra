@@ -2745,6 +2745,13 @@
       "when": 1785582000526,
       "tag": "0391_require_two_factor_and_session_max_age",
       "breakpoints": true
+    },
+    {
+      "idx": 392,
+      "version": "7",
+      "when": 1785613738639,
+      "tag": "0392_audit_log_impersonated_by",
+      "breakpoints": true
     }
   ]
 }

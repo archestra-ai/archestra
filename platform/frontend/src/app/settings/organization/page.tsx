@@ -7,7 +7,6 @@ import {
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
 import {
   SettingsCardHeader,
   SettingsSaveBar,
@@ -439,23 +438,29 @@ export default function OrganizationSettingsPage() {
         <SettingsSectionStack>
           <OAuthTokenLifetimeSection />
 
-          <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
-            <Card>
-              <SettingsCardHeader
-                title="Require Two-Factor Authentication"
-                description="Every member must enroll in 2FA. Turning this on signs out members who haven't enrolled; their next sign-in requires setup before anything else."
-                action={
-                  <Switch
-                    id="requireTwoFactor"
-                    checked={effectiveRequireTwoFactor}
-                    onCheckedChange={(checked) => setRequireTwoFactor(checked)}
-                  />
-                }
-              />
-            </Card>
+          {/* Enterprise-only auth policies are hidden (not greyed out)
+              without a license; the API refuses the writes regardless. */}
+          {enterpriseCoreActive && (
+            <>
+              <Card>
+                <SettingsCardHeader
+                  title="Require Two-Factor Authentication"
+                  description="Every member must enroll in 2FA. Turning this on signs out members who haven't enrolled; their next sign-in requires setup before anything else."
+                  action={
+                    <Switch
+                      id="requireTwoFactor"
+                      checked={effectiveRequireTwoFactor}
+                      onCheckedChange={(checked) =>
+                        setRequireTwoFactor(checked)
+                      }
+                    />
+                  }
+                />
+              </Card>
 
-            <SessionLifetimeSection />
-          </DisabledEnterpriseSection>
+              <SessionLifetimeSection />
+            </>
+          )}
 
           <Card>
             <SettingsCardHeader

@@ -4,8 +4,9 @@ import { eq } from "drizzle-orm";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import { enterpriseTier } from "@/enterprise-tier";
 import { OrganizationModel, SessionModel } from "@/models";
-import { afterEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError } from "@/types";
 import { Authnz } from "./middleware";
 
@@ -737,6 +738,10 @@ describe("Authnz", () => {
   });
 
   describe("enforceOrganizationAuthPolicies", () => {
+    beforeEach(() => {
+      enterpriseTier.setUserCountForTesting(0); // licensed (small-team tier)
+    });
+
     const enforce = (request: unknown) =>
       // biome-ignore lint/complexity/useLiteralKeys: reaching a private method under test
       authnz["enforceOrganizationAuthPolicies"](request as FastifyRequest);
@@ -931,6 +936,39 @@ describe("Authnz", () => {
           routeId: RouteId.GetAgents,
         }),
       );
+    });
+
+    test("stops enforcing entirely when the enterprise license lapses", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSession,
+    }) => {
+      const { organization, user, session } = await makePolicyFixtures(
+        { makeOrganization, makeUser, makeMember, makeSession },
+        {
+          requireTwoFactor: true,
+          twoFactorEnabled: false,
+          sessionMaxAgeSeconds: 3600,
+          sessionCreatedAt: new Date(Date.now() - 7200 * 1000),
+        },
+      );
+
+      enterpriseTier.setUserCountForTesting(9999); // over the free threshold
+      try {
+        // Enrollment is refused without a license, so enforcing would
+        // strand every non-enrolled member.
+        await enforce(
+          makeRequest({
+            organizationId: organization.id,
+            user,
+            session,
+            routeId: RouteId.GetAgents,
+          }),
+        );
+      } finally {
+        enterpriseTier.setUserCountForTesting(0);
+      }
     });
 
     test("skips non-session auth methods entirely", async ({

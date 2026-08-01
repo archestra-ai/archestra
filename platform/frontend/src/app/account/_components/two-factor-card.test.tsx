@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { TwoFactorCard } from "./two-factor-card";
 
@@ -14,6 +15,8 @@ vi.mock("@/lib/clients/auth/auth-client");
 // Pinned to a non-default brand so the enrollment assertion below proves the
 // issuer follows the deployment's name rather than coincidentally matching it.
 vi.mock("@/lib/hooks/use-app-name");
+
+vi.mock("@/lib/config/config.query");
 
 const mockRouterPush = vi.fn();
 
@@ -46,6 +49,7 @@ describe("TwoFactorCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useAppName).mockReturnValue("Acme AI");
+    vi.mocked(useEnterpriseFeature).mockReturnValue(true);
     vi.mocked(useRouter).mockReturnValue({
       push: mockRouterPush,
     } as unknown as ReturnType<typeof useRouter>);
@@ -116,6 +120,26 @@ describe("TwoFactorCard", () => {
         "Your organization requires two-factor authentication. Set it up now to continue using the platform.",
       ),
     ).not.toBeInTheDocument();
+  });
+
+  it("hides entirely for non-enrolled users without an enterprise license", async () => {
+    vi.mocked(useEnterpriseFeature).mockReturnValue(false);
+    mockSession(false);
+
+    const { container } = renderCard();
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("stays visible for enrolled users when the license lapses, so 2FA can be disabled", async () => {
+    vi.mocked(useEnterpriseFeature).mockReturnValue(false);
+    mockSession(true);
+
+    renderCard();
+
+    expect(
+      await screen.findByRole("button", { name: "Disable 2FA" }),
+    ).toBeInTheDocument();
   });
 
   it("disables 2FA with password confirmation", async () => {

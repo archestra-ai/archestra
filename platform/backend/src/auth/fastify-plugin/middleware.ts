@@ -7,6 +7,7 @@ import * as Sentry from "@sentry/node";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { betterAuth, hasPermission } from "@/auth";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import {
   OrganizationModel,
@@ -313,6 +314,14 @@ export class Authnz {
     request: FastifyRequest,
   ): Promise<void> => {
     if (request.authMethod !== "session" || !request.organizationId) {
+      return;
+    }
+
+    // Both policies are enterprise features. If the license lapses while
+    // they are configured, they stop being enforced rather than locking
+    // everyone out (enrollment itself is refused without a license, so
+    // enforcing require-2FA then would strand non-enrolled members).
+    if (!enterpriseTier.isCoreActive()) {
       return;
     }
 

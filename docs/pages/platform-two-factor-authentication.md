@@ -25,7 +25,7 @@ When an admin turns this on:
 - Members who already have 2FA enrolled keep their sessions and notice nothing.
 - The **Settings → Users** table gains a **2FA** column showing who has enrolled and who is still locked out pending setup.
 
-Turning the requirement on (and session lifetime caps, below) requires an enterprise license; the server refuses the setting change without one.
+The requirement toggle and the session lifetime setting (below) only appear with an enterprise license, and the server refuses the setting changes without one regardless of what a client sends.
 
 ## Session lifetime
 

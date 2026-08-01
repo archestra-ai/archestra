@@ -28,6 +28,7 @@ import {
   useEnableTwoFactorMutation,
 } from "@/lib/auth/two-factor.query";
 import { copyToClipboard } from "@/lib/clipboard";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 
 const PasswordFormSchema = z.object({
@@ -43,6 +44,7 @@ type PasswordFormValues = z.infer<typeof PasswordFormSchema>;
  */
 export function TwoFactorCard({ required = false }: { required?: boolean }) {
   const router = useRouter();
+  const enterpriseCoreActive = useEnterpriseFeature("core");
   const { data: session } = useSession();
   const twoFactorEnabled = !!session?.user?.twoFactorEnabled;
   const mustEnroll = required && !twoFactorEnabled;
@@ -52,6 +54,14 @@ export function TwoFactorCard({ required = false }: { required?: boolean }) {
     totpURI: string;
     backupCodes: string[];
   } | null>(null);
+
+  // 2FA is an enterprise feature. Without a license there is nothing a
+  // non-enrolled user can do here (the server refuses enrollment), so hide
+  // the card; already-enrolled users keep it so disabling stays possible if
+  // a license lapses.
+  if (!enterpriseCoreActive && !twoFactorEnabled) {
+    return null;
+  }
 
   return (
     <>

@@ -55,7 +55,7 @@ describe("TwoFactorCard", () => {
     } as unknown as ReturnType<typeof useRouter>);
   });
 
-  it("sends enrollment to the shared setup wizard", async () => {
+  it("runs enrollment in a dialog rather than navigating away", async () => {
     const user = userEvent.setup();
     mockSession(false);
 
@@ -63,12 +63,13 @@ describe("TwoFactorCard", () => {
 
     await user.click(await screen.findByRole("button", { name: "Enable 2FA" }));
 
-    // Enrollment (password, QR, recovery codes) lives in one full-page
-    // wizard so both entry points present the same order.
-    expect(mockRouterPush).toHaveBeenCalledWith(
-      `/auth/two-factor-setup?redirectTo=${encodeURIComponent("/account")}`,
-    );
-    expect(authClient.twoFactor.enable).not.toHaveBeenCalled();
+    // Same flow as mandatory enrollment, in place: the account page should
+    // not hand the user off to /auth.
+    expect(
+      await screen.findByText("Set Up Two-Factor Authentication"),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+    expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
   it("explains the enrollment mandate when the organization requires 2FA", async () => {

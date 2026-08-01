@@ -2,12 +2,15 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { SettingsBlock } from "@/components/settings/settings-block";
-import { StandardFormDialog } from "@/components/standard-dialog";
+import {
+  StandardDialog,
+  StandardFormDialog,
+} from "@/components/standard-dialog";
+import { useTwoFactorEnrollment } from "@/components/two-factor/two-factor-enrollment";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -34,13 +37,13 @@ type PasswordFormValues = z.infer<typeof PasswordFormSchema>;
  * sent to /auth/two-factor to scan the QR code and confirm the authenticator.
  */
 export function TwoFactorCard({ required = false }: { required?: boolean }) {
-  const router = useRouter();
   const enterpriseCoreActive = useEnterpriseFeature("core");
   const { data: session } = useSession();
   const twoFactorEnabled = !!session?.user?.twoFactorEnabled;
   const mustEnroll = required && !twoFactorEnabled;
 
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [isEnrollmentOpen, setIsEnrollmentOpen] = useState(false);
 
   // 2FA is an enterprise feature. Without a license there is nothing a
   // non-enrolled user can do here (the server refuses enrollment), so hide
@@ -72,12 +75,10 @@ export function TwoFactorCard({ required = false }: { required?: boolean }) {
                 setIsPasswordDialogOpen(true);
                 return;
               }
-              // Enrollment runs in the shared full-page wizard so both entry
-              // points get the same order: password, QR + code, then the
-              // download-gated recovery codes.
-              router.push(
-                `/auth/two-factor-setup?redirectTo=${encodeURIComponent("/account")}`,
-              );
+              // Same flow as mandatory enrollment (password, QR + code, then
+              // the download-gated recovery codes) — but in place, since
+              // there is no reason to leave the account page for it.
+              setIsEnrollmentOpen(true);
             }}
           >
             {twoFactorEnabled ? "Disable 2FA" : "Enable 2FA"}
@@ -87,6 +88,10 @@ export function TwoFactorCard({ required = false }: { required?: boolean }) {
       <TwoFactorPasswordDialog
         open={isPasswordDialogOpen}
         onOpenChange={setIsPasswordDialogOpen}
+      />
+      <TwoFactorEnrollmentDialog
+        open={isEnrollmentOpen}
+        onOpenChange={setIsEnrollmentOpen}
       />
     </>
   );
@@ -169,5 +174,35 @@ function TwoFactorPasswordDialog({
         />
       </StandardFormDialog>
     </Form>
+  );
+}
+
+/**
+ * Runs the shared enrollment flow in place. Abandoning it is safe: an
+ * unverified enrollment leaves the account unchanged and starting again
+ * replaces it.
+ */
+function TwoFactorEnrollmentDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { title, description, body } = useTwoFactorEnrollment({
+    onFinished: () => onOpenChange(false),
+  });
+
+  return (
+    <StandardDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
+      size="small"
+      bodyClassName="space-y-4"
+    >
+      {body}
+    </StandardDialog>
   );
 }

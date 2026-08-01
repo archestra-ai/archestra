@@ -1836,6 +1836,13 @@ const config = {
     disableInvitations:
       process.env.ARCHESTRA_AUTH_DISABLE_INVITATIONS === "true",
     /**
+     * Kill switch for user impersonation ("View as user" role debugging).
+     * Blocks starting new impersonated sessions and hides the pickers;
+     * stopping an in-flight impersonation always stays possible.
+     */
+    disableImpersonation:
+      process.env.ARCHESTRA_AUTH_DISABLE_IMPERSONATION === "true",
+    /**
      * OAuth Dynamic Client Registration (DCR, RFC 7591) and CIMD auto-registration.
      * Enabled by default. Set ARCHESTRA_AUTH_DCR_ENABLED=false to allow only
      * pre-registered OAuth clients (e.g. manually registered MCP OAuth clients) to

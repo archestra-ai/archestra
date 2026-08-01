@@ -73315,6 +73315,8 @@
                 "userToken.rotated",
                 "virtualApiKey.created",
                 "virtualApiKey.deleted",
+                "auth.impersonation_started",
+                "auth.impersonation_stopped",
                 "auth.signed_in",
                 "auth.signed_out",
                 "auth.signed_up",
@@ -73478,6 +73480,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "impersonatedBy": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "action": {
                             "anyOf": [
                               {
@@ -73599,6 +73605,8 @@
                                   "userToken.rotated",
                                   "virtualApiKey.created",
                                   "virtualApiKey.deleted",
+                                  "auth.impersonation_started",
+                                  "auth.impersonation_stopped",
                                   "auth.signed_in",
                                   "auth.signed_out",
                                   "auth.signed_up",
@@ -73672,6 +73680,10 @@
                           "userAgent": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "impersonatedByEmail": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -73684,6 +73696,7 @@
                           "actorType",
                           "actorName",
                           "actorEmail",
+                          "impersonatedBy",
                           "action",
                           "outcome",
                           "resourceType",
@@ -73697,7 +73710,8 @@
                           "httpStatus",
                           "requestId",
                           "sourceIp",
-                          "userAgent"
+                          "userAgent",
+                          "impersonatedByEmail"
                         ],
                         "additionalProperties": false
                       }
@@ -74059,6 +74073,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "impersonatedBy": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "action": {
                       "anyOf": [
                         {
@@ -74180,6 +74198,8 @@
                             "userToken.rotated",
                             "virtualApiKey.created",
                             "virtualApiKey.deleted",
+                            "auth.impersonation_started",
+                            "auth.impersonation_stopped",
                             "auth.signed_in",
                             "auth.signed_out",
                             "auth.signed_up",
@@ -74253,6 +74273,10 @@
                     "userAgent": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "impersonatedByEmail": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -74265,6 +74289,7 @@
                     "actorType",
                     "actorName",
                     "actorEmail",
+                    "impersonatedBy",
                     "action",
                     "outcome",
                     "resourceType",
@@ -74278,7 +74303,8 @@
                     "httpStatus",
                     "requestId",
                     "sourceIp",
-                    "userAgent"
+                    "userAgent",
+                    "impersonatedByEmail"
                   ],
                   "additionalProperties": false
                 }
@@ -117362,6 +117388,9 @@
                     "disableInvitations": {
                       "type": "boolean"
                     },
+                    "disableImpersonation": {
+                      "type": "boolean"
+                    },
                     "devAutoLoginEnabled": {
                       "type": "boolean"
                     },
@@ -117420,6 +117449,7 @@
                   "required": [
                     "disableBasicAuth",
                     "disableInvitations",
+                    "disableImpersonation",
                     "devAutoLoginEnabled",
                     "maintenanceMode",
                     "siteNotificationMessage",

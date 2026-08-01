@@ -438,7 +438,7 @@ function MembersTab({
                     {
                       icon: <Eye className="h-4 w-4" />,
                       label: "View as user",
-                      permissions: { member: ["update"] },
+                      permissions: { member: ["impersonate"] },
                       disabled: isImpersonatingUser,
                       testId: `${E2eTestId.ImpersonationViewAsButton}-${member.userId}`,
                       onClick: () => impersonateUser(member.userId),

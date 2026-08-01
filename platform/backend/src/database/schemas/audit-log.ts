@@ -43,6 +43,14 @@ const auditLogsTable = pgTable(
     actorType: text("actor_type").$type<AuditActorType>().notNull(),
     actorName: text("actor_name"),
     actorEmail: text("actor_email"),
+    /**
+     * The real human behind the action when the actor was an impersonated
+     * session: actorId names who the action ran AS, this names who was
+     * actually at the keyboard. Null for non-impersonated actions.
+     */
+    impersonatedBy: text("impersonated_by").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
     action: text("action").$type<AuditEventName>().notNull(),
     outcome: text("outcome").$type<AuditOutcome>().notNull(),
     resourceType: text("resource_type"),

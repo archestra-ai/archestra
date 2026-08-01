@@ -30,6 +30,7 @@ import { admin, jwt, organization, twoFactor } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
+import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
 import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -511,6 +512,7 @@ const memberRoleUpdateByRequest = new WeakMap<Request, MemberRoleUpdateStash>();
 
 type MemberRemoveStash = {
   memberId: string;
+  userId: string;
   organizationId: string;
   role: string;
   email: string;
@@ -518,6 +520,81 @@ type MemberRemoveStash = {
 };
 
 const memberRemoveByRequest = new WeakMap<Request, MemberRemoveStash>();
+
+type ImpersonationStash = {
+  impersonatorId: string;
+  impersonatorName: string | null;
+  impersonatorEmail: string | null;
+  organizationId: string;
+  targetUserId: string;
+};
+
+/** Start attempts, stashed once the RBAC gate passes (target from the body). */
+const impersonationStartByRequest = new WeakMap<Request, ImpersonationStash>();
+/**
+ * Stop attempts, stashed in the before-hook because the impersonated session
+ * (the only place `impersonatedBy` lives) is deleted by the time the
+ * after-hook runs.
+ */
+const impersonationStopByRequest = new WeakMap<Request, ImpersonationStash>();
+
+/**
+ * Audit writer for the impersonation lifecycle. Actor is always the real
+ * human (the impersonator); the impersonated member is the resource.
+ */
+async function writeImpersonationAuditLog(params: {
+  stash: ImpersonationStash;
+  action: "auth.impersonation_started" | "auth.impersonation_stopped";
+  outcome: "success" | "denied";
+  path: string;
+  request?: Request;
+  reason?: string;
+}): Promise<void> {
+  const { stash, action, outcome, path, request, reason } = params;
+  let targetName: string | null = null;
+  let targetEmail: string | null = null;
+  try {
+    const target = await UserModel.getById(stash.targetUserId);
+    targetName = target?.name ?? null;
+    targetEmail = target?.email ?? null;
+  } catch {
+    // Target lookup is best-effort display data; the id is what matters.
+  }
+  try {
+    await AuditLogModel.create({
+      organizationId: stash.organizationId,
+      actorId: stash.impersonatorId,
+      actorType: "user",
+      actorName: stash.impersonatorName,
+      actorEmail: stash.impersonatorEmail,
+      action,
+      outcome,
+      resourceType: "member",
+      resourceId: stash.targetUserId,
+      resourceName: targetName,
+      before: null,
+      after: {
+        targetUserId: stash.targetUserId,
+        ...(targetEmail ? { targetEmail } : {}),
+        ...(reason ? { reason } : {}),
+      },
+      httpMethod: "POST",
+      httpPath: path,
+      httpRoute: null,
+      httpStatus: null,
+      requestId: null,
+      sourceIp: resolveAuthClientIp(request),
+      userAgent: request?.headers.get("user-agent") ?? null,
+      occurredAt: new Date(),
+    });
+  } catch (err) {
+    logger.error(
+      { err, action, outcome },
+      "[auth:audit] failed to write impersonation audit row",
+    );
+    reportAuditWriteFailure({ source: "auth", resourceType: "member" });
+  }
+}
 
 function isAuthSignOutPath(path: string | undefined): boolean {
   if (!path) return false;
@@ -611,11 +688,106 @@ async function assertCallerCanImpersonate(
     throw forbidden();
   }
 
+  const targetUserId =
+    typeof ctx.body?.userId === "string" ? ctx.body.userId : "";
+  const stash: ImpersonationStash = {
+    impersonatorId: user.id,
+    impersonatorName: userRecord.name ?? null,
+    impersonatorEmail: userRecord.email ?? null,
+    organizationId: userRecord.organizationId,
+    targetUserId,
+  };
+
+  if (config.auth.disableImpersonation) {
+    await writeImpersonationAuditLog({
+      stash,
+      action: "auth.impersonation_started",
+      outcome: "denied",
+      path: "/admin/impersonate-user",
+      request,
+      reason: "impersonation is disabled on this deployment",
+    });
+    throw new APIError("FORBIDDEN", {
+      message: "User impersonation is disabled on this deployment",
+    });
+  }
+
   const permissions = await UserModel.getUserPermissions(
     user.id,
     userRecord.organizationId,
   );
   if (!permissions.member?.includes("impersonate")) {
+    await writeImpersonationAuditLog({
+      stash,
+      action: "auth.impersonation_started",
+      outcome: "denied",
+      path: "/admin/impersonate-user",
+      request,
+      reason: "caller lacks the member:impersonate permission",
+    });
+    throw forbidden();
+  }
+
+  // The org-level permission is the source of truth, but better-auth's own
+  // admin-plugin check (system `users.role === "admin"`) still runs after
+  // this hook. Keep the column in lockstep so members whose org role grants
+  // impersonation aren't rejected by the legacy system-level gate.
+  await syncSystemRoleWithOrgPermissions(user.id, userRecord.organizationId);
+
+  if (request) {
+    impersonationStartByRequest.set(request, stash);
+  }
+}
+
+/**
+ * Org-RBAC gate for the rest of better-auth's `/admin/*` surface (ban,
+ * set-role, remove-user, list-users, …). These endpoints are not used by the
+ * product UI, but the system-level `users.role = "admin"` that the
+ * impersonation sync maintains would otherwise unlock all of them for anyone
+ * whose org role merely grants `member:impersonate`. Full member-management
+ * permissions are required instead.
+ */
+async function assertCallerCanUseAdminEndpoints(
+  ctx: HookEndpointContext,
+): Promise<void> {
+  const { request, context } = ctx;
+
+  type SessionUser = { id: string };
+  let user = (context?.session as { user?: SessionUser } | undefined)?.user;
+
+  if (!user && request) {
+    try {
+      const headers = new Headers(request.headers as HeadersInit);
+      const resolved = await auth.api.getSession({ headers });
+      user = resolved?.user as SessionUser | undefined;
+    } catch (err) {
+      logger.debug(
+        { err },
+        "[auth:beforeHook] admin-endpoint gate: getSession failed",
+      );
+    }
+  }
+
+  // Unauthenticated calls are left for better-auth to reject.
+  if (!user?.id) return;
+
+  const forbidden = () =>
+    new APIError("FORBIDDEN", {
+      message: "You do not have permission to use admin user management",
+    });
+
+  const userRecord = await UserModel.getById(user.id);
+  if (!userRecord?.organizationId) {
+    throw forbidden();
+  }
+
+  const permissions = await UserModel.getUserPermissions(
+    user.id,
+    userRecord.organizationId,
+  );
+  const memberActions = permissions.member ?? [];
+  const requiredActions = ["create", "update", "delete"] as const;
+  if (!requiredActions.every((action) => memberActions.includes(action))) {
     throw forbidden();
   }
 }
@@ -825,6 +997,42 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
 
   if (path === "/admin/impersonate-user" && method === "POST") {
     await assertCallerCanImpersonate(ctx);
+  } else if (path === "/admin/stop-impersonating" && method === "POST") {
+    // Stash the impersonated session's identities now: the after-hook (which
+    // writes the audit row) runs after better-auth has already deleted the
+    // session that carries `impersonatedBy`.
+    if (beforeRequest) {
+      try {
+        const headers = new Headers(beforeRequest.headers as HeadersInit);
+        const resolved = await auth.api.getSession({ headers });
+        const impersonatedBy = (
+          resolved?.session as { impersonatedBy?: string | null } | undefined
+        )?.impersonatedBy;
+        if (resolved?.user && impersonatedBy) {
+          const impersonator = await UserModel.getById(impersonatedBy);
+          const organizationId =
+            impersonator?.organizationId ??
+            (await MemberModel.getFirstMembershipForUser(resolved.user.id))
+              ?.organizationId;
+          if (organizationId) {
+            impersonationStopByRequest.set(beforeRequest, {
+              impersonatorId: impersonatedBy,
+              impersonatorName: impersonator?.name ?? null,
+              impersonatorEmail: impersonator?.email ?? null,
+              organizationId,
+              targetUserId: resolved.user.id,
+            });
+          }
+        }
+      } catch (err) {
+        logger.debug(
+          { err },
+          "[auth:audit] stop-impersonating stash: getSession failed",
+        );
+      }
+    }
+  } else if (path.startsWith("/admin/")) {
+    await assertCallerCanUseAdminEndpoints(ctx);
   }
 
   // Subset-check the target role BEFORE the audit stash: better-auth's own
@@ -871,6 +1079,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
       const [existing] = await db
         .select({
           id: schema.membersTable.id,
+          userId: schema.membersTable.userId,
           organizationId: schema.membersTable.organizationId,
           role: schema.membersTable.role,
           email: schema.usersTable.email,
@@ -890,6 +1099,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
       if (existing) {
         memberRemoveByRequest.set(beforeRequest, {
           memberId: existing.id,
+          userId: existing.userId,
           organizationId: existing.organizationId,
           role: existing.role,
           email: existing.email,
@@ -1293,6 +1503,54 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         );
         reportAuditWriteFailure({ source: "auth", resourceType: "member" });
       }
+      // Membership may have been created by better-auth's adapter rather
+      // than MemberModel; resync the system-level user.role.
+      try {
+        const headers = new Headers(request.headers as HeadersInit);
+        const resolved = await auth.api.getSession({ headers });
+        const invitation = await InvitationModel.getById(invitationId);
+        if (resolved?.user && invitation) {
+          await syncSystemRoleWithOrgPermissions(
+            resolved.user.id,
+            invitation.organizationId,
+          );
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth] failed to sync system role after invitation accept",
+        );
+      }
+    }
+  }
+
+  // Audit the impersonation lifecycle. The start row is written only when
+  // better-auth actually minted the impersonated session (newSession); the
+  // stop stash only exists when the caller really was impersonating.
+  if (path === "/admin/impersonate-user" && method === "POST" && request) {
+    const stash = impersonationStartByRequest.get(request);
+    impersonationStartByRequest.delete(request);
+    if (stash && context?.newSession) {
+      await writeImpersonationAuditLog({
+        stash,
+        action: "auth.impersonation_started",
+        outcome: "success",
+        path,
+        request,
+      });
+    }
+  }
+  if (path === "/admin/stop-impersonating" && method === "POST" && request) {
+    const stash = impersonationStopByRequest.get(request);
+    impersonationStopByRequest.delete(request);
+    if (stash) {
+      await writeImpersonationAuditLog({
+        stash,
+        action: "auth.impersonation_stopped",
+        outcome: "success",
+        path,
+        request,
+      });
     }
   }
 
@@ -1350,6 +1608,32 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         reportAuditWriteFailure({ source: "auth", resourceType: "member" });
       }
     }
+    // better-auth's adapter wrote the member row directly (bypassing
+    // MemberModel), so resync the system-level user.role here.
+    const changedMemberId = body.memberId as string | undefined;
+    if (changedMemberId) {
+      try {
+        const [member] = await db
+          .select({
+            userId: schema.membersTable.userId,
+            organizationId: schema.membersTable.organizationId,
+          })
+          .from(schema.membersTable)
+          .where(eq(schema.membersTable.id, changedMemberId))
+          .limit(1);
+        if (member) {
+          await syncSystemRoleWithOrgPermissions(
+            member.userId,
+            member.organizationId,
+          );
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth] failed to sync system role after member role update",
+        );
+      }
+    }
   }
 
   // Audit member removal
@@ -1393,6 +1677,18 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           "[auth:audit] failed to write remove-member audit row",
         );
         reportAuditWriteFailure({ source: "auth", resourceType: "member" });
+      }
+      // Membership is gone; strip any synced system-level admin role.
+      try {
+        await syncSystemRoleWithOrgPermissions(
+          stash.userId,
+          stash.organizationId,
+        );
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth] failed to sync system role after member removal",
+        );
       }
     }
   }

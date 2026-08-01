@@ -372,6 +372,42 @@ describe("registerAuditLogHook", () => {
       expect(rows[0].actorId).toBe(user.id);
     });
 
+    test("attributes impersonated sessions via request.impersonatedBy", async ({
+      makeUser,
+    }) => {
+      const impersonator = await makeUser();
+      // Fresh instance: the shared app is already listening, and the
+      // impersonation decoration has to ride the same onRequest phase.
+      const impersonatedApp = createFastifyInstance();
+      injectAuth(impersonatedApp, user, orgId, "session");
+      impersonatedApp.addHook("onRequest", async (request) => {
+        (
+          request as typeof request & { impersonatedBy?: string }
+        ).impersonatedBy = impersonator.id;
+      });
+      registerAuditLogHook(impersonatedApp);
+      impersonatedApp.post("/api/things", async () => ({
+        id: KNOWN_RESOURCE_ID,
+        name: "New Thing",
+      }));
+      try {
+        const res = await impersonatedApp.inject({
+          method: "POST",
+          url: "/api/things",
+        });
+        expect(res.statusCode).toBe(200);
+        await settle();
+
+        const rows = await getRows();
+        expect(rows).toHaveLength(1);
+        // actor stays the impersonated user; the real human rides alongside.
+        expect(rows[0].actorId).toBe(user.id);
+        expect(rows[0].impersonatedBy).toBe(impersonator.id);
+      } finally {
+        await impersonatedApp.close();
+      }
+    });
+
     test("captures id from { data: { id } } envelope", async () => {
       const envelopeApp = createFastifyInstance();
       injectAuth(envelopeApp, user, orgId, "session");

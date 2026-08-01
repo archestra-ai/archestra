@@ -203,6 +203,43 @@ describe("AuditLogModel", () => {
       expect(result.data[0].resourceId).toBe("in-org");
     });
 
+    test("joins the impersonator's email for impersonation-attributed rows", async ({
+      makeUser,
+    }) => {
+      const impersonator = await makeUser();
+      await AuditLogModel.create({
+        ...BASE_PAYLOAD,
+        organizationId: orgId,
+        resourceId: "impersonated-action",
+        impersonatedBy: impersonator.id,
+      });
+      await AuditLogModel.create({
+        ...BASE_PAYLOAD,
+        organizationId: orgId,
+        resourceId: "plain-action",
+      });
+
+      const result = await AuditLogModel.findPaginated({
+        organizationId: orgId,
+        limit: 100,
+        offset: 0,
+      });
+
+      const impersonated = result.data.find(
+        (row) => row.resourceId === "impersonated-action",
+      );
+      const plain = result.data.find(
+        (row) => row.resourceId === "plain-action",
+      );
+      expect(impersonated?.impersonatedBy).toBe(impersonator.id);
+      expect(impersonated?.impersonatedByEmail).toBe(impersonator.email);
+      expect(plain?.impersonatedBy).toBeNull();
+      expect(plain?.impersonatedByEmail).toBeNull();
+
+      const byId = await AuditLogModel.findById(impersonated?.id ?? "", orgId);
+      expect(byId?.impersonatedByEmail).toBe(impersonator.email);
+    });
+
     test("returns correct total vs paginated data length", async () => {
       for (let i = 0; i < 5; i++) {
         await AuditLogModel.create({

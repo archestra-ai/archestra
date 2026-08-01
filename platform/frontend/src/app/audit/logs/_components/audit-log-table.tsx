@@ -433,13 +433,24 @@ export function AuditLogTable() {
         id: "actor",
         header: "Actor",
         cell: ({ row }) => {
-          const { actorName, actorEmail } = row.original;
+          const { actorName, actorEmail, impersonatedBy, impersonatedByEmail } =
+            row.original;
           const label = actorName ?? actorEmail ?? "Deleted user";
           return (
-            <Badge variant="outline" className="text-xs">
-              <User className="mr-1 h-3 w-3 shrink-0" />
-              <TruncatedText message={label} maxLength={24} />
-            </Badge>
+            <div className="flex flex-col items-start gap-0.5">
+              <Badge variant="outline" className="text-xs">
+                <User className="mr-1 h-3 w-3 shrink-0" />
+                <TruncatedText message={label} maxLength={24} />
+              </Badge>
+              {impersonatedBy && (
+                <span
+                  className="text-[10px] text-amber-600 dark:text-amber-500"
+                  title="This action ran in an impersonated session; the named actor was being impersonated by this admin."
+                >
+                  via {impersonatedByEmail ?? "deleted user"}
+                </span>
+              )}
+            </div>
           );
         },
       },

@@ -149,6 +149,7 @@ export const E2eTestId = {
   ConnectivityStatusBarRetry: "connectivity-status-bar-retry",
   // Role debugger / impersonation
   ImpersonationBanner: "impersonation-banner",
+  ImpersonationDebugRoleButton: "impersonation-debug-role-button",
   ImpersonationStopButton: "impersonation-stop-button",
   ImpersonationViewAsButton: "impersonation-view-as-button",
 } as const;

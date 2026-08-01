@@ -76,6 +76,7 @@ export function makePublicConfig(
   return {
     disableBasicAuth: false,
     disableInvitations: false,
+    disableImpersonation: false,
     devAutoLoginEnabled: false,
     enterpriseCoreActive: false,
     mcpSandboxDomain: null,

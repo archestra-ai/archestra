@@ -10,6 +10,11 @@ import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-sect
 import { QueryLoadError } from "@/components/query-load-error";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import {
@@ -25,8 +30,14 @@ const RolesListEnterprise = dynamic(() =>
   })),
 );
 
-function RoleDebuggerCallout() {
+/**
+ * Compact popover entry point for the role debugger: a single small trigger
+ * instead of the former full-width callout card, so the page leads with the
+ * roles themselves. Candidates are only fetched once the popover opens.
+ */
+function RoleDebuggerPopover() {
   const canImpersonate = useCanImpersonate();
+  const [open, setOpen] = useState(false);
   const {
     data: candidates,
     isLoading,
@@ -46,51 +57,64 @@ function RoleDebuggerCallout() {
   if (!canImpersonate) return null;
 
   return (
-    <div className="mb-4 rounded-md border border-border bg-muted/40 p-3 text-sm">
-      <p className="font-medium">Want to debug a role?</p>
-      <p className="text-muted-foreground">
-        Pick a user and view the app as them. The session expires after one hour
-        or when you click <em>Return to admin</em> in the banner.
-      </p>
-      {isCandidatesLoadError ? (
-        <QueryLoadError
-          className="mt-3"
-          title="Couldn't load users to impersonate"
-          onRetry={() => refetchCandidates()}
-        />
-      ) : (
-        <div className="mt-3 flex items-center gap-2">
-          <UserSearchableSelect
-            value={selectedUserId}
-            onValueChange={setSelectedUserId}
-            users={userOptions}
-            disabled={isLoading || !candidates || candidates.length === 0}
-            placeholder={
-              isLoading
-                ? "Loading users..."
-                : !candidates || candidates.length === 0
-                  ? "No users available"
-                  : "Select a user"
-            }
-            searchPlaceholder="Search users by name or email"
-            className="w-72"
-            emptyMessage="No matching users found."
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            data-testid={E2eTestId.ImpersonationViewAsButton}
-            disabled={!selectedUserId || isPending}
-            onClick={() => {
-              if (selectedUserId) impersonate(selectedUserId);
-            }}
-          >
-            <Eye className="mr-2 h-4 w-4" />
-            View as user
-          </Button>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          size="sm"
+          variant="outline"
+          data-testid={E2eTestId.ImpersonationDebugRoleButton}
+        >
+          <Eye className="mr-2 h-4 w-4" />
+          <span>Debug a role</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-96 space-y-3">
+        <div className="space-y-1">
+          <p className="text-sm font-medium">View the app as another user</p>
+          <p className="text-xs text-muted-foreground">
+            The impersonated session expires after one hour or when you click{" "}
+            <em>Return to admin</em> in the banner.
+          </p>
         </div>
-      )}
-    </div>
+        {isCandidatesLoadError ? (
+          <QueryLoadError
+            title="Couldn't load users to impersonate"
+            onRetry={() => refetchCandidates()}
+          />
+        ) : (
+          <div className="flex items-center gap-2">
+            <UserSearchableSelect
+              value={selectedUserId}
+              onValueChange={setSelectedUserId}
+              users={userOptions}
+              disabled={isLoading || !candidates || candidates.length === 0}
+              placeholder={
+                isLoading
+                  ? "Loading users..."
+                  : !candidates || candidates.length === 0
+                    ? "No users available"
+                    : "Select a user"
+              }
+              searchPlaceholder="Search users by name or email"
+              className="min-w-0 flex-1"
+              emptyMessage="No matching users found."
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              data-testid={E2eTestId.ImpersonationViewAsButton}
+              disabled={!selectedUserId || isPending}
+              onClick={() => {
+                if (selectedUserId) impersonate(selectedUserId);
+              }}
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              <span>View as user</span>
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -99,18 +123,20 @@ export default function RolesSettingsPage() {
   return (
     <ErrorBoundary>
       <SmallTeamTierBanner featureName="RBAC" />
-      <p className="mb-4 text-sm text-muted-foreground">
-        New users who join via email/password self-signup or ChatOps
-        auto-provisioning are assigned a default role. Change it in{" "}
-        <Link
-          href="/settings/auth"
-          className="font-medium underline underline-offset-4"
-        >
-          Settings → Auth
-        </Link>
-        .
-      </p>
-      <RoleDebuggerCallout />
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <p className="text-sm text-muted-foreground">
+          New users who join via email/password self-signup or ChatOps
+          auto-provisioning are assigned a default role. Change it in{" "}
+          <Link
+            href="/settings/auth"
+            className="font-medium underline underline-offset-4"
+          >
+            Settings → Auth
+          </Link>
+          .
+        </p>
+        <RoleDebuggerPopover />
+      </div>
       <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
         <RolesListEnterprise />
       </DisabledEnterpriseSection>

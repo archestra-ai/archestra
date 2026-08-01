@@ -489,6 +489,14 @@ export class Authnz {
             id: session.session.id,
             createdAt: new Date(session.session.createdAt),
           };
+          // Impersonated sessions act as the target user; keep the real
+          // human's id on the request so audit rows can attribute them.
+          const impersonatedBy = (
+            session.session as { impersonatedBy?: string | null }
+          ).impersonatedBy;
+          if (impersonatedBy) {
+            request.impersonatedBy = impersonatedBy;
+          }
           logger.trace(
             { userId: user.id, organizationId },
             "[Authnz] populateUserInfo: populated from session",

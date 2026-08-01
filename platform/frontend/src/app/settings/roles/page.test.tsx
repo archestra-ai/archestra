@@ -1,6 +1,7 @@
 "use client";
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useEnterpriseFeature,
@@ -64,10 +65,18 @@ beforeEach(() => {
 });
 
 describe("RolesSettingsPage", () => {
-  it("uses the searchable user select for role debugging", async () => {
+  it("tucks the role debugger behind a compact popover trigger", async () => {
+    const user = userEvent.setup();
     const { default: RolesSettingsPage } = await import("./page");
 
     render(<RolesSettingsPage />);
+
+    // Collapsed by default — the page leads with the roles list.
+    expect(
+      screen.queryByTestId("user-searchable-select"),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /debug a role/i }));
 
     expect(screen.getByTestId("user-searchable-select")).toBeInTheDocument();
     expect(mockUserSearchableSelect).toHaveBeenCalledWith(

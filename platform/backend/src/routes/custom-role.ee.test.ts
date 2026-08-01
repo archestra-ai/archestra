@@ -265,6 +265,68 @@ describe("custom role routes", () => {
     expect(deleteResponse.json()).toEqual({ success: true });
   });
 
+  test("permission edits resync holders' system-level user.role", async ({
+    makeCustomRole,
+    makeUser,
+    makeMember,
+  }) => {
+    const role = await makeCustomRole(organizationId, {
+      role: "sec_auditor",
+      name: "Security Auditor",
+      permission: { member: ["read"] },
+    });
+    const holder = await makeUser();
+    await makeMember(holder.id, organizationId, { role: role.role });
+
+    // The route delegates the write to better-auth; mirror it onto the DB row
+    // so the post-update resync (which reads the row) sees the new grant.
+    updateOrgRoleMock.mockImplementation(
+      async ({ body }: { body: { data: { permission: unknown } } }) => {
+        await db
+          .update(schema.organizationRolesTable)
+          .set({ permission: JSON.stringify(body.data.permission) })
+          .where(
+            and(
+              eq(schema.organizationRolesTable.organizationId, organizationId),
+              eq(schema.organizationRolesTable.role, role.role),
+            ),
+          );
+        return {
+          roleData: {
+            ...role,
+            permission: JSON.stringify(body.data.permission),
+          },
+        };
+      },
+    );
+
+    const grantResponse = await app.inject({
+      method: "PUT",
+      url: `/api/roles/${role.id}`,
+      payload: { permission: { member: ["read", "impersonate"] } },
+    });
+    expect(grantResponse.statusCode).toBe(200);
+
+    const [afterGrant] = await db
+      .select({ role: schema.usersTable.role })
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, holder.id));
+    expect(afterGrant.role).toBe("admin");
+
+    const revokeResponse = await app.inject({
+      method: "PUT",
+      url: `/api/roles/${role.id}`,
+      payload: { permission: { member: ["read"] } },
+    });
+    expect(revokeResponse.statusCode).toBe(200);
+
+    const [afterRevoke] = await db
+      .select({ role: schema.usersTable.role })
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, holder.id));
+    expect(afterRevoke.role).toBeNull();
+  });
+
   test("update invalidates cached permissions so the latest role data is visible immediately", async ({
     makeCustomRole,
   }) => {

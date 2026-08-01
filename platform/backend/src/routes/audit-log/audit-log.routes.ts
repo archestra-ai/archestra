@@ -11,9 +11,9 @@ import {
   ApiError,
   AuditActorTypeSchema,
   AuditEventNameSchema,
+  AuditLogWithImpersonatorSchema,
   AuditOutcomeSchema,
   constructResponseSchema,
-  SelectAuditLogSchema,
   SortDirectionSchema,
 } from "@/types";
 
@@ -68,7 +68,7 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           })
           .merge(PaginationQuerySchema),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectAuditLogSchema),
+          createPaginatedResponseSchema(AuditLogWithImpersonatorSchema),
         ),
       },
     },
@@ -133,7 +133,7 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string().uuid(),
         }),
-        response: constructResponseSchema(SelectAuditLogSchema),
+        response: constructResponseSchema(AuditLogWithImpersonatorSchema),
       },
     },
     async ({ params: { id }, user, organizationId }, reply) => {

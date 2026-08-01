@@ -24,6 +24,8 @@ function makeEvent(overrides: Partial<AuditLog> = {}): AuditLog {
     actorType: "user",
     actorName: "Ada Lovelace",
     actorEmail: "ada@example.com",
+    impersonatedBy: null,
+    impersonatedByEmail: null,
     action: "agent.updated",
     outcome: "success",
     resourceType: "agent",

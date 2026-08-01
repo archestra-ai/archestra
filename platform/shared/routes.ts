@@ -57,6 +57,7 @@ export const RouteId = {
 
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
+  GetAuthState: "getAuthState",
 
   // MCP Catalog Routes
   GetInternalMcpCatalog: "getInternalMcpCatalog",

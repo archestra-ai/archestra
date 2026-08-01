@@ -74522,6 +74522,41 @@
         }
       }
     },
+    "/api/auth-state": {
+      "get": {
+        "operationId": "getAuthState",
+        "tags": [
+          "Auth"
+        ],
+        "description": "Report whether a two-factor sign-in challenge is currently pending\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "twoFactorPending": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "twoFactorPending"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
     "/api/auth/default-credentials-status": {
       "get": {
         "operationId": "getDefaultCredentialsStatus",

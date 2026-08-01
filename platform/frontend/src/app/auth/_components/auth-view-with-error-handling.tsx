@@ -51,6 +51,10 @@ import {
 } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import {
+  RequireEnrollableSession,
+  RequirePendingTwoFactorChallenge,
+} from "./auth-route-guard";
 import { RecoverAccountView } from "./recover-account-view";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
 import { TwoFactorSetupView } from "./two-factor-setup-view";
@@ -280,15 +284,27 @@ export function AuthViewWithErrorHandling({
   }
 
   if (path === "two-factor") {
-    return <TwoFactorView />;
+    return (
+      <RequirePendingTwoFactorChallenge>
+        <TwoFactorView />
+      </RequirePendingTwoFactorChallenge>
+    );
   }
 
   if (path === "two-factor-setup") {
-    return <TwoFactorSetupView />;
+    return (
+      <RequireEnrollableSession>
+        <TwoFactorSetupView />
+      </RequireEnrollableSession>
+    );
   }
 
   if (path === "recover-account") {
-    return <RecoverAccountView />;
+    return (
+      <RequirePendingTwoFactorChallenge>
+        <RecoverAccountView />
+      </RequirePendingTwoFactorChallenge>
+    );
   }
 
   // Only sign-in remains: sign-up is handled upstream (blocked without an

@@ -21253,6 +21253,24 @@ export type GetAuditLogResponses = {
 
 export type GetAuditLogResponse = GetAuditLogResponses[keyof GetAuditLogResponses];
 
+export type GetAuthStateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth-state';
+};
+
+export type GetAuthStateResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        twoFactorPending: boolean;
+    };
+};
+
+export type GetAuthStateResponse = GetAuthStateResponses[keyof GetAuthStateResponses];
+
 export type GetDefaultCredentialsStatusData = {
     body?: never;
     path?: never;

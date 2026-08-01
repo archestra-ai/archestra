@@ -25,6 +25,7 @@ import {
   INCOMING_EMAIL_WEBHOOK_PREFIX,
   METRICS_PATH,
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
+  AUTH_STATE_PATH,
   PUBLIC_CONFIG_PATH,
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
@@ -196,6 +197,10 @@ export class Authnz {
       (method === "GET" && url === "/api/identity-providers/public") ||
       // Allow fetching public config for login and invitation UI
       (method === "GET" && url === PUBLIC_CONFIG_PATH) ||
+      // Explicit even though the /api/auth prefix check below already covers
+      // this path — the exemption is intentional here and must survive a
+      // rename of either path.
+      (method === "GET" && url === AUTH_STATE_PATH) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
       (method === "GET" &&

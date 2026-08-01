@@ -1459,6 +1459,10 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route
    */
   [RouteId.GetPublicConfig]: {},
+  // Public: reports only whether a two-factor sign-in challenge is pending,
+  // so the auth pages can redirect when they don't apply. Auth is skipped in
+  // middleware for this path.
+  [RouteId.GetAuthState]: {},
   /**
    * Get public appearance settings (theme, logo, font) for login page
    * Available to unauthenticated users

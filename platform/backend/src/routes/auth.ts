@@ -19,6 +19,7 @@ import { z } from "zod";
 import { betterAuth } from "@/auth";
 import { ensureCimdClientRegistered, isCimdClientId } from "@/auth/cimd";
 import config from "@/config";
+import { AUTH_STATE_PATH } from "@/routes/route-paths";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import {
@@ -60,7 +61,64 @@ import {
 import { isPublicOAuthCorsPath } from "./oauth-cors";
 import { getPublicRequestOrigin } from "./request-origin";
 
+/**
+ * better-auth's two-factor plugin marks a pending sign-in challenge with a
+ * signed, httpOnly cookie (TWO_FACTOR_COOKIE_NAME = "two_factor" in
+ * better-auth/dist/plugins/two-factor/constant.mjs — not re-exported from the
+ * package entry, hence the literal). The browser cannot read it, so the auth
+ * pages ask us instead.
+ *
+ * Only the cookie's PRESENCE is reported: the value is never read and the
+ * signature is deliberately not verified, because this is a UX gate for
+ * redirecting away from pages that don't apply. better-auth remains the only
+ * gate that matters on /two-factor/verify-*.
+ */
+function hasTwoFactorChallengeCookie(cookieHeader: string | undefined) {
+  if (!cookieHeader) {
+    return false;
+  }
+  // createCookieGetter builds `${secureCookiePrefix}${prefix}.${name}`, and
+  // the secure prefix appears only on https deployments — accept both.
+  const { cookiePrefix } = config.auth;
+  const candidates = new Set([
+    `${cookiePrefix}.two_factor`,
+    `__Secure-${cookiePrefix}.two_factor`,
+  ]);
+  return cookieHeader.split(";").some((segment) => {
+    const separatorIndex = segment.indexOf("=");
+    // A segment without "=" has no value and so is not our cookie.
+    if (separatorIndex === -1) {
+      return false;
+    }
+    return candidates.has(segment.slice(0, separatorIndex).trim());
+  });
+}
+
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  /**
+   * Pre-authentication state for the auth pages. Unauthenticated by design:
+   * it is read before any session exists.
+   */
+  fastify.route({
+    method: "GET",
+    url: AUTH_STATE_PATH,
+    schema: {
+      operationId: RouteId.GetAuthState,
+      description:
+        "Report whether a two-factor sign-in challenge is currently pending",
+      tags: ["Auth"],
+      response: {
+        200: z.strictObject({
+          twoFactorPending: z.boolean(),
+        }),
+      },
+    },
+    handler: async (request, reply) =>
+      reply.send({
+        twoFactorPending: hasTwoFactorChallengeCookie(request.headers.cookie),
+      }),
+  });
+
   fastify.route({
     method: "GET",
     url: "/api/auth/default-credentials-status",

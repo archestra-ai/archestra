@@ -1208,6 +1208,30 @@ describe("organization routes", () => {
       }
     });
 
+    test("turning requireTwoFactor off revokes nothing", async ({
+      makeUser,
+      makeMember,
+      makeSession,
+    }) => {
+      enterpriseTier.setUserCountForTesting(0);
+      const notEnrolled = await makeUser();
+      await makeMember(notEnrolled.id, organizationId, { role: "member" });
+      const session = await makeSession(notEnrolled.id);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/auth-settings",
+        payload: { requireTwoFactor: false },
+      });
+      expect(response.statusCode).toBe(200);
+
+      const [row] = await db
+        .select()
+        .from(schema.sessionsTable)
+        .where(eq(schema.sessionsTable.id, session.id));
+      expect(row).toBeDefined();
+    });
+
     test("rejects out-of-range session lifetimes and accepts null (no cap)", async () => {
       enterpriseTier.setUserCountForTesting(0);
       const tooShort = await app.inject({

@@ -36,6 +36,8 @@ function isTabActive(
 
 export function PageLayout({
   title,
+  documentTitle,
+  backLink,
   description,
   children,
   tabs = [],
@@ -45,6 +47,17 @@ export function PageLayout({
   children: React.ReactNode;
   tabs?: { label: React.ReactNode; href: string }[];
   title: React.ReactNode;
+  /**
+   * Browser tab title, for pages whose visible `title` is composed markup (an
+   * icon plus a name, say) rather than a plain string. Without it those pages
+   * can't participate in the title sync below.
+   */
+  documentTitle?: string;
+  /**
+   * "Back to <parent>" control for a detail page, rendered above the title so
+   * it reads as part of the header rather than as the first item of content.
+   */
+  backLink?: React.ReactNode;
   description: React.ReactNode;
   actionButton?: React.ReactNode;
   mobileVisibleCount?: number;
@@ -56,10 +69,11 @@ export function PageLayout({
   // Keep the browser tab title in sync with the page so screen reader and
   // switcher users can tell client-side navigated pages apart (WCAG 2.4.2).
   useEffect(() => {
-    if (typeof title === "string" && title && appName) {
-      document.title = `${title} - ${appName}`;
+    const pageTitle = documentTitle ?? (typeof title === "string" ? title : "");
+    if (pageTitle && appName) {
+      document.title = `${pageTitle} - ${appName}`;
     }
-  }, [title, appName]);
+  }, [title, documentTitle, appName]);
   const currentUrl = searchParams.toString()
     ? `${pathname}?${searchParams.toString()}`
     : pathname;
@@ -79,6 +93,7 @@ export function PageLayout({
     <div className="flex h-full w-full flex-col">
       <div className="border-b border-border bg-card/30">
         <div className={cn("mx-auto", maxWidth, "px-6 pt-6 md:px-6")}>
+          {backLink && <div className="mb-2">{backLink}</div>}
           {/* Below sm the action buttons drop under the title/description
               instead of squeezing them into a sliver beside the buttons. */}
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">

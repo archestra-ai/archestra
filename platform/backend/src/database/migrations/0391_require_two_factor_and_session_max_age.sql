@@ -9,4 +9,6 @@ ALTER TABLE "organization" DROP COLUMN IF EXISTS "show_two_factor";--> statement
 ALTER TABLE "two_factor" ADD COLUMN IF NOT EXISTS "verified" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 UPDATE "two_factor" tf SET "verified" = true
 FROM "user" u
-WHERE u."id" = tf."user_id" AND u."two_factor_enabled" = true;
+WHERE u."id" = tf."user_id" AND u."two_factor_enabled" = true;--> statement-breakpoint
+ALTER TABLE "two_factor" ADD COLUMN IF NOT EXISTS "failed_verification_count" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "two_factor" ADD COLUMN IF NOT EXISTS "locked_until" timestamp;

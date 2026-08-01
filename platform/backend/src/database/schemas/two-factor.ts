@@ -1,4 +1,4 @@
-import { boolean, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import usersTable from "./user";
 
 const twoFactor = pgTable("two_factor", {
@@ -12,6 +12,12 @@ const twoFactor = pgTable("two_factor", {
    * (user.two_factor_enabled).
    */
   verified: boolean("verified").notNull().default(false),
+  /** Consecutive failed TOTP attempts; better-auth locks after a threshold. */
+  failedVerificationCount: integer("failed_verification_count")
+    .notNull()
+    .default(0),
+  /** Until when verification is locked after too many failed attempts. */
+  lockedUntil: timestamp("locked_until"),
   userId: text("user_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),

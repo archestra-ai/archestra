@@ -88,6 +88,15 @@ archestra:
     ARCHESTRA_BEDROCK_BASE_URL: "https://bedrock-runtime.eu-north-1.amazonaws.com"
     ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX: "eu"
     ARCHESTRA_AUTH_COOKIE_DOMAIN: ".archestra.dev"
+    # SSO-only sign-in. PREREQUISITE: a working identity provider must be
+    # configured and signed into on staging first — this hides the
+    # email/password form, so with no IdP there is no way in through the UI.
+    # Note this is a UI-level control: better-auth's emailAndPassword provider
+    # stays enabled and POST /api/auth/sign-in/email is NOT blocked by the flag,
+    # so it hides the form rather than closing the endpoint.
+    # It also blocks turning on the require-two-factor org policy, since
+    # enrolment needs a password — 2FA has to come from the IdP instead.
+    ARCHESTRA_AUTH_DISABLE_BASIC_AUTH: "true"
     ARCHESTRA_FRONTEND_URL: "https://frontend.archestra.dev"
     ARCHESTRA_TRUST_PROXY: "false"
     ARCHESTRA_SENTRY_ENVIRONMENT: "archestra.dev"

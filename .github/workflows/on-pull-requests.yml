@@ -420,13 +420,15 @@ jobs:
           echo "✅ All validation checks passed"
 
   # mac-mini routing: both Rust checks and the frontend integration tests run
-  # on the self-hosted mac-mini-1 runners instead of Blacksmith when BOTH hold:
+  # on the self-hosted mac-mini-1 runners instead of GitHub-hosted when BOTH
+  # hold:
   #   - the event is merge_group (only maintainer-queued code ever reaches the
-  #     self-hosted machine; label-triggered PR runs stay on Blacksmith), and
+  #     self-hosted machine; label-triggered PR runs stay on GitHub-hosted
+  #     runners), and
   #   - the MAC_MINI_CI repository variable is "on" — the kill switch. Flip it
   #     off (gh variable set MAC_MINI_CI --body off) to instantly route
-  #     everything back to Blacksmith with no workflow change; unset/missing
-  #     also means Blacksmith.
+  #     everything back to GitHub-hosted runners with no workflow change;
+  #     unset/missing also means GitHub-hosted.
   # The mac-mini-watchdog job below auto-flips the switch off and cancels the
   # run if the machine stops taking jobs, so a dead mini ejects the PR from
   # the merge queue in minutes instead of blocking it for hours.
@@ -445,7 +447,7 @@ jobs:
     name: Platform Rust Checks
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-4vcpu-ubuntu-2404' }}
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -464,6 +466,14 @@ jobs:
           rustup show
           rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
 
+      # The mac mini keeps its cargo caches on the persistent disk; only the
+      # ephemeral Linux runners need a restored cache.
+      - name: Cache cargo registry and target
+        if: runner.os == 'Linux'
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: platform/archestra-rs
+
       - name: Install Rust musl toolchain dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
@@ -480,8 +490,14 @@ jobs:
         run: |
           cargo check --workspace --locked --target x86_64-unknown-linux-musl
 
+      # Prebuilt binary instead of `cargo install` — the source compile was
+      # ~2-4 min of pure waste on ephemeral runners. The action verifies the
+      # download against its pinned manifest and picks the right platform
+      # (Linux runners and the mac mini).
       - name: Install cargo-deny
-        run: cargo install cargo-deny --version 0.20.2 --locked
+        uses: taiki-e/install-action@1beb33eee6d086258184383af9a538940be190ed # v2.85.6
+        with:
+          tool: cargo-deny@0.20.2
 
       - name: Rust dependency policy
         working-directory: ./platform/archestra-rs
@@ -492,7 +508,7 @@ jobs:
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
     if: github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'archestra-ci[bot]' && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
     # mac-mini routing (see comment above platform-rust-checks)
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'blacksmith-4vcpu-ubuntu-2404' }}
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -508,6 +524,13 @@ jobs:
 
       - name: Setup Rust
         run: rustup show
+
+      # See the cache note in platform-rust-checks.
+      - name: Cache cargo registry and target
+        if: runner.os == 'Linux'
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: ai-labs
 
       - name: Install uv
         uses: ./.github/actions/setup-uv

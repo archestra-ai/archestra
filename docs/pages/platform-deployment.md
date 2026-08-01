@@ -919,8 +919,9 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
 
 - **`ARCHESTRA_AUTH_DISABLE_IMPERSONATION`** - Disables user impersonation ("View as user" role debugging).
   - Default: `false`
-  - Set to `true` to block starting impersonated sessions and hide the impersonation pickers
-  - Denied attempts are still recorded in the audit log; stopping an already-running impersonated session always remains possible
+  - Set to `true` to hide the impersonation pickers and refuse new impersonated sessions
+  - The refusal is enforced by the API, not just the UI: a direct call to the impersonation endpoint (a script, or a browser tab loaded before the flag was set) is rejected with a 403 and recorded in the audit log
+  - Anyone already impersonating when the flag is set can still return to their own account — stopping an impersonated session is never blocked, so nobody is stranded as another user
 
 - **`ARCHESTRA_AUTH_DISABLE_INVITATIONS`** - Disables user invitations functionality.
   - Default: `false`

@@ -617,6 +617,20 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // Enrolling in 2FA requires confirming a password (better-auth's
+      // /two-factor/enable mandates it), so on a password-less deployment the
+      // requirement would lock every member out with no way to satisfy it.
+      // SSO deployments enforce MFA at the identity provider instead.
+      if (body.requireTwoFactor === true && config.auth.disableBasicAuth) {
+        throw new ApiError(
+          400,
+          "Two-factor authentication cannot be required while email/password " +
+            "sign-in is disabled: enrolling requires confirming a password. " +
+            "Enforce multi-factor authentication at your identity provider " +
+            "instead.",
+        );
+      }
+
       const before = await OrganizationModel.getById(organizationId);
       const organization = await OrganizationModel.patch(organizationId, body);
 

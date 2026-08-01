@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSession } from "@/lib/auth/auth.query";
 import { useTwoFactorChallengePending } from "@/lib/auth/two-factor.query";
 import {
-  RequireEnrollableSession,
+  RequireSession,
   RequirePendingTwoFactorChallenge,
 } from "./auth-route-guard";
 
@@ -39,14 +39,14 @@ describe("auth route guards", () => {
     });
   });
 
-  describe("RequireEnrollableSession", () => {
+  describe("RequireSession", () => {
     it("renders enrollment for a signed-in, non-enrolled user", () => {
       mockSession({ user: { twoFactorEnabled: false } });
 
       render(
-        <RequireEnrollableSession>
+        <RequireSession>
           <div>enrollment</div>
-        </RequireEnrollableSession>,
+        </RequireSession>,
       );
 
       expect(screen.getByText("enrollment")).toBeInTheDocument();
@@ -57,9 +57,9 @@ describe("auth route guards", () => {
       mockSession(null);
 
       render(
-        <RequireEnrollableSession>
+        <RequireSession>
           <div>enrollment</div>
-        </RequireEnrollableSession>,
+        </RequireSession>,
       );
 
       expect(screen.queryByText("enrollment")).not.toBeInTheDocument();
@@ -68,26 +68,28 @@ describe("auth route guards", () => {
       );
     });
 
-    it("sends an already-enrolled user home", async () => {
+    it("still renders for an enrolled user, so the wizard can finish showing recovery codes", () => {
+      // Verifying the first code flips twoFactorEnabled while the wizard is
+      // still mid-flow; bouncing here used to swallow the backup codes.
       mockSession({ user: { twoFactorEnabled: true } });
 
       render(
-        <RequireEnrollableSession>
+        <RequireSession>
           <div>enrollment</div>
-        </RequireEnrollableSession>,
+        </RequireSession>,
       );
 
-      expect(screen.queryByText("enrollment")).not.toBeInTheDocument();
-      await waitFor(() => expect(replace).toHaveBeenCalledWith("/"));
+      expect(screen.getByText("enrollment")).toBeInTheDocument();
+      expect(replace).not.toHaveBeenCalled();
     });
 
     it("waits rather than redirecting while the session loads", () => {
       mockSession(undefined, true);
 
       render(
-        <RequireEnrollableSession>
+        <RequireSession>
           <div>enrollment</div>
-        </RequireEnrollableSession>,
+        </RequireSession>,
       );
 
       expect(screen.queryByText("enrollment")).not.toBeInTheDocument();

@@ -1208,6 +1208,34 @@ describe("organization routes", () => {
       }
     });
 
+    test("refuses to require 2FA when email/password sign-in is disabled", async () => {
+      // Enrollment confirms a password; on an SSO-only deployment the
+      // requirement would be unsatisfiable and lock every member out.
+      enterpriseTier.setUserCountForTesting(0);
+      const original = config.auth.disableBasicAuth;
+      Object.defineProperty(config.auth, "disableBasicAuth", {
+        value: true,
+        writable: true,
+        configurable: true,
+      });
+      try {
+        const response = await app.inject({
+          method: "PATCH",
+          url: "/api/organization/auth-settings",
+          payload: { requireTwoFactor: true },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error.message).toContain("identity provider");
+      } finally {
+        Object.defineProperty(config.auth, "disableBasicAuth", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+      }
+    });
+
     test("turning requireTwoFactor off revokes nothing", async ({
       makeUser,
       makeMember,

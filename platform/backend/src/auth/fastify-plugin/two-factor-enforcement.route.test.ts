@@ -293,6 +293,46 @@ describe("two-factor / session-policy enforcement (route level)", () => {
     });
   });
 
+  describe("password-less (SSO-only) deployments", () => {
+    test("does not enforce the requirement when email/password sign-in is off", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeSession,
+    }) => {
+      // A deployment that disabled basic auth after the requirement was set
+      // would otherwise strand every member: enrolling needs a password.
+      const org = await makeOrganization();
+      await setPolicies(org.id, { requireTwoFactor: true });
+      const user = await makeUser({ twoFactorEnabled: false });
+      await makeMember(user.id, org.id, { role: "member" });
+      const session = await makeSession(user.id, {
+        activeOrganizationId: org.id,
+      });
+      authenticateAs(user, session);
+
+      const original = config.auth.disableBasicAuth;
+      Object.defineProperty(config.auth, "disableBasicAuth", {
+        value: true,
+        writable: true,
+        configurable: true,
+      });
+      try {
+        const response = await app.inject({
+          method: "GET",
+          url: NON_EXEMPT_ROUTE,
+        });
+        expect(response.statusCode).toBe(200);
+      } finally {
+        Object.defineProperty(config.auth, "disableBasicAuth", {
+          value: original,
+          writable: true,
+          configurable: true,
+        });
+      }
+    });
+  });
+
   describe("enterprise licensing", () => {
     test("stops enforcing both policies when the license lapses", async ({
       makeOrganization,

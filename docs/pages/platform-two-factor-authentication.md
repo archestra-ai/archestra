@@ -10,7 +10,7 @@ lastUpdated: 2026-07-31
 
 Archestra supports TOTP-based two-factor authentication: members enroll by scanning a QR code with any authenticator app (1Password, Google Authenticator, Authy, …) and confirming a one-time code. Enrollment generates single-use backup codes for recovery, shown exactly once. Enrolled members are prompted for a code at every sign-in and may trust a device to skip the prompt on it.
 
-Members enroll from **Account → Two-Factor Authentication**. Enrollment (and organization-wide enforcement, below) is an enterprise feature.
+Members enroll from **Account → Two-Factor Authentication**, which opens a full-page wizard: confirm your password, scan the QR code and enter a code to prove the authenticator works, then download the recovery codes. The password step is required by the enrollment API and is the usual re-authentication before a security-sensitive change — it applies even if you signed in moments ago. Enrollment (and organization-wide enforcement, below) is an enterprise feature.
 
 > **Enterprise feature:** Contact sales@archestra.ai for licensing information.
 
@@ -26,6 +26,8 @@ When an admin turns this on:
 - The **Settings → Users** table gains a **2FA** column showing who has enrolled and who is still locked out pending setup.
 
 The requirement toggle and the session lifetime setting (below) only appear with an enterprise license, and the server refuses the setting changes without one regardless of what a client sends.
+
+**SSO-only deployments cannot use this setting.** Enrolling in 2FA requires confirming a password, so on a deployment with email/password sign-in disabled (`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=true`) the requirement would be unsatisfiable — the toggle is disabled with that explanation, the server rejects the change, and enforcement is skipped even if the setting was turned on before basic auth was disabled. Enforce multi-factor authentication at your identity provider instead.
 
 ## Session lifetime
 

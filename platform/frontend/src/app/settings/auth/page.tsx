@@ -15,7 +15,10 @@ import { RoleSelect } from "@/components/ui/role-select";
 import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
-import { useEnterpriseFeature } from "@/lib/config/config.query";
+import {
+  useDisableBasicAuth,
+  useEnterpriseFeature,
+} from "@/lib/config/config.query";
 import {
   useOrganization,
   useUpdateAuthSettings,
@@ -40,6 +43,9 @@ export default function AuthSettingsPage() {
     "Failed to update Auth settings",
   );
   const enterpriseCoreActive = useEnterpriseFeature("core");
+  // Enrollment confirms a password, so a password-less (SSO-only) deployment
+  // cannot satisfy the requirement — the backend refuses it too.
+  const isBasicAuthDisabled = useDisableBasicAuth() === true;
 
   const serverValues = buildAuthSettingsFormValues(organization);
   const serverOauthLifetimeSeconds =
@@ -156,7 +162,11 @@ export default function AuthSettingsPage() {
               <Card>
                 <SettingsCardHeader
                   title="Require Two-Factor Authentication"
-                  description="Every member must enroll in 2FA. Turning this on signs out members who haven't enrolled; their next sign-in requires setup before anything else."
+                  description={
+                    isBasicAuthDisabled
+                      ? "Unavailable while email/password sign-in is disabled: enrolling in 2FA requires confirming a password, so requiring it would lock every member out. Enforce multi-factor authentication at your identity provider instead."
+                      : "Every member must enroll in 2FA. Turning this on signs out members who haven't enrolled; their next sign-in requires setup before anything else."
+                  }
                   action={
                     <FormField
                       control={form.control}
@@ -166,6 +176,7 @@ export default function AuthSettingsPage() {
                           id="requireTwoFactor"
                           checked={field.value}
                           onCheckedChange={field.onChange}
+                          disabled={isBasicAuthDisabled}
                         />
                       )}
                     />

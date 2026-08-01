@@ -46,21 +46,19 @@ function GuardShell({
 }
 
 /**
- * Enrollment surface: needs a signed-in user who has not enrolled yet.
+ * Enrollment surface: needs a signed-in user. Deliberately does NOT bounce
+ * users who are already enrolled — enrolling flips that flag the moment the
+ * first code verifies, and the wizard still has to show the recovery codes.
+ * The wizard makes that call itself, because only it knows whether a flow is
+ * in progress.
  */
-export function RequireEnrollableSession({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function RequireSession({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = useSession();
   let verdict: GuardVerdict = "allow";
   if (isPending) {
     verdict = "wait";
   } else if (!session) {
     verdict = { redirectTo: "/auth/sign-in" };
-  } else if (session.user.twoFactorEnabled) {
-    verdict = { redirectTo: "/" };
   }
   return <GuardShell verdict={verdict}>{children}</GuardShell>;
 }

@@ -52,7 +52,7 @@ import {
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
-  RequireEnrollableSession,
+  RequireSession,
   RequirePendingTwoFactorChallenge,
 } from "./auth-route-guard";
 import { RecoverAccountView } from "./recover-account-view";
@@ -293,9 +293,9 @@ export function AuthViewWithErrorHandling({
 
   if (path === "two-factor-setup") {
     return (
-      <RequireEnrollableSession>
+      <RequireSession>
         <TwoFactorSetupView />
-      </RequireEnrollableSession>
+      </RequireSession>
     );
   }
 

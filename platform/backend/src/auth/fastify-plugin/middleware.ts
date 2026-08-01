@@ -349,8 +349,12 @@ export class Authnz {
       }
     }
 
+    // A deployment that turned email/password sign-in off after the
+    // requirement was set would otherwise strand every member: enrollment
+    // needs a password to confirm. Such deployments enforce MFA at the IdP.
     if (
       policies.requireTwoFactor &&
+      !config.auth.disableBasicAuth &&
       !(request.user?.twoFactorEnabled ?? false)
     ) {
       const routeId = request.routeOptions.schema?.operationId as

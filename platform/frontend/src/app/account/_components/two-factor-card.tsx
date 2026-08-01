@@ -89,10 +89,11 @@ export function TwoFactorCard({ required = false }: { required?: boolean }) {
         open={isPasswordDialogOpen}
         onOpenChange={setIsPasswordDialogOpen}
       />
-      <TwoFactorEnrollmentDialog
-        open={isEnrollmentOpen}
-        onOpenChange={setIsEnrollmentOpen}
-      />
+      {/* Mounted only while open so closing discards the flow's state —
+          including anything typed into the password field. */}
+      {isEnrollmentOpen && (
+        <TwoFactorEnrollmentDialog open onOpenChange={setIsEnrollmentOpen} />
+      )}
     </>
   );
 }

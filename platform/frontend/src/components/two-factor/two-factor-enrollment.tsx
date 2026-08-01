@@ -113,8 +113,13 @@ export function useTwoFactorEnrollment({
 
   function saveCodes() {
     if (!secrets) return;
-    downloadBackupCodes(secrets.backupCodes, appName);
-    setHasDownloadedCodes(true);
+    if (downloadBackupCodes(secrets.backupCodes, appName)) {
+      setHasDownloadedCodes(true);
+      return;
+    }
+    toast.error(
+      "Couldn't download the backup codes — copy them instead, then continue.",
+    );
   }
 
   if (secrets && isVerified) {
@@ -202,9 +207,16 @@ export function useTwoFactorEnrollment({
                     <Input
                       inputMode="numeric"
                       autoComplete="one-time-code"
-                      maxLength={6}
+                      // Wide enough to accept a pasted "123 456"; the value
+                      // is normalised to six digits below.
+                      maxLength={8}
                       disabled={verifyTotp.isPending}
                       {...field}
+                      onChange={(event) =>
+                        field.onChange(
+                          event.target.value.replace(/\D/g, "").slice(0, 6),
+                        )
+                      }
                     />
                   </FormControl>
                   <FormMessage />

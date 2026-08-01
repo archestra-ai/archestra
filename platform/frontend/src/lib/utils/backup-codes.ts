@@ -30,17 +30,30 @@ export function buildBackupCodesFileContents(
   ].join("\n");
 }
 
-/** Triggers a client-side download of the codes as a text file. */
-export function downloadBackupCodes(codes: string[], appName: string): void {
-  const blob = new Blob([buildBackupCodesFileContents(codes, appName)], {
-    type: "text/plain;charset=utf-8",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = getBackupCodesFileName(appName);
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+/**
+ * Triggers a client-side download of the codes as a text file. Returns
+ * whether it was actually handed to the browser — finishing enrollment is
+ * gated on this, so a blocked download must not unlock the gate.
+ */
+export function downloadBackupCodes(codes: string[], appName: string): boolean {
+  let url: string | null = null;
+  try {
+    const blob = new Blob([buildBackupCodesFileContents(codes, appName)], {
+      type: "text/plain;charset=utf-8",
+    });
+    url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = getBackupCodesFileName(appName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (url) {
+      URL.revokeObjectURL(url);
+    }
+  }
 }

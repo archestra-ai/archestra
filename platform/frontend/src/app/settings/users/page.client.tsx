@@ -267,6 +267,15 @@ function MembersTab({
   const tableRows =
     pageIndex === 0 ? [...pendingSignupMembers, ...members] : members;
 
+  // Show the column while the requirement is on, and keep showing it once
+  // anyone is enrolled — turning the requirement off should not blind admins
+  // to who still has 2FA.
+  const showTwoFactorColumn =
+    !!organization?.requireTwoFactor ||
+    members.some(
+      (member) => "twoFactorEnabled" in member && member.twoFactorEnabled,
+    );
+
   const columns: ColumnDef<Member | PendingSignupMember>[] = [
     {
       id: "avatar",
@@ -327,7 +336,7 @@ function MembersTab({
         </Badge>
       ),
     },
-    ...(organization?.requireTwoFactor
+    ...(showTwoFactorColumn
       ? [
           {
             id: "twoFactor",

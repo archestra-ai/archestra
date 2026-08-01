@@ -220,7 +220,8 @@ export default function AuthSettingsPage() {
             onSave={form.handleSubmit(handleSave)}
             onCancel={handleCancel}
             disabledSave={
-              !form.formState.isValid || !currentOauthLifetimeSeconds
+              !form.formState.isValid ||
+              !Number.isFinite(currentOauthLifetimeSeconds)
             }
           />
         </SettingsSectionStack>

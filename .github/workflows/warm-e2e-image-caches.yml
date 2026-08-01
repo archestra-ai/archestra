@@ -39,6 +39,8 @@ jobs:
     name: Warm E2E Image Caches
     # Same arch as the e2e runners (X64) so ${{ runner.arch }} in the keys
     # matches; a small runner suffices — this job only pulls and saves.
+    # Stays on Blacksmith: github-cache is backed by useblacksmith/cache,
+    # which only works on Blacksmith runners.
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 15
     permissions:

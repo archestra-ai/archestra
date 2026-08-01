@@ -52,7 +52,7 @@ concurrency:
 jobs:
   release-please:
     name: Release Please
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions:
       contents: write # Required to update manifests and release metadata in the repository.
       pull-requests: write # Required for release-please PR creation and updates.
@@ -275,7 +275,7 @@ jobs:
     # Un-drafts the GitHub release and triggers the website deploy only after ALL artifacts
     # (MCP server image, sandbox base image, platform Docker image, Helm chart) are published.
     if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && (github.event_name != 'workflow_dispatch' || inputs.finalize_github_release) && (needs.build-and-push-mcp-server-docker-image.result == 'success' || needs.build-and-push-mcp-server-docker-image.result == 'skipped') && (needs.build-and-push-sandbox-base-docker-image.result == 'success' || needs.build-and-push-sandbox-base-docker-image.result == 'skipped') && (needs.build-and-push-platform-docker-image-to-dockerhub.result == 'success' || needs.build-and-push-platform-docker-image-to-dockerhub.result == 'skipped') && (needs.publish-platform-helm-chart.result == 'success' || needs.publish-platform-helm-chart.result == 'skipped') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     needs:
       - release-please
       - build-and-push-mcp-server-docker-image
@@ -342,7 +342,7 @@ jobs:
       - publish-platform-helm-chart
       - publish-github-release
     if: ${{ always() && needs.release-please.outputs.platform_should_publish == 'true' && contains(needs.*.result, 'failure') }}
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     permissions: {}
     steps:
       - name: Post failure alert to Slack

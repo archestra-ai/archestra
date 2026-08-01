@@ -21,7 +21,7 @@ concurrency:
 jobs:
   pr-review:
     name: PR Review
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and inspect the PR diff.

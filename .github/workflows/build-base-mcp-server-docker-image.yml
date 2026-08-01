@@ -16,6 +16,16 @@ on:
         required: false
         type: string
         default: ""
+      enable_tree_reuse:
+        description: >-
+          Skip the multi-arch rebuild when an image for the exact
+          platform/mcp_server_docker_image source tree was already pushed
+          (tree-OID tag lookup + registry retag). Only for internal channels
+          where the version tag is a commit SHA (the staging deploy); release
+          builds keep this off.
+        required: false
+        type: boolean
+        default: false
     secrets:
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER:
         required: false
@@ -77,6 +87,7 @@ jobs:
       auth_provider: gar
       include_latest_tag: true
       checkout_ref: ${{ inputs.checkout_ref }}
+      reuse_tree_path: ${{ inputs.enable_tree_reuse && 'platform/mcp_server_docker_image' || '' }}
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

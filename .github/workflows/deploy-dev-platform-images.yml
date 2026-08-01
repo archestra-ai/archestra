@@ -33,7 +33,9 @@ jobs:
   resolve-previous-platform-image:
     name: Resolve previous platform image
     if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.label.name == 'deploy-dev-platform-images' && github.event.pull_request.head.repo.fork != true) }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    # A gcloud + kubectl lookup — same workload class as the 2vcpu
+    # deploy-to-staging job in on-commits-to-main.yml.
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: read # Required to resolve the currently deployed platform image from staging.
       id-token: write # Required for Workload Identity Federation and GKE credential retrieval.
@@ -117,6 +119,10 @@ jobs:
     with:
       push_to_gcr: true
       version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      # This image rarely changes with the platform: skip the two-arch rebuild
+      # when the platform/mcp_server_docker_image tree is unchanged and retag
+      # the previously pushed multi-arch manifest instead.
+      enable_tree_reuse: true
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -131,6 +137,9 @@ jobs:
     with:
       push_to_gcr: true
       version: ${{ inputs.version || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      # Same tree-OID reuse as the MCP server base image above, keyed on
+      # platform/sandbox_base.
+      enable_tree_reuse: true
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

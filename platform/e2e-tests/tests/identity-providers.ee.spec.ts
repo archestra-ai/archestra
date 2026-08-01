@@ -1009,7 +1009,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     await getRoleMappingRuleRow(page, 1)
       .getByTestId(E2eTestId.IdpRoleMappingRuleRole)
       .click();
-    await page.getByRole("option", { name: "Admin" }).click();
+    await page.getByRole("option", { name: "Admin", exact: true }).click();
 
     // Set default role to member (so we can verify role mapping works, not just fallback)
     const defaultRoleSelect = page.getByTestId(
@@ -1072,7 +1072,7 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     // Select admin role using data-testid
     const roleSelect = page.getByTestId(E2eTestId.IdpRoleMappingRuleRole);
     await roleSelect.click();
-    await page.getByRole("option", { name: "Admin" }).click();
+    await page.getByRole("option", { name: "Admin", exact: true }).click();
 
     // Set default role to member (so we can verify role mapping works)
     const defaultRoleSelect = page.getByTestId(

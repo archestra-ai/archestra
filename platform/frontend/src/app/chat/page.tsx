@@ -31,7 +31,6 @@ import {
 import { toast } from "sonner";
 import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
-import { CustomServerRequestDialog } from "@/app/mcp/registry/_parts/custom-server-request-dialog";
 import { AgentDialog } from "@/components/agent-dialog";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { Suggestion } from "@/components/ai-elements/suggestion";
@@ -308,14 +307,7 @@ export function ChatPageContent({
   const { data: session } = useSession();
 
   // Dialog management for MCP installation
-  const { isDialogOpened, openDialog, closeDialog } = useDialogs<
-    "custom-request" | "edit-agent"
-  >();
-
-  // Check if user can create catalog items directly
-  const { data: canCreateCatalog } = useHasPermissions({
-    mcpRegistry: ["create"],
-  });
+  const { isDialogOpened, closeDialog } = useDialogs<"edit-agent">();
 
   const { data: isAgentAdmin } = useHasPermissions({
     agent: ["admin"],
@@ -1495,7 +1487,6 @@ export function ChatPageContent({
       : chatSession?.error;
   const addToolResult = chatSession?.addToolResult;
   const addToolApprovalResponse = chatSession?.addToolApprovalResponse;
-  const pendingCustomServerToolCall = chatSession?.pendingCustomServerToolCall;
   const optimisticToolCalls = chatSession?.optimisticToolCalls ?? [];
   const browserToolCallIds = useMemo(
     () =>
@@ -1505,8 +1496,6 @@ export function ChatPageContent({
       }),
     [messages, optimisticToolCalls],
   );
-  const setPendingCustomServerToolCall =
-    chatSession?.setPendingCustomServerToolCall;
   const tokenUsage = chatSession?.tokenUsage;
   const contextTokensUsed = chatSession?.contextTokensUsed;
   const contextWindow = chatSession?.contextWindow ?? null;
@@ -1718,52 +1707,6 @@ export function ChatPageContent({
 
     return () => clearTimeout(timeout);
   }, [manualCompactionFeedback]);
-
-  useEffect(() => {
-    if (
-      !pendingCustomServerToolCall ||
-      !addToolResult ||
-      !setPendingCustomServerToolCall
-    ) {
-      return;
-    }
-
-    // Users who can create catalog items get the Add MCP Server page (in a
-    // new tab so the conversation stays put); others get the request dialog.
-    if (canCreateCatalog) {
-      window.open("/mcp/registry/new", "_blank");
-    } else {
-      openDialog("custom-request");
-    }
-
-    void (async () => {
-      try {
-        await addToolResult({
-          tool: pendingCustomServerToolCall.toolName as never,
-          toolCallId: pendingCustomServerToolCall.toolCallId,
-          output: {
-            type: "text",
-            text: canCreateCatalog
-              ? "Opening the Add MCP Server to Private Registry page."
-              : "Opening the custom MCP server installation request dialog.",
-          } as never,
-        });
-      } catch (toolError) {
-        console.error("[Chat] Failed to add custom server tool result", {
-          toolCallId: pendingCustomServerToolCall.toolCallId,
-          toolError,
-        });
-      }
-    })();
-
-    setPendingCustomServerToolCall(null);
-  }, [
-    pendingCustomServerToolCall,
-    addToolResult,
-    setPendingCustomServerToolCall,
-    canCreateCatalog,
-    openDialog,
-  ]);
 
   // Send a deferred initial prompt once the newly-created conversation's chat
   // session is ready. Existing conversations seed useChat with persisted
@@ -3423,10 +3366,6 @@ export function ChatPageContent({
           )}
         </div>
 
-        <CustomServerRequestDialog
-          isOpen={isDialogOpened("custom-request")}
-          onClose={() => closeDialog("custom-request")}
-        />
         <AgentDialog
           open={isDialogOpened("edit-agent")}
           onOpenChange={(open) => {

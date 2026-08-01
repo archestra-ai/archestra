@@ -54,10 +54,6 @@ export const TOOL_PERMISSIONS: Record<
   list_mcp_server_deployments: { resource: "mcpRegistry", action: "read" },
   get_mcp_server_logs: { resource: "mcpRegistry", action: "read" },
   reload_mcp_server_tools: { resource: "mcpRegistry", action: "update" },
-  create_mcp_server_installation_request: {
-    resource: "mcpServerInstallationRequest",
-    action: "create",
-  },
 
   // Teams
   create_team: { resource: "team", action: "create" },

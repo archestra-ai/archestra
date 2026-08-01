@@ -2752,6 +2752,13 @@
       "when": 1785613738639,
       "tag": "0392_audit_log_impersonated_by",
       "breakpoints": true
+    },
+    {
+      "idx": 393,
+      "version": "7",
+      "when": 1785622126748,
+      "tag": "0393_drop_mcp_server_installation_request",
+      "breakpoints": true
     }
   ]
 }

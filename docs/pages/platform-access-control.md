@@ -63,7 +63,6 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Tools & Policies | `read`, `create`, `update`, `delete` |
 | MCP Registry | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
-| MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
 | GitHub App Configurations | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query`, `deploy-to-restricted` |
@@ -109,7 +108,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Tools & Policies | `read` |
 | MCP Registry | `read`, `update` |
 | MCP Server Installations | `read`, `create`, `delete` |
-| MCP Server Installation Requests | `read`, `create`, `update` |
 | Environments | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
@@ -270,11 +268,6 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpServerInstallation:delete` | Uninstall MCP servers |
 | `mcpServerInstallation:manage-deleted` | View and restore soft-deleted (uninstalled) MCP servers |
 | `mcpServerInstallation:admin` | Approve or manage all MCP server installations |
-| `mcpServerInstallationRequest:read` | View MCP server installation requests |
-| `mcpServerInstallationRequest:create` | Submit requests to install MCP servers |
-| `mcpServerInstallationRequest:update` | Add notes to installation requests |
-| `mcpServerInstallationRequest:delete` | Delete installation requests |
-| `mcpServerInstallationRequest:admin` | Approve or decline installation requests |
 | `mcpSettings:read` | View MCP settings (online catalog availability) |
 | `mcpSettings:update` | Modify MCP settings |
 | `member:read` | View organization members and their roles |

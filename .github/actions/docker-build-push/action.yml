@@ -70,6 +70,7 @@ runs:
       id: build
       uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
       with:
+        # zizmor: ignore[template-injection] every caller passes a literal repo path from our own workflows, matching the trust model of the Blacksmith wrapper this replaces
         context: ${{ inputs.context }}
         file: ${{ inputs.file }}
         platforms: ${{ inputs.platforms }}

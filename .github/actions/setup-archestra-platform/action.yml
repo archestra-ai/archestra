@@ -139,7 +139,7 @@ runs:
     - name: Cache MCP example OAuth server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       id: cache-oauth-image
-      uses: ./.github/actions/github-cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: /tmp/mcp-oauth-server.tar
         key: mcp-oauth-server-0.0.1-${{ runner.arch }}
@@ -147,7 +147,7 @@ runs:
     - name: Cache MCP JWKS server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       id: cache-jwks-image
-      uses: ./.github/actions/github-cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: /tmp/mcp-jwks-server.tar
         key: mcp-jwks-server-0.0.3-${{ runner.arch }}
@@ -155,7 +155,7 @@ runs:
     - name: Cache MCP ID-JAG server image
       if: ${{ inputs.deploy-e2e-dependencies == 'true' }}
       id: cache-id-jag-image
-      uses: ./.github/actions/github-cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: /tmp/mcp-id-jag-server.tar
         key: mcp-id-jag-server-0.0.4-${{ runner.arch }}

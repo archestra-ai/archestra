@@ -52,8 +52,8 @@ import {
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
-  RequireSession,
   RequirePendingTwoFactorChallenge,
+  RequireSession,
 } from "./auth-route-guard";
 import { RecoverAccountView } from "./recover-account-view";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";

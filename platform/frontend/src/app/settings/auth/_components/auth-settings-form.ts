@@ -74,9 +74,7 @@ export function getSelectedOauthLifetimeSeconds(values: {
   return Number(values.oauthLifetimePreset);
 }
 
-function getSessionPresetSelectValue(
-  lifetimeSeconds: number | null,
-): string {
+function getSessionPresetSelectValue(lifetimeSeconds: number | null): string {
   if (lifetimeSeconds === null) {
     return NO_SESSION_LIMIT_VALUE;
   }

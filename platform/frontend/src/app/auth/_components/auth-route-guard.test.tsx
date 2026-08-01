@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useSession } from "@/lib/auth/auth.query";
 import { useTwoFactorChallengePending } from "@/lib/auth/two-factor.query";
 import {
-  RequireSession,
   RequirePendingTwoFactorChallenge,
+  RequireSession,
 } from "./auth-route-guard";
 
 vi.mock("@/lib/auth/auth.query", () => ({ useSession: vi.fn() }));

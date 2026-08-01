@@ -19,7 +19,6 @@ import { z } from "zod";
 import { betterAuth } from "@/auth";
 import { ensureCimdClientRegistered, isCimdClientId } from "@/auth/cimd";
 import config from "@/config";
-import { AUTH_STATE_PATH } from "@/routes/route-paths";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import {
@@ -36,6 +35,7 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { AUTH_STATE_PATH } from "@/routes/route-paths";
 import {
   appConnectorAudienceRef,
   appIdFromConnectorPath,

@@ -256,8 +256,9 @@ export const editorPermissions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete", "share-org"],
   file: ["manage"],
-  // Editors keep org-wide log visibility (log:admin) — the pre-split behavior.
-  log: ["read", "admin"],
+  // Editors see only their own logs; org-wide visibility is log:admin,
+  // reserved for admin-tier roles.
+  log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],

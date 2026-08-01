@@ -317,8 +317,9 @@ describe("own-vs-all log split (log/auditLog read vs admin)", () => {
     expect(permissionDescriptions["auditLog:admin"]).toBeTruthy();
   });
 
-  test("editor keeps the org-wide log view; member has neither", () => {
-    expect(editorPermissions.log).toEqual(["read", "admin"]);
+  test("editor sees only own logs; member has neither log resource", () => {
+    expect(editorPermissions.log).toEqual(["read"]);
+    expect(editorPermissions.auditLog).toEqual([]);
     expect(memberPermissions.log).toEqual([]);
     expect(memberPermissions.auditLog).toEqual([]);
   });

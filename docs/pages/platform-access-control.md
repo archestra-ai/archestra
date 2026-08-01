@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-07-31
+lastUpdated: 2026-08-01
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -70,7 +70,7 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Chats | `read`, `create`, `update`, `delete` |
 | Projects | `read`, `create`, `update`, `delete`, `share-org` |
 | Files | `manage` |
-| Logs | `read`, `admin` |
+| Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
 | LLM Settings | `read`, `update` |
 | MCP Settings | `read`, `update` |

@@ -88,7 +88,7 @@ jobs:
       matrix:
         include:
           - name: Platform
-            runner: blacksmith-16vcpu-ubuntu-2404
+            runner: ubuntu-latest
             context: ./platform
             dockerfile: ""
             artifact-name: platform-docker-image
@@ -96,7 +96,7 @@ jobs:
             local-tag-prefix: archestra-platform
             use-build-action: true
           - name: MCP Server Base
-            runner: blacksmith-4vcpu-ubuntu-2404
+            runner: ubuntu-latest
             context: ./platform/mcp_server_docker_image
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
             artifact-name: mcp-server-base-docker-image
@@ -104,6 +104,12 @@ jobs:
             local-tag-prefix: mcp-server-base
             use-build-action: false
     steps:
+      # Standard runners ship ~14 GB free with ~25 GB of unused toolchains on
+      # the volume; delete the big ones in the background so the image build
+      # never runs out of disk mid-layer. The rm races nothing it touches.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -367,14 +373,12 @@ jobs:
   # servers, and the Vault K8s-auth boot. Everything else runs in the lite
   # job below against the container harness.
   #
-  # One 8vcpu environment, no sharding: every extra shard pays the full
-  # ~4min environment setup again to split a few minutes of tests, and bigger
-  # runners don't speed the tests up either (the serial spec groups set the
-  # floor). 8vcpu is enough because the job is wait-bound, not compute-bound:
-  # setup blocks on image pulls and pod readiness probes, and the tests are
-  # API-bound Playwright specs. 16vcpu was sized for the old full-suite
-  # sharded runs, and measurements showed 16 vs 32 vcpu made no difference
-  # to test time. The required check is "Merge E2E Test Reports", not this job.
+  # One environment, no sharding: the whole job runs ~4-5 min, so every extra
+  # shard would pay the full environment setup again to split a couple of
+  # minutes of tests. A standard runner suffices because the job is
+  # wait-bound, not compute-bound: setup blocks on image pulls and pod
+  # readiness probes, and the tests are API-bound Playwright specs.
+  # The required check is "Merge E2E Test Reports", not this job.
   platform-e2e-k8s-tests:
     name: Platform E2E Tests (K8s)
     # Deliberately NO `needs: [platform-e2e-build]`: this job starts alongside
@@ -387,7 +391,7 @@ jobs:
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     # Observed worst-case wall-clock is ~10 min (setup + tests); 30 caps a
     # hung run instead of letting it burn a runner for the GitHub default.
     timeout-minutes: 30
@@ -396,6 +400,10 @@ jobs:
       id-token: write # Required for Workload Identity Federation in setup actions.
       actions: read # Required to poll for build artifacts on fork PRs (wait-timeout-seconds).
     steps:
+      # See the reclaim note in the build job.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -557,15 +565,41 @@ jobs:
   # below: this environment seeds chat API keys for the provider matrix, so
   # the org here is never in the "no keys yet" state that job exists to cover.
   platform-e2e-lite-tests:
-    name: Platform E2E Tests (Lite)
+    name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      # A failing leg must not cancel its siblings; we want the full failure
+      # picture in one pass.
+      fail-fast: false
+      matrix:
+        include:
+          # Each leg boots its own full lite stack — on free runners that
+          # duplicated ~4 min setup buys test wall-clock. The nightly
+          # cross-browser projects ride the api leg: they only carry the
+          # small @firefox/@webkit-tagged subset.
+          - name: api
+            projects_default: api --project=identity-providers
+            projects_nightly: api --project=identity-providers --project=firefox --project=webkit
+            shard: ""
+          - name: chromium-1of2
+            projects_default: chromium
+            projects_nightly: chromium
+            shard: "--shard=1/2"
+          - name: chromium-2of2
+            projects_default: chromium
+            projects_nightly: chromium
+            shard: "--shard=2/2"
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
+      # See the reclaim note in the build job.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -626,7 +660,8 @@ jobs:
           # Merge queue / on-demand label runs cover chromium only. The nightly
           # schedule (and manual workflow_dispatch) add firefox + webkit, which
           # only carry the @firefox/@webkit-tagged tests.
-          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'chromium --project=firefox --project=webkit --project=api --project=identity-providers' || 'chromium --project=api --project=identity-providers' }}
+          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.projects_nightly || matrix.projects_default }}
+          shard: ${{ matrix.shard }}
           extra_args: "--grep-invert '@quickstart'"
           timeout: "20"
           env_file: /tmp/lite-e2e.env
@@ -635,7 +670,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: blob-report-lite
+          name: blob-report-lite-${{ matrix.name }}
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
@@ -663,12 +698,16 @@ jobs:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
+      # See the reclaim note in the build job.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

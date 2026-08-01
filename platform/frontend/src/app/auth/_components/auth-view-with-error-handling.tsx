@@ -53,6 +53,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { RecoverAccountView } from "./recover-account-view";
 import { SignOutWithIdpLogout } from "./sign-out-with-idp-logout";
+import { TwoFactorSetupView } from "./two-factor-setup-view";
 import { TwoFactorView } from "./two-factor-view";
 
 const IdentityProviderSelector = dynamic(() =>
@@ -282,6 +283,10 @@ export function AuthViewWithErrorHandling({
     return <TwoFactorView />;
   }
 
+  if (path === "two-factor-setup") {
+    return <TwoFactorSetupView />;
+  }
+
   if (path === "recover-account") {
     return <RecoverAccountView />;
   }
@@ -379,15 +384,16 @@ export function AuthViewWithErrorHandling({
   }
 
   const originErrorAlert = originError && isSignInPage && (
-    <Alert className="mb-4 border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950 max-w-sm">
+    <Alert className="mb-4 w-full border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950">
       <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
       <AlertTitle className="text-amber-900 dark:text-amber-100">
         Origin Not Allowed
       </AlertTitle>
       <AlertDescription className="text-amber-700 dark:text-amber-300">
         <p className="text-sm mb-2">
-          You are accessing {appName} from <code>{originError}</code>, which is
-          not in the list of trusted origins.
+          You are accessing {appName} from{" "}
+          <code className="break-all">{originError}</code>, which is not in the
+          list of trusted origins.
         </p>
         <p className="text-sm mb-2">
           To fix this, set the environment variable:
@@ -397,7 +403,10 @@ export function AuthViewWithErrorHandling({
         </pre>
         <p className="text-sm">
           For multiple origins, use{" "}
-          <code>ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS</code>.
+          <code className="break-all">
+            ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS
+          </code>
+          .
         </p>
         <Button
           size="sm"

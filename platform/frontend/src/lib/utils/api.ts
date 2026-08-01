@@ -83,14 +83,14 @@ export function handleApiError(error: ApiSdkError) {
   const sentryError = toApiError(error);
 
   // Mandatory-2FA lockout: every API call fails with this code until the
-  // member enrolls, so route them to the enrollment card instead of raining
-  // error toasts. The account page itself stays reachable server-side.
+  // member enrolls, so route them to the dedicated enrollment page instead of
+  // raining error toasts.
   if (
     typeof window !== "undefined" &&
     getApiErrorInternalCode(error) === "two_factor_setup_required" &&
-    window.location.pathname !== "/account"
+    !window.location.pathname.startsWith("/auth/two-factor")
   ) {
-    window.location.assign("/account");
+    window.location.assign("/auth/two-factor-setup");
     return;
   }
 

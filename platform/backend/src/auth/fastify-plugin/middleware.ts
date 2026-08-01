@@ -344,7 +344,7 @@ export class Authnz {
         throw new ApiError(
           403,
           "This organization requires two-factor authentication. Set it up " +
-            "from your account page to continue.",
+            "to continue.",
           "two_factor_setup_required",
         );
       }

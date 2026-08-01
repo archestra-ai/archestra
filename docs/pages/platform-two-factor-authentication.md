@@ -21,7 +21,7 @@ Members enroll from **Account → Two-Factor Authentication**. Enrollment (and o
 When an admin turns this on:
 
 - Members who have **not** enrolled are signed out immediately (allow up to a minute for every replica to observe the change).
-- On their next sign-in they land on the account page, and every API request other than what the enrollment card needs is refused until they finish setup — the requirement is enforced server-side, not just hidden in the UI.
+- On their next sign-in they land on a dedicated setup page (styled like sign-in) that walks them through enrollment — password confirmation, backup codes, then the QR code. Every API request is refused until they finish, so signing in again just brings the setup page back; the requirement is enforced server-side, not merely hidden in the UI.
 - Members who already have 2FA enrolled keep their sessions and notice nothing.
 - The **Settings → Users** table gains a **2FA** column showing who has enrolled and who is still locked out pending setup.
 

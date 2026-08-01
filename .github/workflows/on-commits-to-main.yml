@@ -129,12 +129,15 @@ jobs:
             --atomic \
             --timeout 15m
 
-  # Keeps the backend-unit-test shards' turbo cache warm for FRESH PR
+  # Keeps the backend-unit-test shards' cargo cache warm for FRESH PR
   # branches: Actions caches are only shared downward from the default
-  # branch, and the shards themselves never run on main. On an exact key hit
-  # (no backend-dep inputs changed — the overwhelmingly common case) this is
-  # a ~15s lookup; on a miss it rebuilds via the turbo remote cache and
-  # saves once. See the shard job in on-pull-requests.yml for the consumer.
+  # branch, and the shards themselves never run on main. The NAPI crate
+  # builds are uncacheable in turbo (cache:false, platform-specific .node
+  # artifacts), so the shards depend on a warm cargo target dir instead —
+  # this job compiles the crates on main and saves the target dir under the
+  # same shared-key the shards restore. With a warm restore the build is an
+  # incremental no-op and the job takes ~1-2 min.
+  # See the shard job in on-pull-requests.yml for the consumer.
   warm-backend-build-cache:
     name: Warm Backend Build Cache
     runs-on: ubuntu-latest
@@ -157,34 +160,23 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      # Key must stay identical to the shard job's restore key.
-      - name: Check for existing cache
-        id: turbo-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # shared-key must stay identical to the shard job's.
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
-          path: platform/.turbo/cache
-          key: turbo-backend-${{ runner.os }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/turbo.json', 'platform/shared/**', 'platform/archestra-rs/**') }}
-          lookup-only: true
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
 
       - name: Setup environment
-        if: steps.turbo-cache.outputs.cache-hit != 'true'
         uses: ./.github/actions/setup-env
         with:
           working-directory: ./platform
 
       # Retry pattern mirrors the shard job (rustup race on cold cargo builds).
       - name: Build backend workspace dependencies
-        if: steps.turbo-cache.outputs.cache-hit != 'true'
         run: |
           pnpm exec turbo build --filter="@backend^..." || {
             echo "Build failed — syncing pinned Rust toolchain and retrying once..."
             rustup show
             pnpm exec turbo build --filter="@backend^..."
           }
-
-      - name: Save cache
-        if: steps.turbo-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: platform/.turbo/cache
-          key: ${{ steps.turbo-cache.outputs.cache-primary-key }}

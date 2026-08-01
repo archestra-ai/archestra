@@ -482,8 +482,11 @@ jobs:
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
+      # always() so this still runs when a failing setup step aborts the job
+      # (a plain outcome check is implicitly ANDed with success() and gets
+      # skipped exactly when the diagnostics matter most).
       - name: Show logs on failure or flaky tests
-        if: steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true'
+        if: always() && (steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true')
         run: |
           echo "=== Kubernetes Pods ==="
           kubectl get pods -o wide || true
@@ -777,12 +780,18 @@ jobs:
           #
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
           # Provider base URLs point to WireMock so quickstart tests can mock LLM responses
+          # Rate limiting is disabled like in the lite and K8s environments:
+          # the auth setup's sign-in/sign-out churn (amplified by Playwright
+          # retries) trips better-auth's per-IP limiter and fails user setup
+          # with 429s — measured on standard runners, where slower cores
+          # bunch the retries tighter than the old hardware did.
           docker run -d \
             --name archestra-quickstart \
             --network archestra-quickstart-net \
             -p 127.0.0.1:9000:9000 \
             -p 127.0.0.1:3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
+            -e ARCHESTRA_AUTH_RATE_LIMIT_DISABLED=true \
             -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest \
             -e ARCHESTRA_ANALYTICS=disabled \
             -e ARCHESTRA_OPENAI_BASE_URL=http://archestra-wiremock:8080/v1 \

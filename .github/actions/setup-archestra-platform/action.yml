@@ -640,13 +640,27 @@ runs:
       shell: bash
       run: |
         echo "=== Kubernetes Pods ==="
-        kubectl get pods -o wide
+        kubectl get pods -o wide || true
+
+        # Events and the database pod first: scheduling failures
+        # (FailedScheduling, unbound PVCs) surface here, and every later
+        # section must be || true — this step runs under bash -e, and one
+        # BadRequest from `kubectl logs` against a PodInitializing container
+        # used to truncate the whole dump.
+        echo "=== Recent Cluster Events ==="
+        kubectl get events --sort-by=.lastTimestamp -A 2>/dev/null | tail -60 || true
+
+        echo "=== Describe PostgreSQL Pod ==="
+        kubectl describe pod -l app.kubernetes.io/name=postgresql || echo "No PostgreSQL pod"
+
+        echo "=== PostgreSQL StatefulSet & PVCs ==="
+        kubectl get statefulset,pvc -l app.kubernetes.io/name=postgresql -o wide || true
 
         echo "=== Kubernetes Services ==="
-        kubectl get services
+        kubectl get services || true
 
         echo "=== Archestra Platform Logs ==="
-        kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200
+        kubectl logs -l app.kubernetes.io/name=archestra-platform --tail=200 || true
 
         echo "=== Archestra Worker Logs ==="
         kubectl logs -l app.kubernetes.io/name=archestra-platform-worker --tail=200 || echo "No worker logs"

@@ -88,6 +88,12 @@ archestra:
     ARCHESTRA_BEDROCK_BASE_URL: "https://bedrock-runtime.eu-north-1.amazonaws.com"
     ARCHESTRA_BEDROCK_INFERENCE_PROFILE_PREFIX: "eu"
     ARCHESTRA_AUTH_COOKIE_DOMAIN: ".archestra.dev"
+    # SSO-only sign-in. Google is the configured identity provider.
+    # Closes the password endpoints (not just the form) and revokes the
+    # sessions of anyone with no federated account, so everyone re-enters
+    # through Google. Also blocks turning on the require-two-factor org policy,
+    # since enrolment needs a password — 2FA comes from Workspace instead.
+    ARCHESTRA_AUTH_DISABLE_BASIC_AUTH: "true"
     ARCHESTRA_FRONTEND_URL: "https://frontend.archestra.dev"
     ARCHESTRA_TRUST_PROXY: "false"
     ARCHESTRA_SENTRY_ENVIRONMENT: "archestra.dev"

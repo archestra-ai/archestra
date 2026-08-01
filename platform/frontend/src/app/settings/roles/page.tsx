@@ -3,7 +3,6 @@
 import { E2eTestId } from "@archestra/shared";
 import { Eye } from "lucide-react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DisabledEnterpriseSection } from "@/components/disabled-enterprise-section";
@@ -11,10 +10,13 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { Button } from "@/components/ui/button";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useEnterpriseFeature } from "@/lib/config/config.query";
 import {
@@ -31,11 +33,11 @@ const RolesListEnterprise = dynamic(() =>
 );
 
 /**
- * Compact popover entry point for the role debugger: a single small trigger
- * instead of the former full-width callout card, so the page leads with the
- * roles themselves. Candidates are only fetched once the popover opens.
+ * Compact dialog entry point for the role debugger, sitting opposite the roles
+ * search field rather than in a full-width callout, so the page leads with the
+ * roles themselves.
  */
-function RoleDebuggerPopover() {
+function RoleDebuggerDialog() {
   const canImpersonate = useCanImpersonate();
   const [open, setOpen] = useState(false);
   const {
@@ -55,10 +57,16 @@ function RoleDebuggerPopover() {
   }));
 
   if (!canImpersonate) return null;
+  // A single-user organization has nobody to impersonate, so the trigger would
+  // only ever open onto an empty picker. Errors keep it visible: hiding then
+  // would make a failed fetch look like an empty org.
+  if (!isLoading && !isCandidatesLoadError && userOptions.length === 0) {
+    return null;
+  }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
         <Button
           size="sm"
           variant="outline"
@@ -67,15 +75,15 @@ function RoleDebuggerPopover() {
           <Eye className="mr-2 h-4 w-4" />
           <span>Debug a role</span>
         </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 space-y-3">
-        <div className="space-y-1">
-          <p className="text-sm font-medium">View the app as another user</p>
-          <p className="text-xs text-muted-foreground">
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>View the app as another user</DialogTitle>
+          <DialogDescription>
             The impersonated session expires after one hour or when you click{" "}
             <em>Return to admin</em> in the banner.
-          </p>
-        </div>
+          </DialogDescription>
+        </DialogHeader>
         {isCandidatesLoadError ? (
           <QueryLoadError
             title="Couldn't load users to impersonate"
@@ -87,14 +95,8 @@ function RoleDebuggerPopover() {
               value={selectedUserId}
               onValueChange={setSelectedUserId}
               users={userOptions}
-              disabled={isLoading || !candidates || candidates.length === 0}
-              placeholder={
-                isLoading
-                  ? "Loading users..."
-                  : !candidates || candidates.length === 0
-                    ? "No users available"
-                    : "Select a user"
-              }
+              disabled={isLoading}
+              placeholder={isLoading ? "Loading users..." : "Select a user"}
               searchPlaceholder="Search users by name or email"
               className="min-w-0 flex-1"
               emptyMessage="No matching users found."
@@ -113,8 +115,8 @@ function RoleDebuggerPopover() {
             </Button>
           </div>
         )}
-      </PopoverContent>
-    </Popover>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -123,22 +125,8 @@ export default function RolesSettingsPage() {
   return (
     <ErrorBoundary>
       <SmallTeamTierBanner featureName="RBAC" />
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <p className="text-sm text-muted-foreground">
-          New users who join via email/password self-signup or ChatOps
-          auto-provisioning are assigned a default role. Change it in{" "}
-          <Link
-            href="/settings/auth"
-            className="font-medium underline underline-offset-4"
-          >
-            Settings → Auth
-          </Link>
-          .
-        </p>
-        <RoleDebuggerPopover />
-      </div>
       <DisabledEnterpriseSection disabled={!enterpriseCoreActive}>
-        <RolesListEnterprise />
+        <RolesListEnterprise headerAction={<RoleDebuggerDialog />} />
       </DisabledEnterpriseSection>
     </ErrorBoundary>
   );

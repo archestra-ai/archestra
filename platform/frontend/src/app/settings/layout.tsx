@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 import { createContext, useContext, useMemo, useState } from "react";
 import { PageLayout } from "@/components/page-layout";
 import { useSettingsTabs } from "./settings-tabs";
 
-const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
+const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/service-accounts": {
     title: "Service Accounts",
     description:
@@ -66,8 +68,20 @@ const PAGE_CONFIG: Record<string, { title: string; description: string }> = {
   },
   "/settings/roles": {
     title: "Roles",
-    description:
-      "Manage predefined and custom roles, permissions, and access control.",
+    description: (
+      <>
+        Manage predefined and custom roles, permissions, and access control. New
+        users who join via email/password self-signup or ChatOps
+        auto-provisioning are assigned a default role. Change it in{" "}
+        <Link
+          href="/settings/auth"
+          className="font-medium underline underline-offset-4"
+        >
+          Settings → Auth
+        </Link>
+        .
+      </>
+    ),
   },
   "/settings/secrets": {
     title: "Secrets",

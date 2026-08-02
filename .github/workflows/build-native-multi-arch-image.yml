@@ -83,7 +83,7 @@ jobs:
   build-image:
     name: Build ${{ inputs.image_name }} (${{ matrix.os_and_arch }})
     # Pick the runner matching the arch.
-    runs-on: ${{ matrix.os_and_arch == 'linux/arm64' && 'blacksmith-16vcpu-ubuntu-2404-arm' || 'blacksmith-16vcpu-ubuntu-2404' }}
+    runs-on: ${{ matrix.os_and_arch == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       # Build both arches, or amd64 only when amd64_only is set.
@@ -114,6 +114,23 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      # Registry-backed layer cache next to the image, one ref per arch so the
+      # legs never clobber each other. Export only when this run can actually
+      # push to the registry; reads are anonymous.
+      - name: Resolve build cache refs
+        id: cache-refs
+        shell: bash
+        env:
+          CACHE_REF: ${{ inputs.image_registry }}/${{ inputs.image_name }}:buildcache-${{ matrix.os_and_arch == 'linux/arm64' && 'arm64' || 'amd64' }}
+          CAN_PUSH: ${{ inputs.push_image && inputs.auth_provider != 'none' }}
+        run: |
+          echo "cache-from=type=registry,ref=${CACHE_REF}" >> "$GITHUB_OUTPUT"
+          if [ "${CAN_PUSH}" = "true" ]; then
+            echo "cache-to=type=registry,ref=${CACHE_REF},mode=max" >> "$GITHUB_OUTPUT"
+          else
+            echo "cache-to=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build Docker image
         id: build
         uses: ./.github/actions/build-docker-image
@@ -128,6 +145,8 @@ jobs:
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           sentry-auth-token: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
+          cache-from: ${{ steps.cache-refs.outputs.cache-from }}
+          cache-to: ${{ steps.cache-refs.outputs.cache-to }}
 
       - name: Export digest
         if: ${{ inputs.push_image }}

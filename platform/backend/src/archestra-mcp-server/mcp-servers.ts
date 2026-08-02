@@ -1,6 +1,5 @@
 import {
   TOOL_CREATE_AGENT_SHORT_NAME,
-  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
   TOOL_CREATE_MCP_SERVER_SHORT_NAME,
   TOOL_DEPLOY_MCP_SERVER_SHORT_NAME,
   TOOL_EDIT_AGENT_SHORT_NAME,
@@ -501,15 +500,6 @@ const registry = defineArchestraTools([
     description: `Re-discover a deployed MCP server's tools from the live server and refresh Archestra's tool catalog for it — picks up added, removed, and changed tools (names, descriptions, and input schemas) without reinstalling or restarting the server. Use when an MCP server's tools have changed and agents are seeing a stale list. Use ${TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME} to find the server ID. Note: tools are shared per catalog item, so this refreshes the tool list for every deployment of the same server.`,
     schema: ReloadMcpServerToolsToolArgsSchema,
     handler: ({ args, context }) => handleReloadMcpServerTools(args, context),
-  }),
-  defineArchestraTool({
-    shortName: TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
-    title: "Create MCP Server Installation Request",
-    description:
-      // white-label-ok: shipped tool text; branded by getArchestraMcpTools before a model sees it
-      "Allows users from within the Archestra Platform chat UI to submit a request for an MCP server to be added to their Archestra Platform's internal MCP server registry. This will open a dialog for the user to submit an installation request. When you trigger this tool, just tell the user to go through the dialog to submit the request. Do not provider any additional information",
-    schema: EmptyToolArgsSchema,
-    handler: ({ context }) => handleCreateMcpServerInstallationRequest(context),
   }),
 ] as const);
 
@@ -1565,25 +1555,6 @@ async function handleReloadMcpServerTools(
     );
   } catch (error) {
     return catchError(error, "reloading MCP server tools");
-  }
-}
-
-async function handleCreateMcpServerInstallationRequest(
-  context: ArchestraContext,
-): Promise<CallToolResult> {
-  const { agent: contextAgent } = context;
-
-  logger.info(
-    { agentId: contextAgent.id },
-    "create_mcp_server_installation_request tool called",
-  );
-
-  try {
-    return successResult(
-      "A dialog for adding or requesting an MCP server should now be visible in the chat. Please review and submit to proceed.",
-    );
-  } catch (error) {
-    return catchError(error, "handling MCP server installation request");
   }
 }
 

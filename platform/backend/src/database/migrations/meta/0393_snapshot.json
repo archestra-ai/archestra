@@ -1,5 +1,5 @@
 {
-  "id": "4a01009d-11ce-475a-b11d-770ee09e90c9",
+  "id": "0d345d22-5499-4737-ab56-f4ccb9c4e54c",
   "prevId": "b600e966-c85c-4705-8191-e5b8ec33d7cb",
   "version": "7",
   "dialect": "postgresql",
@@ -2257,22 +2257,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "agents_deleted_at_purge_idx": {
-          "name": "agents_deleted_at_purge_idx",
-          "columns": [
-            {
-              "expression": "deleted_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"agents\".\"deleted_at\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -3602,22 +3586,6 @@
           ],
           "isUnique": true,
           "where": "\"apps\".\"slug\" IS NOT NULL AND \"apps\".\"deleted_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "apps_deleted_at_purge_idx": {
-          "name": "apps_deleted_at_purge_idx",
-          "columns": [
-            {
-              "expression": "deleted_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"apps\".\"deleted_at\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -9738,22 +9706,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "knowledge_base_connectors_deleted_at_purge_idx": {
-          "name": "knowledge_base_connectors_deleted_at_purge_idx",
-          "columns": [
-            {
-              "expression": "deleted_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "deleted_at IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -9860,22 +9812,6 @@
           ],
           "isUnique": false,
           "where": "deleted_at IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "knowledge_bases_deleted_at_purge_idx": {
-          "name": "knowledge_bases_deleted_at_purge_idx",
-          "columns": [
-            {
-              "expression": "deleted_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "deleted_at IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -11135,124 +11071,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.mcp_server_installation_request": {
-      "name": "mcp_server_installation_request",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "external_catalog_id": {
-          "name": "external_catalog_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "requested_by": {
-          "name": "requested_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "request_reason": {
-          "name": "request_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "custom_server_config": {
-          "name": "custom_server_config",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'null'::jsonb"
-        },
-        "admin_response": {
-          "name": "admin_response",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reviewed_by": {
-          "name": "reviewed_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reviewed_at": {
-          "name": "reviewed_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "notes": {
-          "name": "notes",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "'[]'::jsonb"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "mcp_server_installation_request_requested_by_user_id_fk": {
-          "name": "mcp_server_installation_request_requested_by_user_id_fk",
-          "tableFrom": "mcp_server_installation_request",
-          "tableTo": "user",
-          "columnsFrom": [
-            "requested_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "mcp_server_installation_request_reviewed_by_user_id_fk": {
-          "name": "mcp_server_installation_request_reviewed_by_user_id_fk",
-          "tableFrom": "mcp_server_installation_request",
-          "tableTo": "user",
-          "columnsFrom": [
-            "reviewed_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -14130,22 +13948,6 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "projects_deleted_at_purge_idx": {
-          "name": "projects_deleted_at_purge_idx",
-          "columns": [
-            {
-              "expression": "deleted_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"projects\".\"deleted_at\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -17031,22 +16833,6 @@
           ],
           "isUnique": true,
           "where": "\"skills\".\"scope\" in ('team', 'org') AND \"skills\".\"deleted_at\" IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "skills_deleted_at_purge_idx": {
-          "name": "skills_deleted_at_purge_idx",
-          "columns": [
-            {
-              "expression": "deleted_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"skills\".\"deleted_at\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

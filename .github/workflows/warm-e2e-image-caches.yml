@@ -39,7 +39,7 @@ jobs:
     name: Warm E2E Image Caches
     # Same arch as the e2e runners (X64) so ${{ runner.arch }} in the keys
     # matches; a small runner suffices — this job only pulls and saves.
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
@@ -52,28 +52,28 @@ jobs:
 
       - name: Cache Kind node image
         id: cache-kind-node
-        uses: ./.github/actions/github-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/kindest-node.tar
           key: kindest-node-v1.34.3-${{ runner.arch }}
 
       - name: Cache MCP example OAuth server image
         id: cache-oauth-image
-        uses: ./.github/actions/github-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/mcp-oauth-server.tar
           key: mcp-oauth-server-0.0.1-${{ runner.arch }}
 
       - name: Cache MCP JWKS server image
         id: cache-jwks-image
-        uses: ./.github/actions/github-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/mcp-jwks-server.tar
           key: mcp-jwks-server-0.0.3-${{ runner.arch }}
 
       - name: Cache MCP ID-JAG server image
         id: cache-id-jag-image
-        uses: ./.github/actions/github-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/mcp-id-jag-server.tar
           key: mcp-id-jag-server-0.0.4-${{ runner.arch }}

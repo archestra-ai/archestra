@@ -1,3 +1,4 @@
+# NOTE: CI builds this image with the shell-based build-docker-image action (buildx + registry cache).
 # build KinD, Docker CLI, Dagger CLI, and kubectl from source with a patched Go toolchain.
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.

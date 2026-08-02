@@ -31,6 +31,7 @@ import { beforeEach, describe, expect, test } from "@/test";
 // Create a hoisted ref to control disableInvitations in tests
 const mockDisableInvitations = vi.hoisted(() => ({ value: false }));
 const mockDisableImpersonation = vi.hoisted(() => ({ value: false }));
+const mockDisableBasicAuth = vi.hoisted(() => ({ value: false }));
 
 // Mock config module before importing better-auth
 vi.mock("@/config", async (importOriginal) => {
@@ -47,6 +48,9 @@ vi.mock("@/config", async (importOriginal) => {
         },
         get disableImpersonation() {
           return mockDisableImpersonation.value;
+        },
+        get disableBasicAuth() {
+          return mockDisableBasicAuth.value;
         },
       },
     },
@@ -109,6 +113,62 @@ describe("handleBeforeHook", () => {
   // Reset mock to default before each test for proper isolation
   beforeEach(() => {
     mockDisableInvitations.value = false;
+  });
+
+  describe("basic auth disabled", () => {
+    // Route names verified against better-auth 1.6.22. "/forget-password" is
+    // deliberately not among them — it is not a route, only a rate-limiter
+    // path entry, which is exactly the bug these tests exist to catch.
+    const blockedPaths = [
+      "/sign-in/email",
+      "/sign-up/email",
+      "/request-password-reset",
+      "/reset-password",
+      "/verify-password",
+      "/change-password",
+      "/admin/set-user-password",
+    ];
+
+    for (const path of blockedPaths) {
+      test(`refuses ${path} while basic auth is disabled`, async () => {
+        mockDisableBasicAuth.value = true;
+        try {
+          const ctx = createMockContext({ path, method: "POST", body: {} });
+
+          await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+          await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+            body: { message: expect.stringContaining("identity provider") },
+          });
+        } finally {
+          mockDisableBasicAuth.value = false;
+        }
+      });
+    }
+
+    test("still allows sign-out so a held session can always be ended", async () => {
+      mockDisableBasicAuth.value = true;
+      try {
+        const ctx = createMockContext({
+          path: "/sign-out",
+          method: "POST",
+          body: {},
+        });
+
+        await expect(handleBeforeHook(ctx)).resolves.not.toThrow();
+      } finally {
+        mockDisableBasicAuth.value = false;
+      }
+    });
+
+    test("leaves password sign-in alone when the flag is off", async () => {
+      const ctx = createMockContext({
+        path: "/sign-in/email",
+        method: "POST",
+        body: { email: "someone@example.com", password: "irrelevant" },
+      });
+
+      await expect(handleBeforeHook(ctx)).resolves.not.toThrow();
+    });
   });
 
   describe("two-factor enrollment enterprise gate", () => {

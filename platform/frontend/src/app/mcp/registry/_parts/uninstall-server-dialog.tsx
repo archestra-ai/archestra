@@ -11,11 +11,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useDeleteMcpServer } from "@/lib/mcp/mcp-server.query";
+import { agentOwnerLabel } from "./mcp-server-agent-usage";
 
 export interface UninstallServerInstall {
   server: { id: string; name: string };
   /** Agents with tools explicitly assigned from this install. */
-  assignedAgents?: Array<{ id: string; name: string }>;
+  assignedAgents?: Array<{
+    id: string;
+    name: string;
+    scope: string;
+    ownerEmail: string | null;
+  }>;
 }
 
 interface UninstallServerDialogProps {
@@ -99,7 +105,17 @@ export function UninstallServerDialog({
                   {assignedAgents.length === 1 ? "agent" : "agents"}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {assignedAgents.map((agent) => agent.name).join(", ")}{" "}
+                  {/*
+                    Personal agents share a name across members, so an
+                    unqualified list reads as a repeated "My Assistant" — name
+                    the owner to make each one identifiable.
+                  */}
+                  {assignedAgents
+                    .map((agent) => {
+                      const owner = agentOwnerLabel(agent);
+                      return owner ? `${agent.name} (${owner})` : agent.name;
+                    })
+                    .join(", ")}{" "}
                   {assignedAgents.length === 1 ? "has" : "have"} tools assigned
                   from this server and may lose access to them.
                 </p>

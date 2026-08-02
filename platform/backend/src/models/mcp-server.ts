@@ -32,6 +32,7 @@ import { catalogInEnvironmentPredicate } from "@/services/environments/environme
 import type {
   InsertMcpServer,
   McpServer,
+  McpServerAgentUsage,
   ResourceVisibilityScope,
   ToolParametersContent,
   UpdateMcpServer,
@@ -455,7 +456,7 @@ class McpServerModel {
     // Auto-mode agents belong to the viewing org and can reach every server, so
     // the same set decorates each one. Skipped when the caller omits an org
     // (e.g. background/admin sweeps that do not render the registry card).
-    let autoModeAgents: Array<{ id: string; name: string }> = [];
+    let autoModeAgents: McpServerAgentUsage[] = [];
     if (organizationId) {
       const autoModeAgentsByOrg =
         await AgentModel.getAutoModeAgentDetailsByOrganizations([
@@ -1002,7 +1003,7 @@ class McpServerModel {
       McpServerUserModel.getUserDetailsForMcpServer(id),
       AgentToolModel.getAssignedAgentDetailsForMcpServers([id]),
     ]);
-    let autoModeAgents: Array<{ id: string; name: string }> = [];
+    let autoModeAgents: McpServerAgentUsage[] = [];
     if (organizationId) {
       const autoModeAgentsByOrg =
         await AgentModel.getAutoModeAgentDetailsByOrganizations([

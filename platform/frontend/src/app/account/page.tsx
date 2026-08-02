@@ -35,7 +35,7 @@ function AccountContent() {
 
   return (
     <PageLayout
-      title="Your Account"
+      title="Personal Settings"
       description="Manage your personal profile, API keys, sessions, and sign-in settings."
       actionButton={
         showChangePasswordButton ? (

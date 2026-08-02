@@ -2756,8 +2756,15 @@
     {
       "idx": 393,
       "version": "7",
-      "when": 1785695517750,
-      "tag": "0393_odd_black_panther",
+      "when": 1785622126748,
+      "tag": "0393_drop_mcp_server_installation_request",
+      "breakpoints": true
+    },
+    {
+      "idx": 394,
+      "version": "7",
+      "when": 1785708730045,
+      "tag": "0394_odd_black_panther",
       "breakpoints": true
     }
   ]

@@ -155,7 +155,7 @@ describe("McpServerModel", () => {
       const withOrg = await McpServerModel.findAll(undefined, true, org.id);
       const found = mustExist(withOrg.find((s) => s.id === server.id));
       expect(found.autoModeAgents).toEqual([
-        { id: autoAgent.id, name: "Auto Agent" },
+        expect.objectContaining({ id: autoAgent.id, name: "Auto Agent" }),
       ]);
 
       // findById with the viewing org → same decoration.
@@ -163,7 +163,7 @@ describe("McpServerModel", () => {
         await McpServerModel.findById(server.id, undefined, true, org.id),
       );
       expect(single.autoModeAgents).toEqual([
-        { id: autoAgent.id, name: "Auto Agent" },
+        expect.objectContaining({ id: autoAgent.id, name: "Auto Agent" }),
       ]);
 
       // Opt-in: without an org the decoration is skipped (stays empty), so
@@ -171,6 +171,86 @@ describe("McpServerModel", () => {
       const withoutOrg = await McpServerModel.findAll(undefined, true);
       const foundNoOrg = mustExist(withoutOrg.find((s) => s.id === server.id));
       expect(foundNoOrg.autoModeAgents).toEqual([]);
+    });
+
+    test("attributes same-named personal agents to their owners", async ({
+      makeOrganization,
+      makeAgent,
+      makeMcpServer,
+      makeUser,
+    }) => {
+      // Every member gets an auto-seeded personal agent, and they all carry
+      // the same name — the owner is the only thing that tells them apart.
+      const org = await makeOrganization();
+      const alice = await makeUser({ email: "alice@example.com" });
+      const bob = await makeUser({ email: "bob@example.com" });
+      await makeAgent({
+        organizationId: org.id,
+        name: "My Assistant",
+        agentType: "agent",
+        scope: "personal",
+        accessAllTools: true,
+        authorId: alice.id,
+      });
+      await makeAgent({
+        organizationId: org.id,
+        name: "My Assistant",
+        agentType: "agent",
+        scope: "personal",
+        accessAllTools: true,
+        authorId: bob.id,
+      });
+      const server = await makeMcpServer();
+
+      const servers = await McpServerModel.findAll(undefined, true, org.id);
+      const found = mustExist(servers.find((s) => s.id === server.id));
+
+      expect(
+        found.autoModeAgents
+          ?.map((agent) => ({
+            name: agent.name,
+            scope: agent.scope,
+            agentType: agent.agentType,
+            ownerEmail: agent.ownerEmail,
+          }))
+          .sort((a, b) =>
+            (a.ownerEmail ?? "").localeCompare(b.ownerEmail ?? ""),
+          ),
+      ).toEqual([
+        {
+          name: "My Assistant",
+          scope: "personal",
+          agentType: "agent",
+          ownerEmail: "alice@example.com",
+        },
+        {
+          name: "My Assistant",
+          scope: "personal",
+          agentType: "agent",
+          ownerEmail: "bob@example.com",
+        },
+      ]);
+    });
+
+    test("reports a null owner for an authorless agent", async ({
+      makeOrganization,
+      makeAgent,
+      makeMcpServer,
+    }) => {
+      const org = await makeOrganization();
+      await makeAgent({
+        organizationId: org.id,
+        name: "Shared Gateway",
+        accessAllTools: true,
+      });
+      const server = await makeMcpServer();
+
+      const servers = await McpServerModel.findAll(undefined, true, org.id);
+      const found = mustExist(servers.find((s) => s.id === server.id));
+
+      expect(found.autoModeAgents).toEqual([
+        expect.objectContaining({ name: "Shared Gateway", ownerEmail: null }),
+      ]);
     });
 
     test("returns servers with no users correctly", async ({

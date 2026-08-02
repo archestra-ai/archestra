@@ -60,6 +60,7 @@ import {
   GATEWAY_CAPABLE_AGENT_TYPES,
   type GatewayAgent,
   type InsertAgent,
+  type McpServerAgentUsage,
   type SortingQuery,
   type UpdateAgent,
 } from "@/types";
@@ -143,8 +144,8 @@ class AgentModel {
    */
   static async getAutoModeAgentDetailsByOrganizations(
     organizationIds: string[],
-  ): Promise<Map<string, Array<{ id: string; name: string }>>> {
-    const agentsByOrg = new Map<string, Array<{ id: string; name: string }>>();
+  ): Promise<Map<string, McpServerAgentUsage[]>> {
+    const agentsByOrg = new Map<string, McpServerAgentUsage[]>();
     for (const organizationId of organizationIds) {
       agentsByOrg.set(organizationId, []);
     }
@@ -157,8 +158,18 @@ class AgentModel {
         organizationId: schema.agentsTable.organizationId,
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+        scope: schema.agentsTable.scope,
+        ownerEmail: schema.usersTable.email,
       })
       .from(schema.agentsTable)
+      // Personal agents share a name across members, so the owner is what
+      // tells them apart in the UI. LEFT JOIN: `author_id` is nullable and
+      // nulls out when the author is deleted.
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.agentsTable.authorId, schema.usersTable.id),
+      )
       .where(
         and(
           inArray(schema.agentsTable.organizationId, organizationIds),
@@ -168,8 +179,8 @@ class AgentModel {
       )
       .orderBy(asc(schema.agentsTable.name), asc(schema.agentsTable.id));
 
-    for (const { organizationId, id, name } of rows) {
-      agentsByOrg.get(organizationId)?.push({ id, name });
+    for (const { organizationId, ...agent } of rows) {
+      agentsByOrg.get(organizationId)?.push(agent);
     }
 
     return agentsByOrg;

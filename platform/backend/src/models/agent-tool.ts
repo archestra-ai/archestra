@@ -32,6 +32,7 @@ import type {
   AgentToolSortBy,
   CredentialResolutionMode,
   InsertAgentTool,
+  McpServerAgentUsage,
   SortDirection,
   UpdateAgentTool,
 } from "@/types";
@@ -505,8 +506,8 @@ class AgentToolModel {
    */
   static async getAssignedAgentDetailsForMcpServers(
     mcpServerIds: string[],
-  ): Promise<Map<string, Array<{ id: string; name: string }>>> {
-    const agentsMap = new Map<string, Array<{ id: string; name: string }>>();
+  ): Promise<Map<string, McpServerAgentUsage[]>> {
+    const agentsMap = new Map<string, McpServerAgentUsage[]>();
     for (const mcpServerId of mcpServerIds) {
       agentsMap.set(mcpServerId, []);
     }
@@ -519,6 +520,9 @@ class AgentToolModel {
         mcpServerId: schema.mcpServersTable.id,
         agentId: schema.agentsTable.id,
         agentName: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+        scope: schema.agentsTable.scope,
+        ownerEmail: schema.usersTable.email,
       })
       .from(schema.agentToolsTable)
       .innerJoin(
@@ -528,6 +532,13 @@ class AgentToolModel {
       .innerJoin(
         schema.agentsTable,
         eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+      )
+      // Personal agents share a name across members, so the owner is what
+      // tells them apart in the UI. LEFT JOIN: `author_id` is nullable and
+      // nulls out when the author is deleted.
+      .leftJoin(
+        schema.usersTable,
+        eq(schema.agentsTable.authorId, schema.usersTable.id),
       )
       .innerJoin(
         schema.mcpServersTable,
@@ -547,8 +558,12 @@ class AgentToolModel {
       )
       .orderBy(asc(schema.agentsTable.name), asc(schema.agentsTable.id));
 
-    for (const { mcpServerId, agentId, agentName } of assignments) {
-      agentsMap.get(mcpServerId)?.push({ id: agentId, name: agentName });
+    for (const { mcpServerId, agentId, agentName, ...agent } of assignments) {
+      agentsMap.get(mcpServerId)?.push({
+        id: agentId,
+        name: agentName,
+        ...agent,
+      });
     }
 
     return agentsMap;

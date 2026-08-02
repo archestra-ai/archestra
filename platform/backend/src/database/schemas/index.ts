@@ -21,7 +21,7 @@
  *      identity_provider, incoming_email_subscription, internal_mcp_catalog,
  *      knowledge_base_connector_assignment, limit_model_usage,
  *      mcp_catalog_team, mcp_preset_entry, mcp_server,
- *      mcp_server_installation_request, mcp_server_user,
+ *      mcp_server_user,
  *      organization_role, processed_email, secret,
  *      site_notification, skill_team,
  *      team_external_group, team_token, team_vault_folder, user_token,
@@ -131,7 +131,6 @@ export { default as mcpGatewayTasksTable } from "./mcp-gateway-task";
 export { default as mcpHttpSessionsTable } from "./mcp-http-session";
 export { default as mcpPresetEntriesTable } from "./mcp-preset-entry";
 export { default as mcpServersTable } from "./mcp-server";
-export { default as mcpServerInstallationRequestsTable } from "./mcp-server-installation-request";
 export { default as mcpServerUsersTable } from "./mcp-server-user";
 export { default as mcpToolCallsTable } from "./mcp-tool-call";
 export { default as membersTable } from "./member";

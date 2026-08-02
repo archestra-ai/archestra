@@ -110,7 +110,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "manage-deleted",
     "admin",
   ],
-  mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
   environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
 
@@ -237,7 +236,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
     "deploy-to-restricted",
   ],
   mcpServerInstallation: ["read", "create", "update", "delete"],
-  mcpServerInstallationRequest: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
 
@@ -319,7 +317,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   toolPolicy: ["read"],
   mcpRegistry: ["read", "update"],
   mcpServerInstallation: ["read", "create", "delete"],
-  mcpServerInstallationRequest: ["read", "create", "update"],
   environment: ["read"],
   // minting installation tokens from a stored App credential is privileged;
   // default members get no access — editors and admins manage/use App configs
@@ -527,13 +524,6 @@ export const permissionDescriptions: Record<string, string> = {
     "View and restore soft-deleted (uninstalled) MCP servers",
   "mcpServerInstallation:admin":
     "Approve or manage all MCP server installations",
-  "mcpServerInstallationRequest:read": "View MCP server installation requests",
-  "mcpServerInstallationRequest:create":
-    "Submit requests to install MCP servers",
-  "mcpServerInstallationRequest:update": "Add notes to installation requests",
-  "mcpServerInstallationRequest:delete": "Delete installation requests",
-  "mcpServerInstallationRequest:admin":
-    "Approve or decline installation requests",
   "environment:read": "View and list deployment environments",
   "environment:create": "Create deployment environments",
   "environment:update":
@@ -964,30 +954,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServerInstallation: ["read"],
-  },
-  [RouteId.GetMcpServerInstallationRequests]: {
-    mcpServerInstallationRequest: ["read"],
-  },
-  [RouteId.CreateMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["create"],
-  },
-  [RouteId.GetMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["read"],
-  },
-  [RouteId.UpdateMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["update"],
-  },
-  [RouteId.ApproveMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["admin"],
-  },
-  [RouteId.DeclineMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["admin"],
-  },
-  [RouteId.AddMcpServerInstallationRequestNote]: {
-    mcpServerInstallationRequest: ["update"],
-  },
-  [RouteId.DeleteMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["delete"],
   },
   [RouteId.InitiateOAuth]: {
     mcpServerInstallation: ["create"],
@@ -1952,9 +1918,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
-  "/mcp/registry/installation-requests": {
-    mcpServerInstallationRequest: ["read"],
-  },
 
   // Logs
   "/llm/logs": { log: ["read"] },

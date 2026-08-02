@@ -98,16 +98,6 @@ export const RouteId = {
   McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
   McpServerProxyPost: "mcpServerProxyPost", // Session-based proxy to one installed server's MCP App runtime
 
-  // MCP Server Installation Request Routes
-  GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
-  CreateMcpServerInstallationRequest: "createMcpServerInstallationRequest",
-  GetMcpServerInstallationRequest: "getMcpServerInstallationRequest",
-  UpdateMcpServerInstallationRequest: "updateMcpServerInstallationRequest",
-  ApproveMcpServerInstallationRequest: "approveMcpServerInstallationRequest",
-  DeclineMcpServerInstallationRequest: "declineMcpServerInstallationRequest",
-  AddMcpServerInstallationRequestNote: "addMcpServerInstallationRequestNote",
-  DeleteMcpServerInstallationRequest: "deleteMcpServerInstallationRequest",
-
   // OAuth Routes
   InitiateOAuth: "initiateOAuth",
   HandleOAuthCallback: "handleOAuthCallback",

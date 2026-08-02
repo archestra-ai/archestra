@@ -382,9 +382,11 @@ jobs:
     # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
     runs-on: ubuntu-latest
-    # Observed worst-case wall-clock is ~10 min (setup + tests); 30 caps a
-    # hung run instead of letting it burn a runner for the GitHub default.
-    timeout-minutes: 30
+    # Worst case = the 25-min image-poll ceiling (cold build, see
+    # image-pull-timeout-seconds below) plus setup and the ~4 min of tests;
+    # 40 caps a hung run instead of letting it burn a runner for the GitHub
+    # default.
+    timeout-minutes: 40
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -452,7 +454,12 @@ jobs:
           # Fork PRs load a local artifact tag, which must be kind-loaded.
           platform-image-in-cluster-pull: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'false' || 'true' }}
           mcp-server-base-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
-          image-pull-timeout-seconds: "900"
+          # Must cover the platform image build this job deliberately does not
+          # `needs`: warm registry-cache builds finish well inside this, but a
+          # fully cold build (empty buildcache after a cache-invalidating
+          # change) measured 20 min on a standard runner. A failed build still
+          # cancels this run early via platform-e2e-cancel-on-build-failure.
+          image-pull-timeout-seconds: "1500"
 
       - name: Run K8s-bound E2E tests
         id: e2e

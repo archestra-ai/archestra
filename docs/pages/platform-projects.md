@@ -3,7 +3,7 @@ title: Projects
 category: Projects
 order: 1
 description: A shared workspace to organize your work
-lastUpdated: 2026-07-28
+lastUpdated: 2026-08-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -46,4 +46,4 @@ A finance person approves incoming invoices against the company's vendor list. A
 
 ![Sharing the project with the Finance team](/docs/automated_screenshots/platform-projects_sharing-dialog.webp)
 
-Everyone with access to a shared project can start their own chats and work with its files. You can share with any team you belong to — admins can share with any team in the organization. Reading other members' chats takes a separate permission that admins have by default. Sharing with the whole organization — and deleting or unsharing an org-wide project — takes its own permission, which custom roles can withhold. Deleting a project keeps its chats as ordinary conversations and hides its files and scheduled tasks; a project administrator can restore a deleted project, bringing them back. See [Access Control](./platform-access-control) for permissions.
+Everyone with access to a shared project can start their own chats and work with its files. You can share with any team you belong to — admins can share with any team in the organization. Reading other members' chats takes a separate permission that admins have by default. Sharing with the whole organization — and deleting or unsharing an org-wide project — takes its own permission, which custom roles can withhold. Deleting a project keeps its chats as ordinary conversations and hides its files and scheduled tasks; a project administrator can restore a deleted project from the Deleted view, bringing them back — or delete it permanently. Deployments can also purge deleted items automatically after a retention window; see [Soft-Delete Retention](./platform-deployment#soft-delete-retention). See [Access Control](./platform-access-control) for permissions.

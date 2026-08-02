@@ -4,6 +4,7 @@ import {
   PROJECT_INSTRUCTIONS_FILENAME,
 } from "@archestra/shared";
 import config from "@/config";
+import type { Transaction } from "@/database";
 import {
   FileModel,
   FileNameExistsError,
@@ -50,15 +51,19 @@ export class FileNotDeletableError extends SkillSandboxError {
 /** Which files a `search` lists — a single owner scope. */
 type FileSearchScope =
   | { kind: "conversation"; conversationId: string }
-  | { kind: "project"; projectId: string; projectName: string | null };
+  | { kind: "project"; projectId: string; projectName: string | null }
+  | { kind: "app"; appId: string };
 
 /**
  * The scope a `my_file` resolution (by id or filename) is confined to: the
- * current conversation for a no-project chat, or the project for a project chat.
+ * current conversation for a no-project chat, the project for a project chat,
+ * or the app for an MCP App runtime (whose namespace is the (app, viewer) pair
+ * and never a chat's or project's files).
  */
 type MyFileScope =
   | { kind: "conversation"; conversationId: string }
-  | { kind: "project"; projectId: string };
+  | { kind: "project"; projectId: string }
+  | { kind: "app"; appId: string };
 
 /** The owner half of an untracked-object ref (ids only; ACL is checked from it). */
 type RefScope =
@@ -105,6 +110,7 @@ class FileStore {
     userId: string;
     projectId: string | null;
     conversationId: string | null;
+    appId?: string | null;
     sandboxId?: string | null;
     filename: string;
     mimeType: string;
@@ -139,6 +145,7 @@ class FileStore {
         userId: params.userId,
         projectId: params.projectId,
         conversationId: params.conversationId,
+        appId: params.appId ?? null,
         sandboxId: params.sandboxId ?? null,
         filename: params.filename,
         mimeType: params.mimeType,
@@ -305,16 +312,41 @@ class FileStore {
     organizationId: string;
     conversationId: string;
   }): Promise<void> {
-    const rows = await FileModel.listNoProjectFilesForConversation(params);
-    await Promise.all(
-      rows.map(async (row) => {
-        await FileModel.deleteById(row.id);
-        await deleteRowBytes({
-          provider: row.storageProvider,
-          objectKey: row.objectKey,
-        }).catch(() => {});
-      }),
+    const purgeBytes = await this.purgeConversationFileRows(params);
+    await purgeBytes();
+  }
+
+  /**
+   * Row-deletion half of {@link purgeConversationFiles}, composable with a
+   * caller-owned transaction (the retention sweep deletes file rows and the
+   * conversation under one row lock). Returns a closure that best-effort
+   * deletes the external bytes — with a transaction, call it AFTER commit so
+   * bytes never vanish for rows a rollback resurrects.
+   */
+  async purgeConversationFileRows(
+    params: {
+      organizationId: string;
+      conversationId: string;
+    },
+    executor?: Transaction,
+  ): Promise<() => Promise<void>> {
+    const rows = await FileModel.listNoProjectFilesForConversation(
+      params,
+      executor,
     );
+    for (const row of rows) {
+      await FileModel.deleteById(row.id, executor);
+    }
+    return async () => {
+      await Promise.all(
+        rows.map((row) =>
+          deleteRowBytes({
+            provider: row.storageProvider,
+            objectKey: row.objectKey,
+          }).catch(() => {}),
+        ),
+      );
+    };
   }
 
   /**
@@ -330,17 +362,11 @@ class FileStore {
     query?: string;
   }): Promise<SandboxFileListItem[]> {
     const { scope } = params;
-    const rows =
-      scope.kind === "project"
-        ? await FileModel.listByProject({
-            organizationId: params.organizationId,
-            projectId: scope.projectId,
-          })
-        : await FileModel.listNoProjectByConversation({
-            organizationId: params.organizationId,
-            userId: params.userId,
-            conversationId: scope.conversationId,
-          });
+    const rows = await this.listRowsInScope({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      scope,
+    });
     const projectName = scope.kind === "project" ? scope.projectName : null;
     const projectId = scope.kind === "project" ? scope.projectId : null;
     const query = params.query?.toLowerCase() ?? null;
@@ -502,6 +528,7 @@ class FileStore {
         userId: file.userId,
         projectId: file.projectId,
         conversationId: file.conversationId,
+        appId: file.appId,
       });
       const { key } = await store.write({
         scope,
@@ -682,8 +709,15 @@ class FileStore {
       if (scope.kind === "project") {
         if (file.projectId !== scope.projectId)
           return { error: "outside_project" };
+      } else if (scope.kind === "app") {
+        // this app's own file, authored by this viewer — nothing else. Another
+        // viewer's row in the same app is as invisible as a foreign app's.
+        if (file.appId !== scope.appId || file.userId !== params.userId) {
+          return { error: "not_found" };
+        }
       } else if (
         file.projectId != null ||
+        file.appId != null ||
         file.conversationId !== scope.conversationId ||
         file.userId !== params.userId
       ) {
@@ -693,17 +727,11 @@ class FileStore {
       return file;
     }
     const filename = params.filename ?? "";
-    const candidates =
-      scope.kind === "project"
-        ? await FileModel.listByProject({
-            organizationId: params.organizationId,
-            projectId: scope.projectId,
-          })
-        : await FileModel.listNoProjectByConversation({
-            organizationId: params.organizationId,
-            userId: params.userId,
-            conversationId: scope.conversationId,
-          });
+    const candidates = await this.listRowsInScope({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      scope,
+    });
     const matches = candidates.filter((f) => f.filename === filename);
     if (matches.length > 1) return { error: "ambiguous" };
     if (matches.length === 1) {
@@ -910,6 +938,7 @@ class FileStore {
     userId: string;
     projectId: string | null;
     conversationId: string | null;
+    appId?: string | null;
   }): Promise<OwnerScope> {
     if (params.projectId) {
       const scope = await this.projectScope(params.projectId);
@@ -918,9 +947,44 @@ class FileStore {
       }
       return scope;
     }
-    const scope = await this.userScope(params.userId, params.conversationId);
+    const scope = await this.userScope(
+      params.userId,
+      params.conversationId,
+      params.appId ?? null,
+    );
     if (!scope) throw new Error(`user ${params.userId} has no email`);
     return scope;
+  }
+
+  /**
+   * The rows one owner scope contains — the single place the three scopes map
+   * to their listing query, so `search` and the by-filename `my_file`
+   * resolution can never disagree about what a scope holds.
+   */
+  private async listRowsInScope(params: {
+    organizationId: string;
+    userId: string;
+    scope: FileSearchScope | MyFileScope;
+  }): Promise<SandboxArtifactRow[]> {
+    const { organizationId, userId, scope } = params;
+    if (scope.kind === "project") {
+      return await FileModel.listByProject({
+        organizationId,
+        projectId: scope.projectId,
+      });
+    }
+    if (scope.kind === "app") {
+      return await FileModel.listByAppAndUser({
+        organizationId,
+        userId,
+        appId: scope.appId,
+      });
+    }
+    return await FileModel.listNoProjectByConversation({
+      organizationId,
+      userId,
+      conversationId: scope.conversationId,
+    });
   }
 
   // the folder is the project's immutable slug, so a rename never moves files.
@@ -932,10 +996,11 @@ class FileStore {
   private async userScope(
     userId: string,
     conversationId: string | null = null,
+    appId: string | null = null,
   ): Promise<OwnerScope | null> {
     const email = await UserModel.getEmailById(userId);
     return email
-      ? { kind: "user", userId, label: email, conversationId }
+      ? { kind: "user", userId, label: email, conversationId, appId }
       : null;
   }
 

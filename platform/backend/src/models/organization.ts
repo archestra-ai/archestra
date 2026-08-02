@@ -184,6 +184,7 @@ class OrganizationModel {
       "OrganizationModel.patch: completed",
     );
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
+    await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
     return updatedOrganization || null;
   }
 
@@ -206,6 +207,7 @@ class OrganizationModel {
       .returning({ id: schema.organizationsTable.id });
     if (rows.length > 0) {
       await cacheManager.delete(getOrganizationSettingsCacheKey(id));
+      await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
     }
     return rows.length > 0;
   }
@@ -227,6 +229,7 @@ class OrganizationModel {
       .returning({ id: schema.organizationsTable.id });
     for (const { id } of rows) {
       await cacheManager.delete(getOrganizationSettingsCacheKey(id));
+      await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
     }
     return rows.length;
   }
@@ -387,6 +390,46 @@ class OrganizationModel {
   }
 
   /**
+   * Cached per-request read of the org's auth-enforcement policies
+   * (require-2FA, session max age). Same cache key as the other org
+   * settings, so any OrganizationModel.patch invalidates it.
+   */
+  static async getAuthEnforcementSettings(id: string): Promise<{
+    requireTwoFactor: boolean;
+    sessionMaxAgeSeconds: number | null;
+  }> {
+    const cacheKey = getOrganizationAuthEnforcementCacheKey(id);
+    const cached = await cacheManager.get<{
+      requireTwoFactor: boolean;
+      sessionMaxAgeSeconds: number | null;
+    }>(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const [organization] = await db
+      .select({
+        requireTwoFactor: schema.organizationsTable.requireTwoFactor,
+        sessionMaxAgeSeconds: schema.organizationsTable.sessionMaxAgeSeconds,
+      })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .limit(1);
+
+    const policies = {
+      requireTwoFactor: organization?.requireTwoFactor ?? false,
+      sessionMaxAgeSeconds: organization?.sessionMaxAgeSeconds ?? null,
+    };
+    try {
+      await cacheManager.set(cacheKey, policies);
+    } catch {
+      // Cache writes are best-effort here; tests and early startup may not
+      // have the distributed cache initialized yet.
+    }
+    return policies;
+  }
+
+  /**
    * Get appearance settings
    * Returns default appearance settings if no organization exists.
    */
@@ -521,7 +564,8 @@ class OrganizationModel {
         org.defaultDiscoveredToolInvocationPolicy,
       defaultDiscoveredToolResultPolicy: org.defaultDiscoveredToolResultPolicy,
       rerankerModel: org.rerankerModel ?? null,
-      showTwoFactor: org.showTwoFactor,
+      requireTwoFactor: org.requireTwoFactor,
+      sessionMaxAgeSeconds: org.sessionMaxAgeSeconds,
       slimChatErrorUi: org.slimChatErrorUi,
       oauthAccessTokenLifetimeSeconds: org.oauthAccessTokenLifetimeSeconds,
       connectionDefaultMcpGatewayId: org.connectionDefaultMcpGatewayId ?? null,
@@ -536,4 +580,8 @@ export default OrganizationModel;
 
 function getOrganizationSettingsCacheKey(organizationId: string) {
   return `${CacheKey.OrganizationSettings}-${organizationId}` as const;
+}
+
+function getOrganizationAuthEnforcementCacheKey(organizationId: string) {
+  return `${CacheKey.OrganizationSettings}-auth-enforcement-${organizationId}` as const;
 }

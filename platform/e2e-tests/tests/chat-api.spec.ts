@@ -21,6 +21,9 @@ test.describe("Chat Messages Access Control", () => {
             Origin: "http://localhost:3000",
           },
           data: {
+            // Schema-valid body (conversationId is required), so the request
+            // gets past validation and proves the AUTH rejection specifically.
+            conversationId: "9c1f74a3-19f6-4f81-9c07-371f7a1f8f6e",
             partIndex: 0,
             text: "Updated text",
           },

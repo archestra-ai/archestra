@@ -1,0 +1,11 @@
+name: Setup Docker Builder
+description: |
+  Wrapper around docker/setup-buildx-action pinned to a vetted version.
+  Creates a docker-container driver builder (the default docker driver cannot
+  export registry build caches). The action's default buildkitd flags allow
+  the network.host entitlement our builds use.
+runs:
+  using: composite
+  steps:
+    - name: Setup Docker builder
+      uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0

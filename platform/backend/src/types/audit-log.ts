@@ -85,6 +85,10 @@ export const AuditEventNameSchema = z.enum([
   "mcpServer.deleted",
   "mcpServer.restored",
   "mcpServer.reinstalled",
+  // Retired with the MCP server installation request feature. Kept in the
+  // vocabulary because audit rows written before its removal still carry these
+  // names — dropping them would render that history as raw dotted keys. No
+  // route produces them any more.
   "mcpServerInstallationRequest.created",
   "mcpServerInstallationRequest.updated",
   "member.created",
@@ -132,6 +136,8 @@ export const AuditEventNameSchema = z.enum([
   "virtualApiKey.created",
   "virtualApiKey.deleted",
   // Auth surface
+  "auth.impersonation_started",
+  "auth.impersonation_stopped",
   "auth.signed_in",
   "auth.signed_out",
   "auth.signed_up",
@@ -185,4 +191,15 @@ export const InsertAuditLogSchema = createInsertSchema(schema.auditLogsTable, {
   });
 
 export type AuditLog = z.infer<typeof SelectAuditLogSchema>;
+
+/**
+ * Read shape: audit rows joined with the impersonator's current email so the
+ * UI can attribute impersonated actions without an id-only display.
+ */
+export const AuditLogWithImpersonatorSchema = SelectAuditLogSchema.extend({
+  impersonatedByEmail: z.string().nullable(),
+});
+export type AuditLogWithImpersonator = z.infer<
+  typeof AuditLogWithImpersonatorSchema
+>;
 export type InsertAuditLog = z.infer<typeof InsertAuditLogSchema>;

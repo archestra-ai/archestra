@@ -323,6 +323,9 @@ class SkillSandboxRuntimeService {
           userId: sandbox.userId,
           projectId: params.projectId ?? null,
           conversationId: sandbox.conversationId,
+          // an app's sandbox lands its artifacts in that app's namespace; the
+          // sandbox row is the authority, so no caller can redirect them.
+          appId: sandbox.appId,
           sandboxId: params.sandboxId,
           filename,
           mimeType,

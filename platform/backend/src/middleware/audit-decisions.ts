@@ -16,7 +16,6 @@ import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpServerModel from "@/models/mcp-server";
-import McpServerInstallationRequestModel from "@/models/mcp-server-installation-request";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OptimizationRuleModel from "@/models/optimization-rule";
@@ -104,10 +103,6 @@ export const AUDIT_DECISIONS = {
   limitsTable: { audited: true, model: LimitModel },
   llmProviderApiKeysTable: { audited: true, model: LlmProviderApiKeyModel },
   mcpServersTable: { audited: true, model: McpServerModel },
-  mcpServerInstallationRequestsTable: {
-    audited: true,
-    model: McpServerInstallationRequestModel,
-  },
   membersTable: { audited: true, model: MemberModel },
   modelsTable: { audited: true, model: ModelModel },
   // oauthClientsTable stores LLM OAuth clients (/api/llm-oauth-clients) and MCP
@@ -631,6 +626,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason:
       "secret material; presence audited via parent resource hasSecret flag",
+  },
+  contentEncryptionStateTable: {
+    audited: false,
+    reason: "internal backfill progress bookkeeping, no user-facing state",
   },
   encryptionKeyCanariesTable: {
     audited: false,

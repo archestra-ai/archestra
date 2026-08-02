@@ -38,6 +38,16 @@ export const AgentTypeSchema = z.enum([
 ]);
 export type AgentType = z.infer<typeof AgentTypeSchema>;
 
+/**
+ * Agent types that can serve as an MCP gateway — the agents external MCP
+ * clients register via the connect page (legacy `profile` agents serve both
+ * gateway and proxy surfaces).
+ */
+export const GATEWAY_CAPABLE_AGENT_TYPES = [
+  "mcp_gateway",
+  "profile",
+] as const satisfies readonly AgentType[];
+
 export const AgentScopeSchema = ResourceVisibilityScopeSchema;
 export type AgentScope = ResourceVisibilityScope;
 

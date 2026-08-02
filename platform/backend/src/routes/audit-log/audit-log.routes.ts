@@ -5,14 +5,15 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { userHasPermission } from "@/auth";
 import { AuditLogModel } from "@/models";
 import {
   ApiError,
   AuditActorTypeSchema,
   AuditEventNameSchema,
+  AuditLogWithImpersonatorSchema,
   AuditOutcomeSchema,
   constructResponseSchema,
-  SelectAuditLogSchema,
   SortDirectionSchema,
 } from "@/types";
 
@@ -67,7 +68,7 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           })
           .merge(PaginationQuerySchema),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(SelectAuditLogSchema),
+          createPaginatedResponseSchema(AuditLogWithImpersonatorSchema),
         ),
       },
     },
@@ -87,10 +88,20 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           offset,
           sortDirection,
         },
+        user,
         organizationId,
       },
       reply,
     ) => {
+      // auditLog:read scopes the view to the caller's own actions;
+      // auditLog:admin lifts it to the whole organization.
+      const canSeeAllAuditLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "auditLog",
+        "admin",
+      );
+
       const result = await AuditLogModel.findPaginated({
         organizationId,
         limit,
@@ -98,7 +109,7 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         sortDirection,
         startDate: startDate ? new Date(startDate) : undefined,
         endDate: endDate ? new Date(endDate) : undefined,
-        actorId,
+        actorId: canSeeAllAuditLogs ? actorId : user.id,
         action,
         outcome,
         actorType,
@@ -122,11 +133,25 @@ const auditLogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: z.string().uuid(),
         }),
-        response: constructResponseSchema(SelectAuditLogSchema),
+        response: constructResponseSchema(AuditLogWithImpersonatorSchema),
       },
     },
-    async ({ params: { id }, organizationId }, reply) => {
+    async ({ params: { id }, user, organizationId }, reply) => {
       const auditLog = await AuditLogModel.findById(id, organizationId);
+
+      // Own-actions view: an event someone else caused does not exist for
+      // this caller — 404, not 403, so existence is not disclosed.
+      if (auditLog) {
+        const canSeeAllAuditLogs = await userHasPermission(
+          user.id,
+          organizationId,
+          "auditLog",
+          "admin",
+        );
+        if (!canSeeAllAuditLogs && auditLog.actorId !== user.id) {
+          throw new ApiError(404, "Audit log not found");
+        }
+      }
 
       if (!auditLog) {
         throw new ApiError(404, "Audit log event not found");

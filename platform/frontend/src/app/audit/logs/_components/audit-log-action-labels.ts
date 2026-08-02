@@ -108,6 +108,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "mcpServer.restored": "MCP server restored",
   "mcpServer.reinstalled": "MCP server reinstalled",
   // MCP install request
+  // Retired with the installation-request feature; retained so audit rows
+  // written before its removal still render with a readable label.
   "mcpServerInstallationRequest.created": "MCP install request created",
   "mcpServerInstallationRequest.updated": "MCP install request updated",
   // Member
@@ -171,6 +173,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "virtualApiKey.created": "Virtual API key created",
   "virtualApiKey.deleted": "Virtual API key deleted",
   // Auth surface
+  "auth.impersonation_started": "Impersonation started",
+  "auth.impersonation_stopped": "Impersonation stopped",
   "auth.signed_in": "Sign in",
   "auth.signed_out": "Sign out",
   "auth.signed_up": "Sign up",

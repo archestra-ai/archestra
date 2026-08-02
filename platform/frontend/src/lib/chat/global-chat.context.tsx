@@ -12,7 +12,6 @@ import {
   type McpTaskPartData,
   stripDanglingToolCalls,
   TOOL_CREATE_AGENT_SHORT_NAME,
-  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
   type TokenUsage,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
@@ -138,10 +137,6 @@ interface ChatSession {
   addToolApprovalResponse: ReturnType<
     typeof useChat
   >["addToolApprovalResponse"];
-  pendingCustomServerToolCall: {
-    toolCallId: string;
-    toolName: string;
-  } | null;
   pendingMcpElicitation: ChatMcpElicitationRequest | null;
   /**
    * Background MCP tasks for the running turn, keyed by task id.
@@ -165,9 +160,6 @@ interface ChatSession {
     toolName: string;
     input: unknown;
   }>;
-  setPendingCustomServerToolCall: (
-    value: { toolCallId: string; toolName: string } | null,
-  ) => void;
   /** Token usage for the current/last response */
   tokenUsage: TokenUsage | null;
   contextTokensUsed: number | null;
@@ -440,8 +432,6 @@ function ChatSessionHook({
 }) {
   const queryClient = useQueryClient();
   const appName = useAppName();
-  const [pendingCustomServerToolCall, setPendingCustomServerToolCall] =
-    useState<{ toolCallId: string; toolName: string } | null>(null);
   const [pendingMcpElicitation, setPendingMcpElicitation] =
     useState<ChatMcpElicitationRequest | null>(null);
   const [mcpTasks, setMcpTasks] = useState<Record<string, McpTaskPartData>>({});
@@ -894,12 +884,6 @@ function ChatSessionHook({
         ];
       });
 
-      if (
-        toolShortName === TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME
-      ) {
-        setPendingCustomServerToolCall(toolCall);
-      }
-
       // Agents created through chat tool calls bypass the normal frontend
       // create-agent mutations, so the cached useInternalAgents() list can stay
       // stale unless we invalidate it here. Without this, the prompt input's
@@ -1176,7 +1160,6 @@ function ChatSessionHook({
       recoveringRef.current ||
       hasPendingApprovalRequest ||
       pendingMcpElicitation ||
-      pendingCustomServerToolCall ||
       contextCompaction.isCompacting
     ) {
       return;
@@ -1204,7 +1187,6 @@ function ChatSessionHook({
     resumeSettled,
     hasPendingApprovalRequest,
     pendingMcpElicitation,
-    pendingCustomServerToolCall,
     contextCompaction.isCompacting,
     conversationId,
   ]);
@@ -1305,7 +1287,6 @@ function ChatSessionHook({
     setMessages,
     addToolResult,
     addToolApprovalResponse,
-    pendingCustomServerToolCall,
     pendingMcpElicitation,
     mcpTasks,
     // Computed, not stored: the page paints the SDK error before onError has
@@ -1329,7 +1310,6 @@ function ChatSessionHook({
       );
     },
     optimisticToolCalls,
-    setPendingCustomServerToolCall,
     tokenUsage,
     contextTokensUsed,
     contextWindow,
@@ -1357,7 +1337,6 @@ function ChatSessionHook({
     setMessages,
     addToolResult,
     addToolApprovalResponse,
-    pendingCustomServerToolCall,
     pendingMcpElicitation,
     mcpTasks,
     isRecoveringState,

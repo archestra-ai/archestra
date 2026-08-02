@@ -4226,7 +4226,11 @@ describe("mcp server core route coverage", () => {
         catalogId: catalog.id,
       });
       const tool = await makeTool({ catalogId: catalog.id });
-      const agent = await makeAgent({ name: "Server Consumer" });
+      const agent = await makeAgent({
+        name: "Server Consumer",
+        scope: "personal",
+        authorId: user.id,
+      });
       await makeAgentTool(agent.id, tool.id);
 
       const response = await app.inject({
@@ -4237,8 +4241,16 @@ describe("mcp server core route coverage", () => {
       expect(response.statusCode).toBe(200);
       const servers = response.json();
       const returned = servers.find((s: { id: string }) => s.id === server.id);
+      // The owner rides along so the UI can tell same-named personal agents
+      // ("My Assistant", "My Gateway") apart.
       expect(returned.assignedAgents).toEqual([
-        { id: agent.id, name: "Server Consumer" },
+        {
+          id: agent.id,
+          name: "Server Consumer",
+          agentType: agent.agentType,
+          scope: "personal",
+          ownerEmail: user.email,
+        },
       ]);
     });
   });

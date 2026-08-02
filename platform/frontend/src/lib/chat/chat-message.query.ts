@@ -5,7 +5,7 @@ import { handleApiError, toApiError } from "@/lib/utils";
 
 const { updateChatMessage, setChatMessageFeedback } = archestraApiSdk;
 
-export function useUpdateChatMessage(conversationId?: string) {
+export function useUpdateChatMessage(conversationId: string | undefined) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -19,20 +19,26 @@ export function useUpdateChatMessage(conversationId?: string) {
       partIndex: number;
       text: string;
       deleteSubsequentMessages?: boolean;
-    }) =>
-      callApi(
+    }) => {
+      // Editing only exists for persisted conversations; the API requires the
+      // conversation because content ids are client-supplied nanoids with no
+      // cross-conversation uniqueness.
+      if (!conversationId) {
+        throw new Error("Cannot edit a message without a conversation");
+      }
+      return callApi(
         () =>
           updateChatMessage({
             path: { id: messageId },
-            body: { partIndex, text, deleteSubsequentMessages },
+            body: { conversationId, partIndex, text, deleteSubsequentMessages },
           }),
         null,
-      ),
+      );
+    },
     onSuccess: () => {
       if (!conversationId) {
         return;
       }
-
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });

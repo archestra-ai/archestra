@@ -9,6 +9,7 @@
  *
  * @see https://docs.mistral.ai/api
  */
+
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
@@ -31,6 +32,7 @@ import {
   OpenAIResponseAdapter,
   OpenAIStreamAdapter,
 } from "./openai";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
 // TYPE ALIASES (reuse OpenAI types since Mistral is OpenAI-compatible)
@@ -233,6 +235,7 @@ export const mistralAdapterFactory: LLMProvider<
       : undefined;
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl ?? config.llm.mistral.baseUrl,
       fetch: customFetch,

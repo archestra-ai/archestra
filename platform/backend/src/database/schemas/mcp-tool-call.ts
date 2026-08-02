@@ -57,6 +57,9 @@ const mcpToolCallsTable = pgTable(
   },
   (table) => ({
     agentIdIdx: index("mcp_tool_calls_agent_id_idx").on(table.agentId),
+    // The own-logs (log:read without log:admin) view filters every listing by
+    // attributed user; without this each such query seq-scans the table.
+    userIdIdx: index("mcp_tool_calls_user_id_idx").on(table.userId),
     appIdIdx: index("mcp_tool_calls_app_id_idx").on(table.appId),
     createdAtIdx: index("mcp_tool_calls_created_at_idx").on(table.createdAt),
   }),

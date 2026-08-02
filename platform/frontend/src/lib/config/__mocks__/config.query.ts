@@ -9,6 +9,7 @@ export const useConfig = vi.fn();
 export const usePublicConfig = vi.fn();
 export const useDisableBasicAuth = vi.fn();
 export const useDisableInvitations = vi.fn();
+export const useDisableImpersonation = vi.fn();
 export const usePublicEnterpriseCoreActive = vi.fn();
 export const useProviderBaseUrls = vi.fn();
 export const useFeature = vi.fn();

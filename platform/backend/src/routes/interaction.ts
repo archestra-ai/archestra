@@ -7,7 +7,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasAnyAgentTypeAdminPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission, userHasPermission } from "@/auth";
 import { InteractionModel, KnowledgeBaseConnectorModel } from "@/models";
 import {
   ApiError,
@@ -96,12 +96,21 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
+      // log:read scopes the view to the caller's own attributed rows;
+      // log:admin lifts it (the agent-visibility filter below still applies).
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
 
       fastify.log.info(
         {
           userId: user.id,
           email: user.email,
           isAgentAdmin,
+          canSeeAllLogs,
           profileId,
           externalAgentId,
           filterUserId: userId,
@@ -122,7 +131,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         {
           profileId,
           externalAgentId,
-          userId,
+          userId: canSeeAllLogs ? userId : user.id,
           sessionId,
           startDate: startDate ? new Date(startDate) : undefined,
           endDate: endDate ? new Date(endDate) : undefined,
@@ -209,12 +218,19 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
 
       fastify.log.info(
         {
           userId: user.id,
           email: user.email,
           isAgentAdmin,
+          canSeeAllLogs,
           profileId,
           filterUserId: userId,
           source,
@@ -233,7 +249,7 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         isAgentAdmin,
         {
           profileId,
-          userId,
+          userId: canSeeAllLogs ? userId : user.id,
           source,
           client,
           sessionId,
@@ -280,9 +296,17 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+
       const externalAgentIds = await InteractionModel.getUniqueExternalAgentIds(
         user.id,
         isAgentAdmin,
+        canSeeAllLogs ? undefined : user.id,
       );
 
       return reply.send(externalAgentIds);
@@ -307,6 +331,18 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
+
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+      if (!canSeeAllLogs) {
+        // Own-logs view: the only user to filter by is the caller — anything
+        // more would enumerate the org roster through a side door.
+        return reply.send([{ id: user.id, name: user.name }]);
+      }
 
       const userIds = await InteractionModel.getUniqueUserIds(
         user.id,
@@ -343,6 +379,19 @@ const interactionRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
 
       if (!interaction) {
+        throw new ApiError(404, "Interaction not found");
+      }
+
+      // Own-logs view: a row attributed to someone else (or to nobody — no
+      // X-Archestra-User-Id) does not exist for this caller. 404, not 403,
+      // so existence is not disclosed.
+      const canSeeAllLogs = await userHasPermission(
+        user.id,
+        organizationId,
+        "log",
+        "admin",
+      );
+      if (!canSeeAllLogs && interaction.userId !== user.id) {
         throw new ApiError(404, "Interaction not found");
       }
 

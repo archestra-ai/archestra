@@ -29,6 +29,7 @@ import { metrics } from "@/observability";
 import type { CreateClientOptions, LLMProvider, Perplexity } from "@/types";
 import { ApiError } from "@/types";
 import { openAiResponsesAdapterFactory } from "./openai-responses";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 type PerplexityResponsesRequest = Perplexity.Types.ResponsesRequest;
 type PerplexityResponsesResponse = Perplexity.Types.ResponsesResponse;
@@ -78,6 +79,7 @@ export const perplexityResponsesAdapterFactory: LLMProvider<
     }
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: perplexityAgentApiBaseUrl(options.baseUrl),
       fetch: options.agent

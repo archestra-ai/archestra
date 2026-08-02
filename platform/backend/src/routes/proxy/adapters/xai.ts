@@ -5,6 +5,7 @@
  * This adapter delegates request/response/stream parsing to the OpenAI adapters
  * and only overrides provider-specific configuration (baseUrl, api key behavior).
  */
+
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
@@ -27,6 +28,7 @@ import {
   OpenAIResponseAdapter,
   OpenAIStreamAdapter,
 } from "./openai";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
 // TYPE ALIASES (reuse OpenAI types since xAI is OpenAI-compatible)
@@ -222,6 +224,7 @@ export const xaiAdapterFactory: LLMProvider<
       : undefined;
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl,
       fetch: customFetch,

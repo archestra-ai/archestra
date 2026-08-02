@@ -15,14 +15,23 @@ import type { AgentConfigSnapshot, AgentVersion } from "@/types/agent-version";
 
 type AgentRef = { id: string; organizationId: string };
 
-/** Newest-first version list; both reads are organization-scoped. */
+/**
+ * Newest-first version list hydrated to full rows (the list read is
+ * metadata-only); both reads are organization-scoped.
+ */
 async function listVersions(agent: AgentRef): Promise<AgentVersion[]> {
   const { data } = await AgentVersionModel.listForAgent({
     agentId: agent.id,
     organizationId: agent.organizationId,
     pagination: { limit: 200, offset: 0 },
   });
-  return data;
+  return await Promise.all(
+    data.map(async (meta) => {
+      const version = await getVersion(agent, meta.version);
+      if (!version) throw new Error(`version ${meta.version} disappeared`);
+      return version;
+    }),
+  );
 }
 
 async function getVersion(
@@ -233,6 +242,8 @@ describe("AgentVersionModel", () => {
 
     expect(firstPage.pagination.total).toBe(3);
     expect(firstPage.data.map((v) => v.version)).toEqual([3, 2]);
+    // the list is a metadata projection; the snapshot payload stays on get-one
+    expect(firstPage.data[0]).not.toHaveProperty("snapshot");
 
     const secondPage = await AgentVersionModel.listForAgent({
       agentId: agent.id,

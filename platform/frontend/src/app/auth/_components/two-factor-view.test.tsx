@@ -97,29 +97,4 @@ describe("TwoFactorView", () => {
       ).toHaveAttribute("href", "/auth/recover-account?redirectTo=%2Fchat");
     });
   });
-
-  describe("authenticator setup (with totpURI)", () => {
-    it("shows the QR code and verifies without trustDevice", async () => {
-      const user = userEvent.setup();
-      mockSearchParams({
-        totpURI: "otpauth://totp/Test:user@example.com?secret=ABC",
-      });
-      const { container } = renderView();
-
-      expect(container.querySelector("svg")).toBeInTheDocument();
-      expect(
-        screen.queryByLabelText("Trust this device"),
-      ).not.toBeInTheDocument();
-
-      await user.type(screen.getByLabelText("One-time code"), "654321");
-      await user.click(screen.getByRole("button", { name: "Verify" }));
-
-      await waitFor(() => {
-        expect(authClient.twoFactor.verifyTotp).toHaveBeenCalledWith({
-          code: "654321",
-          trustDevice: undefined,
-        });
-      });
-    });
-  });
 });

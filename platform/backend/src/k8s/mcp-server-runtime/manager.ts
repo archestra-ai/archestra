@@ -1,10 +1,12 @@
 import type * as k8s from "@kubernetes/client-node";
+import { Watch } from "@kubernetes/client-node";
 import config from "@/config";
 import { getK8sCapabilitiesFromApi } from "@/k8s/capabilities";
 import {
   checkNamespaceDeployAccess,
   createK8sClients,
   loadKubeConfig,
+  mapWithConcurrency,
   namespaceAccessMessage,
   sanitizeLabelValue,
 } from "@/k8s/shared";
@@ -61,6 +63,7 @@ export class McpServerRuntimeManager {
   private k8sLog?: k8s.Log;
   private k8sExec?: k8s.Exec;
   private namespace: string = "default";
+  private kubeConfig?: k8s.KubeConfig;
   private mcpServerIdToDeploymentMap: Map<string, K8sDeployment> = new Map();
   // Per-namespace in-flight ensure of the egress default-deny baseline, so
   // concurrent deploys share one call; cleared on start() to re-assert on re-init.
@@ -69,6 +72,24 @@ export class McpServerRuntimeManager {
   // Periodic sweep of Failed/Evicted MCP pods (DiskPressure eviction cascades
   // can leave hundreds of Failed pod corpses that nothing else cleans up).
   private failedPodReapTimer?: NodeJS.Timeout;
+
+  // === Deployment-state watch streams ===
+  // Event-driven state refresh: long-lived K8s watch streams on the pods and
+  // deployments this runtime creates (label app=mcp-server) trigger a
+  // debounced refreshAllStates() sweep, so deployment states update when the
+  // cluster changes instead of relying on a fixed-interval poll. Streams are
+  // keyed `${namespace}|${kind}`.
+  private deploymentStateWatchersStarted = false;
+  private deploymentStateWatchersStopped = false;
+  private watchedNamespaces = new Set<string>();
+  private expectedWatchStreams = new Set<string>();
+  private liveWatchStreams = new Set<string>();
+  private watchStreamAborts = new Map<string, AbortController>();
+  private watchStreamRestartTimers = new Map<string, NodeJS.Timeout>();
+  private watchStreamFailureLogged = new Set<string>();
+  private watchRefreshDebounceTimer?: NodeJS.Timeout;
+  private stateRefreshListeners = new Set<() => void>();
+  private refreshAllStatesInFlight?: Promise<void>;
 
   /**
    * Settles once the startup adopt pass has frozen every local install's
@@ -100,6 +121,9 @@ export class McpServerRuntimeManager {
       const { kubeConfig, namespace } = loadKubeConfig();
       const clients = createK8sClients(kubeConfig, namespace);
 
+      // Retained for the deployment-state watch streams (k8s.Watch takes the
+      // config, not a generated API client).
+      this.kubeConfig = kubeConfig;
       this.k8sApi = clients.coreApi;
       this.k8sAppsApi = clients.appsApi;
       this.k8sAuthApi = clients.authApi;
@@ -220,20 +244,27 @@ export class McpServerRuntimeManager {
       }
 
       const networkPolicyCapabilities = (
-        await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi)
+        await getK8sCapabilitiesFromApi(
+          this.k8sCustomObjectsApi,
+          this.networkPolicyProbeSource(),
+        )
       ).networkPolicy;
       const networkPolicyResolutionCache =
         await this.buildNetworkPolicyResolutionCache(localCatalogItems);
 
-      // Start all local servers in parallel
-      const startPromises = localServers.map(async (mcpServer) => {
-        await this.startServer(mcpServer, undefined, undefined, {
-          networkPolicyCapabilities,
-          networkPolicyResolutionCache,
-        });
-      });
-
-      const results = await Promise.allSettled(startPromises);
+      // Start all local servers with bounded parallelism: each startServer
+      // fires a burst of K8s API calls, and reconciling every install at
+      // once can trip the API server's Priority & Fairness throttling
+      // (429 "Too many requests"), making healthy deployments look broken.
+      const results = await mapWithConcurrency(
+        localServers,
+        K8S_API_FANOUT_CONCURRENCY,
+        (mcpServer) =>
+          this.startServer(mcpServer, undefined, undefined, {
+            networkPolicyCapabilities,
+            networkPolicyResolutionCache,
+          }),
+      );
 
       // Count successes and failures
       const failures = results.filter((result) => result.status === "rejected");
@@ -281,6 +312,11 @@ export class McpServerRuntimeManager {
       });
 
       this.startFailedPodReaper();
+
+      // Start watch streams only after the reconcile above settles: the mass
+      // startServer pass generates a storm of pod/deployment events that
+      // would just trigger redundant refresh sweeps mid-startup.
+      this.startDeploymentStateWatchers();
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : "Unknown error";
       logger.error(`Failed to initialize MCP Server Runtime: ${errorMsg}`);
@@ -642,10 +678,17 @@ export class McpServerRuntimeManager {
         catalogItem,
         options?.networkPolicyResolutionCache,
       );
+      // A server can land in a namespace (new environment) the state
+      // watchers aren't covering yet.
+      this.ensureWatchedNamespace(deploymentNamespace);
       const networkPolicyCapabilities =
         options?.networkPolicyCapabilities ??
-        (await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi))
-          .networkPolicy;
+        (
+          await getK8sCapabilitiesFromApi(
+            this.k8sCustomObjectsApi,
+            this.networkPolicyProbeSource(),
+          )
+        ).networkPolicy;
 
       // Ensure the namespace default-deny baseline before the pod exists, so an
       // un-reconciled or apply-failed pod is denied by default rather than open.
@@ -875,7 +918,10 @@ export class McpServerRuntimeManager {
           catalogItem,
         }),
         networkPolicyCapabilities: (
-          await getK8sCapabilitiesFromApi(this.k8sCustomObjectsApi)
+          await getK8sCapabilitiesFromApi(
+            this.k8sCustomObjectsApi,
+            this.networkPolicyProbeSource(),
+          )
         ).networkPolicy,
         k8sExec: this.k8sExec,
       });
@@ -1307,10 +1353,57 @@ export class McpServerRuntimeManager {
    * Detects state changes like a running pod entering CrashLoopBackOff.
    */
   async refreshAllStates(): Promise<void> {
-    const refreshPromises = Array.from(
-      this.mcpServerIdToDeploymentMap.values(),
-    ).map((deployment) => deployment.refreshState().catch(() => {}));
-    await Promise.all(refreshPromises);
+    // Single-flight: refreshState mutates per-deployment state and is not
+    // concurrency-safe, so concurrent triggers (status polling, watch
+    // events) coalesce onto the in-flight sweep.
+    if (this.refreshAllStatesInFlight) {
+      return this.refreshAllStatesInFlight;
+    }
+    this.refreshAllStatesInFlight = mapWithConcurrency(
+      // Bounded: each refresh makes several K8s API calls — unbounded
+      // parallelism across a large install base is a steady source of API
+      // Priority & Fairness throttling (429s).
+      Array.from(this.mcpServerIdToDeploymentMap.values()),
+      K8S_API_FANOUT_CONCURRENCY,
+      (deployment) => deployment.refreshState(),
+    ).then(
+      () => undefined,
+      () => undefined,
+    );
+    try {
+      await this.refreshAllStatesInFlight;
+    } finally {
+      this.refreshAllStatesInFlight = undefined;
+    }
+  }
+
+  /**
+   * Subscribe to deployment-state refreshes triggered by K8s watch events.
+   * Fired after a watch-triggered refreshAllStates() sweep completes, so
+   * listeners (the websocket status push) can fan the fresh statusSummary out
+   * to clients immediately instead of waiting for their next poll tick.
+   * Returns an unsubscribe function.
+   */
+  onDeploymentStatesRefreshed(listener: () => void): () => void {
+    this.stateRefreshListeners.add(listener);
+    return () => {
+      this.stateRefreshListeners.delete(listener);
+    };
+  }
+
+  /**
+   * Whether every expected deployment-state watch stream is currently open.
+   * When true, cluster changes push state refreshes and pollers only need a
+   * slow resync; when false (e.g. missing `watch` RBAC, connectivity loss),
+   * pollers should fall back to their fast interval.
+   */
+  get deploymentStateWatchersActive(): boolean {
+    if (!this.deploymentStateWatchersStarted) return false;
+    if (this.expectedWatchStreams.size === 0) return false;
+    for (const key of this.expectedWatchStreams) {
+      if (!this.liveWatchStreams.has(key)) return false;
+    }
+    return true;
   }
 
   /**
@@ -1336,6 +1429,8 @@ export class McpServerRuntimeManager {
   async shutdown(): Promise<void> {
     logger.info("Shutting down MCP Server Runtime...");
     this.status = "stopped";
+
+    this.stopDeploymentStateWatchers();
 
     if (this.failedPodReapTimer) {
       clearInterval(this.failedPodReapTimer);
@@ -1866,6 +1961,175 @@ export class McpServerRuntimeManager {
     responseStream.end();
   }
 
+  // === Deployment-state watch streams ===
+
+  /**
+   * Open watch streams for every namespace the runtime currently deploys
+   * into. Later namespaces (a server installed into a new environment) are
+   * picked up via ensureWatchedNamespace from startServer.
+   */
+  private startDeploymentStateWatchers(): void {
+    if (!this.kubeConfig) return;
+    this.deploymentStateWatchersStarted = true;
+    this.deploymentStateWatchersStopped = false;
+
+    const namespaces = new Set<string>([this.namespace]);
+    for (const deployment of this.mcpServerIdToDeploymentMap.values()) {
+      namespaces.add(deployment.k8sNamespace);
+    }
+    for (const namespace of namespaces) {
+      this.watchNamespaceForStateChanges(namespace);
+    }
+  }
+
+  private ensureWatchedNamespace(namespace: string): void {
+    if (
+      !this.deploymentStateWatchersStarted ||
+      this.deploymentStateWatchersStopped ||
+      this.watchedNamespaces.has(namespace)
+    ) {
+      return;
+    }
+    this.watchNamespaceForStateChanges(namespace);
+  }
+
+  private watchNamespaceForStateChanges(namespace: string): void {
+    this.watchedNamespaces.add(namespace);
+    for (const kind of ["pods", "deployments"] as const) {
+      this.expectedWatchStreams.add(watchStreamKey(namespace, kind));
+      void this.openWatchStream(namespace, kind);
+    }
+  }
+
+  private async openWatchStream(
+    namespace: string,
+    kind: WatchStreamKind,
+  ): Promise<void> {
+    if (!this.kubeConfig || this.deploymentStateWatchersStopped) return;
+    const key = watchStreamKey(namespace, kind);
+    const path =
+      kind === "pods"
+        ? `/api/v1/namespaces/${namespace}/pods`
+        : `/apis/apps/v1/namespaces/${namespace}/deployments`;
+    try {
+      const watch = new Watch(this.kubeConfig);
+      const controller = await watch.watch(
+        path,
+        // Only objects this runtime creates — every MCP deployment and pod
+        // carries app=mcp-server.
+        { labelSelector: "app=mcp-server", allowWatchBookmarks: true },
+        (phase) => {
+          if (phase === "BOOKMARK") return;
+          this.scheduleWatchTriggeredRefresh();
+        },
+        (err) => this.onWatchStreamClosed(namespace, kind, err),
+      );
+      if (this.deploymentStateWatchersStopped) {
+        controller.abort();
+        return;
+      }
+      this.watchStreamAborts.set(key, controller);
+      this.liveWatchStreams.add(key);
+      this.watchStreamFailureLogged.delete(key);
+      // The stream may have (re)opened after missing events — resync once.
+      this.scheduleWatchTriggeredRefresh();
+    } catch (error) {
+      this.onWatchStreamClosed(namespace, kind, error);
+    }
+  }
+
+  private onWatchStreamClosed(
+    namespace: string,
+    kind: WatchStreamKind,
+    error: unknown,
+  ): void {
+    const key = watchStreamKey(namespace, kind);
+    this.liveWatchStreams.delete(key);
+    this.watchStreamAborts.delete(key);
+    if (this.deploymentStateWatchersStopped) return;
+
+    // The API server routinely closes watch streams (timeouts, resource
+    // version expiry) — that's a debug-level reopen, not a problem. Real
+    // errors (missing `watch` RBAC, connectivity) get one warn per outage;
+    // pollers fall back to their fast interval while the stream is down.
+    if (error && !this.watchStreamFailureLogged.has(key)) {
+      this.watchStreamFailureLogged.add(key);
+      logger.warn(
+        { err: error, namespace, kind },
+        "MCP deployment-state watch stream failed; falling back to polling until it reopens",
+      );
+    } else {
+      logger.debug(
+        { namespace, kind },
+        "MCP deployment-state watch stream closed; reopening",
+      );
+    }
+
+    if (this.watchStreamRestartTimers.has(key)) return;
+    const timer = setTimeout(
+      () => {
+        this.watchStreamRestartTimers.delete(key);
+        void this.openWatchStream(namespace, kind);
+      },
+      WATCH_STREAM_RECONNECT_DELAY_MS +
+        Math.floor(Math.random() * WATCH_STREAM_RECONNECT_JITTER_MS),
+    );
+    timer.unref?.();
+    this.watchStreamRestartTimers.set(key, timer);
+  }
+
+  /**
+   * Coalesce bursts of watch events (a rollout emits many per pod) into one
+   * refreshAllStates() sweep, then notify listeners so fresh states are
+   * pushed to websocket subscribers immediately.
+   */
+  private scheduleWatchTriggeredRefresh(): void {
+    if (this.watchRefreshDebounceTimer) return;
+    this.watchRefreshDebounceTimer = setTimeout(() => {
+      this.watchRefreshDebounceTimer = undefined;
+      void this.refreshAllStates()
+        .then(() => {
+          for (const listener of this.stateRefreshListeners) {
+            try {
+              listener();
+            } catch (error) {
+              logger.error(
+                { err: error },
+                "Deployment-state refresh listener threw",
+              );
+            }
+          }
+        })
+        .catch(() => {});
+    }, WATCH_REFRESH_DEBOUNCE_MS);
+    this.watchRefreshDebounceTimer.unref?.();
+  }
+
+  private stopDeploymentStateWatchers(): void {
+    this.deploymentStateWatchersStopped = true;
+    this.deploymentStateWatchersStarted = false;
+    for (const timer of this.watchStreamRestartTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.watchStreamRestartTimers.clear();
+    if (this.watchRefreshDebounceTimer) {
+      clearTimeout(this.watchRefreshDebounceTimer);
+      this.watchRefreshDebounceTimer = undefined;
+    }
+    for (const controller of this.watchStreamAborts.values()) {
+      try {
+        controller.abort();
+      } catch {
+        // stream already gone
+      }
+    }
+    this.watchStreamAborts.clear();
+    this.liveWatchStreams.clear();
+    this.expectedWatchStreams.clear();
+    this.watchedNamespaces.clear();
+    this.watchStreamFailureLogged.clear();
+  }
+
   private async namespacesForLocalCatalogs(
     localCatalogItems: CatalogItem[],
   ): Promise<string[]> {
@@ -1915,6 +2179,19 @@ export class McpServerRuntimeManager {
     }
     return deploymentsBySelectorId;
   }
+
+  /**
+   * Where the chart's enforcement probe left its verdict. Threading it through
+   * here keeps the policies this runtime applies and the capabilities the UI
+   * reports based on the same answer about the same cluster.
+   */
+  private networkPolicyProbeSource():
+    | { coreApi: k8s.CoreV1Api; namespace: string }
+    | undefined {
+    return this.k8sApi
+      ? { coreApi: this.k8sApi, namespace: this.namespace }
+      : undefined;
+  }
 }
 
 function uniqueStrings(values: string[]): string[] {
@@ -1948,5 +2225,25 @@ function getDockerConfigRegistryServers(secret: k8s.V1Secret): string[] {
     return [];
   }
 }
+
+/**
+ * Max concurrent per-server operations when fanning out over the whole
+ * install base (startup reconcile, periodic state refresh). Each operation
+ * makes several K8s API calls; unbounded fan-out trips the API server's
+ * Priority & Fairness throttling (429s) on large installs.
+ */
+const K8S_API_FANOUT_CONCURRENCY = 5;
+
+type WatchStreamKind = "pods" | "deployments";
+
+function watchStreamKey(namespace: string, kind: WatchStreamKind): string {
+  return `${namespace}|${kind}`;
+}
+
+/** Coalesce watch-event bursts (rollouts emit many events) into one sweep. */
+const WATCH_REFRESH_DEBOUNCE_MS = 1_000;
+/** Reopen delay after a watch stream closes (routine or error). */
+const WATCH_STREAM_RECONNECT_DELAY_MS = 15_000;
+const WATCH_STREAM_RECONNECT_JITTER_MS = 5_000;
 
 export default new McpServerRuntimeManager();

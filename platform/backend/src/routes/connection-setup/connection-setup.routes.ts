@@ -5,6 +5,7 @@ import {
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
+  toMcpClientServerName,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -46,6 +47,7 @@ import {
   ConnectionSetupPlatformSchema,
   ConnectionSetupProxyAuthSchema,
   constructResponseSchema,
+  GATEWAY_CAPABLE_AGENT_TYPES,
   type Organization,
 } from "@/types";
 import {
@@ -658,7 +660,7 @@ export default connectionSetupRoutes;
 // Internal helpers
 // ===================================================================
 
-const GATEWAY_AGENT_TYPES = new Set(["mcp_gateway", "profile"]);
+const GATEWAY_AGENT_TYPES = new Set<string>(GATEWAY_CAPABLE_AGENT_TYPES);
 const PROXY_AGENT_TYPES = new Set(["llm_proxy", "profile"]);
 
 /**
@@ -702,7 +704,8 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
     });
     if (!gateway) throw GONE();
     mcp = {
-      serverName: toServerName(gateway.name) || toMcpServerSlug(appName),
+      serverName:
+        toMcpClientServerName(gateway.name) || toMcpServerSlug(appName),
       url: `${setup.baseUrl}/mcp/${gateway.slug ?? gateway.id}`,
     };
   }
@@ -965,11 +968,6 @@ function normalizeBaseUrl(
     hostname,
     path,
   };
-}
-
-/** Gateway name → MCP server name, e.g. "Prod Gateway" → "prod_gateway". */
-function toServerName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, "_");
 }
 
 /** Proxy name → TOML-safe provider id, e.g. "Default Proxy" → "default_proxy". */

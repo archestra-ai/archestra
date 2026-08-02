@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type {
   PersistedFile,
   SandboxArtifactRow,
@@ -45,6 +45,8 @@ class FileModel {
     /** Owning project; null = the author's own file. */
     projectId: string | null;
     conversationId: string | null;
+    /** Owning MCP App; null = not an app file. Scope is (app, author). */
+    appId?: string | null;
     /** Producing sandbox — provenance only. */
     sandboxId?: string | null;
     filename: string;
@@ -64,6 +66,7 @@ class FileModel {
           userId: params.userId,
           projectId: params.projectId,
           conversationId: params.conversationId,
+          appId: params.appId ?? null,
           sandboxId: params.sandboxId ?? null,
           filename: params.filename,
           mimeType: params.mimeType,
@@ -147,6 +150,35 @@ class FileModel {
           eq(schema.filesTable.filename, params.filename),
           isNull(schema.filesTable.projectId),
           isNull(schema.filesTable.conversationId),
+          // mirrors the orphan partial unique index: an app's files are their
+          // own namespace and must not be reachable as this user's orphans.
+          isNull(schema.filesTable.appId),
+        ),
+      );
+    return row ? normalizeByteaField(row, "data") : null;
+  }
+
+  /**
+   * One of a viewer's app files by exact name. The partial unique index on
+   * `(user_id, app_id, filename)` makes the match at most one — the app
+   * counterpart of {@link findOrphanByName}, so an app's `save_file` with
+   * `overwrite` replaces its own earlier file.
+   */
+  static async findAppFileByName(params: {
+    organizationId: string;
+    userId: string;
+    appId: string;
+    filename: string;
+  }): Promise<PersistedFile | null> {
+    const [row] = await db
+      .select()
+      .from(schema.filesTable)
+      .where(
+        and(
+          eq(schema.filesTable.organizationId, params.organizationId),
+          eq(schema.filesTable.userId, params.userId),
+          eq(schema.filesTable.appId, params.appId),
+          eq(schema.filesTable.filename, params.filename),
         ),
       );
     return row ? normalizeByteaField(row, "data") : null;
@@ -194,6 +226,29 @@ class FileModel {
   }
 
   /**
+   * One viewer's files inside one MCP App (newest first), metadata only. This
+   * is the app runtime's whole file namespace: another viewer of the same app,
+   * and the same viewer's chats and projects, are all separate scopes.
+   */
+  static async listByAppAndUser(params: {
+    organizationId: string;
+    userId: string;
+    appId: string;
+  }): Promise<SandboxArtifactRow[]> {
+    return db
+      .select(artifactColumns)
+      .from(schema.filesTable)
+      .where(
+        and(
+          eq(schema.filesTable.organizationId, params.organizationId),
+          eq(schema.filesTable.appId, params.appId),
+          eq(schema.filesTable.userId, params.userId),
+        ),
+      )
+      .orderBy(desc(schema.filesTable.createdAt));
+  }
+
+  /**
    * The user's no-project files in one conversation (newest first), metadata
    * only. This is the personal "My Files" scope after no-project files became
    * conversation-scoped: a chat sees only its own files, never another
@@ -224,11 +279,14 @@ class FileModel {
    * conversation's files when it is deleted — project files (which outlive the
    * conversation) are excluded.
    */
-  static async listNoProjectFilesForConversation(params: {
-    organizationId: string;
-    conversationId: string;
-  }): Promise<SandboxArtifactRow[]> {
-    return db
+  static async listNoProjectFilesForConversation(
+    params: {
+      organizationId: string;
+      conversationId: string;
+    },
+    executor: typeof db | Transaction = db,
+  ): Promise<SandboxArtifactRow[]> {
+    return executor
       .select(artifactColumns)
       .from(schema.filesTable)
       .where(
@@ -283,8 +341,13 @@ class FileModel {
       .orderBy(asc(schema.filesTable.createdAt), asc(schema.filesTable.id));
   }
 
-  static async deleteById(id: string): Promise<void> {
-    await db.delete(schema.filesTable).where(eq(schema.filesTable.id, id));
+  static async deleteById(
+    id: string,
+    executor: typeof db | Transaction = db,
+  ): Promise<void> {
+    await executor
+      .delete(schema.filesTable)
+      .where(eq(schema.filesTable.id, id));
   }
 }
 

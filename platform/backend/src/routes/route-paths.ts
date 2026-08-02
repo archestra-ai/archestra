@@ -28,6 +28,11 @@ export const CONNECTION_SETUP_SCRIPT_PREFIX = "/api/connection-setups/script";
 export const ORGANIZATION_APPEARANCE_SETTINGS_PATH =
   "/api/organization/appearance-settings";
 export const PUBLIC_CONFIG_PATH = "/api/config/public";
+/**
+ * Pre-authentication auth state (is a two-factor challenge pending?). Read by
+ * the auth pages before any session exists.
+ */
+export const AUTH_STATE_PATH = "/api/auth-state";
 
 /**
  * Public unauthenticated existence check used by the Claude Code startup

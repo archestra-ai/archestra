@@ -1,17 +1,16 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Copy, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 import { SettingsBlock } from "@/components/settings/settings-block";
 import {
   StandardDialog,
   StandardFormDialog,
 } from "@/components/standard-dialog";
+import { useTwoFactorEnrollment } from "@/components/two-factor/two-factor-enrollment";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -23,12 +22,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useSession } from "@/lib/auth/auth.query";
-import {
-  useDisableTwoFactorMutation,
-  useEnableTwoFactorMutation,
-} from "@/lib/auth/two-factor.query";
-import { copyToClipboard } from "@/lib/clipboard";
-import { useAppName } from "@/lib/hooks/use-app-name";
+import { useDisableTwoFactorMutation } from "@/lib/auth/two-factor.query";
+import { useEnterpriseFeature } from "@/lib/config/config.query";
 
 const PasswordFormSchema = z.object({
   password: z.string().min(1, "Password is required"),
@@ -41,16 +36,22 @@ type PasswordFormValues = z.infer<typeof PasswordFormSchema>;
  * (shown once in a dialog) and a TOTP URI; after saving the codes the user is
  * sent to /auth/two-factor to scan the QR code and confirm the authenticator.
  */
-export function TwoFactorCard() {
-  const router = useRouter();
+export function TwoFactorCard({ required = false }: { required?: boolean }) {
+  const enterpriseCoreActive = useEnterpriseFeature("core");
   const { data: session } = useSession();
   const twoFactorEnabled = !!session?.user?.twoFactorEnabled;
+  const mustEnroll = required && !twoFactorEnabled;
 
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
-  const [enableResult, setEnableResult] = useState<{
-    totpURI: string;
-    backupCodes: string[];
-  } | null>(null);
+  const [isEnrollmentOpen, setIsEnrollmentOpen] = useState(false);
+
+  // 2FA is an enterprise feature. Without a license there is nothing a
+  // non-enrolled user can do here (the server refuses enrollment), so hide
+  // the card; already-enrolled users keep it so disabling stays possible if
+  // a license lapses.
+  if (!enterpriseCoreActive && !twoFactorEnabled) {
+    return null;
+  }
 
   return (
     <>
@@ -59,12 +60,26 @@ export function TwoFactorCard() {
         description={
           twoFactorEnabled
             ? "Two-factor authentication is enabled for your account."
-            : "Add an extra layer of security by requiring a one-time code at sign-in."
+            : mustEnroll
+              ? "Your organization requires two-factor authentication. Set it up now to continue using the platform."
+              : "Add an extra layer of security by requiring a one-time code at sign-in."
         }
         control={
           <Button
             variant={twoFactorEnabled ? "outline" : "default"}
-            onClick={() => setIsPasswordDialogOpen(true)}
+            onClick={() => {
+              if (twoFactorEnabled) {
+                // Disabling is still possible when required — the middleware
+                // will simply lock the account out again; better-auth offers
+                // no disable-block hook, so the card warns via copy.
+                setIsPasswordDialogOpen(true);
+                return;
+              }
+              // Same flow as mandatory enrollment (password, QR + code, then
+              // the download-gated recovery codes) — but in place, since
+              // there is no reason to leave the account page for it.
+              setIsEnrollmentOpen(true);
+            }}
           >
             {twoFactorEnabled ? "Disable 2FA" : "Enable 2FA"}
           </Button>
@@ -73,40 +88,26 @@ export function TwoFactorCard() {
       <TwoFactorPasswordDialog
         open={isPasswordDialogOpen}
         onOpenChange={setIsPasswordDialogOpen}
-        twoFactorEnabled={twoFactorEnabled}
-        onEnabled={(result) => {
-          setIsPasswordDialogOpen(false);
-          setEnableResult(result);
-        }}
       />
-      <BackupCodesDialog
-        result={enableResult}
-        onContinue={() => {
-          if (!enableResult) return;
-          router.push(
-            `/auth/two-factor?totpURI=${encodeURIComponent(enableResult.totpURI)}&redirectTo=${encodeURIComponent("/account")}`,
-          );
-        }}
-      />
+      {/* Mounted only while open so closing discards the flow's state —
+          including anything typed into the password field. */}
+      {isEnrollmentOpen && (
+        <TwoFactorEnrollmentDialog open onOpenChange={setIsEnrollmentOpen} />
+      )}
     </>
   );
 }
 
+/** Password confirmation for turning 2FA OFF (enrollment has its own page). */
 function TwoFactorPasswordDialog({
   open,
   onOpenChange,
-  twoFactorEnabled,
-  onEnabled,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  twoFactorEnabled: boolean;
-  onEnabled: (result: { totpURI: string; backupCodes: string[] }) => void;
 }) {
-  const appName = useAppName();
-  const enableTwoFactor = useEnableTwoFactorMutation();
   const disableTwoFactor = useDisableTwoFactorMutation();
-  const isPending = enableTwoFactor.isPending || disableTwoFactor.isPending;
+  const isPending = disableTwoFactor.isPending;
 
   const form = useForm<PasswordFormValues>({
     resolver: zodResolver(PasswordFormSchema),
@@ -120,22 +121,11 @@ function TwoFactorPasswordDialog({
   }, [form, open]);
 
   async function onSubmit(values: PasswordFormValues) {
-    if (twoFactorEnabled) {
-      const disabled = await disableTwoFactor.mutateAsync({
-        password: values.password,
-      });
-      if (disabled) {
-        onOpenChange(false);
-      }
-      return;
-    }
-
-    const result = await enableTwoFactor.mutateAsync({
+    const disabled = await disableTwoFactor.mutateAsync({
       password: values.password,
-      issuer: appName,
     });
-    if (result) {
-      onEnabled({ totpURI: result.totpURI, backupCodes: result.backupCodes });
+    if (disabled) {
+      onOpenChange(false);
     }
   }
 
@@ -144,11 +134,7 @@ function TwoFactorPasswordDialog({
       <StandardFormDialog
         open={open}
         onOpenChange={onOpenChange}
-        title={
-          twoFactorEnabled
-            ? "Disable Two-Factor Authentication"
-            : "Enable Two-Factor Authentication"
-        }
+        title="Disable Two-Factor Authentication"
         description="Confirm your password to continue."
         size="small"
         onSubmit={form.handleSubmit(onSubmit)}
@@ -192,50 +178,32 @@ function TwoFactorPasswordDialog({
   );
 }
 
-function BackupCodesDialog({
-  result,
-  onContinue,
+/**
+ * Runs the shared enrollment flow in place. Abandoning it is safe: an
+ * unverified enrollment leaves the account unchanged and starting again
+ * replaces it.
+ */
+function TwoFactorEnrollmentDialog({
+  open,
+  onOpenChange,
 }: {
-  result: { totpURI: string; backupCodes: string[] } | null;
-  onContinue: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  async function copyBackupCodes() {
-    if (!result) return;
-    await copyToClipboard(result.backupCodes.join("\n"));
-    toast.success("Backup codes copied to clipboard");
-  }
+  const { title, description, body } = useTwoFactorEnrollment({
+    onFinished: () => onOpenChange(false),
+  });
 
   return (
     <StandardDialog
-      open={!!result}
-      // Backup codes are shown exactly once and 2FA is already enabled at
-      // this point, so dismissing the dialog also proceeds to the
-      // authenticator setup step.
-      onOpenChange={(open) => {
-        if (!open) onContinue();
-      }}
-      title="Save Your Backup Codes"
-      description="Store these codes somewhere safe. Each one can be used once to sign in if you lose access to your authenticator app."
+      open={open}
+      onOpenChange={onOpenChange}
+      title={title}
+      description={description}
       size="small"
-      footer={
-        <>
-          <Button type="button" variant="outline" onClick={copyBackupCodes}>
-            <Copy className="mr-2 h-4 w-4" />
-            Copy
-          </Button>
-          <Button type="button" onClick={onContinue}>
-            Continue
-          </Button>
-        </>
-      }
+      bodyClassName="space-y-4"
     >
-      <div className="grid grid-cols-2 gap-2 font-mono text-sm">
-        {(result?.backupCodes ?? []).map((code) => (
-          <div key={code} className="rounded-md bg-muted px-3 py-2 text-center">
-            {code}
-          </div>
-        ))}
-      </div>
+      {body}
     </StandardDialog>
   );
 }

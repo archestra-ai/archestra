@@ -1,5 +1,5 @@
 {
-  "id": "a56da5ae-f353-424f-bbda-e670d38fb859",
+  "id": "b3d5bb1f-2cbc-412b-94ce-3912962c94eb",
   "prevId": "3c314a3c-4b4f-4578-acde-2c171daf0f9d",
   "version": "7",
   "dialect": "postgresql",
@@ -5306,6 +5306,69 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.content_encryption_state": {
+      "name": "content_encryption_state",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "key_fingerprint": {
+          "name": "key_fingerprint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "interactions_cursor_created_at": {
+          "name": "interactions_cursor_created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "interactions_cursor_id": {
+          "name": "interactions_cursor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "messages_cursor_id": {
+          "name": "messages_cursor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.conversation_attachments": {
       "name": "conversation_attachments",
       "schema": "",
@@ -6111,6 +6174,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "conversations_last_message_at_idx": {
+          "name": "conversations_last_message_at_idx",
+          "columns": [
+            {
+              "expression": "last_message_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -6190,6 +6268,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'secrets'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -6205,7 +6290,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "encryption_key_canaries_purpose_idx": {
+          "name": "encryption_key_canaries_purpose_idx",
+          "columns": [
+            {
+              "expression": "purpose",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
@@ -8130,13 +8231,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "latest_version": {
-          "name": "latest_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -8395,108 +8489,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.mcp_catalog_versions": {
-      "name": "mcp_catalog_versions",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "catalog_id": {
-          "name": "catalog_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "version": {
-          "name": "version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "snapshot": {
-          "name": "snapshot",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content_hash": {
-          "name": "content_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "mcp_catalog_versions_catalog_id_idx": {
-          "name": "mcp_catalog_versions_catalog_id_idx",
-          "columns": [
-            {
-              "expression": "catalog_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "mcp_catalog_versions_catalog_version_uidx": {
-          "name": "mcp_catalog_versions_catalog_version_uidx",
-          "columns": [
-            {
-              "expression": "catalog_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "version",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "mcp_catalog_versions_catalog_id_internal_mcp_catalog_id_fk": {
-          "name": "mcp_catalog_versions_catalog_id_internal_mcp_catalog_id_fk",
-          "tableFrom": "mcp_catalog_versions",
-          "tableTo": "internal_mcp_catalog",
-          "columnsFrom": [
-            "catalog_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

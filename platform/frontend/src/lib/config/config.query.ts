@@ -49,6 +49,12 @@ export function useDisableInvitations(): boolean | undefined {
   return data.disableInvitations;
 }
 
+export function useDisableImpersonation(): boolean | undefined {
+  const { data, isLoading } = usePublicConfig();
+  if (isLoading || !data) return undefined;
+  return data.disableImpersonation;
+}
+
 /**
  * Effective enterprise-core flag from the public (unauthenticated) config.
  * Use this on pre-login surfaces (sign-in page, SSO picker); authenticated

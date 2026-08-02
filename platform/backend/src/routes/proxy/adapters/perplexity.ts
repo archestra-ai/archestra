@@ -17,6 +17,7 @@
  *
  * @see https://docs.perplexity.ai/api-reference/chat-completions-post
  */
+
 import {
   ArchestraInternalErrorCode,
   isPerplexityReasoningModel,
@@ -47,6 +48,7 @@ import type {
   UsageView,
 } from "@/types";
 import { extractCommonMessageText } from "@/types";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
 // TYPE ALIASES
@@ -594,6 +596,7 @@ export const perplexityAdapterFactory: LLMProvider<
 
     // Use OpenAI SDK with Perplexity base URL (OpenAI-compatible API)
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl,
       fetch: customFetch,

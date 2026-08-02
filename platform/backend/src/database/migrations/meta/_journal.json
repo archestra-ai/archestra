@@ -2721,8 +2721,50 @@
     {
       "idx": 388,
       "version": "7",
-      "when": 1785511163876,
-      "tag": "0388_safe_norrin_radd",
+      "when": 1785497883517,
+      "tag": "0388_content_retention_and_encryption",
+      "breakpoints": true
+    },
+    {
+      "idx": 389,
+      "version": "7",
+      "when": 1785528326657,
+      "tag": "0389_ancient_the_hunter",
+      "breakpoints": true
+    },
+    {
+      "idx": 390,
+      "version": "7",
+      "when": 1785537737417,
+      "tag": "0390_log_admin_split",
+      "breakpoints": true
+    },
+    {
+      "idx": 391,
+      "version": "7",
+      "when": 1785582000526,
+      "tag": "0391_require_two_factor_and_session_max_age",
+      "breakpoints": true
+    },
+    {
+      "idx": 392,
+      "version": "7",
+      "when": 1785613738639,
+      "tag": "0392_audit_log_impersonated_by",
+      "breakpoints": true
+    },
+    {
+      "idx": 393,
+      "version": "7",
+      "when": 1785622126748,
+      "tag": "0393_drop_mcp_server_installation_request",
+      "breakpoints": true
+    },
+    {
+      "idx": 394,
+      "version": "7",
+      "when": 1785699955045,
+      "tag": "0394_safe_norrin_radd",
       "breakpoints": true
     }
   ]

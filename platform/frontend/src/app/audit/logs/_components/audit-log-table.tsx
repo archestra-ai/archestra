@@ -29,6 +29,7 @@ import {
   useAuditLog,
   useAuditLogs,
 } from "@/lib/audit-log/audit-log.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
@@ -257,6 +258,9 @@ export function AuditLogTable() {
   // Server-side search rather than a client filter over the first N members:
   // an org larger than one page would otherwise silently hide every actor
   // whose name sorts past the cut-off.
+  const { data: canSeeAllAuditLogs } = useHasPermissions({
+    auditLog: ["admin"],
+  });
   const {
     users: actorUsers,
     onSearchQueryChange: onActorSearchChange,
@@ -429,13 +433,24 @@ export function AuditLogTable() {
         id: "actor",
         header: "Actor",
         cell: ({ row }) => {
-          const { actorName, actorEmail } = row.original;
+          const { actorName, actorEmail, impersonatedBy, impersonatedByEmail } =
+            row.original;
           const label = actorName ?? actorEmail ?? "Deleted user";
           return (
-            <Badge variant="outline" className="text-xs">
-              <User className="mr-1 h-3 w-3 shrink-0" />
-              <TruncatedText message={label} maxLength={24} />
-            </Badge>
+            <div className="flex flex-col items-start gap-0.5">
+              <Badge variant="outline" className="text-xs">
+                <User className="mr-1 h-3 w-3 shrink-0" />
+                <TruncatedText message={label} maxLength={24} />
+              </Badge>
+              {impersonatedBy && (
+                <span
+                  className="text-[10px] text-amber-600 dark:text-amber-500"
+                  title="This action ran in an impersonated session; the named actor was being impersonated by this admin."
+                >
+                  via {impersonatedByEmail ?? "deleted user"}
+                </span>
+              )}
+            </div>
           );
         },
       },
@@ -617,16 +632,20 @@ export function AuditLogTable() {
           items={entityOptions}
           className="w-[220px]"
         />
-        <SearchableSelect
-          value={actorId ?? ALL_VALUE}
-          onValueChange={handleActorChange}
-          placeholder="Filter by actor"
-          items={memberOptions}
-          pinnedItems={[{ value: ALL_VALUE, label: "All actors" }]}
-          onSearchQueryChange={onActorSearchChange}
-          emptyMessage={actorEmptyMessage}
-          className="w-[220px]"
-        />
+        {canSeeAllAuditLogs ? (
+          // Without auditLog:admin the server scopes the trail to the
+          // caller's own actions, so an actor filter would be pointless.
+          <SearchableSelect
+            value={actorId ?? ALL_VALUE}
+            onValueChange={handleActorChange}
+            placeholder="Filter by actor"
+            items={memberOptions}
+            pinnedItems={[{ value: ALL_VALUE, label: "All actors" }]}
+            onSearchQueryChange={onActorSearchChange}
+            emptyMessage={actorEmptyMessage}
+            className="w-[220px]"
+          />
+        ) : null}
         <DateTimeRangePicker
           startDate={dateTimePicker.startDate}
           endDate={dateTimePicker.endDate}

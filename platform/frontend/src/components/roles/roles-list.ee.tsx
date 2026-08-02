@@ -6,9 +6,10 @@ import {
   type PredefinedRoleName,
   roleDescriptions,
 } from "@archestra/shared";
-import { allAvailableActions } from "@archestra/shared/access-control";
+
 import type { ColumnDef } from "@tanstack/react-table";
 import { Copy, Download, Eye, Pencil, Plus, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useSetSettingsAction } from "@/app/settings/layout";
@@ -32,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
+import { useAllPermissions } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
@@ -50,7 +52,10 @@ type Role = archestraApiTypes.GetRoleResponses["200"];
  * Enterprise Edition roles list with custom role management.
  * Shows both predefined roles (read-only) and custom roles (CRUD).
  */
-export function RolesList() {
+export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
+  // The permission builder disables what the author cannot grant — the same
+  // subset rule the server enforces on create/update.
+  const { data: authorPermissions } = useAllPermissions();
   const setActionButton = useSetSettingsAction();
   const {
     pageIndex,
@@ -360,11 +365,16 @@ export function RolesList() {
   return (
     <>
       <div className="space-y-6">
-        <SearchInput
-          objectNamePlural="roles"
-          searchFields={["name"]}
-          paramName="name"
-        />
+        <div className="flex items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <SearchInput
+              objectNamePlural="roles"
+              searchFields={["name"]}
+              paramName="name"
+            />
+          </div>
+          {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
+        </div>
 
         {isLoadingError ? (
           <QueryLoadError
@@ -432,7 +442,7 @@ export function RolesList() {
               <RolePermissionBuilder
                 permission={permission}
                 onChange={setPermission}
-                userPermissions={allAvailableActions}
+                userPermissions={authorPermissions ?? {}}
               />
             </div>
           </DialogBody>
@@ -496,7 +506,7 @@ export function RolesList() {
               <RolePermissionBuilder
                 permission={permission}
                 onChange={setPermission}
-                userPermissions={allAvailableActions}
+                userPermissions={authorPermissions ?? {}}
               />
             </div>
           </DialogBody>

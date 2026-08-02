@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.3.25](https://github.com/archestra-ai/archestra/compare/platform-v1.3.24...platform-v1.3.25) (2026-07-31)
+
+
+### Features
+
+* **agents:** config versioning — schema, snapshot model, fork-on-write ([#6923](https://github.com/archestra-ai/archestra/issues/6923)) ([b59aa97](https://github.com/archestra-ai/archestra/commit/b59aa974f4bb897c691b193cec0c684b5923441e))
+* **chatops:** per-channel answer-all for MS Teams ([#7001](https://github.com/archestra-ai/archestra/issues/7001)) ([f74d454](https://github.com/archestra-ai/archestra/commit/f74d454e20849e4f87ba45a43ec1d0bea06f3260))
+* **chat:** soft-delete conversations instead of hard-deleting ([#6985](https://github.com/archestra-ai/archestra/issues/6985)) ([ce7ebbf](https://github.com/archestra-ai/archestra/commit/ce7ebbfa08d5a1f629e7aefdc47c7bb5cf199757))
+* **helm:** check whether the cluster enforces NetworkPolicy ([#7026](https://github.com/archestra-ai/archestra/issues/7026)) ([fe8e565](https://github.com/archestra-ai/archestra/commit/fe8e565c9f098aeed5d8ba93d9a6aff06d1913d7))
+* **k8s:** report measured NetworkPolicy enforcement, not inferred ([#7027](https://github.com/archestra-ai/archestra/issues/7027)) ([8f5f237](https://github.com/archestra-ai/archestra/commit/8f5f2370cebddbff3a3ce2dd0caafca118269af9))
+* **knowledge-base:** soft-delete knowledge bases and connectors ([#6989](https://github.com/archestra-ai/archestra/issues/6989)) ([60be01e](https://github.com/archestra-ai/archestra/commit/60be01ed35a2ddb1e184c42ad66c9b1dd1322707))
+* **mcp:** soft-delete and restore for MCP servers, catalogs, and tools ([#6994](https://github.com/archestra-ai/archestra/issues/6994)) ([944ae12](https://github.com/archestra-ai/archestra/commit/944ae1229b7e7376263181a3ff20e7c0527a392c))
+* **projects:** retain files & schedules on delete, add admin restore ([#6919](https://github.com/archestra-ai/archestra/issues/6919)) ([e002e66](https://github.com/archestra-ai/archestra/commit/e002e66c7f7db0626830d87b99c5aa846b9883b2))
+* **security:** data-retention windows + content encryption at rest (Enterprise) ([#6943](https://github.com/archestra-ai/archestra/issues/6943)) ([cec25d7](https://github.com/archestra-ai/archestra/commit/cec25d7408effbd97ab3662ed9ba899b228afc5d))
+* **skills:** version-history API for skills and agents ([#7030](https://github.com/archestra-ai/archestra/issues/7030)) ([73905cb](https://github.com/archestra-ai/archestra/commit/73905cb2816534e23a095369f7b5c31118a6acc3))
+
+
+### Bug Fixes
+
+* **account:** show why the sessions list is unavailable instead of an empty card ([#7032](https://github.com/archestra-ai/archestra/issues/7032)) ([bc91223](https://github.com/archestra-ai/archestra/commit/bc912236448d38c42354fe5e41f6c3c5097ffe2b))
+* **account:** stop the account card flashing content before the role loads ([#7034](https://github.com/archestra-ai/archestra/issues/7034)) ([960d736](https://github.com/archestra-ai/archestra/commit/960d73678b46bac96ddac1e560e164fe898c6b9a))
+* **apps:** prevent agents from clobbering or hijacking existing apps; add app lock (T-979) ([#7012](https://github.com/archestra-ai/archestra/issues/7012)) ([654384e](https://github.com/archestra-ai/archestra/commit/654384e2f8d993f5f53c1507916a52c9be1142d9))
+* **chatops:** let the bot answer to the name people actually see ([#7022](https://github.com/archestra-ai/archestra/issues/7022)) ([949a2ce](https://github.com/archestra-ai/archestra/commit/949a2ce736fdbf27e374308f0e18bb34047e31f5))
+* **chatops:** make a reaction-mute stick in answer-all channels ([#7017](https://github.com/archestra-ai/archestra/issues/7017)) ([c8b06cd](https://github.com/archestra-ai/archestra/commit/c8b06cd95b59e61cda7aeacf6a21c69278e14700))
+* **frontend:** close out the machine-translation crash class ([#7019](https://github.com/archestra-ai/archestra/issues/7019)) ([26b713c](https://github.com/archestra-ai/archestra/commit/26b713c22c294327a465369eba04902546db718f))
+* **frontend:** key SearchableSelect trigger content for machine translation ([#7015](https://github.com/archestra-ai/archestra/issues/7015)) ([82ba90c](https://github.com/archestra-ai/archestra/commit/82ba90c19c719fd052ff9d306db0fc9aa1223684))
+* **frontend:** stop Chrome page-translate from crashing the app ([#6988](https://github.com/archestra-ai/archestra/issues/6988)) ([8d9655f](https://github.com/archestra-ai/archestra/commit/8d9655fd2a8e37e7171031a1bf89dc1a35634049))
+* **helm:** let the migrate job start on the upgrade that introduces the content-encryption key ([#7025](https://github.com/archestra-ai/archestra/issues/7025)) ([662def8](https://github.com/archestra-ai/archestra/commit/662def893dc7b3acff4704089fdfe9a95e09e74d))
+* **llm-proxy:** enforce guardrails on client-decorated gateway tool names ([#7023](https://github.com/archestra-ai/archestra/issues/7023)) ([a013c59](https://github.com/archestra-ai/archestra/commit/a013c59528500f5a4d3dc7f986937f25d1fcee4e))
+* **mcp:** re-add the built-in Archestra catalog to its default tool subset ([#7005](https://github.com/archestra-ai/archestra/issues/7005)) ([bc1efc3](https://github.com/archestra-ai/archestra/commit/bc1efc37f24012216ec92056039be903f6349bf2))
+* **proxy:** withhold tool calls until the invocation policy gate decides ([#6999](https://github.com/archestra-ai/archestra/issues/6999)) ([a4adc29](https://github.com/archestra-ai/archestra/commit/a4adc293b60fa2ccc02886b002b82a00be62b072))
+* **security:** no privilege escalation through role assignment or invitations ([#7031](https://github.com/archestra-ai/archestra/issues/7031)) ([fbacd16](https://github.com/archestra-ai/archestra/commit/fbacd160ff570926eff0323493c5730b84cddac0))
+* **security:** stop exporting plaintext content on OTel spans when encryption at rest is on ([#7028](https://github.com/archestra-ai/archestra/issues/7028)) ([389517b](https://github.com/archestra-ai/archestra/commit/389517b5e6c14cb3b2cd32124af270596ba6a4ed))
+
 ## [1.3.24](https://github.com/archestra-ai/archestra/compare/platform-v1.3.23...platform-v1.3.24) (2026-07-30)
 
 

@@ -39,15 +39,15 @@ jobs:
     with:
       version: ${{ github.sha }}
     secrets:
-      DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-      DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+      DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+      DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
       PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN: ${{ secrets.PLATFORM_NEXTJS_SOURCE_MAP_SENTRY_AUTH_TOKEN }}
       TURBOREPO_REMOTE_CACHING_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBOREPO_REMOTE_CACHING_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
 
   deploy-to-staging:
     name: Deploy to staging
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     needs: [deploy-dev-platform-images]
     # cancel-in-progress MUST stay false here: cancelling `helm upgrade`
     # mid-flight has previously left the release wedged in pending-upgrade.
@@ -69,8 +69,8 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: ./.github/actions/google-auth
         with:
-          service_account: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_SERVICE_ACCOUNT_NAME }}
-          workload_identity_provider: ${{ secrets.DEVELOPMENT_OAUTH_PROXY_RELEASER_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+          service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+          workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
@@ -102,6 +102,7 @@ jobs:
           ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_CLIENT_ID: ${{ secrets.ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_CLIENT_ID }}
           ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_TENANT_ID: ${{ secrets.ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_TENANT_ID }}
           ARCHESTRA_STAGING_DATABASE_URL: ${{ secrets.ARCHESTRA_STAGING_DATABASE_URL }}
+          ARCHESTRA_STAGING_CONTENT_ENCRYPTION_SECRET: ${{ secrets.ARCHESTRA_STAGING_CONTENT_ENCRYPTION_SECRET }}
         run: |
           helm upgrade archestra-platform \
             ./platform/helm/archestra \
@@ -122,7 +123,60 @@ jobs:
             --set "archestra.env.ARCHESTRA_CHAT_ANTHROPIC_API_KEY=${ARCHESTRA_STAGING_CHAT_ANTHROPIC_API_KEY}" \
             --set "archestra.env.ARCHESTRA_MICROSOFT_365_COPILOT_CLIENT_ID=${ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_CLIENT_ID}" \
             --set "archestra.env.ARCHESTRA_MICROSOFT_365_COPILOT_TENANT_ID=${ARCHESTRA_STAGING_MICROSOFT_365_COPILOT_TENANT_ID}" \
+            --set "archestra.env.ARCHESTRA_CONTENT_ENCRYPTION_SECRET=${ARCHESTRA_STAGING_CONTENT_ENCRYPTION_SECRET}" \
             --set-string "postgresql.external_database_url=${ARCHESTRA_STAGING_DATABASE_URL}" \
             --values .github/values-staging.yaml \
             --atomic \
             --timeout 15m
+
+  # Keeps the backend-unit-test shards' cargo cache warm for FRESH PR
+  # branches: Actions caches are only shared downward from the default
+  # branch, and the shards themselves never run on main. The NAPI crate
+  # builds are uncacheable in turbo (cache:false, platform-specific .node
+  # artifacts), so the shards depend on a warm cargo target dir instead —
+  # this job compiles the crates on main and saves the target dir under the
+  # same shared-key the shards restore. With a warm restore the build is an
+  # incremental no-op and the job takes ~1-2 min.
+  # See the shard job in on-pull-requests.yml for the consumer.
+  warm-backend-build-cache:
+    name: Warm Backend Build Cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: on-commits-to-main-warm-backend-cache
+      cancel-in-progress: true
+    permissions:
+      contents: read # Checkout only; the product is an Actions cache entry.
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # shared-key must stay identical to the shard job's.
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      # Retry pattern mirrors the shard job (rustup race on cold cargo builds).
+      - name: Build backend workspace dependencies
+        run: |
+          pnpm exec turbo build --filter="@backend^..." || {
+            echo "Build failed — syncing pinned Rust toolchain and retrying once..."
+            rustup show
+            pnpm exec turbo build --filter="@backend^..."
+          }

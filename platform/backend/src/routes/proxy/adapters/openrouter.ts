@@ -4,6 +4,7 @@
  * OpenRouter exposes an OpenAI-compatible API at https://openrouter.ai/api/v1
  * and recommends attribution headers (HTTP-Referer, X-OpenRouter-Title).
  */
+
 import { ApiError, ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
@@ -29,6 +30,7 @@ import {
   OpenAIResponseAdapter,
   OpenAIStreamAdapter,
 } from "./openai";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
 // TYPE ALIASES (reuse OpenAI types since OpenRouter is OpenAI-compatible)
@@ -249,6 +251,7 @@ export const openrouterAdapterFactory: LLMProvider<
       : undefined;
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: rawApiKey,
       baseURL: options.baseUrl ?? config.llm.openrouter.baseUrl,
       fetch: customFetch,

@@ -37,6 +37,15 @@ export interface ArchestraContext {
    * off a tool argument — so an app can only touch its own data store.
    */
   appId?: string;
+  /**
+   * The owned app the chat's UI currently has open, set ONLY by the chat route
+   * after `resolveOpenedApp` re-verified the viewer's access this turn. The
+   * agent-side exchange tool (`copy_file`) keys its "app" side off this — never
+   * off a tool argument — so an agent can only reach the namespace of the app
+   * the user is actually looking at. Distinct from `appId`: that is "this call
+   * IS the app runtime"; this is "the chat has an app open".
+   */
+  openedAppId?: string;
   /** The organization ID */
   organizationId?: string;
   /** Virtual API key ID used for the request */

@@ -112,6 +112,44 @@ describe("evaluatePolicies", () => {
     expect(result).toBeNull();
   });
 
+  test("a run_tool dispatch target is blocked by its sensitive-context policy even when only the wrapper was enabled", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+    makeToolPolicy,
+  }) => {
+    const agent = await makeAgent();
+    const tool = await makeTool({ name: "github__create_or_update_file" });
+    await makeAgentTool(agent.id, tool.id);
+    await makeToolPolicy(tool.id, {
+      conditions: [],
+      action: "block_when_context_is_untrusted",
+      reason: "No writes from a sensitive context",
+    });
+
+    // An external MCP client's request only enables the gateway's dispatch
+    // wrapper; the target reached through it must still be policy-evaluated
+    // rather than refused as disabled or skipped as unknown (T-996).
+    const enabledTools = new Set(["archestra__run_tool"]);
+
+    const result = await evaluatePolicies(
+      [
+        {
+          toolCallName: "github__create_or_update_file",
+          toolCallArgs: JSON.stringify({ path: "README.md" }),
+          isRunToolDispatchTarget: true,
+        },
+      ],
+      agent.id,
+      { teamIds: [] },
+      false,
+      enabledTools,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result?.blockedToolName).toBe("github__create_or_update_file");
+  });
+
   test("returns block result when policy has block_always action", async ({
     makeAgent,
     makeTool,

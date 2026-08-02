@@ -341,23 +341,44 @@ describe("MessageModel", () => {
         },
       });
 
-      const found = await MessageModel.findByContentId("nanoid-abc123");
+      const found = await MessageModel.findByAnyIdInConversation(
+        "nanoid-abc123",
+        conversation.id,
+      );
 
       expect(found).toBeDefined();
       expect(found?.id).toBe(message.id);
       expect(found?.content.id).toBe("nanoid-abc123");
     });
 
-    test("returns null for non-existent content ID", async () => {
-      const found = await MessageModel.findByContentId(
+    test("returns null for non-existent content ID", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({
+        name: "Missing Content Agent",
+        teams: [],
+      });
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "Missing Content Test",
+      });
+
+      const found = await MessageModel.findByAnyIdInConversation(
         "nonexistent-content-id",
+        conversation.id,
       );
 
       expect(found).toBeNull();
     });
   });
 
-  describe("findByAnyId", () => {
+  describe("findByAnyIdInConversation", () => {
     test("finds by DB UUID", async ({
       makeUser,
       makeOrganization,
@@ -384,7 +405,10 @@ describe("MessageModel", () => {
         },
       });
 
-      const found = await MessageModel.findByAnyId(message.id);
+      const found = await MessageModel.findByAnyIdInConversation(
+        message.id,
+        conversation.id,
+      );
 
       expect(found).toBeDefined();
       expect(found?.id).toBe(message.id);
@@ -420,15 +444,35 @@ describe("MessageModel", () => {
       });
 
       // Search by nanoid content ID (not DB UUID)
-      const found = await MessageModel.findByAnyId("27udLUYB4QsD2P8E");
+      const found = await MessageModel.findByAnyIdInConversation(
+        "27udLUYB4QsD2P8E",
+        conversation.id,
+      );
 
       expect(found).toBeDefined();
       expect(found?.id).toBe(message.id);
       expect(found?.content.id).toBe("27udLUYB4QsD2P8E");
     });
 
-    test("returns null when neither UUID nor content ID matches", async () => {
-      const found = await MessageModel.findByAnyId("completely-unknown-id");
+    test("returns null when neither UUID nor content ID matches", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      const agent = await makeAgent({ name: "AnyId Missing Agent", teams: [] });
+      const conversation = await ConversationModel.create({
+        userId: user.id,
+        organizationId: org.id,
+        agentId: agent.id,
+        title: "AnyId Missing Test",
+      });
+
+      const found = await MessageModel.findByAnyIdInConversation(
+        "completely-unknown-id",
+        conversation.id,
+      );
 
       expect(found).toBeNull();
     });

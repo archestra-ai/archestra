@@ -9,6 +9,7 @@ import {
 } from "@archestra/shared";
 import {
   AlertTriangle,
+  ArrowUpRight,
   Bot,
   Copy,
   FileSearch,
@@ -21,6 +22,7 @@ import {
   User,
   Wrench,
 } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -41,6 +43,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -68,6 +75,11 @@ import {
 } from "./deployment-status";
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
 import { InstallationProgress } from "./installation-progress";
+import {
+  type AgentUsage,
+  agentOwnerLabel,
+  deriveAgentUsage,
+} from "./mcp-server-agent-usage";
 import { OAuthReauthIndicator } from "./oauth-reauth-indicator";
 import {
   UninstallServerDialog,
@@ -271,41 +283,14 @@ export function McpServerCard({
   const hasPersonalConnection =
     personalServersForCatalog.length > 0 || !!personalServer;
 
-  // Distinct agents with tools explicitly assigned from any install of this
-  // catalog item — the audience affected if those installs go away.
-  const assignedAgents = (() => {
-    const byId = new Map<string, { id: string; name: string }>();
-    for (const server of allServersForCatalog) {
-      for (const agent of server.assignedAgents ?? []) {
-        byId.set(agent.id, agent);
-      }
-    }
-    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
-  })();
-
-  // Auto-mode agents (implicit access to all tools) can reach this server
-  // without an explicit assignment. The set is org-wide, so the same list rides
-  // on every install of this catalog item — dedupe across them.
-  const autoModeAgents = (() => {
-    const byId = new Map<string, { id: string; name: string }>();
-    for (const server of allServersForCatalog) {
-      for (const agent of server.autoModeAgents ?? []) {
-        byId.set(agent.id, agent);
-      }
-    }
-    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
-  })();
-
-  // An auto-mode agent may also carry an explicit assignment to this server
-  // (a legacy pin, or "Auto except some"), which would otherwise list it in
-  // both sections. An explicit assignment is the more specific fact, so show it
-  // once — under assigned tools — and drop it from the auto-mode list. The
-  // badge counts the distinct agents across both sections.
-  const assignedAgentIds = new Set(assignedAgents.map((agent) => agent.id));
-  const autoModeOnlyAgents = autoModeAgents.filter(
-    (agent) => !assignedAgentIds.has(agent.id),
-  );
-  const totalAgentCount = assignedAgents.length + autoModeOnlyAgents.length;
+  // The distinct agents that can reach this catalog item, across every install
+  // of it — the audience affected if those installs go away. Shared with the
+  // detail page's Usage tab so both surfaces count the same way.
+  const {
+    assigned: assignedAgents,
+    autoOnly: autoModeOnlyAgents,
+    total: totalAgentCount,
+  } = deriveAgentUsage(allServersForCatalog);
 
   // The most recent personal install for this catalog item, if any.
   const uninstallInstalls: UninstallServerInstall[] = (() => {
@@ -627,57 +612,48 @@ export function McpServerCard({
       )}
       {totalAgentCount > 0 && (
         <>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-1 cursor-help">
-                  <Bot className="h-3.5 w-3.5" />
-                  <span data-testid={`${E2eTestId.McpServerAgentsCount}`}>
-                    {totalAgentCount}
-                  </span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                {assignedAgents.length > 0 && (
-                  <>
-                    <p className="font-medium">
-                      Used by {assignedAgents.length}{" "}
-                      {assignedAgents.length === 1 ? "agent" : "agents"}{" "}
-                      (assigned tools)
-                    </p>
-                    <div className="mt-1 space-y-0.5">
-                      {assignedAgents.slice(0, 8).map((agent) => (
-                        <div key={agent.id}>{agent.name}</div>
-                      ))}
-                      {assignedAgents.length > 8 && (
-                        <div>+{assignedAgents.length - 8} more</div>
-                      )}
-                    </div>
-                  </>
-                )}
-                {assignedAgents.length > 0 && autoModeOnlyAgents.length > 0 && (
-                  <div className="my-1.5 h-px bg-border" />
-                )}
-                {autoModeOnlyAgents.length > 0 && (
-                  <>
-                    <p className="font-medium">
-                      {autoModeOnlyAgents.length} auto-mode{" "}
-                      {autoModeOnlyAgents.length === 1 ? "agent" : "agents"}{" "}
-                      (access all tools)
-                    </p>
-                    <div className="mt-1 space-y-0.5">
-                      {autoModeOnlyAgents.slice(0, 8).map((agent) => (
-                        <div key={agent.id}>{agent.name}</div>
-                      ))}
-                      {autoModeOnlyAgents.length > 8 && (
-                        <div>+{autoModeOnlyAgents.length - 8} more</div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          {/*
+            A hover card rather than a tooltip: the footer links through to the
+            full list, and tooltip content is not reachable by the pointer.
+          */}
+          <HoverCard openDelay={150}>
+            <HoverCardTrigger asChild>
+              <div className="flex items-center gap-1 cursor-help">
+                <Bot className="h-3.5 w-3.5" />
+                <span data-testid={`${E2eTestId.McpServerAgentsCount}`}>
+                  {totalAgentCount}
+                </span>
+              </div>
+            </HoverCardTrigger>
+            <HoverCardContent className="w-72 p-3 text-sm">
+              {assignedAgents.length > 0 && (
+                <AgentUsageSection
+                  title={`Used by ${assignedAgents.length} ${
+                    assignedAgents.length === 1 ? "agent" : "agents"
+                  } (assigned tools)`}
+                  agents={assignedAgents}
+                />
+              )}
+              {assignedAgents.length > 0 && autoModeOnlyAgents.length > 0 && (
+                <div className="my-2 h-px bg-border" />
+              )}
+              {autoModeOnlyAgents.length > 0 && (
+                <AgentUsageSection
+                  title={`${autoModeOnlyAgents.length} auto-mode ${
+                    autoModeOnlyAgents.length === 1 ? "agent" : "agents"
+                  } (access all tools)`}
+                  agents={autoModeOnlyAgents}
+                />
+              )}
+              <Link
+                href={`/mcp/registry/${item.id}?tab=usage`}
+                className="mt-2.5 flex items-center gap-1 border-t pt-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <span>View all usage</span>
+                <ArrowUpRight className="h-3 w-3" />
+              </Link>
+            </HoverCardContent>
+          </HoverCard>
           <div className="h-4 w-px bg-border" />
         </>
       )}
@@ -1148,3 +1124,46 @@ export function McpServerCard({
     </Card>
   );
 }
+
+/**
+ * One "used by" group in the card's hover card. Personal agents are seeded per
+ * member and all share a name, so each is attributed to its owner — without it
+ * the list reads as several identical "My Assistant" rows.
+ */
+function AgentUsageSection({
+  title,
+  agents,
+}: {
+  title: string;
+  agents: AgentUsage[];
+}) {
+  const shown = agents.slice(0, AGENT_USAGE_PREVIEW_LIMIT);
+  const remaining = agents.length - shown.length;
+
+  return (
+    <>
+      <p className="font-medium">{title}</p>
+      <div className="mt-1 space-y-0.5">
+        {shown.map((agent) => {
+          const owner = agentOwnerLabel(agent);
+          return (
+            <div key={agent.id} className="flex items-baseline gap-1.5">
+              <span className="truncate">{agent.name}</span>
+              {owner && (
+                <span className="truncate text-xs text-muted-foreground">
+                  {owner}
+                </span>
+              )}
+            </div>
+          );
+        })}
+        {remaining > 0 && (
+          <div className="text-muted-foreground">+{remaining} more</div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** How many agents each hover-card group lists before collapsing to "+N more". */
+const AGENT_USAGE_PREVIEW_LIMIT = 8;

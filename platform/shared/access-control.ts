@@ -8,6 +8,7 @@ import {
   ADMIN_ROLE_NAME,
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
+  PLATFORM_ADMIN_ROLE_NAME,
   type PredefinedRoleName,
 } from "./roles";
 import { RouteId } from "./routes";
@@ -109,7 +110,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "manage-deleted",
     "admin",
   ],
-  mcpServerInstallationRequest: ["read", "create", "update", "delete", "admin"],
   environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
 
@@ -137,12 +137,12 @@ export const allAvailableActions: Record<Resource, Action[]> = {
     "read-all",
   ],
   file: ["manage"],
-  log: ["read"],
+  log: ["read", "admin"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
   serviceAccount: ["read", "create", "update", "delete"],
-  auditLog: ["read"],
+  auditLog: ["read", "admin"],
   agentSettings: ["read", "update"],
   llmSettings: ["read", "update"],
   mcpSettings: ["read", "update"],
@@ -236,7 +236,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
     "deploy-to-restricted",
   ],
   mcpServerInstallation: ["read", "create", "update", "delete"],
-  mcpServerInstallationRequest: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
   githubAppConfig: ["read", "create", "update", "delete"],
 
@@ -255,6 +254,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   chat: ["read", "create", "update", "delete"],
   project: ["read", "create", "update", "delete", "share-org"],
   file: ["manage"],
+  // Editors see only their own logs; org-wide visibility is log:admin,
+  // reserved for admin-tier roles.
   log: ["read"],
 
   // Administration (overrides better-auth defaults to add "read" where needed)
@@ -316,7 +317,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   toolPolicy: ["read"],
   mcpRegistry: ["read", "update"],
   mcpServerInstallation: ["read", "create", "delete"],
-  mcpServerInstallationRequest: ["read", "create", "update"],
   environment: ["read"],
   // minting installation tokens from a stored App credential is privileged;
   // default members get no access — editors and admins manage/use App configs
@@ -362,14 +362,71 @@ export const memberPermissions: Record<Resource, Action[]> = {
   organization: [],
 };
 
+/**
+ * The no-privilege-escalation rule, shared by every server-side grant path
+ * (role authoring, member role assignment, invitations, service-account
+ * roles, the org default role) and by the UI that previews it: a role may
+ * only be granted by someone who already holds every permission it carries.
+ * Returns the `resource:action` pairs the granter is missing (empty = OK).
+ *
+ * UI-behavior resources are exempt — predefined admin deliberately holds
+ * LESS than member on those (e.g. `simpleView`), so including them would
+ * make ordinary grants impossible.
+ */
+export function findUngrantablePermissions(
+  granterPermissions: Permissions,
+  rolePermissions: Permissions,
+): string[] {
+  const exemptUiResources: Resource[] = [
+    "simpleView",
+    "chatAgentPicker",
+    "chatProviderSettings",
+  ];
+
+  const missing: string[] = [];
+  for (const [resource, actions] of Object.entries(rolePermissions)) {
+    if (exemptUiResources.includes(resource as Resource)) continue;
+    const granterActions = granterPermissions[resource as Resource] || [];
+    const realActions = allAvailableActions[resource as Resource] || [];
+    for (const action of actions ?? []) {
+      // Actions outside the permission universe grant nothing (RBAC checks
+      // resolve against allAvailableActions), so they cannot be escalation.
+      // Predefined sets carry a few such vestigial actions (e.g. the editor
+      // role's invitation:read); without this filter no one could grant them.
+      if (!realActions.includes(action)) continue;
+      if (!granterActions.includes(action)) {
+        missing.push(`${resource}:${action}`);
+      }
+    }
+  }
+  return missing;
+}
+
 export const adminPermissions: Record<Resource, Action[]> = {
   ...allAvailableActions,
   simpleView: [],
 };
 
+/**
+ * Platform Admin: runs the deployment — full user, role, and settings
+ * management — while org-wide log visibility and impersonation stay withheld.
+ * They keep log:read / auditLog:read, so their OWN activity stays visible to
+ * them. Combined with the no-escalation rule (a role can only be granted by
+ * someone holding every permission it carries), holders cannot hand
+ * themselves or anyone else a role that would widen their visibility.
+ */
+export const platformAdminPermissions: Record<Resource, Action[]> = {
+  ...allAvailableActions,
+  simpleView: [],
+  log: ["read"],
+  auditLog: ["read"],
+  member: allAvailableActions.member.filter((a) => a !== "impersonate"),
+};
+
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
   {
     [ADMIN_ROLE_NAME]: adminPermissions,
+    [PLATFORM_ADMIN_ROLE_NAME]: platformAdminPermissions,
     [EDITOR_ROLE_NAME]: editorPermissions,
     [MEMBER_ROLE_NAME]: memberPermissions,
   };
@@ -467,13 +524,6 @@ export const permissionDescriptions: Record<string, string> = {
     "View and restore soft-deleted (uninstalled) MCP servers",
   "mcpServerInstallation:admin":
     "Approve or manage all MCP server installations",
-  "mcpServerInstallationRequest:read": "View MCP server installation requests",
-  "mcpServerInstallationRequest:create":
-    "Submit requests to install MCP servers",
-  "mcpServerInstallationRequest:update": "Add notes to installation requests",
-  "mcpServerInstallationRequest:delete": "Delete installation requests",
-  "mcpServerInstallationRequest:admin":
-    "Approve or decline installation requests",
   "environment:read": "View and list deployment environments",
   "environment:create": "Create deployment environments",
   "environment:update":
@@ -553,7 +603,8 @@ export const permissionDescriptions: Record<string, string> = {
   "project:read-all":
     "View chats that other members started in any project you can access. Without this, you only see the chats you started yourself — including in projects you own.",
   "file:manage": "List, read, write, and delete files in chats and projects",
-  "log:read": "View LLM proxy and MCP tool call logs",
+  "log:read": "View your own LLM proxy and MCP tool call logs",
+  "log:admin": "View every user's LLM proxy and MCP tool call logs",
 
   // Administration
   "member:read": "View organization members and their roles",
@@ -585,8 +636,9 @@ export const permissionDescriptions: Record<string, string> = {
   "serviceAccount:create": "Create service accounts",
   "serviceAccount:update": "Modify service accounts",
   "serviceAccount:delete": "Delete service accounts",
-  "auditLog:read":
-    "View the organization-wide audit log of administrative actions",
+  "auditLog:read": "View audit log records of your own administrative actions",
+  "auditLog:admin":
+    "View the organization-wide audit log of every member's administrative actions",
   "organizationSettings:read":
     "View organization settings (appearance, authentication, etc)",
   "organizationSettings:update":
@@ -673,6 +725,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
   [RouteId.RestoreAgent]: {},
+  // Version history: agent-type read permission checked dynamically in handler
+  [RouteId.GetAgentVersions]: {},
+  [RouteId.GetAgentVersion]: {},
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},
@@ -902,30 +957,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetMcpServerInstallationStatus]: {
     mcpServerInstallation: ["read"],
-  },
-  [RouteId.GetMcpServerInstallationRequests]: {
-    mcpServerInstallationRequest: ["read"],
-  },
-  [RouteId.CreateMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["create"],
-  },
-  [RouteId.GetMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["read"],
-  },
-  [RouteId.UpdateMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["update"],
-  },
-  [RouteId.ApproveMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["admin"],
-  },
-  [RouteId.DeclineMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["admin"],
-  },
-  [RouteId.AddMcpServerInstallationRequestNote]: {
-    mcpServerInstallationRequest: ["update"],
-  },
-  [RouteId.DeleteMcpServerInstallationRequest]: {
-    mcpServerInstallationRequest: ["delete"],
   },
   [RouteId.InitiateOAuth]: {
     mcpServerInstallation: ["create"],
@@ -1400,6 +1431,10 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route
    */
   [RouteId.GetPublicConfig]: {},
+  // Public: reports only whether a two-factor sign-in challenge is pending,
+  // so the auth pages can redirect when they don't apply. Auth is skipped in
+  // middleware for this path.
+  [RouteId.GetAuthState]: {},
   /**
    * Get public appearance settings (theme, logo, font) for login page
    * Available to unauthenticated users
@@ -1661,6 +1696,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
   [RouteId.GetSkillUsageStatistics]: { skill: ["read"] },
+  [RouteId.GetSkillVersions]: { skill: ["read"] },
+  [RouteId.GetSkillVersion]: { skill: ["read"] },
   [RouteId.EnableSkillToolDefaults]: { skill: ["admin"] },
   // matches the `download_file` tool (sandbox:execute) that hands out this
   // URL, so a role allowed to produce an artifact can also fetch it.
@@ -1878,9 +1915,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
 
   "/mcp/tool-policies": { toolPolicy: ["read"] },
   "/mcp/tool-guardrails": { toolPolicy: ["read"] },
-  "/mcp/registry/installation-requests": {
-    mcpServerInstallationRequest: ["read"],
-  },
 
   // Logs
   "/llm/logs": { log: ["read"] },
@@ -1906,7 +1940,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { secret: ["read"] },
   "/settings/github": { githubAppConfig: ["read"] },
-  "/settings/organization": { organizationSettings: ["read"] },
+  "/settings/appearance": { organizationSettings: ["read"] },
+  "/settings/auth": { organizationSettings: ["read"] },
 };
 
 // === Internal helpers

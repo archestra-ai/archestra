@@ -62,6 +62,8 @@ const service = websocketService as unknown as {
   mcpExecSubscriptions: Map<WS, McpExecSubscription>;
   mcpDeploymentStatusSubscriptions: Map<WS, McpDeploymentStatusSubscription>;
   mcpDeploymentStatusPollInterval: NodeJS.Timeout | null;
+  lastMcpDeploymentRefreshAt: number;
+  unsubscribeMcpDeploymentStatuses: (ws: WS) => void;
   initBrowserStreamContextForTesting: () => void;
   wss: { clients: Set<WS> } | null;
 };
@@ -1009,6 +1011,138 @@ describe("websocket MCP deployment statuses shared poller", () => {
     await vi.advanceTimersByTimeAsync(10_000);
 
     expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test("a watch-triggered manager refresh pushes fresh statuses without waiting for the poll tick", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    const mcpServer = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    vi.spyOn(McpServerRuntimeManager, "refreshAllStates").mockResolvedValue(
+      undefined,
+    );
+    let summary: typeof McpServerRuntimeManager.statusSummary = {
+      status: "running",
+      mcpServers: {},
+    };
+    vi.spyOn(
+      McpServerRuntimeManager,
+      "statusSummary",
+      "get",
+    ).mockImplementation(() => summary);
+
+    const ws = makeWs();
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+    await subscribe(ws);
+    expect(ws.send).toHaveBeenCalledTimes(1);
+
+    try {
+      // The cluster changes; the manager's watch layer refreshes and
+      // notifies. No poll tick elapses (interval timers stay frozen), yet
+      // the subscriber receives the update.
+      summary = {
+        status: "running",
+        mcpServers: {
+          [mcpServer.id]: {
+            state: "running",
+            message: "Deployment is running",
+            error: null,
+            serverName: "test-server",
+            deploymentName: `mcp-${mcpServer.id}`,
+            namespace: "default",
+          },
+        },
+      };
+      (
+        McpServerRuntimeManager as unknown as {
+          scheduleWatchTriggeredRefresh: () => void;
+        }
+      ).scheduleWatchTriggeredRefresh();
+
+      await vi.waitFor(() => expect(ws.send).toHaveBeenCalledTimes(2), {
+        timeout: 5_000,
+      });
+      const pushed = JSON.parse(
+        (ws.send as ReturnType<typeof vi.fn>).mock.calls[1][0],
+      );
+      expect(pushed.type).toBe("mcp_deployment_statuses");
+      expect(pushed.payload.statuses[mcpServer.id].state).toBe("running");
+    } finally {
+      service.unsubscribeMcpDeploymentStatuses(ws);
+    }
+  });
+
+  test("poll ticks skip the K8s refresh while watch streams are healthy and state is fresh", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({ serverType: "local" });
+    await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    const refreshSpy = vi
+      .spyOn(McpServerRuntimeManager, "refreshAllStates")
+      .mockResolvedValue(undefined);
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {},
+    });
+    vi.spyOn(
+      McpServerRuntimeManager,
+      "deploymentStateWatchersActive",
+      "get",
+    ).mockReturnValue(true);
+
+    const ws = makeWs();
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+    await subscribe(ws);
+
+    try {
+      refreshSpy.mockClear();
+      service.lastMcpDeploymentRefreshAt = Date.now();
+      await vi.advanceTimersByTimeAsync(10_000);
+      // Watchers healthy + fresh state: the tick is a no-op resync check.
+      expect(refreshSpy).not.toHaveBeenCalled();
+
+      // Stale state (past the resync window): the tick re-polls as a
+      // safety net against missed watch events.
+      service.lastMcpDeploymentRefreshAt = Date.now() - 61_000;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(refreshSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      service.unsubscribeMcpDeploymentStatuses(ws);
+    }
   });
 
   test("sends per-subscriber updates scoped to each subscriber's accessible servers", async ({

@@ -351,6 +351,9 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           supportsFqdn: true,
           supportsHttpMethods: false,
           message: null,
+          enforcementSource: "api-discovery",
+          probe: "absent",
+          probedAt: null,
         },
       }),
     ).toBe(true);
@@ -366,6 +369,9 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           supportsFqdn: false,
           supportsHttpMethods: false,
           message: null,
+          enforcementSource: "api-discovery",
+          probe: "absent",
+          probedAt: null,
         },
       }),
     ).toBe(false);
@@ -389,6 +395,9 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           supportsFqdn: true,
           supportsHttpMethods: false,
           message: null,
+          enforcementSource: "api-discovery",
+          probe: "absent",
+          probedAt: null,
         },
       }),
     ).toBe(true);
@@ -404,6 +413,9 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           supportsFqdn: true,
           supportsHttpMethods: false,
           message: null,
+          enforcementSource: "api-discovery",
+          probe: "absent",
+          probedAt: null,
         },
       }),
     ).toBe(false);
@@ -427,6 +439,9 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           supportsFqdn: true,
           supportsHttpMethods: false,
           message: null,
+          enforcementSource: "api-discovery",
+          probe: "absent",
+          probedAt: null,
         },
       }),
     ).toBe(true);
@@ -442,6 +457,9 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
           supportsFqdn: true,
           supportsHttpMethods: false,
           message: null,
+          enforcementSource: "api-discovery",
+          probe: "absent",
+          probedAt: null,
         },
       }),
     ).toBe(false);
@@ -457,6 +475,9 @@ describe("managed MCP Kubernetes NetworkPolicy", () => {
       supportsFqdn: true,
       supportsHttpMethods: false,
       message: null,
+      enforcementSource: "api-discovery" as const,
+      probe: "absent" as const,
+      probedAt: null,
     };
     expect(
       shouldUseAwsApplicationNetworkPolicy({

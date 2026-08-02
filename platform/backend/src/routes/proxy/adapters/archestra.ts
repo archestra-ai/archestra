@@ -13,6 +13,7 @@ import config from "@/config";
 import { metrics } from "@/observability";
 import type { CreateClientOptions } from "@/types";
 import { createOpenAiCompatibleAdapterFactory } from "./openai-compatible-adapter";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 export const archestraAdapterFactory = createOpenAiCompatibleAdapterFactory({
   provider: "archestra",
@@ -31,6 +32,7 @@ export const archestraAdapterFactory = createOpenAiCompatibleAdapterFactory({
       : undefined;
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl ?? config.llm.archestra.baseUrl,
       fetch: customFetch,

@@ -4,6 +4,7 @@ export * as tracing from "@/observability/tracing";
 export * as tokenizers from "@/tokenizers";
 export { resolveInteractionBillingMode } from "./billing-mode";
 export * as costOptimization from "./cost-optimization";
+export * as gatewayToolNames from "./gateway-tool-names";
 export * as headers from "./headers";
 export { checkModelTeamAccess } from "./model-team-access";
 export * as tools from "./tools";

@@ -5,6 +5,7 @@
  * This adapter delegates request/response/stream parsing to the OpenAI adapters
  * and only overrides provider-specific configuration (baseUrl, api key behavior).
  */
+
 import {
   ArchestraInternalErrorCode,
   GROQ_REQUEST_EXCEEDS_BUCKET_STATUS,
@@ -31,6 +32,7 @@ import {
   OpenAIResponseAdapter,
   OpenAIStreamAdapter,
 } from "./openai";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
 // TYPE ALIASES (reuse OpenAI types since Groq is OpenAI-compatible)
@@ -228,6 +230,7 @@ export const groqAdapterFactory: LLMProvider<
       : undefined;
 
     return new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey,
       baseURL: options.baseUrl,
       fetch: customFetch,

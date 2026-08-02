@@ -60,6 +60,8 @@ class McpToolCallModel {
       startDate?: Date;
       endDate?: Date;
       search?: string;
+      /** Narrow to rows attributed to this user (the own-logs log:read view). */
+      ownUserId?: string;
     },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Determine the ORDER BY clause based on sorting params
@@ -67,6 +69,9 @@ class McpToolCallModel {
 
     // Build where clauses
     const conditions: SQL[] = [];
+    if (filters?.ownUserId) {
+      conditions.push(eq(schema.mcpToolCallsTable.userId, filters.ownUserId));
+    }
 
     // Access control filter
     if (userId && !isMcpServerAdmin) {
@@ -244,10 +249,15 @@ class McpToolCallModel {
       startDate?: Date;
       endDate?: Date;
       search?: string;
+      /** Narrow to rows attributed to this user (the own-logs log:read view). */
+      ownUserId?: string;
     },
   ): Promise<PaginatedResult<McpToolCall>> {
     // Build conditions array
     const conditions: SQL[] = [eq(schema.mcpToolCallsTable.agentId, agentId)];
+    if (filters?.ownUserId) {
+      conditions.push(eq(schema.mcpToolCallsTable.userId, filters.ownUserId));
+    }
 
     // Add any custom where clauses
     if (whereClauses && whereClauses.length > 0) {
@@ -314,6 +324,49 @@ class McpToolCallModel {
       .from(schema.mcpToolCallsTable);
     return result.total;
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * Enterprise data-retention sweep: delete tool-call rows older than the
+   * retention window in bounded batches. Batches stay small because the three
+   * GIN trigram indexes (method, server name, tool_result) make bulk deletes
+   * substantially more expensive than the row count suggests. SQL-side cutoff
+   * for the same timestamp-without-time-zone reason as the interactions sweep.
+   */
+  static async deleteExpired(params: {
+    retentionDays: number;
+    batchSize?: number;
+    maxBatches?: number;
+  }): Promise<number> {
+    const batchSize = params.batchSize ?? 500;
+    const maxBatches = params.maxBatches ?? 1000;
+    let totalDeleted = 0;
+
+    for (let batch = 0; batch < maxBatches; batch++) {
+      const result = await db.execute<{ deleted: number }>(sql`
+        WITH fence AS (
+          SELECT id
+          FROM ${schema.mcpToolCallsTable}
+          WHERE created_at < now()::timestamp - make_interval(days => ${params.retentionDays})
+          LIMIT ${batchSize}
+        ),
+        removed AS (
+          DELETE FROM ${schema.mcpToolCallsTable}
+          WHERE id IN (SELECT id FROM fence)
+          RETURNING 1
+        )
+        SELECT COUNT(*)::int AS deleted FROM removed
+      `);
+      const deleted = Number(result.rows[0]?.deleted ?? 0);
+      totalDeleted += deleted;
+      if (deleted < batchSize) break;
+    }
+
+    return totalDeleted;
+  }
+  // SPDX-SnippetEnd
 
   /**
    * Batch-load the timestamp of the most recent MCP call (any method) per

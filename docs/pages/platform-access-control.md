@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-07-31
+lastUpdated: 2026-08-01
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -20,6 +20,8 @@ Permissions in Archestra are defined using a `resource:action` format, where:
 
 For example, the permission `agent:create` allows creating new agents, `mcpGateway:update` allows updating MCP gateways, whereas `llmProxy:read` would allow reading LLM proxies.
 
+Two resources distinguish an own-records view from an organization-wide one: `log:read` shows only the caller's own LLM proxy and MCP tool-call records, while `log:admin` shows every user's; `auditLog:read` and `auditLog:admin` split the audit trail the same way. This is what makes a deliberately-restricted admin role practical — its holders keep full visibility into their own activity without seeing anyone else's.
+
 ## Predefined Roles
 
 The following roles are built into Archestra and cannot be modified or deleted:
@@ -29,6 +31,12 @@ The following roles are built into Archestra and cannot be modified or deleted:
 Full access to all resources including user management, roles, and platform settings
 
 The admin role has **all permissions** on every resource.
+
+### Platform Admin
+
+Runs the platform — everything an admin can do, except reading other users' logs, reading the audit log, and impersonating users
+
+Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, and `member:impersonate` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, and impersonation stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
 
 ### Editor
 
@@ -55,7 +63,6 @@ Full access to core resources and settings, but cannot manage users, roles, or i
 | Tools & Policies | `read`, `create`, `update`, `delete` |
 | MCP Registry | `read`, `create`, `update`, `delete`, `team-admin`, `deploy-to-restricted` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
-| MCP Server Installation Requests | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
 | GitHub App Configurations | `read`, `create`, `update`, `delete` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query`, `deploy-to-restricted` |
@@ -101,7 +108,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Tools & Policies | `read` |
 | MCP Registry | `read`, `update` |
 | MCP Server Installations | `read`, `create`, `delete` |
-| MCP Server Installation Requests | `read`, `create`, `update` |
 | Environments | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete` |
@@ -118,7 +124,19 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 
 ## Custom Roles
 
-Users with `ac:create` permission can create custom roles by selecting specific permission combinations. Custom roles allow fine-grained access control tailored to your needs. Note that you can only grant permissions that you already possess — this prevents privilege escalation.
+Users with `ac:create` permission can create custom roles by selecting specific permission combinations. Custom roles allow fine-grained access control tailored to your needs.
+
+#### No privilege escalation
+
+A role can only be granted by someone who already holds every permission it carries. This single rule is enforced server-side on **every** grant path:
+
+- creating or editing a custom role's permissions,
+- changing a member's role,
+- inviting a user with a role,
+- setting the organization's default member role,
+- creating or updating a service account.
+
+The role pickers in the UI disable roles you cannot grant and explain which permissions you are missing. The rule is what makes deliberately-restricted admin roles trustworthy: an admin role created without, say, `log:read`, `auditLog:read`, and `member:impersonate` cannot be escaped by its holders — with `member:update` they can still manage users freely inside their own permission set, but any attempt to hand out (to themselves or anyone else) a role carrying the withheld permissions is rejected. Roles applied by an identity provider through [SSO role mapping](/docs/platform-sso-role-mapping) are the deliberate exception: they are granted by the IdP configuration, not by a platform user.
 
 ### Available Permissions
 
@@ -153,7 +171,8 @@ The following table lists all available permissions that can be assigned to cust
 | `app:team-admin` | Manage team assignments for MCP Apps |
 | `app:admin` | Full administrative control over all MCP Apps, bypassing team restrictions |
 | `app:deploy-to-restricted` | Assign MCP Apps to restricted deployment environments |
-| `auditLog:read` | View the organization-wide audit log of administrative actions |
+| `auditLog:read` | View audit log records of your own administrative actions |
+| `auditLog:admin` | View the organization-wide audit log of every member's administrative actions |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |
@@ -221,7 +240,8 @@ The following table lists all available permissions that can be assigned to cust
 | `llmVirtualKey:update` | Modify LLM virtual keys and their visibility |
 | `llmVirtualKey:delete` | Delete LLM virtual keys |
 | `llmVirtualKey:admin` | Manage all LLM virtual keys and view every scope |
-| `log:read` | View LLM proxy and MCP tool call logs |
+| `log:read` | View your own LLM proxy and MCP tool call logs |
+| `log:admin` | View every user's LLM proxy and MCP tool call logs |
 | `mcpGateway:read` | View and list MCP gateways |
 | `mcpGateway:create` | Create new MCP gateways |
 | `mcpGateway:update` | Modify MCP gateway configuration |
@@ -248,11 +268,6 @@ The following table lists all available permissions that can be assigned to cust
 | `mcpServerInstallation:delete` | Uninstall MCP servers |
 | `mcpServerInstallation:manage-deleted` | View and restore soft-deleted (uninstalled) MCP servers |
 | `mcpServerInstallation:admin` | Approve or manage all MCP server installations |
-| `mcpServerInstallationRequest:read` | View MCP server installation requests |
-| `mcpServerInstallationRequest:create` | Submit requests to install MCP servers |
-| `mcpServerInstallationRequest:update` | Add notes to installation requests |
-| `mcpServerInstallationRequest:delete` | Delete installation requests |
-| `mcpServerInstallationRequest:admin` | Approve or decline installation requests |
 | `mcpSettings:read` | View MCP settings (online catalog availability) |
 | `mcpSettings:update` | Modify MCP settings |
 | `member:read` | View organization members and their roles |

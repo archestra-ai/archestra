@@ -3,7 +3,7 @@ title: "API Reference"
 category: Archestra Platform
 description: "Interactive API documentation for Archestra"
 order: 6
-lastUpdated: 2026-07-20
+lastUpdated: 2026-08-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,7 +16,7 @@ Use a personal API key or service account token in the `Authorization` header.
 
 ### Personal API Keys
 
-Personal API keys are owned by one user. Create them in the API Keys section on **Your Account** — click your name in the sidebar. They use the owner's current role, so permission changes to that user immediately affect the key.
+Personal API keys are owned by one user. Create them in the API Keys section in **Personal Settings** — click your name in the sidebar. They use the owner's current role, so permission changes to that user immediately affect the key.
 
 Use personal keys for local scripts, development tools, and user-owned automation.
 

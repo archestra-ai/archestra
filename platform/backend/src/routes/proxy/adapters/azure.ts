@@ -10,6 +10,7 @@
  * This adapter delegates request/response/stream parsing to the OpenAI adapters
  * and only overrides provider-specific configuration.
  */
+
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
@@ -44,6 +45,7 @@ import {
   OpenAIResponseAdapter,
   OpenAIStreamAdapter,
 } from "./openai";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 // =============================================================================
 // TYPE ALIASES
@@ -245,6 +247,7 @@ export const azureAdapterFactory: LLMProvider<
 
     if (!apiKey && isAzureOpenAiEntraIdEnabled()) {
       const client = new OpenAIProvider({
+        maxRetries: PROXY_SDK_MAX_RETRIES,
         apiKey: getAzureOpenAiBearerTokenProvider(options.baseUrl),
         baseURL: options.baseUrl,
         defaultQuery: getAzureDefaultQuery(options.baseUrl),
@@ -275,6 +278,7 @@ export const azureAdapterFactory: LLMProvider<
     };
 
     const client = new OpenAIProvider({
+      maxRetries: PROXY_SDK_MAX_RETRIES,
       apiKey: normalizedApiKey,
       baseURL: options.baseUrl,
       defaultQuery: getAzureDefaultQuery(options.baseUrl),
@@ -400,6 +404,7 @@ function getAzureClientForRequest(
   }
 
   return new OpenAIProvider({
+    maxRetries: PROXY_SDK_MAX_RETRIES,
     apiKey:
       azureClient.apiKey ??
       getAzureOpenAiBearerTokenProvider(deploymentBaseUrl),

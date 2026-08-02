@@ -132,3 +132,35 @@ describe("AnthropicOpenaiStreamAdapter.getRawToolCallEvents", () => {
     expect(JSON.parse(byIndex.get(1)?.args ?? "")).toEqual({ cmd: "pwd" });
   });
 });
+
+// toProviderResponse() is the persisted record, and it delegates to the inner
+// Anthropic adapter, which lists tool calls only once they have been handed
+// over. This wrapper keeps its own buffer and returns OpenAI-shaped events, so
+// reading them has to reach the inner adapter too or the record silently drops
+// calls the client did receive — with no type error and no failing wire
+// assertion.
+describe("AnthropicOpenaiStreamAdapter tool-call release", () => {
+  it("records the delivered tool calls once they are read", () => {
+    const adapter = makeAdapter();
+    feedParallelToolCalls(adapter);
+
+    adapter.getRawToolCallEvents();
+
+    expect(
+      adapter
+        .toProviderResponse()
+        .content.filter((block) => block.type === "tool_use"),
+    ).toMatchObject([{ id: "toolu_A" }, { id: "toolu_B" }]);
+  });
+
+  it("records no tool calls for a turn that ended before the gate", () => {
+    const adapter = makeAdapter();
+    feedParallelToolCalls(adapter);
+
+    expect(
+      adapter
+        .toProviderResponse()
+        .content.some((block) => block.type === "tool_use"),
+    ).toBe(false);
+  });
+});

@@ -120,6 +120,7 @@ describe("resolveBestAvailableLlm", () => {
       apiKey: "sk-ant-key",
       modelName: "claude-3-5-sonnet-20241022",
       baseUrl: null,
+      chatApiKeyId: "key-123",
     });
   });
 
@@ -164,6 +165,7 @@ describe("resolveBestAvailableLlm", () => {
       apiKey: undefined,
       modelName: "gemini-2.5-pro",
       baseUrl: "https://us-central1-aiplatform.googleapis.com/v1beta1",
+      chatApiKeyId: "system-key-gemini",
     });
   });
 
@@ -219,6 +221,7 @@ describe("resolveBestAvailableLlm", () => {
       apiKey: "sk-openai-key",
       modelName: "gpt-4o",
       baseUrl: null,
+      chatApiKeyId: "openai-key-id",
     });
   });
 
@@ -879,6 +882,7 @@ describe("resolveAgentLlmOrDefault", () => {
       apiKey: "org-key",
       modelName: "anthropic.claude-sonnet-4-5",
       baseUrl: "https://bedrock.example.test",
+      chatApiKeyId: "key-org",
     });
   });
 
@@ -929,6 +933,7 @@ describe("resolveAgentLlmOrDefault", () => {
       apiKey: "openai-key",
       modelName: "gpt-best",
       baseUrl: null,
+      chatApiKeyId: "key-available",
     });
   });
 });

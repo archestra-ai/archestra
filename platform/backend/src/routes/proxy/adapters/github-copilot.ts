@@ -14,6 +14,7 @@ import { metrics } from "@/observability";
 import { createGithubCopilotFetch } from "@/services/github-copilot-token";
 import type { CreateClientOptions } from "@/types";
 import { createOpenAiCompatibleAdapterFactory } from "./openai-compatible-adapter";
+import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 
 export const githubCopilotAdapterFactory = createOpenAiCompatibleAdapterFactory(
   {
@@ -33,6 +34,7 @@ export const githubCopilotAdapterFactory = createOpenAiCompatibleAdapterFactory(
         : undefined;
 
       return new OpenAIProvider({
+        maxRetries: PROXY_SDK_MAX_RETRIES,
         // Placeholder satisfies the SDK; the wrapper sets the real bearer.
         apiKey: apiKey ?? "github-copilot",
         baseURL: options.baseUrl ?? config.llm["github-copilot"].baseUrl,

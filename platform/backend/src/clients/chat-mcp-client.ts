@@ -811,6 +811,7 @@ export async function getChatMcpTools({
   enabledToolIds,
   conversationId,
   isolationKey,
+  openedAppId,
   sessionId,
   delegationChain,
   abortSignal,
@@ -844,6 +845,8 @@ export async function getChatMcpTools({
    * conversation id.
    */
   isolationKey?: string;
+  /** The owned app the chat UI has open, access-verified this turn. */
+  openedAppId?: string;
   /** Session ID for grouping related LLM requests in logs */
   sessionId?: string;
   /** Delegation chain of agent IDs for tracking delegated agent calls */
@@ -1005,6 +1008,7 @@ export async function getChatMcpTools({
       organizationId,
       conversationId,
       scopeKey,
+      openedAppId,
       chatOpsBindingId,
       chatOpsThreadId,
       sessionId,

@@ -121,6 +121,9 @@ export const DEFAULT_LLM_PROXY_NAME = "Default LLM Proxy";
 /** @deprecated Default Team is no longer auto-created/auto-assigned. Kept for backward compat with E2E tests. */
 export const DEFAULT_TEAM_NAME = "Default Team";
 
+export const SESSION_MAX_AGE_MIN_SECONDS = 3600;
+export const SESSION_MAX_AGE_MAX_SECONDS = 31_536_000;
+
 export const OAUTH_ACCESS_TOKEN_MIN_LIFETIME_SECONDS = 300;
 export const OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS = 31_536_000;
 export const DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS = 31_536_000;
@@ -326,6 +329,32 @@ export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
  * clients from spoofing arbitrary key IDs.
  */
 export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
+
+/**
+ * Requests the strongest thinking-off configuration the Anthropic model
+ * supports: `thinking: {type: "disabled"}` where accepted (Opus 5, Sonnet 5),
+ * or an `output_config.effort` floor on the Fable/Mythos class, which thinks
+ * unconditionally. Set per call (dual LLM interrogation); consumed and
+ * removed by the backend's Anthropic fetch wrapper before the request is
+ * sent. A header rather than a providerOptions value because the installed
+ * @ai-sdk/anthropic serializes `thinking` only for the enabled/adaptive
+ * variants, so no providerOptions value can carry a disable to the wire.
+ */
+export const ANTHROPIC_THINKING_OFF_HEADER =
+  "x-archestra-anthropic-thinking-off";
+
+/**
+ * Header used to pass a per-turn dual LLM progress channel id from chat → LLM
+ * proxy (loopback). When present, the proxy publishes structured dual LLM
+ * analysis events (start / Q&A / complete / failure) on the in-process
+ * progress bus under this channel instead of injecting narration text into
+ * the response stream — injected narration is indistinguishable from model
+ * output on chat-completions streams and fuses into the assistant's answer.
+ * Clients without the header receive protocol-level SSE keep-alive comments
+ * while an analysis holds the stream idle.
+ */
+export const DUAL_LLM_PROGRESS_CHANNEL_HEADER =
+  "X-Archestra-Dual-Llm-Progress-Channel";
 
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 

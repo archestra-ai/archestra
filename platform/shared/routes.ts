@@ -10,6 +10,8 @@ export const RouteId = {
   UpdateAgent: "updateAgent",
   DeleteAgent: "deleteAgent",
   RestoreAgent: "restoreAgent",
+  GetAgentVersions: "getAgentVersions",
+  GetAgentVersion: "getAgentVersion",
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
   GetAgentToolExclusions: "getAgentToolExclusions",
@@ -55,6 +57,7 @@ export const RouteId = {
 
   // Auth Routes
   GetDefaultCredentialsStatus: "getDefaultCredentialsStatus",
+  GetAuthState: "getAuthState",
 
   // MCP Catalog Routes
   GetInternalMcpCatalog: "getInternalMcpCatalog",
@@ -95,16 +98,6 @@ export const RouteId = {
   McpGatewayPost: "mcpGatewayPost",
   McpProxyPost: "mcpProxyPost", // Frontend session-based proxy to MCP Gateway
   McpServerProxyPost: "mcpServerProxyPost", // Session-based proxy to one installed server's MCP App runtime
-
-  // MCP Server Installation Request Routes
-  GetMcpServerInstallationRequests: "getMcpServerInstallationRequests",
-  CreateMcpServerInstallationRequest: "createMcpServerInstallationRequest",
-  GetMcpServerInstallationRequest: "getMcpServerInstallationRequest",
-  UpdateMcpServerInstallationRequest: "updateMcpServerInstallationRequest",
-  ApproveMcpServerInstallationRequest: "approveMcpServerInstallationRequest",
-  DeclineMcpServerInstallationRequest: "declineMcpServerInstallationRequest",
-  AddMcpServerInstallationRequestNote: "addMcpServerInstallationRequestNote",
-  DeleteMcpServerInstallationRequest: "deleteMcpServerInstallationRequest",
 
   // OAuth Routes
   InitiateOAuth: "initiateOAuth",
@@ -666,6 +659,8 @@ export const RouteId = {
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
   GetSkillUsageStatistics: "getSkillUsageStatistics",
+  GetSkillVersions: "getSkillVersions",
+  GetSkillVersion: "getSkillVersion",
   EnableSkillToolDefaults: "enableSkillToolDefaults",
   GetSkillSandboxArtifact: "getSkillSandboxArtifact",
   GetSkillSandboxConversationArtifacts: "getSkillSandboxConversationArtifacts",

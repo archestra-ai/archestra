@@ -11,11 +11,13 @@ import {
   IDENTITY_TRUSTED_PROVIDER_IDS,
   OAUTH_PAGES,
   OAUTH_SCOPES,
+  PredefinedRoleNameSchema,
 } from "@archestra/shared";
 import {
   allAvailableActions,
   editorPermissions,
   memberPermissions,
+  platformAdminPermissions,
 } from "@archestra/shared/access-control";
 import { apiKey } from "@better-auth/api-key";
 import type { HookEndpointContext } from "@better-auth/core";
@@ -28,6 +30,7 @@ import { admin, jwt, organization, twoFactor } from "better-auth/plugins";
 import { createAccessControl } from "better-auth/plugins/access";
 import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
+import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
 import config from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -39,6 +42,7 @@ import AgentModel from "@/models/agent";
 import AuditLogModel from "@/models/audit-log";
 import InvitationModel from "@/models/invitation";
 import MemberModel from "@/models/member";
+import OrganizationRoleModel from "@/models/organization-role";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
@@ -72,6 +76,7 @@ const {
 const ac = createAccessControl(allAvailableActions);
 
 const adminRole = ac.newRole(allAvailableActions);
+const platformAdminRole = ac.newRole(platformAdminPermissions);
 const editorRole = ac.newRole(editorPermissions);
 const memberRole = ac.newRole(memberPermissions);
 
@@ -128,10 +133,16 @@ export const auth = betterAuth({
           if (roleName.length > 50) {
             throw new Error("Role name must be less than 50 characters");
           }
+          if (PredefinedRoleNameSchema.safeParse(roleName).success) {
+            throw new Error(
+              `"${roleName}" is a predefined role name and cannot be used for a custom role`,
+            );
+          }
         },
       },
       roles: {
         admin: adminRole,
+        platform_admin: platformAdminRole,
         editor: editorRole,
         member: memberRole,
       },
@@ -155,6 +166,7 @@ export const auth = betterAuth({
           ac,
           roles: {
             admin: adminRole,
+            platform_admin: platformAdminRole,
             editor: editorRole,
             member: memberRole,
           },
@@ -500,6 +512,7 @@ const memberRoleUpdateByRequest = new WeakMap<Request, MemberRoleUpdateStash>();
 
 type MemberRemoveStash = {
   memberId: string;
+  userId: string;
   organizationId: string;
   role: string;
   email: string;
@@ -507,6 +520,81 @@ type MemberRemoveStash = {
 };
 
 const memberRemoveByRequest = new WeakMap<Request, MemberRemoveStash>();
+
+type ImpersonationStash = {
+  impersonatorId: string;
+  impersonatorName: string | null;
+  impersonatorEmail: string | null;
+  organizationId: string;
+  targetUserId: string;
+};
+
+/** Start attempts, stashed once the RBAC gate passes (target from the body). */
+const impersonationStartByRequest = new WeakMap<Request, ImpersonationStash>();
+/**
+ * Stop attempts, stashed in the before-hook because the impersonated session
+ * (the only place `impersonatedBy` lives) is deleted by the time the
+ * after-hook runs.
+ */
+const impersonationStopByRequest = new WeakMap<Request, ImpersonationStash>();
+
+/**
+ * Audit writer for the impersonation lifecycle. Actor is always the real
+ * human (the impersonator); the impersonated member is the resource.
+ */
+async function writeImpersonationAuditLog(params: {
+  stash: ImpersonationStash;
+  action: "auth.impersonation_started" | "auth.impersonation_stopped";
+  outcome: "success" | "denied";
+  path: string;
+  request?: Request;
+  reason?: string;
+}): Promise<void> {
+  const { stash, action, outcome, path, request, reason } = params;
+  let targetName: string | null = null;
+  let targetEmail: string | null = null;
+  try {
+    const target = await UserModel.getById(stash.targetUserId);
+    targetName = target?.name ?? null;
+    targetEmail = target?.email ?? null;
+  } catch {
+    // Target lookup is best-effort display data; the id is what matters.
+  }
+  try {
+    await AuditLogModel.create({
+      organizationId: stash.organizationId,
+      actorId: stash.impersonatorId,
+      actorType: "user",
+      actorName: stash.impersonatorName,
+      actorEmail: stash.impersonatorEmail,
+      action,
+      outcome,
+      resourceType: "member",
+      resourceId: stash.targetUserId,
+      resourceName: targetName,
+      before: null,
+      after: {
+        targetUserId: stash.targetUserId,
+        ...(targetEmail ? { targetEmail } : {}),
+        ...(reason ? { reason } : {}),
+      },
+      httpMethod: "POST",
+      httpPath: path,
+      httpRoute: null,
+      httpStatus: null,
+      requestId: null,
+      sourceIp: resolveAuthClientIp(request),
+      userAgent: request?.headers.get("user-agent") ?? null,
+      occurredAt: new Date(),
+    });
+  } catch (err) {
+    logger.error(
+      { err, action, outcome },
+      "[auth:audit] failed to write impersonation audit row",
+    );
+    reportAuditWriteFailure({ source: "auth", resourceType: "member" });
+  }
+}
 
 function isAuthSignOutPath(path: string | undefined): boolean {
   if (!path) return false;
@@ -600,12 +688,175 @@ async function assertCallerCanImpersonate(
     throw forbidden();
   }
 
+  const targetUserId =
+    typeof ctx.body?.userId === "string" ? ctx.body.userId : "";
+  const stash: ImpersonationStash = {
+    impersonatorId: user.id,
+    impersonatorName: userRecord.name ?? null,
+    impersonatorEmail: userRecord.email ?? null,
+    organizationId: userRecord.organizationId,
+    targetUserId,
+  };
+
+  if (config.auth.disableImpersonation) {
+    await writeImpersonationAuditLog({
+      stash,
+      action: "auth.impersonation_started",
+      outcome: "denied",
+      path: "/admin/impersonate-user",
+      request,
+      reason: "impersonation is disabled on this deployment",
+    });
+    throw new APIError("FORBIDDEN", {
+      message: "User impersonation is disabled on this deployment",
+    });
+  }
+
   const permissions = await UserModel.getUserPermissions(
     user.id,
     userRecord.organizationId,
   );
   if (!permissions.member?.includes("impersonate")) {
+    await writeImpersonationAuditLog({
+      stash,
+      action: "auth.impersonation_started",
+      outcome: "denied",
+      path: "/admin/impersonate-user",
+      request,
+      reason: "caller lacks the member:impersonate permission",
+    });
     throw forbidden();
+  }
+
+  // The org-level permission is the source of truth, but better-auth's own
+  // admin-plugin check (system `users.role === "admin"`) still runs after
+  // this hook. Keep the column in lockstep so members whose org role grants
+  // impersonation aren't rejected by the legacy system-level gate.
+  await syncSystemRoleWithOrgPermissions(user.id, userRecord.organizationId);
+
+  if (request) {
+    impersonationStartByRequest.set(request, stash);
+  }
+}
+
+/**
+ * Org-RBAC gate for the rest of better-auth's `/admin/*` surface (ban,
+ * set-role, remove-user, list-users, …). These endpoints are not used by the
+ * product UI, but the system-level `users.role = "admin"` that the
+ * impersonation sync maintains would otherwise unlock all of them for anyone
+ * whose org role merely grants `member:impersonate`. Full member-management
+ * permissions are required instead.
+ */
+async function assertCallerCanUseAdminEndpoints(
+  ctx: HookEndpointContext,
+): Promise<void> {
+  const { request, context } = ctx;
+
+  type SessionUser = { id: string };
+  let user = (context?.session as { user?: SessionUser } | undefined)?.user;
+
+  if (!user && request) {
+    try {
+      const headers = new Headers(request.headers as HeadersInit);
+      const resolved = await auth.api.getSession({ headers });
+      user = resolved?.user as SessionUser | undefined;
+    } catch (err) {
+      logger.debug(
+        { err },
+        "[auth:beforeHook] admin-endpoint gate: getSession failed",
+      );
+    }
+  }
+
+  // Unauthenticated calls are left for better-auth to reject.
+  if (!user?.id) return;
+
+  const forbidden = () =>
+    new APIError("FORBIDDEN", {
+      message: "You do not have permission to use admin user management",
+    });
+
+  const userRecord = await UserModel.getById(user.id);
+  if (!userRecord?.organizationId) {
+    throw forbidden();
+  }
+
+  const permissions = await UserModel.getUserPermissions(
+    user.id,
+    userRecord.organizationId,
+  );
+  const memberActions = permissions.member ?? [];
+  const requiredActions = ["create", "update", "delete"] as const;
+  if (!requiredActions.every((action) => memberActions.includes(action))) {
+    throw forbidden();
+  }
+}
+
+/**
+ * No-privilege-escalation gate for putting a member INTO a role: the caller
+ * must already hold every permission the target role grants. Role authoring
+ * (custom-role routes), the org default role, and service-account roles all
+ * enforce this same subset rule — without it here, `member:update` (or
+ * `invitation:create`) alone would be enough to grant admin, read what a
+ * deliberately-restricted role withholds, and switch back.
+ *
+ * An unauthenticated caller and an unresolvable role are both left for
+ * better-auth to reject so error shapes stay consistent.
+ */
+async function assertCallerCanGrantMemberRole(
+  ctx: HookEndpointContext,
+  roleName: string,
+): Promise<void> {
+  const { request, context } = ctx;
+
+  type SessionUser = { id: string };
+  let user = (context?.session as { user?: SessionUser } | undefined)?.user;
+
+  if (!user && request) {
+    try {
+      const headers = new Headers(request.headers as HeadersInit);
+      const resolved = await auth.api.getSession({ headers });
+      user = resolved?.user as SessionUser | undefined;
+    } catch (err) {
+      logger.debug(
+        { err },
+        "[auth:beforeHook] grant-role gate: getSession failed",
+      );
+    }
+  }
+
+  if (!user?.id) return;
+
+  const userRecord = await UserModel.getById(user.id);
+  if (!userRecord?.organizationId) {
+    throw new APIError("FORBIDDEN", {
+      message: "You do not have permission to assign roles",
+    });
+  }
+
+  const targetRole = await OrganizationRoleModel.getByIdentifier(
+    roleName,
+    userRecord.organizationId,
+  );
+  if (!targetRole) return;
+
+  const callerPermissions = await UserModel.getUserPermissions(
+    user.id,
+    userRecord.organizationId,
+  );
+  const { valid, missingPermissions } =
+    OrganizationRoleModel.validateRolePermissions(
+      callerPermissions,
+      targetRole.permission,
+    );
+  if (!valid) {
+    throw new APIError("FORBIDDEN", {
+      message:
+        `Assigning the "${targetRole.name}" role would grant permissions ` +
+        `you don't have yourself: ${missingPermissions.join(", ")}. ` +
+        "Roles can only be granted by someone who already holds every " +
+        "permission they carry.",
+    });
   }
 }
 
@@ -729,12 +980,76 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   // before impersonating; layer the org-level RBAC permission on top so
   // roles without member:impersonate cannot start an impersonated session.
   // (/admin/stop-impersonating stays ungated — exiting must always work.)
+  // Two-factor authentication is enterprise-licensed (small-team allowance
+  // applies): gate ENROLLMENT server-side, not just the settings card —
+  // better-auth mounts these routes unconditionally. Verification and
+  // disabling stay open so already-enrolled users are never locked out by a
+  // lapsed license.
+  if (path === "/two-factor/enable" && method === "POST") {
+    if (!enterpriseTier.isCoreActive()) {
+      throw new APIError("FORBIDDEN", {
+        message:
+          "Two-factor authentication is an enterprise feature. Please " +
+          "contact sales@archestra.ai to enable it.",
+      });
+    }
+  }
+
   if (path === "/admin/impersonate-user" && method === "POST") {
     await assertCallerCanImpersonate(ctx);
+  } else if (path === "/admin/stop-impersonating" && method === "POST") {
+    // Stash the impersonated session's identities now: the after-hook (which
+    // writes the audit row) runs after better-auth has already deleted the
+    // session that carries `impersonatedBy`.
+    if (beforeRequest) {
+      try {
+        const headers = new Headers(beforeRequest.headers as HeadersInit);
+        const resolved = await auth.api.getSession({ headers });
+        const impersonatedBy = (
+          resolved?.session as { impersonatedBy?: string | null } | undefined
+        )?.impersonatedBy;
+        if (resolved?.user && impersonatedBy) {
+          const impersonator = await UserModel.getById(impersonatedBy);
+          const organizationId =
+            impersonator?.organizationId ??
+            (await MemberModel.getFirstMembershipForUser(resolved.user.id))
+              ?.organizationId;
+          if (organizationId) {
+            impersonationStopByRequest.set(beforeRequest, {
+              impersonatorId: impersonatedBy,
+              impersonatorName: impersonator?.name ?? null,
+              impersonatorEmail: impersonator?.email ?? null,
+              organizationId,
+              targetUserId: resolved.user.id,
+            });
+          }
+        }
+      } catch (err) {
+        logger.debug(
+          { err },
+          "[auth:audit] stop-impersonating stash: getSession failed",
+        );
+      }
+    }
+  } else if (path.startsWith("/admin/")) {
+    await assertCallerCanUseAdminEndpoints(ctx);
+  }
+
+  // Subset-check the target role BEFORE the audit stash: better-auth's own
+  // gate is only `member:update`, which must not be enough to hand out a
+  // role more powerful than the caller's own (grant admin -> read what your
+  // role withholds -> switch back). The endpoint better-auth serves is
+  // /organization/update-member-role (verified live — the bare
+  // /organization/update-member path 404s).
+  if (path === "/organization/update-member-role" && method === "POST") {
+    const role = body.role;
+    if (typeof role === "string" && role.length > 0) {
+      await assertCallerCanGrantMemberRole(ctx, role);
+    }
   }
 
   if (
-    path === "/organization/update-member" &&
+    path === "/organization/update-member-role" &&
     method === "POST" &&
     beforeRequest
   ) {
@@ -764,6 +1079,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
       const [existing] = await db
         .select({
           id: schema.membersTable.id,
+          userId: schema.membersTable.userId,
           organizationId: schema.membersTable.organizationId,
           role: schema.membersTable.role,
           email: schema.usersTable.email,
@@ -783,6 +1099,7 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
       if (existing) {
         memberRemoveByRequest.set(beforeRequest, {
           memberId: existing.id,
+          userId: existing.userId,
           organizationId: existing.organizationId,
           role: existing.role,
           email: existing.email,
@@ -817,6 +1134,14 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
       });
     }
 
+    // Same no-escalation subset rule as update-member: the invited role is
+    // applied verbatim on acceptance, so inviting (even yourself, via another
+    // address) into a stronger role is the same escalation.
+    const invitedRole = body.role;
+    if (typeof invitedRole === "string" && invitedRole.length > 0) {
+      await assertCallerCanGrantMemberRole(ctx, invitedRole);
+    }
+
     return ctx;
   }
 
@@ -835,6 +1160,44 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
       );
       throw new APIError("FORBIDDEN", {
         message: "User invitations are disabled",
+      });
+    }
+  }
+
+  // Close every password-based entry point when basic auth is disabled.
+  // The frontend already hides the sign-in form, but hiding a form is not a
+  // control — without this the endpoints still accept valid credentials, so
+  // "SSO only" would hold for the UI and not for the API.
+  //
+  // Sign-out is deliberately NOT blocked: people already holding a session
+  // must always be able to end it. Sessions belonging to users who have no
+  // federated account are revoked at boot by revokeBasicAuthOnlySessions().
+  if (config.auth.disableBasicAuth) {
+    // Verified against better-auth 1.6.22: api/routes/password.mjs declares
+    // /request-password-reset, /reset-password and /verify-password.
+    // "/forget-password" is NOT a route — it appears only in the rate-limiter's
+    // path list — so blocking it matched nothing and left reset-initiation open.
+    //
+    // /admin/create-user is deliberately absent: creating users stays valid on
+    // an SSO-only deployment, and its optional password is inert while
+    // /sign-in/email is closed.
+    const passwordPaths = [
+      "/sign-in/email",
+      "/sign-up/email",
+      "/request-password-reset",
+      "/reset-password",
+      "/verify-password",
+      "/change-password",
+      "/admin/set-user-password",
+    ];
+    if (passwordPaths.some((blocked) => path.startsWith(blocked))) {
+      logger.warn(
+        { path, method },
+        "[auth:beforeHook] blocked password endpoint — basic auth is disabled on this deployment",
+      );
+      throw new APIError("FORBIDDEN", {
+        message:
+          "Password sign-in is disabled on this deployment. Sign in with your identity provider.",
       });
     }
   }
@@ -1178,11 +1541,63 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         );
         reportAuditWriteFailure({ source: "auth", resourceType: "member" });
       }
+      // Membership may have been created by better-auth's adapter rather
+      // than MemberModel; resync the system-level user.role.
+      try {
+        const headers = new Headers(request.headers as HeadersInit);
+        const resolved = await auth.api.getSession({ headers });
+        const invitation = await InvitationModel.getById(invitationId);
+        if (resolved?.user && invitation) {
+          await syncSystemRoleWithOrgPermissions(
+            resolved.user.id,
+            invitation.organizationId,
+          );
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth] failed to sync system role after invitation accept",
+        );
+      }
+    }
+  }
+
+  // Audit the impersonation lifecycle. The start row is written only when
+  // better-auth actually minted the impersonated session (newSession); the
+  // stop stash only exists when the caller really was impersonating.
+  if (path === "/admin/impersonate-user" && method === "POST" && request) {
+    const stash = impersonationStartByRequest.get(request);
+    impersonationStartByRequest.delete(request);
+    if (stash && context?.newSession) {
+      await writeImpersonationAuditLog({
+        stash,
+        action: "auth.impersonation_started",
+        outcome: "success",
+        path,
+        request,
+      });
+    }
+  }
+  if (path === "/admin/stop-impersonating" && method === "POST" && request) {
+    const stash = impersonationStopByRequest.get(request);
+    impersonationStopByRequest.delete(request);
+    if (stash) {
+      await writeImpersonationAuditLog({
+        stash,
+        action: "auth.impersonation_stopped",
+        outcome: "success",
+        path,
+        request,
+      });
     }
   }
 
   // Audit member role changes
-  if (path === "/organization/update-member" && method === "POST" && request) {
+  if (
+    path === "/organization/update-member-role" &&
+    method === "POST" &&
+    request
+  ) {
     const stash = memberRoleUpdateByRequest.get(request);
     memberRoleUpdateByRequest.delete(request);
     const newRole = body.role as string | undefined;
@@ -1231,6 +1646,32 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         reportAuditWriteFailure({ source: "auth", resourceType: "member" });
       }
     }
+    // better-auth's adapter wrote the member row directly (bypassing
+    // MemberModel), so resync the system-level user.role here.
+    const changedMemberId = body.memberId as string | undefined;
+    if (changedMemberId) {
+      try {
+        const [member] = await db
+          .select({
+            userId: schema.membersTable.userId,
+            organizationId: schema.membersTable.organizationId,
+          })
+          .from(schema.membersTable)
+          .where(eq(schema.membersTable.id, changedMemberId))
+          .limit(1);
+        if (member) {
+          await syncSystemRoleWithOrgPermissions(
+            member.userId,
+            member.organizationId,
+          );
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth] failed to sync system role after member role update",
+        );
+      }
+    }
   }
 
   // Audit member removal
@@ -1274,6 +1715,18 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           "[auth:audit] failed to write remove-member audit row",
         );
         reportAuditWriteFailure({ source: "auth", resourceType: "member" });
+      }
+      // Membership is gone; strip any synced system-level admin role.
+      try {
+        await syncSystemRoleWithOrgPermissions(
+          stash.userId,
+          stash.organizationId,
+        );
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth] failed to sync system role after member removal",
+        );
       }
     }
   }

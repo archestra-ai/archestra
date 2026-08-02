@@ -45,7 +45,11 @@ import {
   type AppSdkTool,
   injectAppSdk,
 } from "@/services/apps/app-sdk-injection";
-import { APP_RUNTIME_BUILTIN_SHORT_NAMES } from "@/services/apps/app-tool-runtime-gate";
+import {
+  isAppFileToolShortName,
+  isAppRuntimeBuiltinAvailable,
+  redactAppBuiltinAuditResult,
+} from "@/services/apps/app-tool-runtime-gate";
 import { APP_PLATFORM_CSP } from "@/services/apps/app-ui-policy";
 import type { CommonToolCall } from "@/types";
 import { appOwner } from "@/types";
@@ -150,13 +154,13 @@ export async function createAppServer(
         };
       }
 
-      // Reserved app-runtime built-ins (App Data Store + the LLM completion)
-      // run in-process with the route-bound appId so they can only ever act for
-      // this app. Other Archestra tools (the management/chat surface) are NOT
-      // dispatchable from an app runtime.
+      // Reserved app-runtime built-ins (App Data Store, the LLM completion, the
+      // file tools) run in-process with the route-bound appId so they can only
+      // ever act for this app. Other Archestra tools (the management/chat
+      // surface) are NOT dispatchable from an app runtime.
       if (archestraMcpBranding.isToolName(name)) {
         const shortName = archestraMcpBranding.getToolShortName(name);
-        if (!shortName || !APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName)) {
+        if (!shortName || !isAppRuntimeBuiltinAvailable(shortName)) {
           throw {
             code: -32601,
             message: `Tool "${name}" is not available to apps.`,
@@ -181,7 +185,7 @@ export async function createAppServer(
             mcpServerName: archestraMcpBranding.serverName,
             method: "tools/call",
             toolCall: { id: `app-${Date.now()}`, name, arguments: args || {} },
-            toolResult: response,
+            toolResult: redactAppBuiltinAuditResult(name, response),
             userId: tokenAuth.userId ?? null,
             authMethod: deriveAuthMethod(tokenAuth) ?? null,
           });
@@ -399,8 +403,9 @@ async function buildPermittedAppToolList(
  * The assigned-tool descriptors embedded into the SDK bootstrap for
  * `archestra.tools.list()`: only tools the app's HTML can actually call —
  * RBAC-permitted upstream tools that don't exclude the "app" surface via
- * `_meta.ui.visibility`. The App Data Store built-ins are deliberately absent
- * (apps reach them through `archestra.storage`, not `tools.call`).
+ * `_meta.ui.visibility`, plus the file built-ins, which the app reaches through
+ * `archestra.tools.call` and so must be able to discover. The App Data Store
+ * built-ins stay absent (apps reach them through `archestra.storage`).
  */
 async function buildAppSdkTools(
   appId: string,
@@ -408,7 +413,11 @@ async function buildAppSdkTools(
 ): Promise<AppSdkTool[]> {
   const permitted = await buildPermittedAppToolList(appId, tokenAuth);
   return permitted
-    .filter((tool) => !archestraMcpBranding.isToolName(tool.name))
+    .filter((tool) => {
+      const shortName = archestraMcpBranding.getToolShortName(tool.name);
+      if (shortName === null) return true;
+      return isAppFileToolShortName(shortName);
+    })
     .filter((tool) => {
       const visibility = (
         tool._meta as { ui?: { visibility?: string[] } } | undefined
@@ -462,18 +471,18 @@ async function buildAppToolList(appId: string): Promise<McpListTool[]> {
   const builtInTools = getArchestraMcpTools()
     .filter((tool) => {
       const shortName = archestraMcpBranding.getToolShortName(tool.name);
-      return (
-        shortName !== null && APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName)
-      );
+      return shortName !== null && isAppRuntimeBuiltinAvailable(shortName);
     })
     .map((tool): McpListTool => {
-      // The runtime LLM completion stays in tools/list (so an app's own
-      // tools/call is still relayed by a foreign host) but is marked app-only,
-      // so the host's model can't invoke it to spend the viewer's metered LLM
-      // budget directly. Other built-ins (the data store) stay model-visible.
+      // The runtime LLM completion and the file tools stay in tools/list (so an
+      // app's own tools/call is still relayed by a foreign host) but are marked
+      // app-only: a host's model must not spend the viewer's metered LLM budget
+      // or roam their app files directly. Other built-ins (the data store) stay
+      // model-visible.
+      const shortName = archestraMcpBranding.getToolShortName(tool.name);
       if (
-        archestraMcpBranding.getToolShortName(tool.name) ===
-        TOOL_APP_LLM_COMPLETE_SHORT_NAME
+        shortName === TOOL_APP_LLM_COMPLETE_SHORT_NAME ||
+        (shortName !== null && isAppFileToolShortName(shortName))
       ) {
         return withAppOnlyVisibility(tool);
       }

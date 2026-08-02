@@ -326,6 +326,8 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 threadId: message.threadId ?? message.channelId,
                 botMentioned,
                 text: message.text,
+                // Teams stamps the bot's display name on every activity.
+                botDisplayName: context.activity.recipient?.name,
                 postMutedNotice: async () => {
                   await context.sendActivity(buildThreadMutedNotice());
                 },

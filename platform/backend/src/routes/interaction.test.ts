@@ -20,10 +20,13 @@ describe("interaction routes", () => {
   let currentUser: User;
   let organizationId: string;
 
-  beforeEach(async ({ makeAdmin, makeOrganization }) => {
+  beforeEach(async ({ makeAdmin, makeOrganization, makeMember }) => {
     currentUser = await makeAdmin();
     const organization = await makeOrganization();
     organizationId = organization.id;
+    // The routes resolve log:admin from the caller's org membership; the
+    // suite's default caller is an org admin (org-wide log visibility).
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -610,7 +613,16 @@ describe("interaction routes", () => {
     expect(response.json().pagination.total).toBe(4);
   });
 
-  test("hides an agent-less interaction from a non-agent-admin", async () => {
+  test("hides an agent-less interaction from a non-agent-admin", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    // The suite's default caller is an org admin; this test needs a caller
+    // without agent-admin (or log:admin) standing.
+    const limited = await makeUser();
+    await makeMember(limited.id, organizationId, { role: "member" });
+    currentUser = limited;
+
     const interaction = await InteractionModel.create({
       profileId: null,
       source: "knowledge:embedding",
@@ -736,6 +748,168 @@ describe("interaction routes", () => {
     expect(response.json()).toMatchObject({
       connectorId: connector.id,
       connectorName: null,
+    });
+  });
+
+  describe("own-vs-all log visibility (log:read vs log:admin)", () => {
+    let limitedUser: User;
+    let otherUser: User;
+    let agentId: string;
+    let ownRowId: string;
+    let otherRowId: string;
+
+    const seedRow = (userId: string | null, sessionId: string) =>
+      InteractionModel.create({
+        profileId: agentId,
+        userId,
+        sessionId,
+        externalAgentId: userId ? `ext-${userId}` : null,
+        request: {
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        response: {
+          id: "r",
+          object: "chat.completion",
+          choices: [],
+        } as unknown as InteractionResponse,
+        type: "openai:chatCompletions",
+      });
+
+    beforeEach(async ({ makeAgent, makeUser, makeMember, makeCustomRole }) => {
+      const agent = await makeAgent({
+        organizationId,
+        authorId: currentUser.id,
+        scope: "org",
+      });
+      agentId = agent.id;
+
+      otherUser = await makeUser();
+      limitedUser = await makeUser();
+      const readOnlyLogs = await makeCustomRole(organizationId, {
+        permission: { log: ["read"], agent: ["read"] },
+      });
+      await makeMember(limitedUser.id, organizationId, {
+        role: readOnlyLogs.role,
+      });
+
+      ownRowId = (await seedRow(limitedUser.id, "own-session")).id;
+      otherRowId = (await seedRow(otherUser.id, "other-session")).id;
+      await seedRow(null, "unattributed-session");
+    });
+
+    test("log:read lists only the caller's own rows — a userId filter for someone else is overridden", async () => {
+      currentUser = limitedUser;
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/interactions?limit=10&offset=0",
+      });
+      expect(list.statusCode).toBe(200);
+      expect(list.json().pagination.total).toBe(1);
+      expect(list.json().data[0].id).toBe(ownRowId);
+
+      // Asking for another user's rows must not widen the view.
+      const forced = await app.inject({
+        method: "GET",
+        url: `/api/interactions?limit=10&offset=0&userId=${otherUser.id}`,
+      });
+      expect(forced.json().pagination.total).toBe(1);
+      expect(forced.json().data[0].id).toBe(ownRowId);
+    });
+
+    test("log:read hides another user's (and unattributed) detail rows as 404", async () => {
+      currentUser = limitedUser;
+
+      const own = await app.inject({
+        method: "GET",
+        url: `/api/interactions/${ownRowId}`,
+      });
+      expect(own.statusCode).toBe(200);
+
+      const other = await app.inject({
+        method: "GET",
+        url: `/api/interactions/${otherRowId}`,
+      });
+      expect(other.statusCode).toBe(404);
+    });
+
+    test("log:read narrows sessions, user-ids, and external-agent-ids to the caller", async () => {
+      currentUser = limitedUser;
+
+      const sessions = await app.inject({
+        method: "GET",
+        url: "/api/interactions/sessions?limit=10&offset=0",
+      });
+      expect(sessions.statusCode).toBe(200);
+      expect(sessions.json().pagination.total).toBe(1);
+      expect(sessions.json().data[0].sessionId).toBe("own-session");
+
+      const userIds = await app.inject({
+        method: "GET",
+        url: "/api/interactions/user-ids",
+      });
+      expect(userIds.json()).toEqual([
+        { id: limitedUser.id, name: limitedUser.name },
+      ]);
+
+      const extIds = await app.inject({
+        method: "GET",
+        url: "/api/interactions/external-agent-ids",
+      });
+      expect(extIds.json().map((e: { id: string }) => e.id)).toEqual([
+        `ext-${limitedUser.id}`,
+      ]);
+    });
+
+    test("log:admin (custom role) and the predefined admin see every user's rows", async ({
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const auditor = await makeUser();
+      const allLogs = await makeCustomRole(organizationId, {
+        permission: { log: ["read", "admin"], agent: ["read", "admin"] },
+      });
+      await makeMember(auditor.id, organizationId, { role: allLogs.role });
+      currentUser = auditor;
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/interactions?limit=10&offset=0",
+      });
+      expect(list.json().pagination.total).toBe(3);
+
+      const other = await app.inject({
+        method: "GET",
+        url: `/api/interactions/${otherRowId}`,
+      });
+      expect(other.statusCode).toBe(200);
+    });
+
+    test("the predefined platform_admin sees only their own rows", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const platformAdmin = await makeUser();
+      await makeMember(platformAdmin.id, organizationId, {
+        role: "platform_admin",
+      });
+      const mine = await seedRow(platformAdmin.id, "pa-session");
+      currentUser = platformAdmin;
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/interactions?limit=10&offset=0",
+      });
+      expect(list.json().pagination.total).toBe(1);
+      expect(list.json().data[0].id).toBe(mine.id);
+
+      const other = await app.inject({
+        method: "GET",
+        url: `/api/interactions/${otherRowId}`,
+      });
+      expect(other.statusCode).toBe(404);
     });
   });
 });

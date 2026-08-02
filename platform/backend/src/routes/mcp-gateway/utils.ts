@@ -13,6 +13,7 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   platformExecutedAs,
+  TOOL_COPY_FILE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -230,6 +231,18 @@ type ResolvedArchestraToken =
       token: SelectUserToken;
     };
 
+/**
+ * Archestra built-ins whose effect exists only on the internal chat surface, so
+ * an external MCP client is never offered them: `render_app` mounts an app from
+ * its own result, which only Archestra's chat does, and `copy_file` exchanges
+ * files with the app the user has open there — off that surface there is
+ * neither a conversation nor an open app, and every call can only refuse.
+ */
+const CHAT_ONLY_ARCHESTRA_SHORT_NAMES = new Set<string>([
+  TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_COPY_FILE_SHORT_NAME,
+]);
+
 const TOKEN_AUTH_CACHE_TTL_MS = 30_000;
 const TOKEN_AUTH_CACHE_MAX_ENTRIES = 1_000;
 const tokenAuthCache = new LRUCacheManager<TokenAuthResult | null>({
@@ -346,20 +359,20 @@ export async function createAgentServer(params: {
     // on any other surface (mcp_gateway, legacy profile) renders only from a
     // discovery-time tool DEFINITION (per the MCP Apps extension), so it must
     // advertise UI-providing tools — both assigned and dynamically-reached, which
-    // have no agent_tools row — and drops render_app, which no-ops for it. The
-    // three flags are independently motivated; they coincide on agentType, the
-    // surface signal this codebase keys on throughout.
+    // have no agent_tools row — and drops the chat-only built-ins, which no-op
+    // for it. The three flags are independently motivated; they coincide on
+    // agentType, the surface signal this codebase keys on throughout.
     const surface =
       agent.agentType === "agent"
         ? {
             widenDynamicUiTools: false,
             advertiseUiTools: false,
-            keepRenderApp: true,
+            keepChatOnlyTools: true,
           }
         : {
             widenDynamicUiTools: true,
             advertiseUiTools: true,
-            keepRenderApp: false,
+            keepChatOnlyTools: false,
           };
 
     const dynamicUiTools = (
@@ -434,13 +447,17 @@ export async function createAgentServer(params: {
       advertiseUiResourceTools: surface.advertiseUiTools,
       tools: candidateTools.filter((t) => permittedNames.has(t.name)),
     });
-    const permittedTools = surface.keepRenderApp
+    const permittedTools = surface.keepChatOnlyTools
       ? exposureFiltered
-      : exposureFiltered.filter(
-          (tool) =>
-            archestraMcpBranding.getToolShortName(tool.name) !==
-            TOOL_RENDER_APP_SHORT_NAME,
-        );
+      : exposureFiltered.filter((tool) => {
+          // A null short name is not an Archestra built-in at all, so it is
+          // never one of the chat-only ones.
+          const shortName = archestraMcpBranding.getToolShortName(tool.name);
+          return (
+            shortName === null ||
+            !CHAT_ONLY_ARCHESTRA_SHORT_NAMES.has(shortName)
+          );
+        });
 
     // Resolve the backing catalogs of the advertised tools once: their names
     // feed both the search_tools description and the app launch-tool title and

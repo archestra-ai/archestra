@@ -5,6 +5,9 @@ import {
   BUILT_IN_AGENT_NAMES,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
+  DUAL_LLM_DEFAULT_MAX_ROUNDS,
+  DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS,
+  DUAL_LLM_MAIN_SYSTEM_PROMPT,
   POLICY_CONFIG_SYSTEM_PROMPT,
 } from "@archestra/shared";
 import { and, eq, isNull } from "drizzle-orm";
@@ -70,6 +73,72 @@ describe("syncBuiltInAgents", () => {
       firstOrg.id,
     );
     expect(titleAgent?.systemPrompt).toBe(CHAT_TITLE_GENERATION_SYSTEM_PROMPT);
+  });
+
+  test("seeds the dual LLM main agent with the current maxRounds default", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
+    await syncBuiltInAgents();
+
+    const mainAgent = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+      organization.id,
+    );
+    expect(mainAgent?.builtInAgentConfig).toMatchObject({
+      maxRounds: DUAL_LLM_DEFAULT_MAX_ROUNDS,
+    });
+  });
+
+  test("migrates a dual LLM maxRounds still on the legacy default, leaving admin choices alone", async ({
+    makeOrganization,
+  }) => {
+    const legacyOrg = await makeOrganization();
+    const customOrg = await makeOrganization();
+
+    await db.insert(schema.agentsTable).values([
+      {
+        organizationId: legacyOrg.id,
+        name: BUILT_IN_AGENT_NAMES.DUAL_LLM_MAIN,
+        agentType: "agent",
+        scope: "org",
+        systemPrompt: DUAL_LLM_MAIN_SYSTEM_PROMPT,
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+          maxRounds: DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS,
+        },
+      },
+      {
+        organizationId: customOrg.id,
+        name: BUILT_IN_AGENT_NAMES.DUAL_LLM_MAIN,
+        agentType: "agent",
+        scope: "org",
+        systemPrompt: DUAL_LLM_MAIN_SYSTEM_PROMPT,
+        builtInAgentConfig: {
+          name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+          // A deliberate admin value — anything but the legacy default.
+          maxRounds: 8,
+        },
+      },
+    ]);
+
+    await syncBuiltInAgents();
+
+    const [migrated, untouched] = await Promise.all([
+      AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        legacyOrg.id,
+      ),
+      AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+        customOrg.id,
+      ),
+    ]);
+    expect(migrated?.builtInAgentConfig).toMatchObject({
+      maxRounds: DUAL_LLM_DEFAULT_MAX_ROUNDS,
+    });
+    expect(untouched?.builtInAgentConfig).toMatchObject({ maxRounds: 8 });
   });
 
   test("updates legacy policy configuration system prompts", async ({

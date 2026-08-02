@@ -1,10 +1,17 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+  type Permissions,
+} from "@archestra/shared";
+import { allAvailableActions } from "@archestra/shared/access-control";
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import type * as originalConfigModule from "@/config";
 import { CREDENTIAL_PROVIDER_ID } from "@/constants";
+import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 
 vi.mock("@/logging");
@@ -23,6 +30,8 @@ import { beforeEach, describe, expect, test } from "@/test";
 
 // Create a hoisted ref to control disableInvitations in tests
 const mockDisableInvitations = vi.hoisted(() => ({ value: false }));
+const mockDisableImpersonation = vi.hoisted(() => ({ value: false }));
+const mockDisableBasicAuth = vi.hoisted(() => ({ value: false }));
 
 // Mock config module before importing better-auth
 vi.mock("@/config", async (importOriginal) => {
@@ -36,6 +45,12 @@ vi.mock("@/config", async (importOriginal) => {
         trustedOrigins: ["https://app.example.com"],
         get disableInvitations() {
           return mockDisableInvitations.value;
+        },
+        get disableImpersonation() {
+          return mockDisableImpersonation.value;
+        },
+        get disableBasicAuth() {
+          return mockDisableBasicAuth.value;
         },
       },
     },
@@ -98,6 +113,123 @@ describe("handleBeforeHook", () => {
   // Reset mock to default before each test for proper isolation
   beforeEach(() => {
     mockDisableInvitations.value = false;
+  });
+
+  describe("basic auth disabled", () => {
+    // Route names verified against better-auth 1.6.22. "/forget-password" is
+    // deliberately not among them — it is not a route, only a rate-limiter
+    // path entry, which is exactly the bug these tests exist to catch.
+    const blockedPaths = [
+      "/sign-in/email",
+      "/sign-up/email",
+      "/request-password-reset",
+      "/reset-password",
+      "/verify-password",
+      "/change-password",
+      "/admin/set-user-password",
+    ];
+
+    for (const path of blockedPaths) {
+      test(`refuses ${path} while basic auth is disabled`, async () => {
+        mockDisableBasicAuth.value = true;
+        try {
+          const ctx = createMockContext({ path, method: "POST", body: {} });
+
+          await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+          await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+            body: { message: expect.stringContaining("identity provider") },
+          });
+        } finally {
+          mockDisableBasicAuth.value = false;
+        }
+      });
+    }
+
+    test("still allows sign-out so a held session can always be ended", async () => {
+      mockDisableBasicAuth.value = true;
+      try {
+        const ctx = createMockContext({
+          path: "/sign-out",
+          method: "POST",
+          body: {},
+        });
+
+        await expect(handleBeforeHook(ctx)).resolves.not.toThrow();
+      } finally {
+        mockDisableBasicAuth.value = false;
+      }
+    });
+
+    test("leaves password sign-in alone when the flag is off", async () => {
+      const ctx = createMockContext({
+        path: "/sign-in/email",
+        method: "POST",
+        body: { email: "someone@example.com", password: "irrelevant" },
+      });
+
+      await expect(handleBeforeHook(ctx)).resolves.not.toThrow();
+    });
+  });
+
+  describe("two-factor enrollment enterprise gate", () => {
+    test("refuses /two-factor/enable without an enterprise license", async () => {
+      const spy = vi
+        .spyOn(enterpriseTier, "isCoreActive")
+        .mockReturnValue(false);
+      try {
+        const ctx = createMockContext({
+          path: "/two-factor/enable",
+          method: "POST",
+          body: { password: "irrelevant" },
+        });
+
+        await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+        await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+          body: {
+            message: expect.stringContaining("enterprise feature"),
+          },
+        });
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    test("allows /two-factor/enable when the license is active", async () => {
+      const spy = vi
+        .spyOn(enterpriseTier, "isCoreActive")
+        .mockReturnValue(true);
+      try {
+        const ctx = createMockContext({
+          path: "/two-factor/enable",
+          method: "POST",
+          body: { password: "irrelevant" },
+        });
+
+        const result = await handleBeforeHook(ctx);
+        expect(result).toBe(ctx);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    test("leaves verify/disable open so a lapsed license never locks users out", async () => {
+      const spy = vi
+        .spyOn(enterpriseTier, "isCoreActive")
+        .mockReturnValue(false);
+      try {
+        for (const path of ["/two-factor/verify-totp", "/two-factor/disable"]) {
+          const ctx = createMockContext({
+            path,
+            method: "POST",
+            body: {},
+          });
+          const result = await handleBeforeHook(ctx);
+          expect(result).toBe(ctx);
+        }
+      } finally {
+        spy.mockRestore();
+      }
+    });
   });
 
   describe("invitation email validation", () => {
@@ -430,6 +562,477 @@ describe("handleBeforeHook", () => {
 
       const result = await handleBeforeHook(ctx);
       expect(result).toBe(ctx);
+    });
+
+    test("syncs the system-level user.role once the org RBAC gate passes", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      // Org admin promoted after bootstrap: no system-level role yet.
+      const orgAdmin = await makeUser();
+      await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+
+      await handleBeforeHook(impersonateCtx(orgAdmin));
+
+      const [row] = await db
+        .select({ role: schema.usersTable.role })
+        .from(schema.usersTable)
+        .where(eq(schema.usersTable.id, orgAdmin.id));
+      expect(row.role).toBe("admin");
+    });
+
+    test("records denied attempts in the audit log", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const plainMember = await makeUser();
+      await makeMember(plainMember.id, org.id, { role: MEMBER_ROLE_NAME });
+
+      await expect(
+        handleBeforeHook(impersonateCtx(plainMember)),
+      ).rejects.toThrow(APIError);
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, org.id));
+      const denied = rows.find(
+        (row) =>
+          row.action === "auth.impersonation_started" &&
+          row.outcome === "denied",
+      );
+      expect(denied).toBeDefined();
+      expect(denied?.actorId).toBe(plainMember.id);
+      expect(denied?.resourceId).toBe("some-target-user");
+    });
+
+    test("kill switch blocks impersonation and records the denial", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      mockDisableImpersonation.value = true;
+      try {
+        const org = await makeOrganization();
+        const orgAdmin = await makeUser({ role: "admin" });
+        await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+
+        await expect(
+          handleBeforeHook(impersonateCtx(orgAdmin)),
+        ).rejects.toMatchObject({
+          body: {
+            message: "User impersonation is disabled on this deployment",
+          },
+        });
+
+        const rows = await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.organizationId, org.id));
+        expect(
+          rows.some(
+            (row) =>
+              row.action === "auth.impersonation_started" &&
+              row.outcome === "denied",
+          ),
+        ).toBe(true);
+      } finally {
+        mockDisableImpersonation.value = false;
+      }
+    });
+
+    test("kill switch never blocks stop-impersonating", async () => {
+      mockDisableImpersonation.value = true;
+      try {
+        const ctx = createMockContext({
+          path: "/admin/stop-impersonating",
+          method: "POST",
+        });
+        const result = await handleBeforeHook(ctx);
+        expect(result).toBe(ctx);
+      } finally {
+        mockDisableImpersonation.value = false;
+      }
+    });
+
+    test("writes a success audit row once better-auth mints the impersonated session", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const orgAdmin = await makeUser({ role: "admin" });
+      await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+      const target = await makeUser();
+      await makeMember(target.id, org.id, { role: MEMBER_ROLE_NAME });
+
+      const request = new Request(
+        "http://localhost/api/auth/admin/impersonate-user",
+        { method: "POST" },
+      );
+      const beforeCtx = createMockContext({
+        path: "/admin/impersonate-user",
+        method: "POST",
+        body: { userId: target.id },
+        request,
+        context: {
+          session: {
+            user: orgAdmin,
+            session: { id: "session-id" },
+          },
+        },
+      });
+      await handleBeforeHook(beforeCtx);
+
+      const afterCtx = createMockContext({
+        path: "/admin/impersonate-user",
+        method: "POST",
+        body: { userId: target.id },
+        request,
+        context: {
+          newSession: {
+            user: { id: target.id, email: target.email },
+            session: { id: "impersonated-session" },
+          },
+        },
+      });
+      await handleAfterHook(afterCtx);
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, org.id));
+      const started = rows.find(
+        (row) =>
+          row.action === "auth.impersonation_started" &&
+          row.outcome === "success",
+      );
+      expect(started).toBeDefined();
+      expect(started?.actorId).toBe(orgAdmin.id);
+      expect(started?.resourceId).toBe(target.id);
+      expect(started?.after).toMatchObject({ targetUserId: target.id });
+    });
+
+    test("writes a stop audit row attributed to the impersonator", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const orgAdmin = await makeUser({ role: "admin" });
+      await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+      const target = await makeUser();
+      await makeMember(target.id, org.id, { role: MEMBER_ROLE_NAME });
+
+      const getSessionSpy = vi.spyOn(auth.api, "getSession").mockResolvedValue({
+        user: { id: target.id, email: target.email, name: target.name },
+        session: {
+          id: "impersonated-session",
+          impersonatedBy: orgAdmin.id,
+          activeOrganizationId: org.id,
+        },
+      } as unknown as Awaited<ReturnType<typeof auth.api.getSession>>);
+      try {
+        const request = new Request(
+          "http://localhost/api/auth/admin/stop-impersonating",
+          { method: "POST" },
+        );
+        const beforeCtx = createMockContext({
+          path: "/admin/stop-impersonating",
+          method: "POST",
+          request,
+        });
+        await handleBeforeHook(beforeCtx);
+        getSessionSpy.mockRestore();
+
+        const afterCtx = createMockContext({
+          path: "/admin/stop-impersonating",
+          method: "POST",
+          request,
+        });
+        await handleAfterHook(afterCtx);
+      } finally {
+        getSessionSpy.mockRestore();
+      }
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.organizationId, org.id));
+      const stopped = rows.find(
+        (row) => row.action === "auth.impersonation_stopped",
+      );
+      expect(stopped).toBeDefined();
+      expect(stopped?.outcome).toBe("success");
+      expect(stopped?.actorId).toBe(orgAdmin.id);
+      expect(stopped?.resourceId).toBe(target.id);
+    });
+  });
+
+  describe("admin endpoint org-RBAC gate", () => {
+    const adminEndpointCtx = (
+      user: { id: string; email: string },
+      path = "/admin/list-users",
+    ) =>
+      createMockContext({
+        path,
+        method: "POST",
+        body: {},
+        context: {
+          session: {
+            user,
+            session: { id: "session-id" },
+          },
+        },
+      });
+
+    test("allows callers with full member-management permissions", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const orgAdmin = await makeUser({ role: "admin" });
+      await makeMember(orgAdmin.id, org.id, { role: ADMIN_ROLE_NAME });
+
+      const ctx = adminEndpointCtx(orgAdmin);
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+
+    test("blocks callers without member management even if user.role is admin", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      // The threat: a custom role granting only member:impersonate gets
+      // user.role="admin" from the sync; better-auth alone would then let it
+      // reach ban/set-role/remove-user.
+      const impersonatorOnly = await makeUser({ role: "admin" });
+      const customRole = await makeCustomRole(org.id, {
+        permission: { member: ["read", "impersonate"] },
+      });
+      await makeMember(impersonatorOnly.id, org.id, {
+        role: customRole.role,
+      });
+
+      await expect(
+        handleBeforeHook(adminEndpointCtx(impersonatorOnly, "/admin/set-role")),
+      ).rejects.toMatchObject({
+        body: {
+          message: "You do not have permission to use admin user management",
+        },
+      });
+    });
+
+    test("leaves unauthenticated admin-endpoint calls for better-auth", async () => {
+      const ctx = createMockContext({
+        path: "/admin/list-users",
+        method: "POST",
+        body: {},
+      });
+      const result = await handleBeforeHook(ctx);
+      expect(result).toBe(ctx);
+    });
+  });
+
+  describe("role-assignment no-escalation gate", () => {
+    // The threat this closes: a deliberately-restricted admin role (all
+    // permissions EXCEPT e.g. log:read/auditLog:read/member:impersonate,
+    // but including member:update) must not be able to hand out — to
+    // themselves or anyone — a role carrying the withheld permissions,
+    // read what their own role withholds, and switch back.
+    const restrictedAdminPermission = Object.fromEntries(
+      Object.entries(allAvailableActions).map(([resource, actions]) => {
+        if (resource === "log" || resource === "auditLog")
+          return [resource, []];
+        if (resource === "member")
+          return [resource, actions.filter((a) => a !== "impersonate")];
+        return [resource, actions];
+      }),
+    ) as Permissions;
+
+    const updateMemberCtx = (
+      user: { id: string; email: string } | null,
+      role: string,
+      memberId = "some-member-id",
+    ) =>
+      createMockContext({
+        path: "/organization/update-member-role",
+        method: "POST",
+        body: { memberId, role },
+        ...(user
+          ? {
+              context: {
+                session: { user, session: { id: "session-id" } },
+              },
+            }
+          : {}),
+      });
+
+    test("blocks a restricted admin assigning the admin role (to anyone, including themselves)", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const customRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: customRole.role });
+
+      const ctx = updateMemberCtx(restricted, ADMIN_ROLE_NAME);
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+        body: {
+          message: expect.stringContaining(
+            "would grant permissions you don't have yourself",
+          ),
+        },
+      });
+      // The rejection names exactly what the caller's role withholds.
+      await expect(handleBeforeHook(ctx)).rejects.toMatchObject({
+        body: { message: expect.stringContaining("log:read") },
+      });
+    });
+
+    test("blocks assigning a custom role that carries withheld permissions", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const restrictedRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: restrictedRole.role });
+      const auditReader = await makeCustomRole(org.id, {
+        permission: { auditLog: ["read"] },
+      });
+
+      const ctx = updateMemberCtx(restricted, auditReader.role);
+      await expect(handleBeforeHook(ctx)).rejects.toThrow(APIError);
+    });
+
+    test("allows assignments within the caller's own permission set", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const customRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: customRole.role });
+
+      // Downgrading someone to the predefined member role is fine…
+      const downgrade = updateMemberCtx(restricted, MEMBER_ROLE_NAME);
+      expect(await handleBeforeHook(downgrade)).toBe(downgrade);
+      // …and so is assigning their own restricted role (exact subset).
+      const lateral = updateMemberCtx(restricted, customRole.role);
+      expect(await handleBeforeHook(lateral)).toBe(lateral);
+    });
+
+    test("a full admin can still assign any role — including editor, whose predefined set carries vestigial actions", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const adminUser = await makeUser({ role: "admin" });
+      await makeMember(adminUser.id, org.id, { role: ADMIN_ROLE_NAME });
+
+      // Editor's predefined set includes actions absent from
+      // allAvailableActions (e.g. invitation:read); those grant nothing and
+      // must not block assignment.
+      for (const role of [ADMIN_ROLE_NAME, "editor", MEMBER_ROLE_NAME]) {
+        const ctx = updateMemberCtx(adminUser, role);
+        expect(await handleBeforeHook(ctx)).toBe(ctx);
+      }
+    });
+
+    test("leaves unauthenticated and unknown-role calls for better-auth", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const unauthenticated = updateMemberCtx(null, ADMIN_ROLE_NAME);
+      expect(await handleBeforeHook(unauthenticated)).toBe(unauthenticated);
+
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const customRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: customRole.role });
+      const unknownRole = updateMemberCtx(restricted, "no_such_role");
+      expect(await handleBeforeHook(unknownRole)).toBe(unknownRole);
+    });
+
+    test("a platform_admin cannot grant the full admin role — the customer-shaped restriction holds", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const platformAdmin = await makeUser();
+      await makeMember(platformAdmin.id, org.id, { role: "platform_admin" });
+
+      const escalate = updateMemberCtx(platformAdmin, ADMIN_ROLE_NAME);
+      await expect(handleBeforeHook(escalate)).rejects.toThrow(APIError);
+      await expect(handleBeforeHook(escalate)).rejects.toMatchObject({
+        body: { message: expect.stringContaining("log:admin") },
+      });
+
+      // Managing users within their own permission set still works.
+      const lateral = updateMemberCtx(platformAdmin, "platform_admin");
+      expect(await handleBeforeHook(lateral)).toBe(lateral);
+      const downgrade = updateMemberCtx(platformAdmin, MEMBER_ROLE_NAME);
+      expect(await handleBeforeHook(downgrade)).toBe(downgrade);
+    });
+
+    test("blocks inviting a user into a role stronger than the inviter's", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeCustomRole,
+    }) => {
+      const org = await makeOrganization();
+      const restricted = await makeUser();
+      const customRole = await makeCustomRole(org.id, {
+        permission: restrictedAdminPermission,
+      });
+      await makeMember(restricted.id, org.id, { role: customRole.role });
+
+      const inviteCtx = (role: string) =>
+        createMockContext({
+          path: "/organization/invite-member",
+          method: "POST",
+          body: { email: "new-user@example.com", role },
+          context: {
+            session: { user: restricted, session: { id: "session-id" } },
+          },
+        });
+
+      await expect(
+        handleBeforeHook(inviteCtx(ADMIN_ROLE_NAME)),
+      ).rejects.toThrow(APIError);
+      // Within the subset, the invitation passes through.
+      const allowed = inviteCtx(MEMBER_ROLE_NAME);
+      expect(await handleBeforeHook(allowed)).toBe(allowed);
     });
   });
 });
@@ -3009,7 +3612,7 @@ describe("auth event audit logging", () => {
     );
     await handleBeforeHook(
       createMockContext({
-        path: "/organization/update-member",
+        path: "/organization/update-member-role",
         method: "POST",
         body: { memberId: member.id, role: "editor" },
         request: beforeRequest,
@@ -3026,7 +3629,7 @@ describe("auth event audit logging", () => {
       >);
 
     const afterCtx = createMockContext({
-      path: "/organization/update-member",
+      path: "/organization/update-member-role",
       method: "POST",
       body: { memberId: member.id, role: "editor" },
       request: beforeRequest,
@@ -3072,7 +3675,7 @@ describe("auth event audit logging", () => {
     );
     await handleBeforeHook(
       createMockContext({
-        path: "/organization/update-member",
+        path: "/organization/update-member-role",
         method: "POST",
         body: { memberId: member.id, role: "member" },
         request: beforeRequest,
@@ -3090,7 +3693,7 @@ describe("auth event audit logging", () => {
 
     await handleAfterHook(
       createMockContext({
-        path: "/organization/update-member",
+        path: "/organization/update-member-role",
         method: "POST",
         body: { memberId: member.id, role: "member" },
         request: beforeRequest,

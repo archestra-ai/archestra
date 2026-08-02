@@ -401,7 +401,6 @@ Required RBAC permission: `mcpGateway:update`
 | `list_mcp_server_deployments` | List all deployed (installed) MCP server instances accessible to the current user. | `mcpRegistry:read` |
 | `get_mcp_server_logs` | Get recent container logs from a deployed local (K8s) MCP server. | `mcpRegistry:read` |
 | `reload_mcp_server_tools` | Re-discover a deployed MCP server's tools from the live server and refresh Archestra's tool catalog for it — picks up added, removed, and changed tools (names, descriptions, and input schemas) with... | `mcpRegistry:update` |
-| `create_mcp_server_installation_request` | Allows users from within the Archestra Platform chat UI to submit a request for an MCP server to be added to their Archestra Platform's internal MCP server registry. | `mcpServerInstallationRequest:create` |
 
 #### search_private_mcp_registry
 
@@ -639,13 +638,6 @@ Required RBAC permission: `mcpRegistry:update`
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `serverId` | `string` | Yes | The deployment ID of the MCP server whose tools should be refreshed. Use list_mcp_server_deployments to find it. |
-
-
-#### create_mcp_server_installation_request
-
-Required RBAC permission: `mcpServerInstallationRequest:create`
-
-This tool takes no arguments.
 
 
 ### Teams

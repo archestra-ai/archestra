@@ -78,6 +78,13 @@ class SlackProvider implements ChatOpsProvider {
 
   private client: WebClient | null = null;
   private botUserId: string | null = null;
+  /**
+   * The bot's name as Slack shows it, which is what someone types when they
+   * address it without an @mention ("Archestra mute"). auth.test can't provide
+   * it — for a bot token its `user` field is the literal string "bot" — so it is
+   * resolved from the bot's own profile.
+   */
+  private botDisplayName: string | null = null;
   private teamId: string | null = null;
   private teamName: string | null = null;
   private config: SlackDbConfig;
@@ -161,8 +168,16 @@ class SlackProvider implements ChatOpsProvider {
       this.botUserId = (body.user_id as string) || null;
       this.teamId = (body.team_id as string) || null;
       this.teamName = (body.team as string) || null;
+      // Best-effort: without it the bot simply stops answering to its own name.
+      this.botDisplayName = this.botUserId
+        ? await this.getUserName(this.botUserId)
+        : null;
       logger.info(
-        { botUserId: this.botUserId, teamId: this.teamId },
+        {
+          botUserId: this.botUserId,
+          botDisplayName: this.botDisplayName,
+          teamId: this.teamId,
+        },
         "[SlackProvider] Authenticated successfully",
       );
 
@@ -205,6 +220,7 @@ class SlackProvider implements ChatOpsProvider {
     this.socketDedup.clear();
     this.client = null;
     this.botUserId = null;
+    this.botDisplayName = null;
     this.teamId = null;
     this.teamName = null;
     logger.info("[SlackProvider] Cleaned up");
@@ -329,6 +345,7 @@ class SlackProvider implements ChatOpsProvider {
         threadId: threadTs,
         botMentioned: hasBotMention,
         text: cleanedText,
+        botDisplayName: this.botDisplayName,
         postMutedNotice: () =>
           this.postThreadMutedNotice(event.channel, threadTs),
         resolveAnswerAllWorkspaceId: async () => body.team_id || null,

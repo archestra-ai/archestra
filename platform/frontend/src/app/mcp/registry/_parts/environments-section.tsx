@@ -2,7 +2,7 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Info, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Info, Pencil, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -838,6 +838,9 @@ function EnvironmentEditorDialog({
             }}
             supportsFqdn={supportsFqdn}
             provider={capabilities?.networkPolicy.provider ?? null}
+            enforcementMeasured={
+              capabilities?.networkPolicy.enforcementSource === "probe"
+            }
             baselineLoaded={egressBaselineLoaded}
             disabled={isPending || !egressBaselineLoaded}
           />
@@ -880,6 +883,7 @@ function NetworkPolicyFields({
   setAllowedCidrsText,
   supportsFqdn,
   provider,
+  enforcementMeasured,
   baselineLoaded,
   disabled,
 }: {
@@ -893,6 +897,7 @@ function NetworkPolicyFields({
   setAllowedCidrsText: (value: string) => void;
   supportsFqdn: boolean;
   provider: string | null;
+  enforcementMeasured: boolean;
   baselineLoaded: boolean;
   disabled: boolean;
 }) {
@@ -902,7 +907,19 @@ function NetworkPolicyFields({
   const enforcementUnavailable = provider === "none";
   return (
     <div className="space-y-4">
-      {enforcementUnavailable ? (
+      {enforcementUnavailable && enforcementMeasured ? (
+        <Alert variant="warning">
+          <TriangleAlert className="h-4 w-4" />
+          <AlertTitle>Network policy enforcement test failed</AlertTitle>
+          <AlertDescription className="block leading-6">
+            Egress rules would be accepted and then ignored, so these controls
+            stay disabled until the cluster enforces NetworkPolicy.{" "}
+            <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
+              View docs
+            </ExternalDocsLink>
+          </AlertDescription>
+        </Alert>
+      ) : enforcementUnavailable ? (
         <Alert variant="info">
           <Info className="h-4 w-4" />
           <AlertTitle>Network policy enforcement unavailable</AlertTitle>

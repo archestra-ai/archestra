@@ -561,7 +561,7 @@ MCP server pods are protected from SSRF automatically: each pod's egress is conf
 
 ## Infrastructure as Code
 
-Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one in the API Keys section on Your Account (click your name in the sidebar) (see [API Reference](/docs/platform-api-reference#authentication)).
+Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one in the API Keys section in Personal Settings (click your name in the sidebar) (see [API Reference](/docs/platform-api-reference#authentication)).
 
 ### Terraform
 
@@ -874,6 +874,14 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Startup verifies this key against previously encrypted secrets and aborts on a mismatch (see `ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY`).
   - **Rotating it** requires re-encrypting existing rows: set `ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS` to the old value and restart — the app re-encrypts stored secrets on startup, decrypting each with the previous key and re-encrypting with the new one (idempotent, and a no-op when the key is unchanged). You can also run it explicitly with `pnpm --filter backend db:reencrypt-secrets`. Vault-managed secrets are unaffected.
 
+- **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`** - Enables enterprise content encryption at rest: LLM interaction payloads and chat message content are encrypted in the database with a key derived from this secret, separate from the stored-secrets key.
+  - Default: not set (disabled). Operator-supplied only — never auto-generated.
+  - Requires an enterprise license; startup fails when set without one.
+  - Existing rows are encrypted by a background sweep after enabling (also runnable as `pnpm --filter backend db:reencrypt-content`).
+  - Once content has been encrypted, startup fails — deliberately with no override — if the key is missing or wrong, because chat history and logs cannot be re-entered.
+  - See [Content Encryption at Rest](/docs/platform-secrets-management#content-encryption-at-rest-enterprise) for the enable and rotation procedures.
+- **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`** - Additional decrypt-only content key. Set during rotation (old key here, new key above) while the background sweep re-encrypts, and during rolling enablement to make every replica envelope-capable before writes activate. Unset it once the sweep completes.
+
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.
 
   > When using an external `authSecret.existingSecretName`, that Secret must include `session-secret` and `secrets-encryption-secret` keys (add them before upgrading). Rotate by updating a key in your own secret manager.
@@ -908,6 +916,11 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Default: `false`
   - Set to `true` to disable basic authentication and require users to authenticate via SSO only
   - Note: Configure at least one Identity Provider before enabling this option. See [Identity Providers](/docs/platform-identity-providers) for SSO configuration.
+
+- **`ARCHESTRA_AUTH_DISABLE_IMPERSONATION`** - Disables user impersonation ("View as user" role debugging).
+  - Default: `false`
+  - Set to `true` to hide the impersonation pickers and refuse new impersonated sessions
+  - Leaving it `false` does not grant impersonation to everyone — it still requires the `member:impersonate` permission (see [Available Permissions](/docs/platform-access-control#available-permissions))
 
 - **`ARCHESTRA_AUTH_DISABLE_INVITATIONS`** - Disables user invitations functionality.
   - Default: `false`
@@ -1363,7 +1376,7 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Example: `your-bearer-token`
 
 - **`ARCHESTRA_OTEL_CAPTURE_CONTENT`** - Enable or disable prompt/completion content capture in trace spans.
-  - Default: `true` (enabled)
+  - Default: `true` (enabled) — **unless [content encryption at rest](/docs/platform-secrets-management#content-encryption-at-rest-enterprise) is configured, in which case the default flips to `false`**: exporting the same content in plaintext to a telemetry backend would bypass the at-rest guarantee. Setting `true` explicitly still enables capture (for telemetry pipelines protected to the same standard) and logs a startup warning.
   - Set to `false` to disable content capture for privacy or to reduce span sizes
 
 - **`ARCHESTRA_OTEL_CONTENT_MAX_LENGTH`** - Maximum character length for captured content in span events (prompt messages, completions, tool arguments, tool results).
@@ -1564,15 +1577,23 @@ Permission sync for connectors using [auto-sync permissions](/docs/platform-know
   - Default: `1`
   - This lane is separate from the content lane's `ARCHESTRA_KNOWLEDGE_BASE_TASK_WORKER_MAX_CONCURRENT`, so permission sync never competes with content sync for slots.
 
-### Audit Log Configuration
+### Data Retention
 
-The audit log records administrative actions (mutations via `/api/*` and auth events) across your organization. Automatic retention is **disabled by default** - audit rows are kept indefinitely unless an org admin opts in by setting a positive retention window.
+> **Enterprise feature:** Contact sales@archestra.ai for licensing information.
 
-- **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Number of days to retain audit log records before they are automatically deleted by the daily retention sweep.
-  - Default: `0` (disabled — audit rows are never auto-deleted).
-  - Set to a positive integer (e.g. `90`, `180`) to opt in to automatic purging after that many days.
-  - Must be a non-negative integer; invalid values fall back to the default (disabled).
-  - When enabled, the sweep runs once every 24 hours as a background task.
+Automatic deletion of content-bearing records after a configurable number of days. All windows are **disabled by default** — records are kept indefinitely until an operator opts in. Startup fails when a window is configured without an active enterprise license, so a deployment relying on retention can never run with it silently disabled. When enabled, a sweep runs once every 24 hours as a background task and deletes in small batches.
+
+- **`ARCHESTRA_LLM_LOGS_RETENTION_DAYS`** - Days to retain LLM proxy logs (the `interactions` records behind the LLM Logs page) before automatic deletion.
+  - Default: `0` (disabled).
+  - Rows that newer records still depend on for request reconstruction are retained until those newer records expire too.
+  - A window shorter than 32 days logs a startup warning: monthly cost-limit periods aggregate these records, so deleting inside that horizon can under-count usage against limits. All-time cost statistics reflect retained records only.
+- **`ARCHESTRA_MCP_LOGS_RETENTION_DAYS`** - Days to retain MCP gateway tool-call logs before automatic deletion.
+  - Default: `0` (disabled).
+- **`ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS`** - Days after a conversation's last message activity before the conversation is automatically deleted, together with its messages, attachments, and conversation files.
+  - Default: `0` (disabled).
+  - Any new message resets the clock — only genuinely idle conversations expire.
+- **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Days to retain audit log records (administrative actions — mutations via `/api/*` and auth events) before automatic deletion.
+  - Default: `0` (disabled — audit rows are kept indefinitely).
 
 ### Maintenance Mode
 

@@ -2,20 +2,21 @@ import { archestraApiSdk } from "@archestra/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { useDisableImpersonation } from "@/lib/config/config.query";
 import { throwOnApiError } from "@/lib/utils";
 
-// Starting impersonation requires BOTH better-auth's admin plugin gate
-// (system-level `users.role === "admin"`) and the org-level RBAC permission
-// member:impersonate (enforced server-side in the auth before-hook), so the
-// UI only offers it when the caller passes both.
+// The org-level RBAC permission member:impersonate is the source of truth
+// (the backend keeps better-auth's system-level role in lockstep with it),
+// so the UI offers impersonation exactly when the permission is held — and
+// never when the deployment-level kill switch is on.
 export function useCanImpersonate() {
-  const { data: session } = useSession();
+  const disableImpersonation = useDisableImpersonation();
   const { data: hasImpersonatePermission } = useHasPermissions({
     member: ["impersonate"],
   });
-  return session?.user.role === "admin" && !!hasImpersonatePermission;
+  return disableImpersonation === false && !!hasImpersonatePermission;
 }
 
 export const impersonationKeys = {
@@ -25,7 +26,7 @@ export const impersonationKeys = {
 
 export function useImpersonationCandidates() {
   const isAuthenticated = useIsAuthenticated();
-  const { data: canManage } = useHasPermissions({ member: ["impersonate"] });
+  const canImpersonate = useCanImpersonate();
 
   return useQuery({
     queryKey: impersonationKeys.candidates(),
@@ -34,7 +35,7 @@ export function useImpersonationCandidates() {
       throwOnApiError(response.error);
       return response.data ?? [];
     },
-    enabled: isAuthenticated && !!canManage,
+    enabled: isAuthenticated && canImpersonate,
     retry: false,
     throwOnError: false,
   });

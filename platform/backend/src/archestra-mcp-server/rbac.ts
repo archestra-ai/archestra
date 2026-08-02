@@ -54,10 +54,6 @@ export const TOOL_PERMISSIONS: Record<
   list_mcp_server_deployments: { resource: "mcpRegistry", action: "read" },
   get_mcp_server_logs: { resource: "mcpRegistry", action: "read" },
   reload_mcp_server_tools: { resource: "mcpRegistry", action: "update" },
-  create_mcp_server_installation_request: {
-    resource: "mcpServerInstallationRequest",
-    action: "create",
-  },
 
   // Teams
   create_team: { resource: "team", action: "create" },
@@ -180,6 +176,11 @@ export const TOOL_PERMISSIONS: Record<
   // (authorship, project membership) stays in the handlers.
   search_files: { resource: "file", action: "manage" },
   read_file: { resource: "file", action: "manage" },
+  // Agent-side exchange with the chat's open app — pure PFS↔PFS, so file
+  // permission, not sandbox execution.
+  copy_file: { resource: "file", action: "manage" },
+  // App-runtime only (never seeded/agent-visible); still viewer-RBAC-checked.
+  read_file_raw: { resource: "file", action: "manage" },
   save_file: { resource: "file", action: "manage" },
   edit_file: { resource: "file", action: "manage" },
   delete_file: { resource: "file", action: "manage" },

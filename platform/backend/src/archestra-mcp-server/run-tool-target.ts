@@ -23,8 +23,7 @@ export function resolveRunToolTarget(
   args: unknown,
 ): { toolName: string; toolInput: Record<string, unknown> } {
   const toolInput = isRecord(args) ? args : {};
-  const shortName = archestraMcpBranding.getToolShortName(toolName);
-  if (shortName !== TOOL_RUN_TOOL_SHORT_NAME) {
+  if (!isRunToolName(toolName)) {
     return { toolName, toolInput };
   }
 
@@ -62,12 +61,18 @@ type RunToolDispatch =
  * policies evaluate the tool that actually produced the data instead of the
  * built-in wrapper.
  */
+/** True when the (canonical) tool name is the `run_tool` dispatch wrapper. */
+function isRunToolName(toolName: string): boolean {
+  return (
+    archestraMcpBranding.getToolShortName(toolName) === TOOL_RUN_TOOL_SHORT_NAME
+  );
+}
+
 export function resolveRunToolDispatch(
   toolName: string,
   args: unknown,
 ): RunToolDispatch {
-  const shortName = archestraMcpBranding.getToolShortName(toolName);
-  if (shortName !== TOOL_RUN_TOOL_SHORT_NAME) {
+  if (!isRunToolName(toolName)) {
     return { kind: "not_dispatch" };
   }
 

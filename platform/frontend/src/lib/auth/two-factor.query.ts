@@ -1,12 +1,34 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { archestraApiSdk } from "@archestra/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { authQueryKeys } from "@/lib/auth/auth.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { throwOnApiError } from "@/lib/utils";
 
 type AuthClientError = {
   message?: string;
   statusText?: string;
 };
+
+/**
+ * Whether a two-factor SIGN-IN challenge is currently pending. better-auth
+ * keeps that state in a signed httpOnly cookie the browser cannot read, so
+ * the auth pages ask the server before deciding whether they apply.
+ */
+export function useTwoFactorChallengePending() {
+  return useQuery({
+    queryKey: ["auth-state", "two-factor-pending"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getAuthState();
+      throwOnApiError(error, { toastOnError: false });
+      return data?.twoFactorPending ?? false;
+    },
+    // A challenge is short-lived and single-use; never serve it from cache.
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+}
 
 /**
  * Enable two-factor authentication. Returns the TOTP URI (for the QR setup

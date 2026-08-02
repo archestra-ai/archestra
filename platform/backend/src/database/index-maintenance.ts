@@ -1,4 +1,6 @@
 import { sql } from "drizzle-orm";
+// biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
+import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
 import db from "@/database";
 import logger from "@/logging";
 
@@ -60,6 +62,48 @@ export async function dropLegacyPayloadTrgmIndexes(
     }
   }
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/**
+ * Under enterprise content encryption, `messages.content` stores ciphertext:
+ * the trigram index cannot serve searches anymore (conversation search
+ * degrades to titles) and would pay GIN maintenance on every backfill
+ * rewrite. Dropped out-of-band for the same lock-safety reasons as the
+ * legacy payload indexes above; the backfill additionally verifies the index
+ * is gone before rewriting rows, because this drop is best-effort.
+ */
+export async function dropMessagesContentTrgmIndexUnderEncryption(
+  options: { concurrently?: boolean } = {},
+): Promise<void> {
+  if (!isContentEncryptionEnabled()) return;
+  const concurrently = options.concurrently ?? true;
+  const indexName = "messages_content_trgm_idx";
+  try {
+    const existing = await db.execute(
+      sql`select to_regclass(${indexName}) as index_oid`,
+    );
+    if (!existing.rows[0]?.index_oid) return;
+
+    logger.info({ indexName }, "Dropping message content trgm index");
+    await db.execute(
+      sql.raw(
+        `DROP INDEX ${concurrently ? "CONCURRENTLY " : ""}IF EXISTS "${indexName}"`,
+      ),
+    );
+    logger.info({ indexName }, "Dropped message content trgm index");
+  } catch (error) {
+    logger.warn(
+      {
+        error: error instanceof Error ? error.message : String(error),
+        indexName,
+      },
+      "Failed to drop message content trgm index; will retry on next boot",
+    );
+  }
+}
+// SPDX-SnippetEnd
 
 // ============================================================
 // Internal implementation

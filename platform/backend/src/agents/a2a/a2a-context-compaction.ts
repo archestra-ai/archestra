@@ -374,6 +374,7 @@ async function buildSummarizer(params: {
     userId: params.userId ?? undefined,
     sessionId: params.sessionId,
     source: "a2a:compaction",
+    chatApiKeyId: compactionLlm.chatApiKeyId,
   });
 
   // Last-resort flow (no interactive retry affordance): salvage untagged

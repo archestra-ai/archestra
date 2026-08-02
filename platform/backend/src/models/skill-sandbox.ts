@@ -122,6 +122,51 @@ class SkillSandboxModel {
     return row;
   }
 
+  /**
+   * Find the (app, user) default sandbox or create it — the single sandbox an
+   * MCP App runtime ever uses, since an app carries no conversation. Same
+   * concurrency argument as {@link findOrCreateDefault}, against the partial
+   * unique index `(organization_id, user_id, app_id) WHERE is_default AND
+   * app_id IS NOT NULL`.
+   */
+  static async findOrCreateAppDefault(params: {
+    organizationId: string;
+    userId: string;
+    appId: string;
+    defaultCwd: string;
+  }): Promise<SkillSandbox> {
+    const { organizationId, userId, appId, defaultCwd } = params;
+
+    await db
+      .insert(schema.skillSandboxesTable)
+      .values({
+        organizationId,
+        userId,
+        appId,
+        defaultCwd,
+        isDefault: true,
+      })
+      .onConflictDoNothing();
+
+    const [row] = await db
+      .select()
+      .from(schema.skillSandboxesTable)
+      .where(
+        and(
+          eq(schema.skillSandboxesTable.organizationId, organizationId),
+          eq(schema.skillSandboxesTable.userId, userId),
+          eq(schema.skillSandboxesTable.appId, appId),
+          eq(schema.skillSandboxesTable.isDefault, true),
+        ),
+      );
+    if (!row) {
+      // The app FK is ON DELETE CASCADE, so a missing row here means the app
+      // was deleted between the insert and the re-select.
+      throw new Error(`App ${appId} no longer exists`);
+    }
+    return row;
+  }
+
   /** The conversation's default sandbox, if one has been created. */
   static async findDefault(params: {
     organizationId: string;

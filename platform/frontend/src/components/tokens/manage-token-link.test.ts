@@ -22,7 +22,7 @@ describe("getManageTokenLink", () => {
       }),
     ).toEqual({
       label: "Manage your organization token",
-      href: "/settings/organization?highlight=organization-token",
+      href: "/settings/auth?highlight=organization-token",
     });
   });
 

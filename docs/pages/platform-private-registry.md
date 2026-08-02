@@ -87,7 +87,7 @@ The registry does not expose tools to clients by itself. After a server is insta
 
 For external MCP clients, create or edit an [MCP Gateway](/docs/platform-mcp-gateway), assign tools from installed registry entries (or use Automatic tool assignment mode to derive them from labels), then connect the client to the gateway endpoint. For built-in Archestra agents, assign the same tools from the agent's tool configuration.
 
-Each registry card shows which agents and gateways have tools assigned from the server. The uninstall dialog lists them too, so you can see who is affected before removing a connection. The count covers explicit assignments only — Automatic tool assignment mode is not included.
+Each registry card shows how many agents and gateways can reach the server. Hover the count to list them, grouped by how they get access — an explicit tool assignment, or Automatic tool assignment mode. The server's **Usage** tab shows the same list as a read-only table. Personal agents all share a name, so each one is labelled with its owner. The uninstall dialog lists them too, so you can see who is affected before removing a connection.
 
 ## Refreshing Tools
 

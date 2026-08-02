@@ -61,6 +61,10 @@ import {
   createChatTaskBridge,
 } from "@/clients/chat-task-bridge";
 import {
+  applyDualLlmAnalysesToMessages,
+  createDualLlmAnalysisStreamBridge,
+} from "@/clients/dual-llm-analysis-stream";
+import {
   createLLMModel,
   createLLMModelForAgent,
   isApiKeyRequired,
@@ -77,6 +81,7 @@ import {
 import config from "@/config";
 import { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
+import { dualLlmProgressBus } from "@/guardrails/dual-llm-progress-bus";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import {
   applyHookRunsToMessages,
@@ -408,6 +413,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // splicing into the assistant message in onFinish. One instance is shared
       // down the whole delegation chain.
       const subagentToolStream = createSubagentToolStreamBridge();
+      // Surfaces the proxy's dual LLM sanitization work on this conversation as
+      // structured analysis parts. The proxy publishes events on the in-process
+      // bus under a per-turn channel id that rides the loopback request as a
+      // header; the bridge streams them live and collects them for splicing in
+      // onFinish, buffering anything that fires before the model stream's
+      // `start` chunk (a pre-`start` data part mints a phantom message).
+      const dualLlmAnalysisStream = createDualLlmAnalysisStreamBridge();
+      const dualLlmProgressChannel = randomUUID();
+      const unsubscribeDualLlmProgress = dualLlmProgressBus.subscribe(
+        dualLlmProgressChannel,
+        (event) => dualLlmAnalysisStream.handleEvent(event),
+      );
       // Detaches a tool call that outlives the synchronous threshold into a
       // durable task, so the user sees a live cancellable card instead of the
       // turn simply failing at the timeout.
@@ -625,6 +642,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             onStreamSettled: () => {
               removeAbortListeners();
               stopActiveRunPolling();
+              unsubscribeDualLlmProgress();
             },
             buildErrorPayload: ({ error, mappedError }) =>
               buildStreamErrorPayload({
@@ -941,6 +959,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 chatMcpElicitation.setWriter(writer);
                 subagentToolStream.setWriter(writer);
                 chatTaskBridge.setWriter(writer);
+                dualLlmAnalysisStream.setWriter(writer);
 
                 // Create the LLM model here, inside execute, so a credential
                 // failure (e.g. a per-user provider like GitHub Copilot the user
@@ -961,6 +980,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     sessionId: conversationId,
                     source: "chat",
                     agentLlmApiKeyId: agent.llmApiKeyId,
+                    dualLlmProgressChannel,
                   });
 
                 // Send heartbeat every 5s to prevent connection drops
@@ -1594,19 +1614,23 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   onFinish: async ({ messages: finalMessages }) => {
                     removeAbortListeners();
                     stopActiveRunPolling();
+                    unsubscribeDualLlmProgress();
 
                     // Splice the turn's collected hook runs into the assistant
                     // message(s) as inline `data-hook-run` parts before persisting,
                     // so they survive refresh and sit at their lifecycle position.
-                    const messagesToPersist = applyMcpTasksToMessages(
-                      applySubagentToolCallsToMessages(
-                        applyHookRunsToMessages(
-                          finalMessages as unknown as ChatMessage[],
-                          hookRunCollector,
+                    const messagesToPersist = applyDualLlmAnalysesToMessages(
+                      applyMcpTasksToMessages(
+                        applySubagentToolCallsToMessages(
+                          applyHookRunsToMessages(
+                            finalMessages as unknown as ChatMessage[],
+                            hookRunCollector,
+                          ),
+                          subagentToolStream.collected(),
                         ),
-                        subagentToolStream.collected(),
+                        chatTaskBridge.collected(),
                       ),
-                      chatTaskBridge.collected(),
+                      dualLlmAnalysisStream.collected(),
                     );
 
                     // Only persist if not already persisted by onError
@@ -1652,6 +1676,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // stream.
                 writer.merge(
                   modelUiStream
+                    .pipeThrough(
+                      // Releases the dual-LLM bridge's buffered analysis parts
+                      // once the model stream has opened — writing them any
+                      // earlier mints a phantom assistant message client-side.
+                      // Flushed on the second chunk, not the first: the merge
+                      // pump has provably forwarded the `start` chunk to the
+                      // outbound stream before this transform sees chunk two,
+                      // so a side-write can no longer overtake it.
+                      (() => {
+                        let chunksSeen = 0;
+                        return new TransformStream({
+                          transform(chunk, controller) {
+                            controller.enqueue(chunk);
+                            chunksSeen++;
+                            if (chunksSeen >= 2) {
+                              dualLlmAnalysisStream.markStreamStarted();
+                            }
+                          },
+                        });
+                      })(),
+                    )
                     .pipeThrough(
                       createToolUiStartTransform({
                         prefetchedUiResources,
@@ -1757,6 +1802,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           chatAbortController.abort();
         }
         stopActiveRunPolling();
+        unsubscribeDualLlmProgress();
         await activeChatRunService.markTerminal({
           runId: activeRun.id,
           status: "failed",
@@ -3242,6 +3288,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Chat"],
         params: z.object({ id: z.string() }),
         body: z.object({
+          conversationId: z.string(),
           partIndex: z.number().int().min(0),
           text: z.string().min(1),
           deleteSubsequentMessages: z.boolean().optional(),
@@ -3252,30 +3299,33 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (
       {
         params: { id },
-        body: { partIndex, text, deleteSubsequentMessages },
+        body: { conversationId, partIndex, text, deleteSubsequentMessages },
         user,
         organizationId,
       },
       reply,
     ) => {
-      // Fetch the message to get its conversation ID
-      // Use findByAnyId to support both DB UUIDs and AI SDK nanoid content IDs
-      // (in-session messages retain their nanoid IDs until page reload)
-      const message = await MessageModel.findByAnyId(id);
-
-      if (!message) {
-        throw new ApiError(404, "Message not found");
-      }
-
-      // Verify the user has access to the conversation
+      // Verify the user has access to the conversation FIRST — the message
+      // lookup is scoped to it. Content ids (AI SDK nanoids, used until page
+      // reload) are client-supplied and non-unique across conversations, and
+      // the scoped lookup also stays correct under content encryption.
       const conversation = await ConversationModel.findById({
-        id: message.conversationId,
+        id: conversationId,
         userId: user.id,
         organizationId: organizationId,
       });
 
       if (!conversation) {
         throw new ApiError(404, "Message not found or access denied");
+      }
+
+      const message = await MessageModel.findByAnyIdInConversation(
+        id,
+        conversationId,
+      );
+
+      if (!message) {
+        throw new ApiError(404, "Message not found");
       }
 
       // run the message edit, optional subsequent-message deletion, and
@@ -3663,6 +3713,8 @@ export interface GenerateTitleParams {
   apiKey: string | undefined;
   modelName: string;
   baseUrl: string | null;
+  /** Key row that supplied `apiKey` — forwarded so per-key proxy state (codex refresh-token rotation) binds to the right row. */
+  chatApiKeyId?: string;
   agentId: string;
   userId: string;
   conversationId: string;
@@ -3737,6 +3789,7 @@ export async function generateConversationTitle(
     sessionId: conversationId,
     source: "chat:title_generation",
     baseUrl,
+    chatApiKeyId: params.chatApiKeyId,
   });
 
   try {

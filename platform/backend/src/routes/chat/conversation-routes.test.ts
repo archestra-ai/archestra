@@ -723,11 +723,23 @@ describe("chat conversation and message routes", () => {
     expect(response.json().error.message).toContain("Conversation not found");
   });
 
-  test("returns 404 when updating a missing message", async () => {
+  test("returns 404 when updating a missing message", async ({ makeAgent }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: currentUser.id,
+      scope: "personal",
+    });
+    const conversation = await ConversationModel.create({
+      userId: currentUser.id,
+      organizationId,
+      agentId: agent.id,
+    });
+
     const response = await app.inject({
       method: "PATCH",
       url: "/api/chat/messages/1d6934ea-eb0d-452d-abf3-72122d140c49",
       payload: {
+        conversationId: conversation.id,
         partIndex: 0,
         text: "Updated text",
       },
@@ -738,10 +750,13 @@ describe("chat conversation and message routes", () => {
   });
 
   test("validates chat message patch payload", async () => {
+    const conversationId = "9c1f74a3-19f6-4f81-9c07-371f7a1f8f6e";
+
     const emptyTextResponse = await app.inject({
       method: "PATCH",
       url: "/api/chat/messages/1d6934ea-eb0d-452d-abf3-72122d140c49",
       payload: {
+        conversationId,
         partIndex: 0,
         text: "",
       },
@@ -753,12 +768,26 @@ describe("chat conversation and message routes", () => {
       method: "PATCH",
       url: "/api/chat/messages/1d6934ea-eb0d-452d-abf3-72122d140c49",
       payload: {
+        conversationId,
         partIndex: -1,
         text: "Updated text",
       },
     });
 
     expect(negativeIndexResponse.statusCode).toBe(400);
+
+    // Message lookups are conversation-scoped: a payload without the owning
+    // conversation is rejected before any lookup happens.
+    const missingConversationResponse = await app.inject({
+      method: "PATCH",
+      url: "/api/chat/messages/1d6934ea-eb0d-452d-abf3-72122d140c49",
+      payload: {
+        partIndex: 0,
+        text: "Updated text",
+      },
+    });
+
+    expect(missingConversationResponse.statusCode).toBe(400);
 
     const missingBodyResponse = await app.inject({
       method: "PATCH",
@@ -806,6 +835,7 @@ describe("chat conversation and message routes", () => {
       method: "PATCH",
       url: `/api/chat/messages/${firstMessage.id}`,
       payload: {
+        conversationId: conversation.id,
         partIndex: 0,
         text: "Updated text",
         deleteSubsequentMessages: true,
@@ -869,6 +899,7 @@ describe("chat conversation and message routes", () => {
       method: "PATCH",
       url: `/api/chat/messages/${firstMessage.id}`,
       payload: {
+        conversationId: conversation.id,
         partIndex: 0,
         text: "Updated text",
         deleteSubsequentMessages: true,

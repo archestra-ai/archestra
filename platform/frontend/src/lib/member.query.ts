@@ -223,7 +223,11 @@ export function useUpdateMemberRole() {
     }) => {
       const response = await authClient.organization.updateMemberRole({
         memberId,
-        role: role as "admin" | "member",
+        // better-auth's client types only admit its built-in role names;
+        // custom and platform-defined roles pass through as plain strings.
+        role: role as Parameters<
+          typeof authClient.organization.updateMemberRole
+        >[0]["role"],
       });
       if (response.error) {
         throw new Error(response.error.message ?? "Failed to update role");

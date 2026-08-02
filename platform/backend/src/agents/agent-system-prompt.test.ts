@@ -1,6 +1,7 @@
 import {
   ADMIN_ROLE_NAME,
   type ArchestraToolShortName,
+  TOOL_COPY_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
@@ -226,6 +227,48 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("code execution environment");
     expect(prompt).not.toContain(searchFilesToolName);
     expect(prompt).not.toContain("did not attach this turn");
+  });
+
+  test("app-exchange guidance is gated on copy_file and keeps the source filename", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+    const common = {
+      agent,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    };
+
+    const withCopy = await buildAgentSystemPrompt({
+      ...common,
+      mcpTools: {
+        ...withFileTools,
+        [brand(TOOL_COPY_FILE_SHORT_NAME)]: {} as Tool,
+      },
+    });
+    expect(withCopy).toContain(brand(TOOL_COPY_FILE_SHORT_NAME));
+    // The copy lands under the source's own name — that name (extension and
+    // all) is how the app finds the file and how it picks a parser. Guidance
+    // that told the model to rename every copy into an app-declared input slot
+    // made agents hand a .obj to an app as "model.stl", which then parsed it as
+    // STL and drew garbage.
+    expect(withCopy).toContain("keeps the source's filename");
+    expect(withCopy).toContain("never rewrite the extension");
+
+    const withoutCopy = await buildAgentSystemPrompt({
+      ...common,
+      mcpTools: withFileTools,
+    });
+    expect(withoutCopy).not.toContain(brand(TOOL_COPY_FILE_SHORT_NAME));
+    expect(withoutCopy).not.toContain("keeps the source's filename");
   });
 
   test("adds the tool-result instruction only when tools are present", async ({
@@ -633,6 +676,7 @@ describe("buildAgentSystemPrompt", () => {
       agentId: agent.id,
       openedApp: {
         kind: "owned",
+        id: "opened-app-1",
         name: "Expense Tracker",
         description: "Logs receipts.",
         tools: [],
@@ -662,6 +706,7 @@ describe("buildAgentSystemPrompt", () => {
 
     const openedApp: OpenedApp = {
       kind: "owned",
+      id: "opened-app-2",
       name: "Notification Triage",
       description: "A notification-style inbox.",
       tools: ["github__search_issues", "github__search_pull_requests"],
@@ -734,6 +779,7 @@ describe("buildAgentSystemPrompt", () => {
       agentId: agent.id,
       openedApp: {
         kind: "owned",
+        id: "opened-app-3",
         name: "Cross-poster",
         description: null,
         // Two upstream servers plus a recognized archestra built-in: the
@@ -775,6 +821,7 @@ describe("buildAgentSystemPrompt", () => {
       agentId: agent.id,
       openedApp: {
         kind: "owned",
+        id: "opened-app-4",
         name: "Kitchen Sink",
         description: null,
         tools,

@@ -18,6 +18,9 @@ function makeCapabilities(
     supportsFqdn: false,
     supportsHttpMethods: false,
     message: null,
+    enforcementSource: "api-discovery",
+    probe: "absent",
+    probedAt: null,
   };
 }
 

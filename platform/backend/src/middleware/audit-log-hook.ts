@@ -493,8 +493,15 @@ async function resolveAfterState(params: {
   // A genuine resource deletion has no post-state. But a DELETE registered with
   // a non-delete action (e.g. removing one delegation → agent.updated) leaves
   // the resource alive, so its after-state must be captured — otherwise the row
-  // renders as a full teardown instead of the child-level diff.
-  if (method === "DELETE" && action.endsWith(".deleted")) return null;
+  // renders as a full teardown instead of the child-level diff. `.purged` is a
+  // deletion too — without the guard its fetchById would run and return null
+  // anyway (the row is gone), a wasted query per purge.
+  if (
+    method === "DELETE" &&
+    (action.endsWith(".deleted") || action.endsWith(".purged"))
+  ) {
+    return null;
+  }
   if (!cfg?.fetchById || !id) return null;
 
   return cfg.fetchById(id, organizationId, routeParams).catch((err) => {

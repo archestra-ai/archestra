@@ -1485,6 +1485,57 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.delete(
+    "/api/agents/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PurgeAgent,
+        description:
+          "Permanently delete a soft-deleted agent (admins only). Unlinks its " +
+          "LLM interaction history and destroys the row; the data cannot be " +
+          "recovered. A trash action, never a shortcut: 404 unless the agent " +
+          "is already soft-deleted.",
+        tags: ["Agents"],
+        params: z.object({
+          id: UuidIdSchema,
+        }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const agent = await AgentModel.findDeletedByIdForOrganization(
+        id,
+        organizationId,
+      );
+      if (!agent) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      try {
+        // Per-type admin, resolved dynamically like every other agent route.
+        checker.require(agent.agentType, "admin");
+      } catch {
+        // Mirror the restore route: no permission reads as not-found.
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // 0 days: any soft-deleted row qualifies; the in-transaction FOR UPDATE
+      // re-check makes a concurrent restore win over the purge.
+      const purged = await AgentModel.hardDelete(id, {
+        onlyIfDeletedForDays: 0,
+      });
+      if (!purged) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.get(
     "/api/agents/labels/keys",
     {

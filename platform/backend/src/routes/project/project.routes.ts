@@ -8,8 +8,10 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
+import { ProjectModel } from "@/models";
 import { projectService } from "@/services/project";
 import {
+  ApiError,
   constructResponseSchema,
   ProjectConversationItemSchema,
   ProjectDetailSchema,
@@ -345,6 +347,41 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         name: body?.name,
       }),
+  );
+
+  fastify.delete(
+    "/api/projects/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PurgeProject,
+        description:
+          "Permanently delete a soft-deleted project (admins only). Destroys " +
+          "its retained files (rows and stored bytes) and scheduled tasks; " +
+          "the data cannot be recovered. A trash action, never a shortcut: " +
+          "404 unless the project is already soft-deleted.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id }, organizationId }) => {
+      const project = await ProjectModel.findDeletedByIdForOrganization({
+        id,
+        organizationId,
+      });
+      if (!project) {
+        throw new ApiError(404, "Project not found");
+      }
+      // 0 days: any soft-deleted row qualifies; the in-transaction FOR UPDATE
+      // re-check makes a concurrent restore win over the purge.
+      const purged = await ProjectModel.hardDelete(id, {
+        onlyIfDeletedForDays: 0,
+      });
+      if (!purged) {
+        throw new ApiError(404, "Project not found");
+      }
+      return { ok: true as const };
+    },
   );
 
   fastify.get(

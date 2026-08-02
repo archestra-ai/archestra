@@ -22,6 +22,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agent.updated": "Agent updated",
   "agent.deleted": "Agent deleted",
   "agent.restored": "Agent restored",
+  "agent.purged": "Agent permanently deleted",
   "agent.imported": "Agent imported",
   // Agent tool assignment
   "agentTool.created": "Agent tool added",
@@ -36,6 +37,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "app.created": "App created",
   "app.updated": "App updated",
   "app.deleted": "App deleted",
+  "app.purged": "App permanently deleted",
   // ChatOps binding
   "chatOpsBinding.created": "ChatOps binding created",
   "chatOpsBinding.updated": "ChatOps binding updated",
@@ -47,6 +49,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
+  "connector.purged": "Connector permanently deleted",
   "connector.permission_sync_triggered": "Connector permission sync triggered",
   "connector.synced": "Connector synced",
   // Default user limit
@@ -73,6 +76,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "internalMcpCatalog.updated": "Internal catalog updated",
   "internalMcpCatalog.deleted": "Internal catalog deleted",
   "internalMcpCatalog.restored": "Internal catalog restored",
+  "internalMcpCatalog.purged": "Internal catalog permanently deleted",
   "internalMcpCatalog.reinstalled": "Internal catalog reinstalled",
   // Invitation
   "invitation.created": "Invitation sent",
@@ -81,6 +85,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "knowledgeBase.created": "Knowledge base created",
   "knowledgeBase.updated": "Knowledge base updated",
   "knowledgeBase.deleted": "Knowledge base deleted",
+  "knowledgeBase.purged": "Knowledge base permanently deleted",
   // Limit
   "limit.created": "Limit created",
   "limit.updated": "Limit updated",
@@ -106,6 +111,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "mcpServer.updated": "MCP server updated",
   "mcpServer.deleted": "MCP server deleted",
   "mcpServer.restored": "MCP server restored",
+  "mcpServer.purged": "MCP server permanently deleted",
   "mcpServer.reinstalled": "MCP server reinstalled",
   // MCP install request
   "mcpServerInstallationRequest.created": "MCP install request created",
@@ -125,6 +131,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "project.updated": "Project updated",
   "project.deleted": "Project deleted",
   "project.restored": "Project restored",
+  "project.purged": "Project permanently deleted",
   // Role
   "role.created": "Role created",
   "role.updated": "Role updated",
@@ -143,6 +150,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "skill.updated": "Skill updated",
   "skill.deleted": "Skill deleted",
   "skill.restored": "Skill restored",
+  "skill.purged": "Skill permanently deleted",
   "skill.imported": "Skill imported",
   // Team
   "team.created": "Team created",
@@ -152,6 +160,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "teamToken.rotated": "Team token rotated",
   // Tool
   "tool.deleted": "Tool deleted",
+  "tool.purged": "Tool permanently deleted",
   // Tool invocation policy
   "toolInvocationPolicy.created": "Tool policy created",
   "toolInvocationPolicy.updated": "Tool policy updated",

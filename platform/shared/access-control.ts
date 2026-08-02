@@ -735,6 +735,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateAgent]: {},
   [RouteId.DeleteAgent]: {},
   [RouteId.RestoreAgent]: {},
+  // Permanent delete: per-agent-type `admin` checked dynamically in handler,
+  // like every other agent route.
+  [RouteId.PurgeAgent]: {},
   // Version history: agent-type read permission checked dynamically in handler
   [RouteId.GetAgentVersions]: {},
   [RouteId.GetAgentVersion]: {},
@@ -1716,6 +1719,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSkill]: { skill: ["update"] },
   [RouteId.DeleteSkill]: { skill: ["delete"] },
   [RouteId.RestoreSkill]: { skill: ["delete"] },
+  // Permanent delete is a trash action (the row must already be soft-deleted)
+  // and destroys data irrecoverably — admin-only, unlike delete/restore.
+  [RouteId.PurgeSkill]: { skill: ["admin"] },
   [RouteId.ResetSkill]: { skill: ["update"] },
   [RouteId.UpdateSkillGithubSync]: { skill: ["update"] },
   [RouteId.DiscoverGithubSkills]: { skill: ["read"] },
@@ -1744,6 +1750,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // Restore is the inverse of delete and, like the deleted-projects view, an
   // oversight action — the handler further narrows it to `project:admin`.
   [RouteId.RestoreProject]: { project: ["delete"] },
+  // Permanent delete is a trash action (the row must already be soft-deleted)
+  // and destroys data irrecoverably — admin-only.
+  [RouteId.PurgeProject]: { project: ["admin"] },
   [RouteId.GetProjectConversations]: { project: ["read"] },
   // Project file surfaces combine project-level access with the files gate:
   // `file:manage` covers the file operations, while project membership is

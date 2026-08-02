@@ -53053,6 +53053,281 @@
         }
       }
     },
+    "/api/agents/{id}/permanent": {
+      "delete": {
+        "operationId": "purgeAgent",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Permanently delete a soft-deleted agent (admins only). Unlinks its LLM interaction history and destroys the row; the data cannot be recovered. A trash action, never a shortcut: 404 unless the agent is already soft-deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
     "/api/agents/labels/keys": {
       "get": {
         "operationId": "getLabelKeys",
@@ -73204,6 +73479,7 @@
                 "agent.deleted",
                 "agent.restored",
                 "agent.imported",
+                "agent.purged",
                 "agentTool.created",
                 "agentTool.updated",
                 "agentTool.deleted",
@@ -73214,6 +73490,7 @@
                 "app.created",
                 "app.updated",
                 "app.deleted",
+                "app.purged",
                 "chatOpsBinding.created",
                 "chatOpsBinding.updated",
                 "chatOpsBinding.deleted",
@@ -73222,6 +73499,7 @@
                 "connector.created",
                 "connector.updated",
                 "connector.deleted",
+                "connector.purged",
                 "connector.permission_sync_triggered",
                 "connector.synced",
                 "defaultUserLimit.created",
@@ -73242,6 +73520,7 @@
                 "internalMcpCatalog.created",
                 "internalMcpCatalog.updated",
                 "internalMcpCatalog.deleted",
+                "internalMcpCatalog.purged",
                 "internalMcpCatalog.restored",
                 "internalMcpCatalog.reinstalled",
                 "invitation.created",
@@ -73249,6 +73528,7 @@
                 "knowledgeBase.created",
                 "knowledgeBase.updated",
                 "knowledgeBase.deleted",
+                "knowledgeBase.purged",
                 "limit.created",
                 "limit.updated",
                 "limit.deleted",
@@ -73267,6 +73547,7 @@
                 "mcpServer.created",
                 "mcpServer.updated",
                 "mcpServer.deleted",
+                "mcpServer.purged",
                 "mcpServer.restored",
                 "mcpServer.reinstalled",
                 "mcpServerInstallationRequest.created",
@@ -73281,6 +73562,7 @@
                 "project.created",
                 "project.updated",
                 "project.deleted",
+                "project.purged",
                 "project.restored",
                 "role.created",
                 "role.updated",
@@ -73295,6 +73577,7 @@
                 "skill.created",
                 "skill.updated",
                 "skill.deleted",
+                "skill.purged",
                 "skill.restored",
                 "skill.imported",
                 "team.created",
@@ -73302,6 +73585,7 @@
                 "team.deleted",
                 "teamToken.rotated",
                 "tool.deleted",
+                "tool.purged",
                 "toolInvocationPolicy.created",
                 "toolInvocationPolicy.updated",
                 "toolInvocationPolicy.deleted",
@@ -73494,6 +73778,7 @@
                                   "agent.deleted",
                                   "agent.restored",
                                   "agent.imported",
+                                  "agent.purged",
                                   "agentTool.created",
                                   "agentTool.updated",
                                   "agentTool.deleted",
@@ -73504,6 +73789,7 @@
                                   "app.created",
                                   "app.updated",
                                   "app.deleted",
+                                  "app.purged",
                                   "chatOpsBinding.created",
                                   "chatOpsBinding.updated",
                                   "chatOpsBinding.deleted",
@@ -73512,6 +73798,7 @@
                                   "connector.created",
                                   "connector.updated",
                                   "connector.deleted",
+                                  "connector.purged",
                                   "connector.permission_sync_triggered",
                                   "connector.synced",
                                   "defaultUserLimit.created",
@@ -73532,6 +73819,7 @@
                                   "internalMcpCatalog.created",
                                   "internalMcpCatalog.updated",
                                   "internalMcpCatalog.deleted",
+                                  "internalMcpCatalog.purged",
                                   "internalMcpCatalog.restored",
                                   "internalMcpCatalog.reinstalled",
                                   "invitation.created",
@@ -73539,6 +73827,7 @@
                                   "knowledgeBase.created",
                                   "knowledgeBase.updated",
                                   "knowledgeBase.deleted",
+                                  "knowledgeBase.purged",
                                   "limit.created",
                                   "limit.updated",
                                   "limit.deleted",
@@ -73557,6 +73846,7 @@
                                   "mcpServer.created",
                                   "mcpServer.updated",
                                   "mcpServer.deleted",
+                                  "mcpServer.purged",
                                   "mcpServer.restored",
                                   "mcpServer.reinstalled",
                                   "mcpServerInstallationRequest.created",
@@ -73571,6 +73861,7 @@
                                   "project.created",
                                   "project.updated",
                                   "project.deleted",
+                                  "project.purged",
                                   "project.restored",
                                   "role.created",
                                   "role.updated",
@@ -73585,6 +73876,7 @@
                                   "skill.created",
                                   "skill.updated",
                                   "skill.deleted",
+                                  "skill.purged",
                                   "skill.restored",
                                   "skill.imported",
                                   "team.created",
@@ -73592,6 +73884,7 @@
                                   "team.deleted",
                                   "teamToken.rotated",
                                   "tool.deleted",
+                                  "tool.purged",
                                   "toolInvocationPolicy.created",
                                   "toolInvocationPolicy.updated",
                                   "toolInvocationPolicy.deleted",
@@ -74087,6 +74380,7 @@
                             "agent.deleted",
                             "agent.restored",
                             "agent.imported",
+                            "agent.purged",
                             "agentTool.created",
                             "agentTool.updated",
                             "agentTool.deleted",
@@ -74097,6 +74391,7 @@
                             "app.created",
                             "app.updated",
                             "app.deleted",
+                            "app.purged",
                             "chatOpsBinding.created",
                             "chatOpsBinding.updated",
                             "chatOpsBinding.deleted",
@@ -74105,6 +74400,7 @@
                             "connector.created",
                             "connector.updated",
                             "connector.deleted",
+                            "connector.purged",
                             "connector.permission_sync_triggered",
                             "connector.synced",
                             "defaultUserLimit.created",
@@ -74125,6 +74421,7 @@
                             "internalMcpCatalog.created",
                             "internalMcpCatalog.updated",
                             "internalMcpCatalog.deleted",
+                            "internalMcpCatalog.purged",
                             "internalMcpCatalog.restored",
                             "internalMcpCatalog.reinstalled",
                             "invitation.created",
@@ -74132,6 +74429,7 @@
                             "knowledgeBase.created",
                             "knowledgeBase.updated",
                             "knowledgeBase.deleted",
+                            "knowledgeBase.purged",
                             "limit.created",
                             "limit.updated",
                             "limit.deleted",
@@ -74150,6 +74448,7 @@
                             "mcpServer.created",
                             "mcpServer.updated",
                             "mcpServer.deleted",
+                            "mcpServer.purged",
                             "mcpServer.restored",
                             "mcpServer.reinstalled",
                             "mcpServerInstallationRequest.created",
@@ -74164,6 +74463,7 @@
                             "project.created",
                             "project.updated",
                             "project.deleted",
+                            "project.purged",
                             "project.restored",
                             "role.created",
                             "role.updated",
@@ -74178,6 +74478,7 @@
                             "skill.created",
                             "skill.updated",
                             "skill.deleted",
+                            "skill.purged",
                             "skill.restored",
                             "skill.imported",
                             "team.created",
@@ -74185,6 +74486,7 @@
                             "team.deleted",
                             "teamToken.rotated",
                             "tool.deleted",
+                            "tool.purged",
                             "toolInvocationPolicy.created",
                             "toolInvocationPolicy.updated",
                             "toolInvocationPolicy.deleted",
@@ -286315,6 +286617,285 @@
         }
       }
     },
+    "/api/projects/{id}/permanent": {
+      "delete": {
+        "operationId": "purgeProject",
+        "tags": [
+          "Projects"
+        ],
+        "description": "Permanently delete a soft-deleted project (admins only). Destroys its retained files (rows and stored bytes) and scheduled tasks; the data cannot be recovered. A trash action, never a shortcut: 404 unless the project is already soft-deleted.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:admin`: Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role).",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "project:admin"
+          ]
+        }
+      }
+    },
     "/api/projects/{id}/files": {
       "get": {
         "operationId": "getProjectFiles",
@@ -303599,6 +304180,280 @@
           "kind": "static",
           "permissions": [
             "skill:delete"
+          ]
+        }
+      }
+    },
+    "/api/skills/{id}/permanent": {
+      "delete": {
+        "operationId": "purgeSkill",
+        "tags": [
+          "Skills"
+        ],
+        "description": "Permanently delete a soft-deleted skill (admins only). Destroys its versions and resource files; the data cannot be recovered. A trash action, never a shortcut: 404 unless the skill is already soft-deleted. 409 while a sandbox mount still pins one of its versions.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:admin`: Full administrative control over all agent skills, bypassing team restrictions",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "skill:admin"
           ]
         }
       }

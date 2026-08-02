@@ -142,6 +142,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "agent.restored",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
+  // Identity-only snapshot, same as the retention sweep's purge audit rows: a
+  // purge records that the row is gone, never a full copy of deleted content.
+  "/api/agents/:id/permanent": {
+    resourceType: "agent",
+    action: "agent.purged",
+    fetchById: (id, orgId) => AgentModel.findIdentityForAudit(id, orgId),
+  },
   "/api/agents/:agentId": {
     resourceType: "agent",
     resourceIdParam: "agentId",
@@ -438,6 +445,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "project.restored",
     fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
   },
+  // Identity-only snapshot, same as the retention sweep's purge audit rows.
+  "/api/projects/:id/permanent": {
+    resourceType: "project",
+    action: "project.purged",
+    fetchById: (id, orgId) => ProjectModel.findIdentityForAudit(id, orgId),
+  },
   // Visibility lives in `project_shares`, captured by the project snapshot.
   "/api/projects/:id/share": {
     resourceType: "project",
@@ -461,6 +474,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skill",
     action: "skill.restored",
     fetchById: (id, orgId) => SkillModel.findByIdForAudit(id, orgId),
+  },
+  // Identity-only snapshot, same as the retention sweep's purge audit rows.
+  "/api/skills/:id/permanent": {
+    resourceType: "skill",
+    action: "skill.purged",
+    fetchById: (id, orgId) => SkillModel.findIdentityForAudit(id, orgId),
   },
   // Reset is a POST carrying :id, so the hook suppresses the parent walk-up.
   // Register it directly to capture the target id and before/after snapshots of

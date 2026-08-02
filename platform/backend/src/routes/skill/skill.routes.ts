@@ -1046,6 +1046,47 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.delete(
+    "/api/skills/:id/permanent",
+    {
+      schema: {
+        operationId: RouteId.PurgeSkill,
+        description:
+          "Permanently delete a soft-deleted skill (admins only). Destroys " +
+          "its versions and resource files; the data cannot be recovered. A " +
+          "trash action, never a shortcut: 404 unless the skill is already " +
+          "soft-deleted. 409 while a sandbox mount still pins one of its " +
+          "versions.",
+        tags: ["Skills"],
+        params: z.object({ id: z.string() }),
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async ({ params: { id }, organizationId }, reply) => {
+      const skill = await SkillModel.findDeletedById(id, organizationId);
+      if (!skill) {
+        throw new ApiError(404, "Skill not found");
+      }
+      // 0 days: any soft-deleted row qualifies; the in-transaction FOR UPDATE
+      // re-check makes a concurrent restore win over the purge.
+      const purged = await SkillModel.hardDelete(id, {
+        onlyIfDeletedForDays: 0,
+      });
+      if (!purged) {
+        // Distinguish the two skip reasons: a pinned version is a 409 the
+        // caller can act on, not an opaque failure (or a 23503 as a 500).
+        if (await SkillModel.hasSandboxVersionPin(id)) {
+          throw new ApiError(
+            409,
+            "This skill is still mounted in an active sandbox and cannot be permanently deleted yet.",
+          );
+        }
+        throw new ApiError(404, "Skill not found");
+      }
+      return reply.send({ success: true });
+    },
+  );
+
   fastify.post(
     "/api/skills/:id/reset",
     {

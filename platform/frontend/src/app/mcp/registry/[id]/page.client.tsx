@@ -310,7 +310,7 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
   const connectionsCount = allServersForCatalog.length;
   const agentUsageCount = deriveAgentUsage(allServersForCatalog).total;
 
-  const tabs: { label: React.ReactNode; href: string }[] = [
+  const tabs: { label: React.ReactNode; href: string; testId?: string }[] = [
     { label: "Overview", href: tabHref("overview") },
     {
       label: <TabLabel title="Usage" count={agentUsageCount} />,
@@ -319,14 +319,9 @@ function CatalogItemDetails({ item }: { item: CatalogItem }) {
     ...(showConnectionsTab
       ? [
           {
-            label: (
-              <TabLabel
-                title="Credentials"
-                count={connectionsCount}
-                testId={E2eTestId.McpServerSettingsConnectionsNavButton}
-              />
-            ),
+            label: <TabLabel title="Credentials" count={connectionsCount} />,
             href: tabHref("credentials"),
+            testId: E2eTestId.McpServerSettingsConnectionsNavButton,
           },
         ]
       : []),
@@ -737,20 +732,14 @@ function ItemPageSkeleton() {
 }
 
 /**
- * Tab label with an optional count. PageLayout renders labels as plain nodes,
- * so the e2e hook that used to sit on the tab trigger rides on the label.
+ * Tab label with an optional count. The e2e hook belongs on the tab's `testId`
+ * rather than here — PageLayout renders each label in its desktop row, its
+ * mobile row and possibly an overflow popover, so a test id on the label
+ * resolves to several elements at once.
  */
-function TabLabel({
-  title,
-  count,
-  testId,
-}: {
-  title: string;
-  count: number;
-  testId?: string;
-}) {
+function TabLabel({ title, count }: { title: string; count: number }) {
   return (
-    <span data-testid={testId} className="flex items-center gap-1">
+    <span className="flex items-center gap-1">
       <span>{title}</span>
       {count > 0 && (
         <span className="text-xs text-muted-foreground tabular-nums">

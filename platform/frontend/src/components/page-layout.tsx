@@ -45,7 +45,15 @@ export function PageLayout({
   mobileVisibleCount = 3,
 }: {
   children: React.ReactNode;
-  tabs?: { label: React.ReactNode; href: string }[];
+  /**
+   * Tab bar entries. A tab is rendered more than once — a desktop row plus a
+   * mobile row and, past `mobileVisibleCount`, an overflow popover — so a
+   * `data-testid` baked into `label` lands in the DOM two or three times and
+   * any strict-mode locator for it fails. Pass `testId` instead: it goes on
+   * the desktop link only, which is the copy visible at the desktop viewports
+   * the e2e suite runs at, so it resolves to exactly one element.
+   */
+  tabs?: { label: React.ReactNode; href: string; testId?: string }[];
   title: React.ReactNode;
   /**
    * Browser tab title, for pages whose visible `title` is composed markup (an
@@ -127,6 +135,8 @@ export function PageLayout({
                       key={tab.href}
                       href={tab.href}
                       aria-current={isActive ? "page" : undefined}
+                      // Only this copy carries the test id — see the `tabs` prop.
+                      data-testid={tab.testId}
                       className={cn(
                         "relative cursor-pointer pb-3 text-sm font-medium transition-colors hover:text-foreground",
                         isActive ? "text-foreground" : "text-muted-foreground",

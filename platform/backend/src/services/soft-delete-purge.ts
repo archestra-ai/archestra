@@ -29,6 +29,8 @@ export type PurgeableEntity = {
     | "agent"
     | "project";
   auditAction: AuditEventName;
+  /** Audit-registry resourceType vocabulary (audit-log-registry.ts). */
+  resourceType: string;
   /**
    * Global batched scan for rows soft-deleted longer ago than the window —
    * no per-org loop. Rows whose organization cannot be resolved are excluded:
@@ -77,6 +79,7 @@ export type PurgeableEntity = {
 export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
   {
     key: "tool",
+    resourceType: "tool",
     auditAction: "tool.purged",
     findExpired: (params) => ToolModel.findExpiredDeleted(params),
     countUnresolvable: (params) =>
@@ -86,6 +89,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
   },
   {
     key: "mcpServer",
+    resourceType: "mcpServer",
     auditAction: "mcpServer.purged",
     findExpired: (params) => McpServerModel.findExpiredDeleted(params),
     countUnresolvable: (params) =>
@@ -95,6 +99,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
   },
   {
     key: "internalMcpCatalog",
+    resourceType: "internalMcpCatalog",
     auditAction: "internalMcpCatalog.purged",
     findExpired: (params) => InternalMcpCatalogModel.findExpiredDeleted(params),
     hardDelete: (id, opts) => InternalMcpCatalogModel.hardDelete(id, opts),
@@ -103,6 +108,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
   },
   {
     key: "knowledgeBaseConnector",
+    resourceType: "connector",
     auditAction: "connector.purged",
     findExpired: (params) =>
       KnowledgeBaseConnectorModel.findExpiredDeleted(params),
@@ -112,6 +118,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
   },
   {
     key: "knowledgeBase",
+    resourceType: "knowledgeBase",
     auditAction: "knowledgeBase.purged",
     findExpired: (params) => KnowledgeBaseModel.findExpiredDeleted(params),
     hardDelete: (id, opts) => KnowledgeBaseModel.hardDelete(id, opts),
@@ -120,6 +127,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
   },
   {
     key: "app",
+    resourceType: "app",
     auditAction: "app.purged",
     findExpired: (params) => AppModel.findExpiredDeleted(params),
     hardDelete: (id, opts) => AppModel.hardDelete(id, opts),
@@ -128,6 +136,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
   },
   {
     key: "skill",
+    resourceType: "skill",
     auditAction: "skill.purged",
     findExpired: (params) => SkillModel.findExpiredDeleted(params),
     hardDelete: (id, opts) => SkillModel.hardDelete(id, opts),
@@ -136,6 +145,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
   },
   {
     key: "agent",
+    resourceType: "agent",
     auditAction: "agent.purged",
     findExpired: (params) => AgentModel.findExpiredDeleted(params),
     hardDelete: (id, opts) => AgentModel.hardDelete(id, opts),
@@ -144,6 +154,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
   },
   {
     key: "project",
+    resourceType: "project",
     auditAction: "project.purged",
     findExpired: (params) => ProjectModel.findExpiredDeleted(params),
     hardDelete: (id, opts) => ProjectModel.hardDelete(id, opts),

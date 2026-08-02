@@ -13,6 +13,7 @@ import { handleContentRetentionCleanup } from "./content-retention-cleanup-handl
 import { handlePermissionSync } from "./permission-sync-handler";
 import { handleScheduleTriggerRunExecution } from "./schedule-trigger-run-handler";
 import { handleSkillGithubSync } from "./skill-github-sync-handler";
+import { handleSoftDeletePurge } from "./soft-delete-purge-handler";
 
 export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
   taskQueueService.registerHandler("connector_sync", handleConnectorSync);
@@ -48,4 +49,5 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
     handleCheckDueSkillGithubSyncs,
   );
   taskQueueService.registerHandler("skill_github_sync", handleSkillGithubSync);
+  taskQueueService.registerHandler("soft_delete_purge", handleSoftDeletePurge);
 }

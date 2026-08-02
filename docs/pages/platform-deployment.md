@@ -561,7 +561,7 @@ MCP server pods are protected from SSRF automatically: each pod's egress is conf
 
 ## Infrastructure as Code
 
-Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one in the API Keys section on Your Account (click your name in the sidebar) (see [API Reference](/docs/platform-api-reference#authentication)).
+Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one in the API Keys section in Personal Settings (click your name in the sidebar) (see [API Reference](/docs/platform-api-reference#authentication)).
 
 ### Terraform
 

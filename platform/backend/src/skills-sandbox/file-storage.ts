@@ -69,6 +69,25 @@ export async function deleteRowBytes(blob: {
   if (store && blob.objectKey) await store.remove(blob.objectKey);
 }
 
+/**
+ * Best-effort {@link deleteRowBytes} over a purged batch of file rows. Purge
+ * paths call this AFTER the row-deleting transaction commits, so bytes never
+ * vanish for rows a rollback resurrects; a failed byte delete is swallowed
+ * (the row is already gone, so the object is unreachable dead weight).
+ */
+export async function deleteRowsBytesBestEffort(
+  rows: { storageProvider: string; objectKey: string | null }[],
+): Promise<void> {
+  await Promise.all(
+    rows.map((row) =>
+      deleteRowBytes({
+        provider: row.storageProvider,
+        objectKey: row.objectKey,
+      }).catch(() => {}),
+    ),
+  );
+}
+
 // === internal ===
 
 /**

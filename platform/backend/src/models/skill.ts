@@ -17,7 +17,13 @@ import {
 } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { restore, softDelete } from "@/database/soft-delete";
+import {
+  findExpiredSoftDeleted,
+  hardDelete,
+  lockRowForPurge,
+  restore,
+  softDelete,
+} from "@/database/soft-delete";
 import logger from "@/logging";
 import { skillInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
@@ -38,6 +44,7 @@ import type {
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import { trackBackgroundWork } from "@/utils/background-work";
 import SkillVersionModel, { type VersionFileInput } from "./skill-version";
+import TaskModel from "./task";
 
 class SkillModel {
   static async findByOrganization(params: {
@@ -631,6 +638,121 @@ class SkillModel {
       eq(schema.skillsTable.id, id),
     );
     return count > 0;
+  }
+
+  /**
+   * Physically delete a skill: its version rows (`skill_versions.skill_id` is
+   * ON DELETE SET NULL — a bare row delete would orphan the version bytes and
+   * their `skill_version_files`), its queued GitHub-sync tasks (no FK — the
+   * skill id lives in the payload), then the skill row (junctions, files,
+   * share links, and usage events cascade).
+   *
+   * Refuses (returns false) while a sandbox mount pins any of this skill's
+   * versions: `skill_sandbox_skill_mounts.skill_version_id` is ON DELETE
+   * RESTRICT, so the version delete would raise 23503. Nothing deletes
+   * sandboxes today, so a mounted skill stays unpurgeable until the pinning
+   * sandbox goes away — the sweep retries, the manual route surfaces a 409
+   * via {@link hasSandboxVersionPin}.
+   */
+  static async hardDelete(
+    id: string,
+    opts?: { onlyIfDeletedForDays?: number },
+  ): Promise<boolean> {
+    return await withDbTransaction(async (tx) => {
+      if (
+        !(await lockRowForPurge(
+          tx,
+          schema.skillsTable,
+          eq(schema.skillsTable.id, id),
+          opts,
+        ))
+      ) {
+        return false;
+      }
+      if (await SkillModel.hasSandboxVersionPin(id, tx)) return false;
+
+      await TaskModel.deleteQueuedForPayloadValue(
+        { taskType: "skill_github_sync", key: "skillId", value: id },
+        tx,
+      );
+      await tx
+        .delete(schema.skillVersionsTable)
+        .where(eq(schema.skillVersionsTable.skillId, id));
+      const count = await hardDelete(
+        tx,
+        schema.skillsTable,
+        eq(schema.skillsTable.id, id),
+      );
+      return count > 0;
+    });
+  }
+
+  /**
+   * Whether a sandbox mount pins one of this skill's versions — the condition
+   * under which {@link hardDelete} refuses. Application-level: soft delete
+   * never unpins anything (reads are gated instead, see
+   * assertMountedSkillsReadable), and Postgres only knows about the RESTRICT
+   * FK this check predicts.
+   */
+  static async hasSandboxVersionPin(
+    id: string,
+    executor: typeof db | Transaction = db,
+  ): Promise<boolean> {
+    const rows = await executor
+      .select({ id: schema.skillSandboxSkillMountsTable.id })
+      .from(schema.skillSandboxSkillMountsTable)
+      .innerJoin(
+        schema.skillVersionsTable,
+        eq(
+          schema.skillVersionsTable.id,
+          schema.skillSandboxSkillMountsTable.skillVersionId,
+        ),
+      )
+      .where(eq(schema.skillVersionsTable.skillId, id))
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  /** The purge sweep's find-expired scan; see findExpiredSoftDeleted. */
+  static async findExpiredDeleted(params: {
+    retentionDays: number;
+    limit: number;
+  }): Promise<{ id: string; organizationId: string }[]> {
+    return findExpiredSoftDeleted(
+      db,
+      schema.skillsTable,
+      {
+        id: schema.skillsTable.id,
+        organizationId: schema.skillsTable.organizationId,
+      },
+      params,
+    );
+  }
+
+  /**
+   * Identity-only audit snapshot ({ id, name, deletedAt }), org-scoped,
+   * soft-deleted rows included. A purge audit row records that the row is
+   * gone, not what it contained.
+   */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.skillsTable.id,
+        name: schema.skillsTable.name,
+        deletedAt: schema.skillsTable.deletedAt,
+      })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.id, id),
+          eq(schema.skillsTable.organizationId, organizationId),
+        ),
+      );
+    if (!row) return null;
+    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
   }
 
   /**

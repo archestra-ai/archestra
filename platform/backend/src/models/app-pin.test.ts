@@ -119,7 +119,7 @@ describe("AppPinModel", () => {
     const app = await makeApp({ organizationId: org.id, authorId: user.id });
     await AppPinModel.pinOwned({ userId: user.id, appId: app.id });
 
-    await AppModel.purge(app.id);
+    await AppModel.hardDelete(app.id);
 
     const pins = await AppPinModel.getPinnedAtForApps({
       userId: user.id,

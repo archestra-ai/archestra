@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type { InsertTask, Task, TaskType } from "@/types";
 
 type StuckTaskTransition = Pick<Task, "taskType" | "periodic"> & {
@@ -317,6 +317,27 @@ class TaskModel {
    * called before the connector (and its cascade-deleted runs) are removed, or
    * the batch_embedding subquery finds nothing. Returns the number deleted.
    */
+  /**
+   * Drop queued (pending/processing) tasks of one type whose payload carries a
+   * given value under a given key. The tasks table has no FKs — entity ids
+   * live in the payload JSON — so purging an entity otherwise orphans its
+   * enqueued work (a purged skill's `skill_github_sync`, a purged agent's or
+   * project's `schedule_trigger_run_execute`), which the worker would keep
+   * picking up and failing. Returns the number deleted.
+   */
+  static async deleteQueuedForPayloadValue(
+    params: { taskType: TaskType; key: string; value: string },
+    executor: typeof db | Transaction = db,
+  ): Promise<number> {
+    const { rowCount } = await executor.execute(sql`
+      DELETE FROM tasks t
+      WHERE t.status IN ('pending', 'processing')
+        AND t.task_type = ${params.taskType}
+        AND t.payload->>${params.key} = ${params.value}
+    `);
+    return rowCount ?? 0;
+  }
+
   static async deleteQueuedForConnector(connectorId: string): Promise<number> {
     const { rowCount } = await db.execute(sql`
       DELETE FROM tasks t

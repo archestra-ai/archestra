@@ -1,7 +1,12 @@
 import { and, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { softDelete } from "@/database/soft-delete";
+import {
+  findExpiredSoftDeleted,
+  hardDelete,
+  lockRowForPurge,
+  softDelete,
+} from "@/database/soft-delete";
 import type {
   InsertKnowledgeBase,
   KnowledgeBase,
@@ -124,6 +129,75 @@ class KnowledgeBaseModel {
     );
 
     return count > 0;
+  }
+
+  /**
+   * Physical delete for the purge paths (`onlyIfDeletedForDays` restricts to
+   * aged-out soft-deleted rows, re-checked under FOR UPDATE so a concurrent
+   * restore wins). Children (agent assignments, connector assignments)
+   * cascade; the single-statement delete is the established pattern and
+   * nothing writes to a soft-deleted knowledge base.
+   */
+  static async hardDelete(
+    id: string,
+    opts?: { onlyIfDeletedForDays?: number },
+  ): Promise<boolean> {
+    return await withDbTransaction(async (tx) => {
+      if (
+        !(await lockRowForPurge(
+          tx,
+          schema.knowledgeBasesTable,
+          eq(schema.knowledgeBasesTable.id, id),
+          opts,
+        ))
+      ) {
+        return false;
+      }
+      const count = await hardDelete(
+        tx,
+        schema.knowledgeBasesTable,
+        eq(schema.knowledgeBasesTable.id, id),
+      );
+      return count > 0;
+    });
+  }
+
+  /** The purge sweep's find-expired scan; see findExpiredSoftDeleted. */
+  static async findExpiredDeleted(params: {
+    retentionDays: number;
+    limit: number;
+  }): Promise<{ id: string; organizationId: string }[]> {
+    return findExpiredSoftDeleted(
+      db,
+      schema.knowledgeBasesTable,
+      {
+        id: schema.knowledgeBasesTable.id,
+        organizationId: schema.knowledgeBasesTable.organizationId,
+      },
+      params,
+    );
+  }
+
+  /** Identity-only audit snapshot for purge audit rows; org-scoped. */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.knowledgeBasesTable.id,
+        name: schema.knowledgeBasesTable.name,
+        deletedAt: schema.knowledgeBasesTable.deletedAt,
+      })
+      .from(schema.knowledgeBasesTable)
+      .where(
+        and(
+          eq(schema.knowledgeBasesTable.id, id),
+          eq(schema.knowledgeBasesTable.organizationId, organizationId),
+        ),
+      );
+    if (!row) return null;
+    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
   }
 
   static async countByOrganization(params: {

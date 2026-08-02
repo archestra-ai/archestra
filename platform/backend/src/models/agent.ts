@@ -36,7 +36,14 @@ import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { hardDelete, restore, softDelete } from "@/database/soft-delete";
+import {
+  findExpiredSoftDeleted,
+  hardDelete,
+  lockRowForPurge,
+  restore,
+  softDelete,
+  softDeleteExpired,
+} from "@/database/soft-delete";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -70,6 +77,7 @@ import AgentVersionModel from "./agent-version";
 import McpToolCallModel from "./mcp-tool-call";
 import MemberModel from "./member";
 import OrganizationModel from "./organization";
+import TaskModel from "./task";
 import ToolModel from "./tool";
 
 class AgentModel {
@@ -2657,13 +2665,153 @@ class AgentModel {
     return null;
   }
 
-  static async hardDelete(id: string, tx?: Transaction): Promise<boolean> {
-    const count = await hardDelete(
-      tx ?? db,
-      schema.agentsTable,
-      eq(schema.agentsTable.id, id),
+  /**
+   * Physically delete an agent and everything that must not outlive it.
+   * Serves both the create/clone rollback (active row, no opts) and the purge
+   * paths — the retention sweep and the manual permanent-delete route pass
+   * `onlyIfDeletedForDays` so only an aged-out soft-deleted row is removed,
+   * re-checked under FOR UPDATE so a concurrent restore wins.
+   *
+   * Before the parent delete, the two write-hot SET NULL children are
+   * unlinked in bounded batches — each batch its own transaction — so the
+   * FK's own cascade never fires one unbounded UPDATE against `interactions`
+   * (the LLM proxy's write path; same reasoning as
+   * InteractionModel.deleteExpired). A restore racing the purge can therefore
+   * win the final re-check after some interactions were already unlinked;
+   * acceptable, since unlinking LLM history is already what an agent purge
+   * does. On the rollback path both loops exit on the first empty round.
+   */
+  static async hardDelete(
+    id: string,
+    opts?: { onlyIfDeletedForDays?: number },
+  ): Promise<boolean> {
+    if (opts?.onlyIfDeletedForDays !== undefined) {
+      // Cheap pre-check so an ineligible call never starts unlinking history.
+      const [eligible] = await db
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.id, id),
+            softDeleteExpired(schema.agentsTable, opts.onlyIfDeletedForDays),
+          ),
+        )
+        .limit(1);
+      if (!eligible) return false;
+    }
+
+    // Both FK columns are indexed (interactions_agent_id_idx,
+    // mcp_tool_calls_agent_id_idx), so each batch is an index scan.
+    await AgentModel.nullReferencesInBatches(
+      sql`UPDATE interactions SET profile_id = NULL
+          WHERE id IN (SELECT id FROM interactions WHERE profile_id = ${id} LIMIT ${UNLINK_BATCH_SIZE})`,
     );
-    return count > 0;
+    await AgentModel.nullReferencesInBatches(
+      sql`UPDATE mcp_tool_calls SET agent_id = NULL
+          WHERE id IN (SELECT id FROM mcp_tool_calls WHERE agent_id = ${id} LIMIT ${UNLINK_BATCH_SIZE})`,
+    );
+
+    // Queued runs of this agent's schedule triggers reference trigger/run rows
+    // that cascade with the agent; tasks have no FK (ids live in the payload),
+    // so drop them or the worker keeps dequeuing work whose rows are gone.
+    const triggers = await db
+      .select({ id: schema.scheduleTriggersTable.id })
+      .from(schema.scheduleTriggersTable)
+      .where(eq(schema.scheduleTriggersTable.agentId, id));
+    for (const trigger of triggers) {
+      await TaskModel.deleteQueuedForPayloadValue({
+        taskType: "schedule_trigger_run_execute",
+        key: "triggerId",
+        value: trigger.id,
+      });
+    }
+
+    return await withDbTransaction(async (tx) => {
+      if (
+        !(await lockRowForPurge(
+          tx,
+          schema.agentsTable,
+          eq(schema.agentsTable.id, id),
+          opts,
+        ))
+      ) {
+        return false;
+      }
+
+      // organization's three default-agent FKs exist only in SQL (migrations
+      // 0177/0211 — `.references()` was omitted to break TS circular
+      // inference), so null them explicitly rather than rely on constraints
+      // the Drizzle schema does not declare (absent in PGlite test databases).
+      // member.default_agent_id is declared, but is nulled alongside for
+      // symmetry with the org-level defaults.
+      await tx
+        .update(schema.organizationsTable)
+        .set({ defaultAgentId: null })
+        .where(eq(schema.organizationsTable.defaultAgentId, id));
+      await tx
+        .update(schema.organizationsTable)
+        .set({ connectionDefaultMcpGatewayId: null })
+        .where(eq(schema.organizationsTable.connectionDefaultMcpGatewayId, id));
+      await tx
+        .update(schema.organizationsTable)
+        .set({ connectionDefaultLlmProxyId: null })
+        .where(eq(schema.organizationsTable.connectionDefaultLlmProxyId, id));
+      await tx
+        .update(schema.membersTable)
+        .set({ defaultAgentId: null })
+        .where(eq(schema.membersTable.defaultAgentId, id));
+
+      const count = await hardDelete(
+        tx,
+        schema.agentsTable,
+        eq(schema.agentsTable.id, id),
+      );
+      return count > 0;
+    });
+  }
+
+  /** The purge sweep's find-expired scan; see findExpiredSoftDeleted. */
+  static async findExpiredDeleted(params: {
+    retentionDays: number;
+    limit: number;
+  }): Promise<{ id: string; organizationId: string }[]> {
+    return findExpiredSoftDeleted(
+      db,
+      schema.agentsTable,
+      {
+        id: schema.agentsTable.id,
+        organizationId: schema.agentsTable.organizationId,
+      },
+      params,
+    );
+  }
+
+  /**
+   * Identity-only audit snapshot ({ id, name, type, deletedAt }), org-scoped,
+   * soft-deleted rows included. A purge audit row records that the row is
+   * gone, not what it contained — full snapshots stay on user-initiated soft
+   * deletes, where recovery is the point.
+   */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+        deletedAt: schema.agentsTable.deletedAt,
+      })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, id),
+          eq(schema.agentsTable.organizationId, organizationId),
+        ),
+      );
+    if (!row) return null;
+    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
   }
 
   /** Check if an agent has any Playwright tools assigned via agent_tools. */
@@ -3305,6 +3453,20 @@ class AgentModel {
     return baseSlug;
   }
 
+  /**
+   * Run a limited UPDATE repeatedly until it matches no more rows. Each
+   * iteration is its own implicit transaction, so the write-hot table is
+   * never locked for one giant statement.
+   */
+  private static async nullReferencesInBatches(
+    batchUpdate: SQL,
+  ): Promise<void> {
+    for (;;) {
+      const { rowCount } = await db.execute(batchUpdate);
+      if (!rowCount) break;
+    }
+  }
+
   private static async insertWithSlugRetry(
     values: typeof schema.agentsTable.$inferInsert,
   ) {
@@ -3487,5 +3649,8 @@ function isQueryKnowledgeSourcesTool(toolName: string): boolean {
     TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME
   );
 }
+
+// Matches InteractionModel.deleteExpired's batch size for the same table.
+const UNLINK_BATCH_SIZE = 1000;
 
 export default AgentModel;

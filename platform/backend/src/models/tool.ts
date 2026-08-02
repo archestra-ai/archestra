@@ -44,10 +44,15 @@ import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import config from "@/config";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
-import { restore, softDelete } from "@/database/soft-delete";
+import {
+  hardDelete,
+  lockRowForPurge,
+  restore,
+  softDelete,
+} from "@/database/soft-delete";
 import {
   createPaginatedResult,
   type PaginatedResult,
@@ -3090,6 +3095,118 @@ class ToolModel {
       );
 
     return (result.rowCount || 0) > 0;
+  }
+
+  /**
+   * Physical delete for the purge paths (`onlyIfDeletedForDays` restricts to
+   * aged-out soft-deleted rows, re-checked under FOR UPDATE so a concurrent
+   * restore wins). Every child — junction rows, policies, observations — is
+   * ON DELETE CASCADE, so a plain row delete leaves nothing behind.
+   */
+  static async hardDelete(
+    id: string,
+    opts?: { onlyIfDeletedForDays?: number },
+  ): Promise<boolean> {
+    return await withDbTransaction(async (tx) => {
+      if (
+        !(await lockRowForPurge(
+          tx,
+          schema.toolsTable,
+          eq(schema.toolsTable.id, id),
+          opts,
+        ))
+      ) {
+        return false;
+      }
+      const count = await hardDelete(
+        tx,
+        schema.toolsTable,
+        eq(schema.toolsTable.id, id),
+      );
+      return count > 0;
+    });
+  }
+
+  /**
+   * The purge sweep's find-expired scan. `tools` has no org column; tenancy
+   * resolves from the row's own columns first, mirroring the execution path:
+   * `catalog_id` → the catalog's org, else `agent_id` → the agent's org
+   * (including soft-deleted agents), else any assigning agent via the
+   * `agent_tools` junction. Rows with none of the three are excluded —
+   * purging them would destroy data with no audit trail (see
+   * {@link countExpiredDeletedUnresolvable}).
+   */
+  static async findExpiredDeleted(params: {
+    retentionDays: number;
+    limit: number;
+  }): Promise<{ id: string; organizationId: string }[]> {
+    const { rows } = await db.execute<{
+      id: string;
+      organization_id: string;
+    }>(sql`
+      SELECT tl.id,
+             COALESCE(c.organization_id, a.organization_id, aj.organization_id) AS organization_id
+      FROM tools tl
+      LEFT JOIN internal_mcp_catalog c ON c.id = tl.catalog_id
+      LEFT JOIN agents a ON a.id = tl.agent_id
+      LEFT JOIN LATERAL (
+        SELECT ag.organization_id
+        FROM agent_tools at2
+        JOIN agents ag ON ag.id = at2.agent_id
+        WHERE at2.tool_id = tl.id
+        LIMIT 1
+      ) aj ON true
+      WHERE tl.deleted_at < now()::timestamp - make_interval(days => ${params.retentionDays})
+        AND COALESCE(c.organization_id, a.organization_id, aj.organization_id) IS NOT NULL
+      ORDER BY tl.deleted_at
+      LIMIT ${params.limit}
+    `);
+    return rows.map((row) => ({
+      id: row.id,
+      organizationId: row.organization_id,
+    }));
+  }
+
+  /** Expired soft-deleted tools with no resolvable org (skipped, logged). */
+  static async countExpiredDeletedUnresolvable(params: {
+    retentionDays: number;
+  }): Promise<number> {
+    const { rows } = await db.execute<{ count: number }>(sql`
+      SELECT COUNT(*)::int AS count
+      FROM tools tl
+      LEFT JOIN internal_mcp_catalog c ON c.id = tl.catalog_id
+      LEFT JOIN agents a ON a.id = tl.agent_id
+      LEFT JOIN LATERAL (
+        SELECT ag.organization_id
+        FROM agent_tools at2
+        JOIN agents ag ON ag.id = at2.agent_id
+        WHERE at2.tool_id = tl.id
+        LIMIT 1
+      ) aj ON true
+      WHERE tl.deleted_at < now()::timestamp - make_interval(days => ${params.retentionDays})
+        AND COALESCE(c.organization_id, a.organization_id, aj.organization_id) IS NULL
+    `);
+    return Number(rows[0]?.count ?? 0);
+  }
+
+  /**
+   * Identity-only audit snapshot for purge audit rows. NOT org-scoped — the
+   * table has no org column and callers (the sweep) have already inferred the
+   * org via {@link findExpiredDeleted}.
+   */
+  static async findIdentityForAudit(
+    id: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        deletedAt: schema.toolsTable.deletedAt,
+      })
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.id, id));
+    if (!row) return null;
+    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
   }
 
   /**

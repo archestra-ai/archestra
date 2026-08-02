@@ -11,12 +11,21 @@ import {
   sql,
 } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import { notDeletedConversation } from "@/database/schemas/conversation";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { restore as restoreRows, softDelete } from "@/database/soft-delete";
+import {
+  findExpiredSoftDeleted,
+  hardDelete as hardDeleteRows,
+  lockRowForPurge,
+  restore as restoreRows,
+  softDelete,
+} from "@/database/soft-delete";
+import { deleteRowsBytesBestEffort } from "@/skills-sandbox/file-storage";
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
+import FileModel from "./file";
 import ProjectShareModel from "./project-share";
+import TaskModel from "./task";
 
 /**
  * CRUD for `projects`. Share/visibility queries live in
@@ -249,6 +258,112 @@ class ProjectModel {
         eq(schema.projectsTable.id, id),
       );
     });
+  }
+
+  /**
+   * Physically delete a project and everything the soft delete retained. The
+   * purge paths pass `onlyIfDeletedForDays` so only an aged-out soft-deleted
+   * row is removed, re-checked under FOR UPDATE so a concurrent restore wins.
+   *
+   * File ROWS cascade with the project, but their bytes live in the external
+   * file store — collect the storage pointers inside the transaction and
+   * delete the bytes after commit, so bytes never vanish for rows a rollback
+   * resurrects. Schedule triggers (and their runs) cascade too; their queued
+   * tasks have no FK (ids live in the payload), so they are dropped
+   * explicitly or the worker keeps dequeuing work whose rows are gone. Chats
+   * already detached at soft-delete (`project_id` → NULL).
+   */
+  static async hardDelete(
+    id: string,
+    opts?: { onlyIfDeletedForDays?: number },
+  ): Promise<boolean> {
+    let purgeBytes: (() => Promise<void>) | null = null;
+    const deleted = await withDbTransaction(async (tx) => {
+      if (
+        !(await lockRowForPurge(
+          tx,
+          schema.projectsTable,
+          eq(schema.projectsTable.id, id),
+          opts,
+        ))
+      ) {
+        return false;
+      }
+
+      const triggers = await tx
+        .select({ id: schema.scheduleTriggersTable.id })
+        .from(schema.scheduleTriggersTable)
+        .where(eq(schema.scheduleTriggersTable.projectId, id));
+      for (const trigger of triggers) {
+        await TaskModel.deleteQueuedForPayloadValue(
+          {
+            taskType: "schedule_trigger_run_execute",
+            key: "triggerId",
+            value: trigger.id,
+          },
+          tx,
+        );
+      }
+
+      const files = await FileModel.listAllByProject(id, tx);
+      for (const file of files) {
+        await FileModel.deleteById(file.id, tx);
+      }
+      purgeBytes = () => deleteRowsBytesBestEffort(files);
+
+      const count = await hardDeleteRows(
+        tx,
+        schema.projectsTable,
+        eq(schema.projectsTable.id, id),
+      );
+      return count > 0;
+    });
+    if (deleted && purgeBytes) {
+      await (purgeBytes as () => Promise<void>)();
+    }
+    return deleted;
+  }
+
+  /** The purge sweep's find-expired scan; see findExpiredSoftDeleted. */
+  static async findExpiredDeleted(params: {
+    retentionDays: number;
+    limit: number;
+  }): Promise<{ id: string; organizationId: string }[]> {
+    return findExpiredSoftDeleted(
+      db,
+      schema.projectsTable,
+      {
+        id: schema.projectsTable.id,
+        organizationId: schema.projectsTable.organizationId,
+      },
+      params,
+    );
+  }
+
+  /**
+   * Identity-only audit snapshot ({ id, name, deletedAt }), org-scoped,
+   * soft-deleted rows included. A purge audit row records that the row is
+   * gone, not what it contained.
+   */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.projectsTable.id,
+        name: schema.projectsTable.name,
+        deletedAt: schema.projectsTable.deletedAt,
+      })
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.id, id),
+          eq(schema.projectsTable.organizationId, organizationId),
+        ),
+      );
+    if (!row) return null;
+    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
   }
 
   /**

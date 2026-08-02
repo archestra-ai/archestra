@@ -1,5 +1,9 @@
-import { and, isNull, not, type SQL, sql } from "drizzle-orm";
-import type { PgTable, PgUpdateSetSource } from "drizzle-orm/pg-core";
+import { and, asc, isNull, not, type SQL, sql } from "drizzle-orm";
+import type {
+  AnyPgColumn,
+  PgTable,
+  PgUpdateSetSource,
+} from "drizzle-orm/pg-core";
 import type db from "@/database";
 import type { Transaction } from "@/database";
 import type { SoftDeletableTable } from "@/database/schemas/soft-deletable-table";
@@ -72,4 +76,75 @@ export async function hardDelete<T extends PgTable>(
     .where(where)
     .returning({ _: sql`1` });
   return rows.length;
+}
+
+/**
+ * Predicate: the row has been soft-deleted for longer than `retentionDays`
+ * (0 = any soft-deleted row). The cutoff is computed in SQL
+ * (`now() - make_interval(...)`): `deleted_at` is `timestamp without time
+ * zone`, and a JS Date parameter would shift by the host's UTC offset (same
+ * rule as InteractionModel.deleteExpired).
+ */
+export const softDeleteExpired = (
+  table: SoftDeletableTable,
+  retentionDays: number,
+): SQL =>
+  sql`${table.deletedAt} < now()::timestamp - make_interval(days => ${retentionDays})`;
+
+/**
+ * Rows soft-deleted longer ago than `retentionDays`, oldest first — the purge
+ * sweep's find-expired scan, served by the partial `*_deleted_at_purge_idx`
+ * indexes. Rows with a NULL organization column are excluded: a purge without
+ * a resolvable tenant would mean destroying data with no audit trail.
+ */
+export async function findExpiredSoftDeleted<T extends SoftDeletablePgTable>(
+  executor: Executor,
+  table: T,
+  columns: { id: AnyPgColumn; organizationId: AnyPgColumn },
+  params: { retentionDays: number; limit: number },
+): Promise<{ id: string; organizationId: string }[]> {
+  const rows = await executor
+    .select({ id: columns.id, organizationId: columns.organizationId })
+    .from(table as PgTable)
+    .where(
+      and(
+        not(isNull(columns.organizationId)),
+        softDeleteExpired(table, params.retentionDays),
+      ),
+    )
+    .orderBy(asc(table.deletedAt))
+    .limit(params.limit);
+  return rows as { id: string; organizationId: string }[];
+}
+
+/**
+ * Lock a row FOR UPDATE inside the caller's transaction and confirm it is
+ * still hard-deletable. With `onlyIfDeletedForDays`, eligible means
+ * soft-deleted longer ago than that many days (0 = any soft-deleted row) —
+ * the re-check that makes a purge race-safe against a concurrent restore:
+ * restore updates the row, so it either commits before this lock (the
+ * re-check sees the live row and refuses) or blocks until the purge commits.
+ * Without the option the row is locked unconditionally, for rollback flows
+ * that hard-delete rows which were never soft-deleted.
+ * Returns false when the row is missing or ineligible.
+ */
+export async function lockRowForPurge<T extends SoftDeletablePgTable>(
+  tx: Transaction,
+  table: T,
+  where: SQL | undefined,
+  opts?: { onlyIfDeletedForDays?: number },
+): Promise<boolean> {
+  if (!where) throw new Error("lockRowForPurge requires a where clause");
+
+  const rows = await tx
+    .select({ deletedAt: table.deletedAt })
+    .from(table as PgTable)
+    .where(
+      opts?.onlyIfDeletedForDays === undefined
+        ? where
+        : and(where, softDeleteExpired(table, opts.onlyIfDeletedForDays)),
+    )
+    .limit(1)
+    .for("update");
+  return rows.length > 0;
 }

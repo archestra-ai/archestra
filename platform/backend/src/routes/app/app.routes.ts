@@ -528,7 +528,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds,
         });
       } catch (error) {
-        await AppModel.purge(created.id);
+        await AppModel.hardDelete(created.id);
         throw error;
       }
       if (body.labels?.length) {

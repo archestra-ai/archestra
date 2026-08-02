@@ -1,8 +1,13 @@
 // This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
-import { softDelete } from "@/database/soft-delete";
+import {
+  findExpiredSoftDeleted,
+  hardDelete,
+  lockRowForPurge,
+  softDelete,
+} from "@/database/soft-delete";
 import { connectorInEnvironmentPredicate } from "@/services/environments/environment-isolation";
 import type {
   InsertKnowledgeBaseConnector,
@@ -515,6 +520,80 @@ class KnowledgeBaseConnectorModel {
     );
 
     return count > 0;
+  }
+
+  /**
+   * Physical delete for the purge paths (`onlyIfDeletedForDays` restricts to
+   * aged-out soft-deleted rows, re-checked under FOR UPDATE so a concurrent
+   * restore wins). Children — runs, documents (and their chunks), ACLs,
+   * external groups, member overrides, assignments — all cascade. Queued-sync
+   * cancellation and secret revocation already happened at soft-delete time
+   * (knowledge-source-deletion service), so there is nothing external left.
+   */
+  static async hardDelete(
+    id: string,
+    opts?: { onlyIfDeletedForDays?: number },
+  ): Promise<boolean> {
+    return await withDbTransaction(async (tx) => {
+      if (
+        !(await lockRowForPurge(
+          tx,
+          schema.knowledgeBaseConnectorsTable,
+          eq(schema.knowledgeBaseConnectorsTable.id, id),
+          opts,
+        ))
+      ) {
+        return false;
+      }
+      const count = await hardDelete(
+        tx,
+        schema.knowledgeBaseConnectorsTable,
+        eq(schema.knowledgeBaseConnectorsTable.id, id),
+      );
+      return count > 0;
+    });
+  }
+
+  /** The purge sweep's find-expired scan; see findExpiredSoftDeleted. */
+  static async findExpiredDeleted(params: {
+    retentionDays: number;
+    limit: number;
+  }): Promise<{ id: string; organizationId: string }[]> {
+    return findExpiredSoftDeleted(
+      db,
+      schema.knowledgeBaseConnectorsTable,
+      {
+        id: schema.knowledgeBaseConnectorsTable.id,
+        organizationId: schema.knowledgeBaseConnectorsTable.organizationId,
+      },
+      params,
+    );
+  }
+
+  /** Identity-only audit snapshot for purge audit rows; org-scoped. */
+  static async findIdentityForAudit(
+    id: string,
+    organizationId: string,
+  ): Promise<Record<string, unknown> | null> {
+    const [row] = await db
+      .select({
+        id: schema.knowledgeBaseConnectorsTable.id,
+        name: schema.knowledgeBaseConnectorsTable.name,
+        connectorType: schema.knowledgeBaseConnectorsTable.connectorType,
+        deletedAt: schema.knowledgeBaseConnectorsTable.deletedAt,
+      })
+      .from(schema.knowledgeBaseConnectorsTable)
+      .where(
+        and(
+          eq(schema.knowledgeBaseConnectorsTable.id, id),
+          eq(
+            schema.knowledgeBaseConnectorsTable.organizationId,
+            organizationId,
+          ),
+        ),
+      );
+    if (!row) return null;
+    return { ...row, deletedAt: row.deletedAt?.toISOString() ?? null };
   }
 
   /**

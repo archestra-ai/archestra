@@ -74,6 +74,7 @@ import {
   UuidIdSchema,
 } from "@/types";
 import { SelectInternalMcpCatalogVersionSchema } from "@/types/internal-mcp-catalog-version";
+import { isManagedSecretEnvVar } from "@/utils/catalog-plaintext-secrets";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 
 // Match the schema from getMcpServerTools endpoint
@@ -398,7 +399,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Remove values from secret env vars in catalog template
         if (restBody.localConfig?.environment) {
           for (const envVar of restBody.localConfig.environment) {
-            if (envVar.type === "secret" && !envVar.promptOnInstallation) {
+            if (isManagedSecretEnvVar(envVar)) {
               delete envVar.value;
             }
           }
@@ -417,11 +418,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const secretEnvVars: Record<string, string> = {};
         if (localConfig?.environment) {
           for (const envVar of localConfig.environment) {
-            if (
-              envVar.type === "secret" &&
-              envVar.value &&
-              !envVar.promptOnInstallation
-            ) {
+            if (isManagedSecretEnvVar(envVar) && envVar.value) {
               secretEnvVars[envVar.key] = envVar.value;
               delete envVar.value; // Remove value from catalog template
             }
@@ -1027,7 +1024,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Remove values from secret env vars in catalog template
         if (restBody.localConfig?.environment) {
           for (const envVar of restBody.localConfig.environment) {
-            if (envVar.type === "secret" && !envVar.promptOnInstallation) {
+            if (isManagedSecretEnvVar(envVar)) {
               delete envVar.value;
             }
           }
@@ -1059,7 +1056,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const secretEnvVars: Record<string, string> = {};
 
         for (const envVar of localConfig?.environment ?? []) {
-          if (envVar.type === "secret" && !envVar.promptOnInstallation) {
+          if (isManagedSecretEnvVar(envVar)) {
             if (envVar.value) {
               // New value provided - use it
               if (existingSecretValues[envVar.key] !== envVar.value) {

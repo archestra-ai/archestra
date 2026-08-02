@@ -12,6 +12,7 @@ import type {
   InternalMcpCatalogVersion,
   McpCatalogConfigSnapshot,
 } from "@/types/internal-mcp-catalog-version";
+import { stripAllPlaintextSecretFields } from "@/utils/catalog-plaintext-secrets";
 
 type CatalogRow = typeof schema.internalMcpCatalogTable.$inferSelect;
 
@@ -22,9 +23,10 @@ type CatalogRow = typeof schema.internalMcpCatalogTable.$inferSelect;
  * McpCatalogConfigSnapshotSchema for the exact surface). All catalog config
  * writes funnel through four InternalMcpCatalogModel methods — `create`,
  * `update`, `renameCascade`, and `restore` — so those four are the only fork
- * hooks. A write producing an identical payload leaves the head untouched
- * (content-hash dedup); writes that touch only excluded columns (approval
- * state, reinstall flags, sharing) dedup to a no-op the same way.
+ * hooks. A write producing an identical payload — identical after plaintext
+ * secret stripping, so secret-field-only edits never fork — leaves the head
+ * untouched (content-hash dedup); writes that touch only excluded columns
+ * (approval state, reinstall flags, sharing) dedup to a no-op the same way.
  *
  * App-backed rows (`serverType: "app"`) never fork: their catalog row is
  * written by AppModel outside the hooks above, and their content history
@@ -54,10 +56,20 @@ class InternalMcpCatalogVersionModel {
   /**
    * Assemble the catalog item's canonical config snapshot from the raw DB row
    * `forkIfChanged` just locked. Deliberately built from that row and never
-   * from a caller-supplied catalog object: objects flowing through routes and
-   * services may carry `expandSecrets`-materialized plaintext (in
-   * localConfig.environment values and oauthConfig.client_secret), while the
-   * raw row is guaranteed to hold secret-bundle IDs only.
+   * from a caller-supplied catalog object — objects flowing through routes and
+   * services may carry `expandSecrets`-materialized plaintext — and then
+   * stripped of every plaintext secret field regardless
+   * (stripAllPlaintextSecretFields): writers have historically written
+   * expanded objects back into the row itself, so the raw row cannot be
+   * trusted to hold secret-bundle IDs only. Stripping runs after
+   * canonicalization and before hashing, so a contaminated row and its clean
+   * twin dedup to one version instead of forking on the leaked value.
+   *
+   * Snapshots therefore never carry secret values, including prompt-on-install
+   * template values. A future restore feature must preserve the live row's
+   * secret fields — e.g. a legacy bundle-less row's inline
+   * `oauthConfig.client_secret`, which OAuth flows still read when no bundle
+   * resolves — rather than take them from the snapshot.
    */
   static async buildConfigSnapshot(
     tx: Transaction,
@@ -94,6 +106,12 @@ class InternalMcpCatalogVersionModel {
         : Promise.resolve([]),
     ]);
 
+    const config = stripAllPlaintextSecretFields({
+      oauthConfig: catalog.oauthConfig ?? null,
+      enterpriseManagedConfig: catalog.enterpriseManagedConfig ?? null,
+      localConfig: canonicalizeLocalConfig(catalog.localConfig),
+    });
+
     return {
       name: catalog.name,
       serverType: catalog.serverType,
@@ -109,9 +127,9 @@ class InternalMcpCatalogVersionModel {
       authDescription: catalog.authDescription ?? null,
       authFields: catalog.authFields ?? null,
       userConfig: catalog.userConfig ?? null,
-      oauthConfig: catalog.oauthConfig ?? null,
-      enterpriseManagedConfig: catalog.enterpriseManagedConfig ?? null,
-      localConfig: canonicalizeLocalConfig(catalog.localConfig),
+      oauthConfig: config.oauthConfig,
+      enterpriseManagedConfig: config.enterpriseManagedConfig,
+      localConfig: config.localConfig,
       deploymentSpecYaml: catalog.deploymentSpecYaml ?? null,
       clientSecretId: catalog.clientSecretId ?? null,
       localConfigSecretId: catalog.localConfigSecretId ?? null,

@@ -178,6 +178,153 @@ describe("InternalMcpCatalogVersionModel", () => {
     expect(JSON.stringify(head?.snapshot)).not.toContain(secretValue);
   });
 
+  test("a contaminated row snapshots clean on every plaintext secret surface", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "local",
+      serverUrl: null,
+      localConfig: { dockerImage: "example/image:1" },
+    });
+
+    // Seed the row the way the historical leak did: an expanded object
+    // written straight into the jsonb columns, bypassing the model boundary.
+    await db
+      .update(schema.internalMcpCatalogTable)
+      .set({
+        localConfig: {
+          dockerImage: "example/image:1",
+          environment: [
+            {
+              key: "TOKEN",
+              type: "secret",
+              promptOnInstallation: false,
+              value: "leaked-token",
+            },
+          ],
+          imagePullSecrets: [
+            {
+              source: "credentials",
+              server: "registry.example.com",
+              username: "bot",
+              password: "leaked-password",
+            },
+          ],
+        },
+        oauthConfig: {
+          name: "provider",
+          server_url: "https://provider.example.com",
+          client_id: "client-id",
+          client_secret: "leaked-client-secret",
+          redirect_uris: [],
+          scopes: [],
+          default_scopes: [],
+          supports_resource_metadata: false,
+        },
+        enterpriseManagedConfig: { clientSecretOverride: "leaked-override" },
+      })
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+
+    const fork = await InternalMcpCatalogVersionModel.forkIfChanged(catalog.id);
+    expect(fork).toEqual({ version: 2, forked: true });
+
+    const head = await getVersion(catalog, 2);
+    const snapshotJson = JSON.stringify(head?.snapshot);
+    expect(snapshotJson).not.toContain("leaked-token");
+    expect(snapshotJson).not.toContain("leaked-password");
+    expect(snapshotJson).not.toContain("leaked-client-secret");
+    expect(snapshotJson).not.toContain("leaked-override");
+    // The non-secret parts of each surface are still captured.
+    const localConfig = head?.snapshot.localConfig as {
+      environment: object[];
+      imagePullSecrets: object[];
+    };
+    expect(localConfig.environment[0]).toMatchObject({ key: "TOKEN" });
+    expect(localConfig.imagePullSecrets[0]).toMatchObject({
+      server: "registry.example.com",
+      username: "bot",
+    });
+    expect(head?.snapshot.oauthConfig).toMatchObject({
+      client_id: "client-id",
+    });
+  });
+
+  test("a non-canonical legacy row that fails schema parse still snapshots clean", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "local",
+      serverUrl: null,
+      localConfig: { dockerImage: "example/image:1" },
+    });
+
+    // promptOnInstallation missing: LocalConfigSelectSchema rejects this
+    // entry, so canonicalizeLocalConfig falls back to the raw value — the
+    // strip must be structural, not parse-dependent, to reach it.
+    await db
+      .update(schema.internalMcpCatalogTable)
+      .set({
+        localConfig: {
+          dockerImage: "example/image:1",
+          environment: [
+            { key: "TOKEN", type: "secret", value: "leaked-token" },
+          ],
+        } as (typeof schema.internalMcpCatalogTable.$inferSelect)["localConfig"],
+      })
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+
+    const fork = await InternalMcpCatalogVersionModel.forkIfChanged(catalog.id);
+    expect(fork).toEqual({ version: 2, forked: true });
+
+    const head = await getVersion(catalog, 2);
+    expect(
+      (head?.snapshot.localConfig as { environment: object[] }).environment[0],
+    ).toEqual({ key: "TOKEN", type: "secret" });
+  });
+
+  test("a write-back of an expanded read dedups against the clean head (post-strip hash)", async ({
+    makeInternalMcpCatalog,
+    makeSecret,
+  }) => {
+    const secretValue = `super-secret-${crypto.randomUUID()}`;
+    const secret = await makeSecret({ secret: { TOKEN: secretValue } });
+    const cleanLocalConfig = {
+      dockerImage: "example/image:1",
+      environment: [
+        {
+          key: "TOKEN",
+          type: "secret" as const,
+          promptOnInstallation: false,
+          required: true,
+        },
+      ],
+    };
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "local",
+      serverUrl: null,
+      localConfigSecretId: secret.id,
+      localConfig: cleanLocalConfig,
+    });
+
+    // Same logical config with the expanded plaintext injected: hashing runs
+    // after the strip, so this must not mint a version whose only delta is
+    // the leaked value.
+    await db
+      .update(schema.internalMcpCatalogTable)
+      .set({
+        localConfig: {
+          ...cleanLocalConfig,
+          environment: [
+            { ...cleanLocalConfig.environment[0], value: secretValue },
+          ],
+        },
+      })
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+
+    const fork = await InternalMcpCatalogVersionModel.forkIfChanged(catalog.id);
+    expect(fork).toEqual({ version: 1, forked: false });
+  });
+
   test("app-backed catalog rows never fork", async ({
     makeInternalMcpCatalog,
   }) => {

@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-07-31
+lastUpdated: 2026-08-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -101,7 +101,9 @@ Archestra stores the tool list discovered at install time. When the upstream ser
 
 Archestra records a version of a registry entry's configuration on every change. Editing the connection settings, environment variable definitions, or deployment YAML forks a new version — a save that changes nothing does not. The last 100 versions are kept per entry, so you can review what changed and when.
 
-History covers configuration only. Sharing, teams, and labels are not versioned. Secrets are stored as references — a version never contains secret values. App-backed registry entries are not versioned here; their content history lives with the app.
+History covers configuration only. Sharing, teams, and labels are not versioned. Secrets are stored as references — a version never contains secret values. App-backed registry entries are not versioned here; their content history lives with the app. System-managed entries, such as the built-in Archestra server, are not versioned either.
+
+Entries that existed before version history start recording on their first edit. That first version captures the edited state — the state before it is not recorded.
 
 Version history is an API surface today:
 

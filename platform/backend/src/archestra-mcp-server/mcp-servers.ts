@@ -880,10 +880,14 @@ async function handleEditMcpConfig(
       organizationId,
     });
 
+    // Raw row, not the expanded view: `existing` feeds permission checks and
+    // the localConfig spread below, and an expanded read would materialize
+    // secret values into a payload that is then written back via update().
     const existing = await InternalMcpCatalogModel.findById(args.id, {
       userId: context.userId,
       isAdmin: checker.isAdmin,
       organizationId,
+      expandSecrets: false,
     });
     if (
       !existing ||

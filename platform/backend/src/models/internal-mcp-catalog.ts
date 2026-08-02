@@ -31,6 +31,7 @@ import {
   type SecretValue,
   type UpdateInternalMcpCatalog,
 } from "@/types";
+import { stripManagedPlaintextSecretFields } from "@/utils/catalog-plaintext-secrets";
 import InternalMcpCatalogVersionModel from "./internal-mcp-catalog-version";
 import LimitModel from "./limit";
 import McpCatalogLabelModel from "./mcp-catalog-label";
@@ -66,6 +67,15 @@ class InternalMcpCatalogModel {
     context?: { organizationId: string; authorId?: string },
   ): Promise<InternalMcpCatalog> {
     const { labels, teams, ...dbValues } = catalogItem;
+
+    // A payload carrying `expandSecrets`-materialized values (an expanded
+    // read written back) must not seed the row with plaintext.
+    applyManagedPlaintextStrip({
+      catalogId: dbValues.id,
+      dbValues,
+      hasClientSecretBundle: dbValues.clientSecretId != null,
+      hasLocalConfigSecretBundle: dbValues.localConfigSecretId != null,
+    });
 
     // Multitenant catalogs own one shared K8s deployment; freeze its name at
     // creation (needs the id up front — supplying one is equivalent to the
@@ -817,6 +827,45 @@ class InternalMcpCatalogModel {
         }
         delete dbValues.name;
       }
+    }
+
+    // Managed plaintext never reaches the row: writers have historically
+    // passed `expandSecrets`-materialized objects back into update() (e.g. a
+    // serviceAccount write-back spreading an expanded localConfig), which
+    // used to persist real secret values into legal plaintext fields. Resolve
+    // which secret bundles are in play (payload wins; an explicit null clears
+    // a bundle and disables stripping for that surface) and strip accordingly.
+    if (
+      dbValues.localConfig != null ||
+      dbValues.oauthConfig != null ||
+      dbValues.enterpriseManagedConfig != null
+    ) {
+      let { clientSecretId, localConfigSecretId } = dbValues;
+      if (clientSecretId === undefined || localConfigSecretId === undefined) {
+        // Non-transactional like the other guard reads in this method: a
+        // concurrent bundle-id change can at worst under/over-strip this one
+        // write, and the version-snapshot builder strips defensively anyway.
+        const [existing] = await db
+          .select({
+            clientSecretId: schema.internalMcpCatalogTable.clientSecretId,
+            localConfigSecretId:
+              schema.internalMcpCatalogTable.localConfigSecretId,
+          })
+          .from(schema.internalMcpCatalogTable)
+          .where(eq(schema.internalMcpCatalogTable.id, id));
+        if (clientSecretId === undefined) {
+          clientSecretId = existing?.clientSecretId;
+        }
+        if (localConfigSecretId === undefined) {
+          localConfigSecretId = existing?.localConfigSecretId;
+        }
+      }
+      applyManagedPlaintextStrip({
+        catalogId: id,
+        dbValues,
+        hasClientSecretBundle: clientSecretId != null,
+        hasLocalConfigSecretBundle: localConfigSecretId != null,
+      });
     }
 
     // Drop keys whose value is undefined ("not provided"): drizzle ignores
@@ -1725,3 +1774,57 @@ class InternalMcpCatalogModel {
 }
 
 export default InternalMcpCatalogModel;
+
+// === Internal helpers ===
+
+/**
+ * Strip managed plaintext secret values from a write payload, replacing the
+ * payload's top-level config fields with sanitized copies (the nested objects
+ * the caller passed in are never mutated — callers reuse the expanded config
+ * for deployment work after the write). Legitimate writers extract secret
+ * values into bundles before calling the model, so anything stripped here is
+ * either a leaked `expandSecrets`-materialized object being written back or a
+ * caller bug — warn so the drop is debuggable rather than silent.
+ */
+function applyManagedPlaintextStrip<
+  T extends {
+    localConfig?: unknown;
+    oauthConfig?: unknown;
+    enterpriseManagedConfig?: unknown;
+  },
+>(params: {
+  catalogId: string | undefined;
+  dbValues: T;
+  hasClientSecretBundle: boolean;
+  hasLocalConfigSecretBundle: boolean;
+}): void {
+  const {
+    catalogId,
+    dbValues,
+    hasClientSecretBundle,
+    hasLocalConfigSecretBundle,
+  } = params;
+  const { values, strippedPaths } = stripManagedPlaintextSecretFields({
+    values: {
+      localConfig: dbValues.localConfig,
+      oauthConfig: dbValues.oauthConfig,
+      enterpriseManagedConfig: dbValues.enterpriseManagedConfig,
+    },
+    hasClientSecretBundle,
+    hasLocalConfigSecretBundle,
+  });
+  if (strippedPaths.length === 0) return;
+  logger.warn(
+    { catalogId, strippedPaths },
+    "[InternalMcpCatalog] Stripped plaintext secret values from a write payload; secret values belong in secret bundles",
+  );
+  if (dbValues.localConfig !== undefined) {
+    dbValues.localConfig = values.localConfig;
+  }
+  if (dbValues.oauthConfig !== undefined) {
+    dbValues.oauthConfig = values.oauthConfig;
+  }
+  if (dbValues.enterpriseManagedConfig !== undefined) {
+    dbValues.enterpriseManagedConfig = values.enterpriseManagedConfig;
+  }
+}

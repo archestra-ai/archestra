@@ -15,9 +15,13 @@ import { schema } from "@/database";
  * - tool rows (discovered from the live server, not authored config)
  *
  * Secrets: only the raw row's secret-bundle IDs are captured (clientSecretId /
- * localConfigSecretId), never expanded values — the snapshot builder re-reads
- * the row inside the fork transaction precisely so an `expandSecrets`-
- * materialized in-memory object can never leak plaintext into history.
+ * localConfigSecretId), never values — the snapshot builder re-reads the row
+ * inside the fork transaction AND strips every plaintext secret field
+ * defensively (stripAllPlaintextSecretFields), because writers have
+ * historically leaked `expandSecrets`-materialized values into the row.
+ * Because snapshots are deliberately lossy for secret material, a future
+ * restore must re-source secrets from the live row/bundles, never from the
+ * snapshot.
  *
  * Enum-ish fields are plain strings and config jsonb blobs are `unknown` on
  * purpose: snapshots are immutable historical data and must keep parsing after

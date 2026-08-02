@@ -4,6 +4,7 @@ import * as fs from "node:fs/promises";
 import path from "node:path";
 import type { S3Client } from "@aws-sdk/client-s3";
 import config from "@/config";
+import logger from "@/logging";
 import type { StoredBlobRow } from "@/types";
 import { resolveWithinRoot, safeSegment, UnsafePathError } from "./file-path";
 import {
@@ -72,23 +73,40 @@ export async function deleteRowBytes(blob: {
 /**
  * Best-effort {@link deleteRowBytes} over a purged batch of file rows. Purge
  * paths call this AFTER the row-deleting transaction commits, so bytes never
- * vanish for rows a rollback resurrects; a failed byte delete is swallowed
- * (the row is already gone, so the object is unreachable dead weight).
+ * vanish for rows a rollback resurrects; a failed byte delete is logged and
+ * swallowed (the row is already gone, so the object is unreachable dead
+ * weight — but the bytes still exist, so the failure must be visible).
+ * Deletes run in bounded chunks so a project with thousands of files never
+ * fires them all at the store at once.
  */
 export async function deleteRowsBytesBestEffort(
   rows: { storageProvider: string; objectKey: string | null }[],
 ): Promise<void> {
-  await Promise.all(
-    rows.map((row) =>
-      deleteRowBytes({
-        provider: row.storageProvider,
-        objectKey: row.objectKey,
-      }).catch(() => {}),
-    ),
-  );
+  for (let i = 0; i < rows.length; i += BYTE_DELETE_CHUNK_SIZE) {
+    await Promise.all(
+      rows.slice(i, i + BYTE_DELETE_CHUNK_SIZE).map((row) =>
+        deleteRowBytes({
+          provider: row.storageProvider,
+          objectKey: row.objectKey,
+        }).catch((error) => {
+          logger.warn(
+            {
+              provider: row.storageProvider,
+              objectKey: row.objectKey,
+              error: String(error),
+            },
+            "deleteRowsBytesBestEffort: failed to delete object bytes (orphaned). DB row already removed.",
+          );
+        }),
+      ),
+    );
+  }
 }
 
 // === internal ===
+
+/** Concurrent object-store deletes per batch in {@link deleteRowsBytesBestEffort}. */
+const BYTE_DELETE_CHUNK_SIZE = 16;
 
 /**
  * Bytes on a mounted filesystem, laid out `<root>/<folder>/<name>` (the folder is

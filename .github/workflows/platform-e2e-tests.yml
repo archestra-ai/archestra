@@ -233,14 +233,12 @@ jobs:
       # Slim variant for the K8s e2e job: the same image minus the ~352MB
       # Dagger engine tar that only the quickstart job uses. Every layer is already in
       # the builder cache from the full build above, so this push takes
-      # seconds. (docker-build-push directly: the builder is already set
-      # up from the full build.)
+      # seconds.
       - name: Build slim Platform image (K8s job, no Dagger engine tar) and push
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && steps.platform-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/docker-build-push
+        uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
-          file: ${{ matrix.context }}/Dockerfile
           push: "true"
           target: unified-slim
           # Same dual-tag scheme as the full image: the SHA tag the K8s job
@@ -249,10 +247,8 @@ jobs:
             ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-slim
             ${{ steps.platform-reuse.outputs.slim_tree_tag }}
           provenance: "false"
-          network: host
-          secrets: |
-            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
           # All slim layers are a subset of the full build just done on this
           # builder; the registry ref only backstops a same-run builder loss.
           cache-from: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
@@ -293,18 +289,12 @@ jobs:
           fi
           echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
 
-      # The builder is only needed for an actual build; the reuse check above
-      # talks straight to the registry. Fork PRs always build.
-      - name: Setup Docker Builder
-        if: ${{ !matrix.use-build-action && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) || steps.mcp-base-reuse.outputs.reuse != 'true') }}
-        uses: ./.github/actions/setup-docker-builder
-
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action && steps.mcp-base-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/docker-build-push
+        uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
+          dockerfile: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           load: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}

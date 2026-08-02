@@ -90,19 +90,15 @@ jobs:
           # Read-only: the e2e build job owns cache export for this image.
           cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/platform:buildcache
 
-      - name: Setup Docker Builder
-        if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/setup-docker-builder
-
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action }}
-        uses: ./.github/actions/docker-build-push
+        uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
+          dockerfile: ${{ matrix.dockerfile }}
           platforms: linux/amd64
-          push: false
-          load: true
+          push: "false"
+          load: "true"
           tags: ${{ format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
           cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:buildcache
 

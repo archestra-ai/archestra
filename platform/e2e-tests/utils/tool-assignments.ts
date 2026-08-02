@@ -260,13 +260,22 @@ async function openCatalogToolAssignment({
 
   if (catalogAssignmentState === "enabled") {
     await enabledCatalogItem.click();
-    // Close a still-open combobox by clicking a neutral element inside the
-    // dialog. Escape is banned here: on slow runners searchInput.isVisible()
-    // keeps returning true through the popover's close animation, so a
-    // "guarded" Escape routinely landed after the popover was functionally
-    // closed and dismissed the outer edit dialog instead — from which no
-    // retry can recover.
-    if (await searchInput.isVisible().catch(() => false)) {
+    // Clicking the catalog item opens the per-server tool-config MODAL
+    // (item-name heading, "Connect on behalf of" credential select, tool
+    // checkboxes) layered over the edit dialog. While it is up, everything
+    // beneath is unclickable even though isVisible() still reports the
+    // combobox — so only dismiss a leftover combobox when no modal
+    // appeared, and do it with a neutral in-dialog click (Escape is banned
+    // here: it lands on whatever the CURRENT top layer is, and closing the
+    // modal or the edit dialog by accident strands every later step).
+    const modalAppeared = await visibleTokenSelect
+      .waitFor({ state: "visible", timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (
+      !modalAppeared &&
+      (await searchInput.isVisible().catch(() => false))
+    ) {
       await toolsSectionHeading.click();
     }
   }
@@ -315,6 +324,16 @@ async function openCatalogToolAssignment({
   await expect(async () => {
     if (await dynamicCredentialOption.isVisible().catch(() => false)) {
       return;
+    }
+    // The credential select lives in the tool-config modal; if the modal
+    // got dismissed along the way, clicking the assigned server's pill
+    // reopens it.
+    if (!(await visibleTokenSelect.isVisible().catch(() => false))) {
+      if (await pillButtonByTestId.isVisible().catch(() => false)) {
+        await pillButtonByTestId.click();
+      } else if (await pillButtonByRole.isVisible().catch(() => false)) {
+        await pillButtonByRole.click();
+      }
     }
     await visibleTokenSelect.click({ timeout: 2_000 });
     await expect(dynamicCredentialOption).toBeVisible({ timeout: 2_000 });

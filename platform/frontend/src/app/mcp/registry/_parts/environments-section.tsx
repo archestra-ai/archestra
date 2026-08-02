@@ -841,7 +841,6 @@ function EnvironmentEditorDialog({
             enforcementMeasured={
               capabilities?.networkPolicy.enforcementSource === "probe"
             }
-            probedAt={capabilities?.networkPolicy.probedAt ?? null}
             baselineLoaded={egressBaselineLoaded}
             disabled={isPending || !egressBaselineLoaded}
           />
@@ -885,7 +884,6 @@ function NetworkPolicyFields({
   supportsFqdn,
   provider,
   enforcementMeasured,
-  probedAt,
   baselineLoaded,
   disabled,
 }: {
@@ -900,7 +898,6 @@ function NetworkPolicyFields({
   supportsFqdn: boolean;
   provider: string | null;
   enforcementMeasured: boolean;
-  probedAt: string | null;
   baselineLoaded: boolean;
   disabled: boolean;
 }) {
@@ -913,21 +910,10 @@ function NetworkPolicyFields({
       {enforcementUnavailable && enforcementMeasured ? (
         <Alert variant="warning">
           <TriangleAlert className="h-4 w-4" />
-          <AlertTitle>This cluster does not enforce network policy</AlertTitle>
+          <AlertTitle>Network policy enforcement test failed</AlertTitle>
           <AlertDescription className="block leading-6">
-            A test pod under a deny-all policy still reached the network
-            {probedAt ? (
-              <>
-                {" on "}
-                {/* Rendered as the raw date rather than a locale string, which
-                    would differ between the server pass and the browser. */}
-                <time dateTime={probedAt}>{probedAt.slice(0, 10)}</time>
-              </>
-            ) : null}
-            <span>
-              , so egress rules would be accepted and then ignored. These
-              controls stay disabled until the cluster enforces NetworkPolicy.
-            </span>{" "}
+            Egress rules would be accepted and then ignored, so these controls
+            stay disabled until the cluster enforces NetworkPolicy.{" "}
             <ExternalDocsLink href={NETWORK_POLICY_DOCS_URL}>
               View docs
             </ExternalDocsLink>

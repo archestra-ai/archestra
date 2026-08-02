@@ -32437,6 +32437,10 @@ export type GetConfigResponses = {
                 owner: string;
                 name: string;
             } | null;
+            softDeleteRetention: {
+                enabled: boolean;
+                days: number;
+            };
         };
         providerBaseUrls: {
             [key: string]: string | null;

@@ -117669,6 +117669,22 @@
                             "name"
                           ],
                           "additionalProperties": false
+                        },
+                        "softDeleteRetention": {
+                          "type": "object",
+                          "properties": {
+                            "enabled": {
+                              "type": "boolean"
+                            },
+                            "days": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "enabled",
+                            "days"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -117700,7 +117716,8 @@
                         "hackathonRecorderEnabled",
                         "hackathonVideoDownloadEnabled",
                         "hackathonMaxFinalCutMs",
-                        "hackathonGalleryRepo"
+                        "hackathonGalleryRepo",
+                        "softDeleteRetention"
                       ],
                       "additionalProperties": false
                     },

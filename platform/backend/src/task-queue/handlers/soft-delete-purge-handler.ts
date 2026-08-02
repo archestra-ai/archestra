@@ -74,14 +74,22 @@ async function sweepEntity(
   }
 
   let total = 0;
+  // Rows scanned but not purged — still referenced, restored meanwhile, or
+  // errored. Doubles as the scan offset: skipped rows keep their deleted_at,
+  // so they stay the oldest prefix of every scan, while purged rows vanish
+  // from it — OFFSET skipped therefore always lands on the first row this
+  // sweep has not seen yet, and a wall of un-purgeable rows can never starve
+  // the purgeable rows behind it. (The invariant breaks if a skip path ever
+  // touches deleted_at, or the scans lose their (deleted_at, id) order.)
+  let skipped = 0;
   for (let batch = 0; batch < MAX_BATCHES; batch++) {
     const candidates = await entity.findExpired({
       retentionDays,
       limit: BATCH_SIZE,
+      offset: skipped,
     });
     if (candidates.length === 0) break;
 
-    let purgedInBatch = 0;
     for (const candidate of candidates) {
       // Per-row try/catch: one bad row cannot stall the sweep.
       try {
@@ -100,11 +108,14 @@ async function sweepEntity(
             );
           },
         });
-        // false = restored meanwhile or still referenced; next sweep retries.
-        if (!purged) continue;
-        purgedInBatch++;
-        total++;
+        if (purged) {
+          total++;
+        } else {
+          // Restored meanwhile or still referenced; next sweep retries.
+          skipped++;
+        }
       } catch (error) {
+        skipped++;
         logger.warn(
           {
             entity: entity.key,
@@ -116,10 +127,16 @@ async function sweepEntity(
       }
     }
 
-    // Skipped rows (still referenced) reappear in every scan, oldest first —
-    // a batch that made no progress means only skipped rows remain.
-    if (purgedInBatch === 0) break;
+    // A short batch means the scan is exhausted. Every full batch either
+    // purged rows or advanced the offset, so the loop always progresses;
+    // MAX_BATCHES stays as the backstop.
     if (candidates.length < BATCH_SIZE) break;
+  }
+  if (skipped > 0) {
+    logger.warn(
+      { entity: entity.key, skipped, retentionDays },
+      "soft-delete purge sweep: expired rows left in place (still referenced, restored mid-sweep, or errored)",
+    );
   }
   return total;
 }

@@ -3139,6 +3139,7 @@ class ToolModel {
   static async findExpiredDeleted(params: {
     retentionDays: number;
     limit: number;
+    offset: number;
   }): Promise<{ id: string; organizationId: string }[]> {
     const { rows } = await db.execute<{
       id: string;
@@ -3158,8 +3159,9 @@ class ToolModel {
       ) aj ON true
       WHERE tl.deleted_at < now()::timestamp - make_interval(days => ${params.retentionDays})
         AND COALESCE(c.organization_id, a.organization_id, aj.organization_id) IS NOT NULL
-      ORDER BY tl.deleted_at
+      ORDER BY tl.deleted_at, tl.id
       LIMIT ${params.limit}
+      OFFSET ${params.offset}
     `);
     return rows.map((row) => ({
       id: row.id,

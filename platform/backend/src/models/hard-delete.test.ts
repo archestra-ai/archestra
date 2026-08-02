@@ -16,12 +16,15 @@ import {
   SkillSandboxReplayEventModel,
   SkillVersionModel,
   TaskModel,
+  ToolModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { Skill } from "@/types";
 
 const FORTY_DAYS_AGO = () => new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+const THIRTY_FIVE_DAYS_AGO = () =>
+  new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
 
 async function seedSkill(organizationId: string, name: string): Promise<Skill> {
   const skill = await SkillModel.createWithFiles({
@@ -512,6 +515,78 @@ describe("AgentModel.hardDelete", () => {
       .from(schema.tasksTable)
       .where(eq(schema.tasksTable.taskType, "schedule_trigger_run_execute"));
     expect(tasks).toHaveLength(1);
+  });
+});
+
+// The purge sweep pages its scans with OFFSET = its skipped-row count; the
+// two org-inferring raw-SQL scans are not covered by the shared-helper tests.
+describe("findExpiredDeleted offset paging (bespoke scans)", () => {
+  test("ToolModel.findExpiredDeleted skips the scan's oldest rows", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const org = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const older = await makeTool({ catalogId: catalog.id });
+    const younger = await makeTool({ catalogId: catalog.id });
+    await db
+      .update(schema.toolsTable)
+      .set({ deletedAt: FORTY_DAYS_AGO() })
+      .where(eq(schema.toolsTable.id, older.id));
+    await db
+      .update(schema.toolsTable)
+      .set({ deletedAt: THIRTY_FIVE_DAYS_AGO() })
+      .where(eq(schema.toolsTable.id, younger.id));
+
+    const all = await ToolModel.findExpiredDeleted({
+      retentionDays: 30,
+      limit: 10,
+      offset: 0,
+    });
+    expect(all.map((r) => r.id)).toEqual([older.id, younger.id]);
+
+    const page = await ToolModel.findExpiredDeleted({
+      retentionDays: 30,
+      limit: 10,
+      offset: 1,
+    });
+    expect(page).toEqual([{ id: younger.id, organizationId: org.id }]);
+  });
+
+  test("McpServerModel.findExpiredDeleted skips the scan's oldest rows", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const older = await makeMcpServer({ teamId: team.id });
+    const younger = await makeMcpServer({ teamId: team.id });
+    await db
+      .update(schema.mcpServersTable)
+      .set({ deletedAt: FORTY_DAYS_AGO() })
+      .where(eq(schema.mcpServersTable.id, older.id));
+    await db
+      .update(schema.mcpServersTable)
+      .set({ deletedAt: THIRTY_FIVE_DAYS_AGO() })
+      .where(eq(schema.mcpServersTable.id, younger.id));
+
+    const all = await McpServerModel.findExpiredDeleted({
+      retentionDays: 30,
+      limit: 10,
+      offset: 0,
+    });
+    expect(all.map((r) => r.id)).toEqual([older.id, younger.id]);
+
+    const page = await McpServerModel.findExpiredDeleted({
+      retentionDays: 30,
+      limit: 10,
+      offset: 1,
+    });
+    expect(page).toEqual([{ id: younger.id, organizationId: org.id }]);
   });
 });
 

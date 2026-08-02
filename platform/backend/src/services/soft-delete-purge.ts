@@ -34,13 +34,16 @@ export type PurgeableEntity = {
   resourceType: string;
   /**
    * Global batched scan for rows soft-deleted longer ago than the window —
-   * no per-org loop. Rows whose organization cannot be resolved are excluded:
-   * purging them would destroy data with no audit trail (see
-   * `countUnresolvable`).
+   * no per-org loop, oldest first with an id tie-break. `offset` is the
+   * sweep's count of rows it scanned but could not purge, paging the scan
+   * past them (see sweepEntity for why that arithmetic is sound). Rows whose
+   * organization cannot be resolved are excluded: purging them would destroy
+   * data with no audit trail (see `countUnresolvable`).
    */
   findExpired: (params: {
     retentionDays: number;
     limit: number;
+    offset: number;
   }) => Promise<{ id: string; organizationId: string }[]>;
   /**
    * Expired rows `findExpired` will never return because no organization

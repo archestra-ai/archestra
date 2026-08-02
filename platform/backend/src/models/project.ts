@@ -328,6 +328,7 @@ class ProjectModel {
   static async findExpiredDeleted(params: {
     retentionDays: number;
     limit: number;
+    offset: number;
   }): Promise<{ id: string; organizationId: string }[]> {
     return findExpiredSoftDeleted(
       db,

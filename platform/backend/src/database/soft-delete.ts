@@ -94,14 +94,17 @@ export const softDeleteExpired = (
 /**
  * Rows soft-deleted longer ago than `retentionDays`, oldest first — the purge
  * sweep's find-expired scan, served by the partial `*_deleted_at_purge_idx`
- * indexes. Rows with a NULL organization column are excluded: a purge without
- * a resolvable tenant would mean destroying data with no audit trail.
+ * indexes. `offset` skips the scan's oldest rows (the sweep passes its
+ * skipped-row count to page past rows it could not purge); the id tie-break
+ * keeps that paging deterministic when a bulk delete stamps many rows with
+ * one `deletedAt`. Rows with a NULL organization column are excluded: a purge
+ * without a resolvable tenant would mean destroying data with no audit trail.
  */
 export async function findExpiredSoftDeleted<T extends SoftDeletablePgTable>(
   executor: Executor,
   table: T,
   columns: { id: AnyPgColumn; organizationId: AnyPgColumn },
-  params: { retentionDays: number; limit: number },
+  params: { retentionDays: number; limit: number; offset: number },
 ): Promise<{ id: string; organizationId: string }[]> {
   const rows = await executor
     .select({ id: columns.id, organizationId: columns.organizationId })
@@ -112,8 +115,9 @@ export async function findExpiredSoftDeleted<T extends SoftDeletablePgTable>(
         softDeleteExpired(table, params.retentionDays),
       ),
     )
-    .orderBy(asc(table.deletedAt))
-    .limit(params.limit);
+    .orderBy(asc(table.deletedAt), asc(columns.id))
+    .limit(params.limit)
+    .offset(params.offset);
   return rows as { id: string; organizationId: string }[];
 }
 

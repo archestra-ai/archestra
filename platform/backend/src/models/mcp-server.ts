@@ -1400,6 +1400,7 @@ class McpServerModel {
   static async findExpiredDeleted(params: {
     retentionDays: number;
     limit: number;
+    offset: number;
   }): Promise<{ id: string; organizationId: string }[]> {
     const { rows } = await db.execute<{
       id: string;
@@ -1413,8 +1414,9 @@ class McpServerModel {
       ) m ON true
       WHERE s.deleted_at < now()::timestamp - make_interval(days => ${params.retentionDays})
         AND COALESCE(t.organization_id, m.organization_id) IS NOT NULL
-      ORDER BY s.deleted_at
+      ORDER BY s.deleted_at, s.id
       LIMIT ${params.limit}
+      OFFSET ${params.offset}
     `);
     return rows.map((row) => ({
       id: row.id,

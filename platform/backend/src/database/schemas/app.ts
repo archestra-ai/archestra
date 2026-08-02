@@ -112,6 +112,11 @@ const appsTable = softDeletablePgTable(
     uniqueIndex("apps_org_slug_uidx")
       .on(table.organizationId, table.slug)
       .where(sql`${table.slug} IS NOT NULL AND ${table.deletedAt} IS NULL`),
+    // Serves the retention sweep's find-deleted scan; the active-rows partial
+    // indexes above cannot, since they exclude soft-deleted rows.
+    index("apps_deleted_at_purge_idx")
+      .on(table.deletedAt)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
   ],
 );
 

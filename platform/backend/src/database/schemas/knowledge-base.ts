@@ -23,6 +23,11 @@ const knowledgeBasesTable = softDeletablePgTable(
     index("knowledge_bases_organization_id_idx")
       .on(table.organizationId)
       .where(sql`deleted_at IS NULL`),
+    // Serves the retention sweep's find-deleted scan; the active-rows partial
+    // index above cannot, since it excludes soft-deleted rows.
+    index("knowledge_bases_deleted_at_purge_idx")
+      .on(table.deletedAt)
+      .where(sql`deleted_at IS NOT NULL`),
   ],
 );
 

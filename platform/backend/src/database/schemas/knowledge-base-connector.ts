@@ -103,6 +103,11 @@ const knowledgeBaseConnectorsTable = softDeletablePgTable(
     index("knowledge_base_connectors_environment_id_idx")
       .on(table.environmentId)
       .where(sql`deleted_at IS NULL`),
+    // Serves the retention sweep's find-deleted scan; the active-rows partial
+    // indexes above cannot, since they exclude soft-deleted rows.
+    index("knowledge_base_connectors_deleted_at_purge_idx")
+      .on(table.deletedAt)
+      .where(sql`deleted_at IS NOT NULL`),
   ],
 );
 

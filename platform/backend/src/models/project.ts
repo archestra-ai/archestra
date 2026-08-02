@@ -16,6 +16,7 @@ import { notDeletedConversation } from "@/database/schemas/conversation";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   findExpiredSoftDeleted,
+  type HardDeleteOpts,
   hardDelete as hardDeleteRows,
   lockRowForPurge,
   restore as restoreRows,
@@ -273,10 +274,7 @@ class ProjectModel {
    * explicitly or the worker keeps dequeuing work whose rows are gone. Chats
    * already detached at soft-delete (`project_id` → NULL).
    */
-  static async hardDelete(
-    id: string,
-    opts?: { onlyIfDeletedForDays?: number },
-  ): Promise<boolean> {
+  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
     let purgeBytes: (() => Promise<void>) | null = null;
     const deleted = await withDbTransaction(async (tx) => {
       if (
@@ -316,7 +314,9 @@ class ProjectModel {
         schema.projectsTable,
         eq(schema.projectsTable.id, id),
       );
-      return count > 0;
+      if (count === 0) return false;
+      await opts?.onPurged?.(tx);
+      return true;
     });
     if (deleted && purgeBytes) {
       await (purgeBytes as () => Promise<void>)();

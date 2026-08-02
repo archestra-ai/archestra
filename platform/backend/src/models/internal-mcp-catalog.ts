@@ -16,6 +16,7 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   findExpiredSoftDeleted,
+  type HardDeleteOpts,
   hardDelete,
   lockRowForPurge,
   restore,
@@ -1111,10 +1112,7 @@ class InternalMcpCatalogModel {
    * them — including a legacy child's bag, since children cascade with the
    * parent row.
    */
-  static async hardDelete(
-    id: string,
-    opts?: { onlyIfDeletedForDays?: number },
-  ): Promise<boolean> {
+  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
     const secretIds: string[] = [];
     const deleted = await withDbTransaction(async (tx) => {
       if (
@@ -1176,7 +1174,9 @@ class InternalMcpCatalogModel {
         schema.internalMcpCatalogTable,
         eq(schema.internalMcpCatalogTable.id, id),
       );
-      return count > 0;
+      if (count === 0) return false;
+      await opts?.onPurged?.(tx);
+      return true;
     });
 
     if (deleted) {

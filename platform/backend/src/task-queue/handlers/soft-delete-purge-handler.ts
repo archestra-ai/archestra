@@ -5,7 +5,7 @@ import {
   PURGEABLE_ENTITIES,
   type PurgeableEntity,
 } from "@/services/soft-delete-purge";
-import type { AuditableSnapshot } from "@/types/audit-log";
+import type { AuditableSnapshot, InsertAuditLog } from "@/types/audit-log";
 
 /**
  * Soft-delete retention sweep: permanently deletes rows soft-deleted longer
@@ -21,6 +21,8 @@ import type { AuditableSnapshot } from "@/types/audit-log";
  * Idempotent and replica-safe: every hardDelete re-checks eligibility under
  * FOR UPDATE (a restore between select and purge wins), and the task queue
  * claims with FOR UPDATE SKIP LOCKED, so concurrent sweeps cannot double-run.
+ * Each purge commits atomically with its audit row (via `onPurged`), so a
+ * row can never be destroyed without a trail of it having existed.
  */
 export async function handleSoftDeletePurge(): Promise<void> {
   if (!config.softDeleteRetention.enabled) return;
@@ -87,12 +89,21 @@ async function sweepEntity(
         const identity = await entity.identity(candidate);
         const purged = await entity.hardDelete(candidate.id, {
           onlyIfDeletedForDays: retentionDays,
+          // Audit row in the delete transaction: the purge and its trail
+          // commit atomically. A failed insert rolls the delete back (caught
+          // and logged below) and the next sweep retries — a purge can never
+          // land unrecorded.
+          onPurged: async (tx) => {
+            await AuditLogModel.create(
+              purgeAuditRow(entity, candidate, identity),
+              tx,
+            );
+          },
         });
         // false = restored meanwhile or still referenced; next sweep retries.
         if (!purged) continue;
         purgedInBatch++;
         total++;
-        await writePurgeAuditRow(entity, candidate, identity);
       } catch (error) {
         logger.warn(
           {
@@ -113,43 +124,31 @@ async function sweepEntity(
   return total;
 }
 
-async function writePurgeAuditRow(
+function purgeAuditRow(
   entity: PurgeableEntity,
   candidate: { id: string; organizationId: string },
   identity: AuditableSnapshot,
-): Promise<void> {
-  try {
-    await AuditLogModel.create({
-      organizationId: candidate.organizationId,
-      actorId: null,
-      actorType: "system",
-      actorName: null,
-      actorEmail: null,
-      action: entity.auditAction,
-      outcome: "success",
-      resourceType: entity.resourceType,
-      resourceId: candidate.id,
-      resourceName: typeof identity?.name === "string" ? identity.name : null,
-      before: identity,
-      after: null,
-      httpMethod: null,
-      httpPath: null,
-      httpRoute: null,
-      httpStatus: null,
-      requestId: null,
-      sourceIp: null,
-      userAgent: null,
-      occurredAt: new Date(),
-    });
-  } catch (error) {
-    // The row is already gone; a failed audit write must not fail the sweep.
-    logger.error(
-      {
-        entity: entity.key,
-        id: candidate.id,
-        error: error instanceof Error ? error.message : String(error),
-      },
-      "soft-delete purge sweep: audit write failed",
-    );
-  }
+): InsertAuditLog {
+  return {
+    organizationId: candidate.organizationId,
+    actorId: null,
+    actorType: "system",
+    actorName: null,
+    actorEmail: null,
+    action: entity.auditAction,
+    outcome: "success",
+    resourceType: entity.resourceType,
+    resourceId: candidate.id,
+    resourceName: typeof identity?.name === "string" ? identity.name : null,
+    before: identity,
+    after: null,
+    httpMethod: null,
+    httpPath: null,
+    httpRoute: null,
+    httpStatus: null,
+    requestId: null,
+    sourceIp: null,
+    userAgent: null,
+    occurredAt: new Date(),
+  };
 }

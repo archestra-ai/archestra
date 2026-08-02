@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
-import { AgentModel } from "@/models";
+import { AgentModel, AuditLogModel } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test, vi } from "@/test";
 import { handleSoftDeletePurge } from "./soft-delete-purge-handler";
 
 const FORTY_DAYS_AGO = () => new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
@@ -164,6 +164,51 @@ describe("handleSoftDeletePurge", () => {
       "internalMcpCatalog.purged",
       "mcpServer.purged",
     ]);
+  });
+
+  test("a failed audit write rolls back the purge; the next sweep retries", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await agedDeletedAgent(makeAgent, org.id);
+    enableRetention();
+
+    const createSpy = vi
+      .spyOn(AuditLogModel, "create")
+      .mockRejectedValueOnce(new Error("audit store unavailable"));
+    try {
+      await handleSoftDeletePurge();
+
+      // The delete rolled back with its audit insert: the row survives and
+      // nothing was destroyed without a trail.
+      const [row] = await db
+        .select()
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, agent.id));
+      expect(row).toBeDefined();
+      const audits = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.resourceId, agent.id));
+      expect(audits).toEqual([]);
+
+      // Audit writes healthy again: the next sweep purges and records it.
+      await handleSoftDeletePurge();
+    } finally {
+      createSpy.mockRestore();
+    }
+
+    const [rowAfter] = await db
+      .select()
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, agent.id));
+    expect(rowAfter).toBeUndefined();
+    const [audit] = await db
+      .select()
+      .from(schema.auditLogsTable)
+      .where(eq(schema.auditLogsTable.resourceId, agent.id));
+    expect(audit).toMatchObject({ action: "agent.purged", outcome: "success" });
   });
 
   test("skips a row whose organization cannot be resolved", async ({

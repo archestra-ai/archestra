@@ -4,6 +4,7 @@ import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   findExpiredSoftDeleted,
+  type HardDeleteOpts,
   hardDelete,
   lockRowForPurge,
   softDelete,
@@ -530,10 +531,7 @@ class KnowledgeBaseConnectorModel {
    * cancellation and secret revocation already happened at soft-delete time
    * (knowledge-source-deletion service), so there is nothing external left.
    */
-  static async hardDelete(
-    id: string,
-    opts?: { onlyIfDeletedForDays?: number },
-  ): Promise<boolean> {
+  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
     return await withDbTransaction(async (tx) => {
       if (
         !(await lockRowForPurge(
@@ -550,7 +548,9 @@ class KnowledgeBaseConnectorModel {
         schema.knowledgeBaseConnectorsTable,
         eq(schema.knowledgeBaseConnectorsTable.id, id),
       );
-      return count > 0;
+      if (count === 0) return false;
+      await opts?.onPurged?.(tx);
+      return true;
     });
   }
 

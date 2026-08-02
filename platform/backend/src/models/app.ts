@@ -12,6 +12,7 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   findExpiredSoftDeleted,
+  type HardDeleteOpts,
   lockRowForPurge,
   softDelete,
 } from "@/database/soft-delete";
@@ -654,10 +655,7 @@ class AppModel {
    * re-checked under FOR UPDATE so a concurrent restore wins). Byte deletion
    * runs after commit, so bytes never vanish for rows a rollback resurrects.
    */
-  static async hardDelete(
-    id: string,
-    opts?: { onlyIfDeletedForDays?: number },
-  ): Promise<boolean> {
+  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
     let purgeBytes: (() => Promise<void>) | null = null;
     const deleted = await withDbTransaction(async (tx) => {
       if (
@@ -679,6 +677,7 @@ class AppModel {
         .delete(schema.appVersionsTable)
         .where(eq(schema.appVersionsTable.appId, id));
       await tx.delete(schema.appsTable).where(eq(schema.appsTable.id, id));
+      await opts?.onPurged?.(tx);
       return true;
     });
     if (deleted && purgeBytes) {

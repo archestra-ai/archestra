@@ -1,3 +1,4 @@
+import type { HardDeleteOpts } from "@/database/soft-delete";
 import {
   AgentModel,
   AppModel,
@@ -51,11 +52,12 @@ export type PurgeableEntity = {
    * The same hardDelete the manual permanent-delete routes use. Resolves
    * false when the row was skipped — restored or aged back under the window
    * (the FOR UPDATE re-check), or still referenced (a catalog with installs,
-   * a skill pinned by a sandbox mount); the next sweep retries.
+   * a skill pinned by a sandbox mount); the next sweep retries. The sweep
+   * writes its purge audit row via `onPurged`, inside the delete transaction.
    */
   hardDelete: (
     id: string,
-    opts: { onlyIfDeletedForDays: number },
+    opts: HardDeleteOpts & { onlyIfDeletedForDays: number },
   ) => Promise<boolean>;
   /**
    * Identity-only audit snapshot ({ id, name, deletedAt, … }) written to the

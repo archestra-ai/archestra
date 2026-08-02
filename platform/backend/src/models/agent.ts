@@ -38,6 +38,7 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   findExpiredSoftDeleted,
+  type HardDeleteOpts,
   hardDelete,
   lockRowForPurge,
   restore,
@@ -2684,10 +2685,7 @@ class AgentModel {
    * nulling, the row itself — runs inside the transaction after the re-check,
    * so a winning restore loses nothing but already-unlinked history.
    */
-  static async hardDelete(
-    id: string,
-    opts?: { onlyIfDeletedForDays?: number },
-  ): Promise<boolean> {
+  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
     if (opts?.onlyIfDeletedForDays !== undefined) {
       // Cheap pre-check so an ineligible call never starts unlinking history.
       const [eligible] = await db
@@ -2775,7 +2773,9 @@ class AgentModel {
         schema.agentsTable,
         eq(schema.agentsTable.id, id),
       );
-      return count > 0;
+      if (count === 0) return false;
+      await opts?.onPurged?.(tx);
+      return true;
     });
   }
 

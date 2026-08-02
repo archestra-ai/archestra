@@ -3,6 +3,7 @@ import db, { schema, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   findExpiredSoftDeleted,
+  type HardDeleteOpts,
   hardDelete,
   lockRowForPurge,
   softDelete,
@@ -138,10 +139,7 @@ class KnowledgeBaseModel {
    * cascade; the single-statement delete is the established pattern and
    * nothing writes to a soft-deleted knowledge base.
    */
-  static async hardDelete(
-    id: string,
-    opts?: { onlyIfDeletedForDays?: number },
-  ): Promise<boolean> {
+  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
     return await withDbTransaction(async (tx) => {
       if (
         !(await lockRowForPurge(
@@ -158,7 +156,9 @@ class KnowledgeBaseModel {
         schema.knowledgeBasesTable,
         eq(schema.knowledgeBasesTable.id, id),
       );
-      return count > 0;
+      if (count === 0) return false;
+      await opts?.onPurged?.(tx);
+      return true;
     });
   }
 

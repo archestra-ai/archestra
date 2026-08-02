@@ -19,6 +19,7 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   findExpiredSoftDeleted,
+  type HardDeleteOpts,
   hardDelete,
   lockRowForPurge,
   restore,
@@ -654,10 +655,7 @@ class SkillModel {
    * sandbox goes away — the sweep retries, the manual route surfaces a 409
    * via {@link hasSandboxVersionPin}.
    */
-  static async hardDelete(
-    id: string,
-    opts?: { onlyIfDeletedForDays?: number },
-  ): Promise<boolean> {
+  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
     return await withDbTransaction(async (tx) => {
       if (
         !(await lockRowForPurge(
@@ -683,7 +681,9 @@ class SkillModel {
         schema.skillsTable,
         eq(schema.skillsTable.id, id),
       );
-      return count > 0;
+      if (count === 0) return false;
+      await opts?.onPurged?.(tx);
+      return true;
     });
   }
 

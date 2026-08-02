@@ -48,6 +48,7 @@ import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
 import {
+  type HardDeleteOpts,
   hardDelete,
   lockRowForPurge,
   restore,
@@ -3103,10 +3104,7 @@ class ToolModel {
    * restore wins). Every child — junction rows, policies, observations — is
    * ON DELETE CASCADE, so a plain row delete leaves nothing behind.
    */
-  static async hardDelete(
-    id: string,
-    opts?: { onlyIfDeletedForDays?: number },
-  ): Promise<boolean> {
+  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
     return await withDbTransaction(async (tx) => {
       if (
         !(await lockRowForPurge(
@@ -3123,7 +3121,9 @@ class ToolModel {
         schema.toolsTable,
         eq(schema.toolsTable.id, id),
       );
-      return count > 0;
+      if (count === 0) return false;
+      await opts?.onPurged?.(tx);
+      return true;
     });
   }
 

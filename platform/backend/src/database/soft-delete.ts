@@ -118,6 +118,20 @@ export async function findExpiredSoftDeleted<T extends SoftDeletablePgTable>(
 }
 
 /**
+ * Options shared by every purgeable model's `hardDelete`.
+ * `onlyIfDeletedForDays` restricts the purge paths to aged-out soft-deleted
+ * rows (see {@link lockRowForPurge}); `onPurged` runs inside the delete
+ * transaction immediately after the row delete succeeds — the retention
+ * sweep writes its purge audit row there, so a purge can never commit
+ * without its audit trail (a failed write rolls the delete back and the
+ * next sweep retries).
+ */
+export type HardDeleteOpts = {
+  onlyIfDeletedForDays?: number;
+  onPurged?: (tx: Transaction) => Promise<void>;
+};
+
+/**
  * Lock a row FOR UPDATE inside the caller's transaction and confirm it is
  * still hard-deletable. With `onlyIfDeletedForDays`, eligible means
  * soft-deleted longer ago than that many days (0 = any soft-deleted row) —

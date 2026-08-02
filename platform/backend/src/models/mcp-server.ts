@@ -17,6 +17,7 @@ import mcpClient from "@/clients/mcp-client";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
+  type HardDeleteOpts,
   hardDelete,
   lockRowForPurge,
   restore,
@@ -1347,10 +1348,7 @@ class McpServerModel {
    * no cascade toward it — destroy it explicitly via the secret manager,
    * which also covers Vault-backed secrets a raw row delete would leak.
    */
-  static async hardDelete(
-    id: string,
-    opts?: { onlyIfDeletedForDays?: number },
-  ): Promise<boolean> {
+  static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
     let secretId: string | null = null;
     const deleted = await withDbTransaction(async (tx) => {
       if (
@@ -1373,7 +1371,9 @@ class McpServerModel {
         schema.mcpServersTable,
         eq(schema.mcpServersTable.id, id),
       );
-      return count > 0;
+      if (count === 0) return false;
+      await opts?.onPurged?.(tx);
+      return true;
     });
 
     if (deleted && secretId) {

@@ -31,6 +31,27 @@ export async function openGatewayCatalogToolAssignment(params: {
 }
 
 export async function saveOpenProfileDialog(page: Page): Promise<void> {
+  // The per-server tool-config modal has no submit of its own (its choices
+  // commit live; the only control is the Close X) and while it is open the
+  // layer beneath is aria-hidden, so no role query can reach the edit
+  // dialog's Save/Update. It normally auto-closes after the credential
+  // choice commits, but on slow runners it can linger — wait briefly for
+  // the auto-close, then close it manually.
+  const configModal = page
+    .getByRole("dialog")
+    .filter({ has: page.getByTestId(E2eTestId.TokenSelect) })
+    .first();
+  if (await configModal.isVisible().catch(() => false)) {
+    const autoClosed = await configModal
+      .waitFor({ state: "hidden", timeout: 3_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!autoClosed) {
+      await configModal.getByRole("button", { name: "Close" }).click();
+      await expect(configModal).toBeHidden({ timeout: 5_000 });
+    }
+  }
+
   // One combined locator: sampling Save's visibility at a single instant and
   // falling back to Update races the dialog's render (isVisible() does not
   // wait). A dialog has exactly one submit — wait for whichever it is.

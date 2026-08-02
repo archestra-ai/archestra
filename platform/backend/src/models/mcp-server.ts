@@ -1376,7 +1376,7 @@ class McpServerModel {
       return true;
     });
 
-    if (deleted && secretId) {
+    if (deleted && secretId && opts?.onlyIfDeletedForDays !== undefined) {
       try {
         await secretManager().deleteSecret(secretId);
       } catch (error) {

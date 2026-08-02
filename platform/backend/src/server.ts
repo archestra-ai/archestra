@@ -53,6 +53,7 @@ import {
 } from "@/agents/incoming-email";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { fastifyAuthPlugin } from "@/auth";
+import { revokeBasicAuthOnlySessions } from "@/auth/basic-auth-lockout";
 import { cacheManager } from "@/cache-manager";
 import config, {
   shouldRunRenderer,
@@ -1248,6 +1249,12 @@ const startWebServer = async () => {
     // SPDX-SnippetEnd
 
     await seedRequiredStartingData();
+
+    // With basic auth disabled, a password session that predates the flag
+    // would otherwise stay valid until it expired. Runs after seeding so the
+    // bootstrap admin exists first (and is itself swept when it has no
+    // federated account, which is the intent).
+    await revokeBasicAuthOnlySessions();
 
     // Sync system API keys for keyless providers (Vertex AI, vLLM, Ollama, Bedrock)
     const defaultOrg = await OrganizationModel.getFirst();

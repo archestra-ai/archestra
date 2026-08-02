@@ -71,7 +71,6 @@ export function makeUserPermissions(
   return {
     mcpRegistry: [...ALL, "deploy-to-restricted"],
     mcpServerInstallation: [...ALL],
-    mcpServerInstallationRequest: [...ALL],
     mcpGateway: [...ALL, "deploy-to-restricted"],
     environment: ["read", "create", "update", "delete"],
     agent: [...ALL, "team-admin", "deploy-to-restricted"],

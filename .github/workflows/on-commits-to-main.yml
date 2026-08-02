@@ -128,3 +128,55 @@ jobs:
             --values .github/values-staging.yaml \
             --atomic \
             --timeout 15m
+
+  # Keeps the backend-unit-test shards' cargo cache warm for FRESH PR
+  # branches: Actions caches are only shared downward from the default
+  # branch, and the shards themselves never run on main. The NAPI crate
+  # builds are uncacheable in turbo (cache:false, platform-specific .node
+  # artifacts), so the shards depend on a warm cargo target dir instead —
+  # this job compiles the crates on main and saves the target dir under the
+  # same shared-key the shards restore. With a warm restore the build is an
+  # incremental no-op and the job takes ~1-2 min.
+  # See the shard job in on-pull-requests.yml for the consumer.
+  warm-backend-build-cache:
+    name: Warm Backend Build Cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: on-commits-to-main-warm-backend-cache
+      cancel-in-progress: true
+    permissions:
+      contents: read # Checkout only; the product is an Actions cache entry.
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # shared-key must stay identical to the shard job's.
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      # Retry pattern mirrors the shard job (rustup race on cold cargo builds).
+      - name: Build backend workspace dependencies
+        run: |
+          pnpm exec turbo build --filter="@backend^..." || {
+            echo "Build failed — syncing pinned Rust toolchain and retrying once..."
+            rustup show
+            pnpm exec turbo build --filter="@backend^..."
+          }

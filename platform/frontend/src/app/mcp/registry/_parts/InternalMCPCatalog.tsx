@@ -54,7 +54,6 @@ import {
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { resolveCatalogEnvironmentLabel } from "./catalog-environment-label";
-import { CustomServerRequestDialog } from "./custom-server-request-dialog";
 import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
@@ -162,11 +161,7 @@ export function InternalMCPCatalog({
   );
 
   const { isDialogOpened, openDialog, closeDialog } = useDialogs<
-    | "custom-request"
-    | "remote-install"
-    | "local-install"
-    | "oauth"
-    | "reinstall"
+    "remote-install" | "local-install" | "oauth" | "reinstall"
   >();
 
   // Deep-link manage connections dialog state
@@ -1110,11 +1105,6 @@ export function InternalMCPCatalog({
           )
         )}
       </div>
-
-      <CustomServerRequestDialog
-        isOpen={isDialogOpened("custom-request")}
-        onClose={() => closeDialog("custom-request")}
-      />
 
       {/* Shared install-mode dialogs (remote, OAuth, no-auth, local). */}
       {install.dialogs}

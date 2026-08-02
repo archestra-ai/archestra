@@ -1164,6 +1164,44 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     }
   }
 
+  // Close every password-based entry point when basic auth is disabled.
+  // The frontend already hides the sign-in form, but hiding a form is not a
+  // control — without this the endpoints still accept valid credentials, so
+  // "SSO only" would hold for the UI and not for the API.
+  //
+  // Sign-out is deliberately NOT blocked: people already holding a session
+  // must always be able to end it. Sessions belonging to users who have no
+  // federated account are revoked at boot by revokeBasicAuthOnlySessions().
+  if (config.auth.disableBasicAuth) {
+    // Verified against better-auth 1.6.22: api/routes/password.mjs declares
+    // /request-password-reset, /reset-password and /verify-password.
+    // "/forget-password" is NOT a route — it appears only in the rate-limiter's
+    // path list — so blocking it matched nothing and left reset-initiation open.
+    //
+    // /admin/create-user is deliberately absent: creating users stays valid on
+    // an SSO-only deployment, and its optional password is inert while
+    // /sign-in/email is closed.
+    const passwordPaths = [
+      "/sign-in/email",
+      "/sign-up/email",
+      "/request-password-reset",
+      "/reset-password",
+      "/verify-password",
+      "/change-password",
+      "/admin/set-user-password",
+    ];
+    if (passwordPaths.some((blocked) => path.startsWith(blocked))) {
+      logger.warn(
+        { path, method },
+        "[auth:beforeHook] blocked password endpoint — basic auth is disabled on this deployment",
+      );
+      throw new APIError("FORBIDDEN", {
+        message:
+          "Password sign-in is disabled on this deployment. Sign in with your identity provider.",
+      });
+    }
+  }
+
   // Block direct sign-up without invitation (invitation-only registration)
   if (path.startsWith("/sign-up/email") && method === "POST") {
     const callbackURL = body.callbackURL as string | undefined;

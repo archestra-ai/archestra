@@ -108,6 +108,8 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "mcpServer.restored": "MCP server restored",
   "mcpServer.reinstalled": "MCP server reinstalled",
   // MCP install request
+  // Retired with the installation-request feature; retained so audit rows
+  // written before its removal still render with a readable label.
   "mcpServerInstallationRequest.created": "MCP install request created",
   "mcpServerInstallationRequest.updated": "MCP install request updated",
   // Member

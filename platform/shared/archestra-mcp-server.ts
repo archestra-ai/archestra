@@ -45,8 +45,6 @@ export const TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME =
 export const TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME = "get_mcp_server_logs";
 export const TOOL_RELOAD_MCP_SERVER_TOOLS_SHORT_NAME =
   "reload_mcp_server_tools";
-export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME =
-  "create_mcp_server_installation_request";
 export const TOOL_CREATE_TEAM_SHORT_NAME = "create_team";
 export const TOOL_GET_TEAM_SHORT_NAME = "get_team";
 export const TOOL_LIST_TEAMS_SHORT_NAME = "list_teams";
@@ -207,7 +205,6 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
   TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME,
   TOOL_RELOAD_MCP_SERVER_TOOLS_SHORT_NAME,
-  TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME,
   TOOL_CREATE_TEAM_SHORT_NAME,
   TOOL_GET_TEAM_SHORT_NAME,
   TOOL_LIST_TEAMS_SHORT_NAME,
@@ -370,7 +367,6 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   list_mcp_server_deployments: "mcp_servers",
   get_mcp_server_logs: "mcp_servers",
   reload_mcp_server_tools: "mcp_servers",
-  create_mcp_server_installation_request: "mcp_servers",
 
   create_team: "teams",
   get_team: "teams",
@@ -536,8 +532,6 @@ export const TOOL_LIST_MCP_SERVER_DEPLOYMENTS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME}` as const;
 export const TOOL_GET_MCP_SERVER_LOGS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_MCP_SERVER_LOGS_SHORT_NAME}` as const;
-export const TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_CREATE_MCP_SERVER_INSTALLATION_REQUEST_SHORT_NAME}` as const;
 export const TOOL_CREATE_LIMIT_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_CREATE_LIMIT_SHORT_NAME}` as const;
 export const TOOL_GET_LIMITS_FULL_NAME =

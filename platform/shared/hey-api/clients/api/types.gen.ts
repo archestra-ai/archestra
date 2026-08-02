@@ -59786,10 +59786,16 @@ export type GetMcpServersResponses = {
         assignedAgents?: Array<{
             id: string;
             name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerEmail: string | null;
         }>;
         autoModeAgents?: Array<{
             id: string;
             name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     }>;
@@ -59934,10 +59940,16 @@ export type InstallMcpServerResponses = {
         assignedAgents?: Array<{
             id: string;
             name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerEmail: string | null;
         }>;
         autoModeAgents?: Array<{
             id: string;
             name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -60148,10 +60160,16 @@ export type GetMcpServerResponses = {
         assignedAgents?: Array<{
             id: string;
             name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerEmail: string | null;
         }>;
         autoModeAgents?: Array<{
             id: string;
             name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -60287,10 +60305,16 @@ export type ReauthenticateMcpServerResponses = {
         assignedAgents?: Array<{
             id: string;
             name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerEmail: string | null;
         }>;
         autoModeAgents?: Array<{
             id: string;
             name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -60416,10 +60440,16 @@ export type RestoreMcpServerResponses = {
         assignedAgents?: Array<{
             id: string;
             name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerEmail: string | null;
         }>;
         autoModeAgents?: Array<{
             id: string;
             name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -60828,10 +60858,16 @@ export type ReinstallMcpServerResponses = {
         assignedAgents?: Array<{
             id: string;
             name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerEmail: string | null;
         }>;
         autoModeAgents?: Array<{
             id: string;
             name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerEmail: string | null;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };

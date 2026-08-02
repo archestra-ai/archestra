@@ -54,6 +54,7 @@ vi.mock("@/components/search-input", () => ({
 
 vi.mock("@/components/resource-scope-filter", () => ({
   ResourceScopeFilter: () => <div>scope filter</div>,
+  ResourceDeletedStatusFilter: () => <div>status filter</div>,
   useScopeFilterParams: () => ({
     scope: undefined,
     teamIds: undefined,
@@ -232,6 +233,8 @@ vi.mock("@/lib/projects/projects.query", () => ({
     isPending: false,
   }),
   usePinProject: () => ({ mutate: mockPinMutate }),
+  useRestoreProject: () => ({ mutate: vi.fn(), isPending: false }),
+  usePurgeProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
   // The edit dialog fetches the project detail by id; return a minimal one.
   useProject: () => ({
     data: {

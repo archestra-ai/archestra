@@ -21,6 +21,7 @@ import {
   ConnectDialogSection,
 } from "@/components/connect-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { DeletedRowMeta } from "@/components/deleted-row-meta";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -43,6 +44,7 @@ import {
   useExportAgent,
   useProfile,
   useProfilesPaginated,
+  usePurgeProfile,
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -196,11 +198,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     entityFromUrl: viewAgentFromUrl ?? null,
   });
   const [deletingAgentId, setDeletingAgentId] = useState<string | null>(null);
+  const [purgingAgent, setPurgingAgent] = useState<AgentData | null>(null);
 
   const [cloningAgent, setCloningAgent] = useState<AgentData | null>(null);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
+  const purgeAgent = usePurgeProfile();
 
   const [convertingAgent, setConvertingAgent] = useState<AgentData | null>(
     null,
@@ -327,6 +331,18 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         />
       ),
     },
+    ...(isDeletedView
+      ? [
+          {
+            id: "deleted",
+            header: "Deleted",
+            enableSorting: false,
+            cell: ({ row }) => (
+              <DeletedRowMeta deletedAt={row.original.deletedAt} />
+            ),
+          } satisfies ColumnDef<AgentData>,
+        ]
+      : []),
     {
       id: "actions",
       header: "Actions",
@@ -363,6 +379,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 },
               });
             }}
+            onPurge={setPurgingAgent}
             onClone={setCloningAgent}
             onConvertToSkill={setConvertingAgent}
             onExport={(agentData) => {
@@ -533,6 +550,22 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 agentId={deletingAgentId}
                 open={!!deletingAgentId}
                 onOpenChange={(open) => !open && setDeletingAgentId(null)}
+              />
+            )}
+
+            {purgingAgent && (
+              <DeleteConfirmDialog
+                open={!!purgingAgent}
+                onOpenChange={(open) => !open && setPurgingAgent(null)}
+                title="Delete agent permanently"
+                description={`This permanently deletes "${purgingAgent.name}" and unlinks its LLM interaction history. The data cannot be recovered.`}
+                isPending={purgeAgent.isPending}
+                onConfirm={async () => {
+                  const ok = await purgeAgent.mutateAsync(purgingAgent.id);
+                  if (ok) setPurgingAgent(null);
+                }}
+                confirmLabel="Delete permanently"
+                pendingLabel="Deleting..."
               />
             )}
 

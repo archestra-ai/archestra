@@ -22,6 +22,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { DeletedRowMeta } from "@/components/deleted-row-meta";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -59,6 +60,7 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useDeleteSkill,
+  usePurgeSkill,
   useResetSkill,
   useRestoreSkill,
   useSkillSourceRepos,
@@ -197,6 +199,7 @@ function SkillsList() {
   });
 
   const [deletingSkill, setDeletingSkill] = useState<SkillItem | null>(null);
+  const [purgingSkill, setPurgingSkill] = useState<SkillItem | null>(null);
   const [resettingSkill, setResettingSkill] = useState<SkillItem | null>(null);
   const [usageSkill, setUsageSkill] = useState<SkillItem | null>(null);
   const { data: session } = useSession();
@@ -419,6 +422,18 @@ function SkillsList() {
         </div>
       ),
     },
+    ...(isDeletedView
+      ? [
+          {
+            id: "deleted",
+            header: "Deleted",
+            enableSorting: false,
+            cell: ({ row }) => (
+              <DeletedRowMeta deletedAt={row.original.deletedAt} />
+            ),
+          } satisfies ColumnDef<SkillItem>,
+        ]
+      : []),
     {
       id: "actions",
       size: 150,
@@ -435,6 +450,13 @@ function SkillsList() {
                 label: "Restore",
                 permissions: { skill: ["delete"] },
                 onClick: () => restoreSkill.mutate(skill.id),
+              },
+              {
+                icon: <Trash2 className="h-4 w-4" />,
+                label: "Delete permanently",
+                permissions: { skill: ["admin"] },
+                variant: "destructive",
+                onClick: () => setPurgingSkill(skill),
               },
             ]
           : [
@@ -618,6 +640,14 @@ function SkillsList() {
         />
       )}
 
+      {purgingSkill && (
+        <PurgeSkillDialog
+          skill={purgingSkill}
+          open={!!purgingSkill}
+          onOpenChange={(open) => !open && setPurgingSkill(null)}
+        />
+      )}
+
       {resettingSkill && (
         <ResetSkillDialog
           skill={resettingSkill}
@@ -719,6 +749,38 @@ function DeleteSkillDialog({
       isPending={deleteSkill.isPending}
       onConfirm={handleDelete}
       confirmLabel="Delete Skill"
+      pendingLabel="Deleting..."
+    />
+  );
+}
+
+function PurgeSkillDialog({
+  skill,
+  open,
+  onOpenChange,
+}: {
+  skill: SkillItem;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const purgeSkill = usePurgeSkill();
+
+  const handlePurge = useCallback(async () => {
+    const result = await purgeSkill.mutateAsync(skill.id);
+    if (result) {
+      onOpenChange(false);
+    }
+  }, [skill.id, purgeSkill, onOpenChange]);
+
+  return (
+    <DeleteConfirmDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Delete skill permanently"
+      description={`This permanently deletes "${skill.name}" along with its versions and resource files. The data cannot be recovered.`}
+      isPending={purgeSkill.isPending}
+      onConfirm={handlePurge}
+      confirmLabel="Delete permanently"
       pendingLabel="Deleting..."
     />
   );

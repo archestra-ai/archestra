@@ -22,6 +22,7 @@ const {
   getDefaultLlmProxy,
   getAgent,
   importAgent,
+  purgeAgent,
   restoreAgent,
   updateAgent,
   getLabelKeys,
@@ -371,6 +372,26 @@ export function useRestoreProfile() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       queryClient.setQueryData(["agents", data.id], data);
+    },
+  });
+}
+
+/** Permanently delete a soft-deleted agent (admin-only trash action). */
+export function usePurgeProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await purgeAgent({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success("Agent permanently deleted");
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }

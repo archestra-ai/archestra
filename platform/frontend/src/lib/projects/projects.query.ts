@@ -31,6 +31,8 @@ const {
   getProjectInstructions,
   getProjects,
   pinProject,
+  purgeProject,
+  restoreProject,
   setProjectInstructions,
   setProjectShare,
   unpinProject,
@@ -57,6 +59,7 @@ export function useProjects(
   const teamIds = options?.teamIds;
   const authorIds = options?.authorIds;
   const excludeAuthorIds = options?.excludeAuthorIds;
+  const status = options?.status;
   const toastOnError = options?.toastOnError;
   // The endpoint requires project:read; skip the request for users whose role
   // lacks it (e.g. the sidebar mounts this for everyone) instead of 403ing.
@@ -71,12 +74,13 @@ export function useProjects(
         teamIds: teamIds ?? null,
         authorIds: authorIds ?? null,
         excludeAuthorIds: excludeAuthorIds ?? null,
+        status: status ?? null,
       },
     ],
     enabled: (options?.enabled ?? true) && !!canReadProjects,
     queryFn: async () => {
       const { data, error } = await getProjects({
-        query: { scope, search, teamIds, authorIds, excludeAuthorIds },
+        query: { scope, search, teamIds, authorIds, excludeAuthorIds, status },
       });
       throwOnApiError(error, { toastOnError });
       return data;
@@ -325,6 +329,52 @@ export function useDeleteProject() {
       // so drop them from any open scheduled-tasks list. Chats detach rather
       // than hide, so the conversations list needs no invalidation here.
       queryClient.invalidateQueries({ queryKey: scheduleTriggerKeys.all });
+    },
+  });
+}
+
+/** Restore a soft-deleted project from the trash view (project admins). */
+export function useRestoreProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { data, error } = await restoreProject({
+        path: { id },
+        body: null,
+      });
+      if (error) {
+        // A 409 (name re-taken while deleted) surfaces its own message.
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (project) => {
+      if (!project) return;
+      toast.success(`Project "${project.name}" restored`);
+      queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
+      // Its retained scheduled tasks resume with it.
+      queryClient.invalidateQueries({ queryKey: scheduleTriggerKeys.all });
+    },
+  });
+}
+
+/** Permanently delete a soft-deleted project (admin-only trash action). */
+export function usePurgeProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id }: { id: string }) => {
+      const { error } = await purgeProject({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return true;
+    },
+    onSuccess: (ok) => {
+      if (!ok) return;
+      toast.success("Project permanently deleted");
+      queryClient.invalidateQueries({ queryKey: ["projects", "list"] });
     },
   });
 }

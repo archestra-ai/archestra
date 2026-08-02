@@ -28,6 +28,7 @@ type AgentActionsProps = {
   onView: (agent: Agent) => void;
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;
+  onPurge: (agent: Agent) => void;
   onClone: (agent: Agent) => void;
   onExport: (agent: Agent) => void;
   onConvertToSkill: (agent: Agent) => void;
@@ -41,6 +42,7 @@ export function AgentActions({
   onView,
   onDelete,
   onRestore,
+  onPurge,
   onClone,
   onExport,
   onConvertToSkill,
@@ -59,6 +61,13 @@ export function AgentActions({
             permissions: { agent: ["delete"] },
             disabled: !canModify,
             onClick: () => onRestore(agent.id),
+          },
+          {
+            icon: <Trash2 className="h-4 w-4" />,
+            label: "Delete permanently",
+            permissions: { agent: ["admin"] },
+            variant: "destructive",
+            onClick: () => onPurge(agent),
           },
         ]}
       />

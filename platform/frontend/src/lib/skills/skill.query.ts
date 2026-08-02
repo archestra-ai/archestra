@@ -17,6 +17,7 @@ const {
   updateSkill,
   updateSkillGithubSync,
   deleteSkill,
+  purgeSkill,
   restoreSkill,
   resetSkill,
   discoverGithubSkills,
@@ -207,6 +208,30 @@ export function useRestoreSkill() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill restored");
+    },
+  });
+}
+
+/**
+ * Permanently delete a soft-deleted skill (admin-only trash action). A 409 —
+ * the skill is still mounted in an active sandbox — surfaces its own message
+ * via the error toast.
+ */
+export function usePurgeSkill() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await purgeSkill({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      toast.success("Skill permanently deleted");
     },
   });
 }

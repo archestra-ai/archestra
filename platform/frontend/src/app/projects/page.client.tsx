@@ -14,6 +14,7 @@ import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   type ListViewMode,
   ListViewToggle,
@@ -25,6 +26,7 @@ import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
+  ResourceDeletedStatusFilter,
   ResourceScopeFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
@@ -50,10 +52,12 @@ import {
   usePinProject,
   useProject,
   useProjects,
+  usePurgeProject,
+  useRestoreProject,
 } from "@/lib/projects/projects.query";
 import { ProjectActionsMenu } from "./project-actions-menu";
 import { ProjectDeleteConfirmDialog } from "./project-delete-confirm-dialog";
-import { ProjectsTable } from "./projects-table";
+import { DeletedProjectsTable, ProjectsTable } from "./projects-table";
 
 export default function ProjectsPageClient() {
   return (
@@ -73,6 +77,9 @@ function ProjectsList() {
   const { scope, teamIds, authorIds, excludeAuthorIds, hasActiveScopeFilters } =
     useScopeFilterParams();
   const search = searchParams.get("search") ?? undefined;
+  // The trash view; the backend returns deleted projects to project admins
+  // only, and the status filter itself is gated the same way.
+  const isDeletedView = searchParams.get("status") === "deleted";
   const {
     data,
     isPending,
@@ -84,6 +91,7 @@ function ProjectsList() {
     teamIds,
     authorIds,
     excludeAuthorIds,
+    status: isDeletedView ? "deleted" : undefined,
     toastOnError: false,
   });
   const {
@@ -106,16 +114,21 @@ function ProjectsList() {
   });
   const [deletingProject, setDeletingProject] =
     useState<ProjectListItem | null>(null);
+  const [purgingProject, setPurgingProject] = useState<ProjectListItem | null>(
+    null,
+  );
   // Pinned-first grouping applies in every scope: oversight projects simply
   // aren't pinnable, so they fall into the unpinned section on their own.
   const projects = useMemo(() => sortProjectsPinnedFirst(data ?? []), [data]);
   const pinnedProjects = projects.filter((project) => project.pinnedAt);
   const unpinnedProjects = projects.filter((project) => !project.pinnedAt);
   const deleteProject = useDeleteProject();
+  const restoreProject = useRestoreProject();
+  const purgeProject = usePurgeProject();
   const pinProjectMutation = usePinProject();
   const togglePin = (project: ProjectListItem) =>
     pinProjectMutation.mutate({ id: project.id, pinned: !project.pinnedAt });
-  const hasActiveFilter = hasActiveScopeFilters || !!search;
+  const hasActiveFilter = hasActiveScopeFilters || !!search || isDeletedView;
 
   // The first keys fetch failed with no cached list (e.g. offline cold start).
   // Show a retry state rather than the setup prompt, which would wrongly imply
@@ -191,6 +204,25 @@ function ProjectsList() {
           }}
         />
       )}
+      {purgingProject && (
+        <DeleteConfirmDialog
+          open={!!purgingProject}
+          onOpenChange={(open) => {
+            if (!open) setPurgingProject(null);
+          }}
+          title="Delete project permanently"
+          description={`This permanently deletes "${purgingProject.name}" along with its files and scheduled tasks. The data cannot be recovered.`}
+          isPending={purgeProject.isPending}
+          onConfirm={async () => {
+            const ok = await purgeProject.mutateAsync({
+              id: purgingProject.id,
+            });
+            if (ok) setPurgingProject(null);
+          }}
+          confirmLabel="Delete permanently"
+          pendingLabel="Deleting..."
+        />
+      )}
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-2">
           <SearchInput placeholder="Search projects" paramName="search" />
@@ -199,11 +231,31 @@ function ProjectsList() {
             allLabel="All projects"
             adminPermission={{ project: ["admin"] }}
           />
-          <span className="ml-auto">
-            <ListViewToggle value={viewMode} onChange={setViewMode} />
-          </span>
+          <ResourceDeletedStatusFilter
+            deletePermission={{ project: ["delete"] }}
+          />
+          {!isDeletedView && (
+            <span className="ml-auto">
+              <ListViewToggle value={viewMode} onChange={setViewMode} />
+            </span>
+          )}
         </div>
-        {projects.length === 0 ? (
+        {isDeletedView ? (
+          projects.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
+              <FolderKanban className="h-8 w-8 opacity-50" />
+              <p>
+                <span>{isPending ? "Loading…" : "No deleted projects"}</span>
+              </p>
+            </div>
+          ) : (
+            <DeletedProjectsTable
+              projects={projects}
+              onRestore={(project) => restoreProject.mutate({ id: project.id })}
+              onPurge={setPurgingProject}
+            />
+          )
+        ) : projects.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-16 text-center text-sm text-muted-foreground">
             <FolderKanban className="h-8 w-8 opacity-50" />
             <p>

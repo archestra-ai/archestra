@@ -100,18 +100,6 @@ describe("mcp server tool execution", () => {
     );
   });
 
-  test("create_mcp_server_installation_request returns success message", async () => {
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_mcp_server_installation_request`,
-      {},
-      mockContext,
-    );
-    expect(result.isError).toBe(false);
-    expect((result.content[0] as any).text).toContain(
-      "dialog for adding or requesting",
-    );
-  });
-
   test("get_mcp_servers returns real catalog items", async ({
     makeInternalMcpCatalog,
   }) => {

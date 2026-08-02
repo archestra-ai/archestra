@@ -17,7 +17,6 @@ import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
-import McpServerInstallationRequestModel from "@/models/mcp-server-installation-request";
 import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OptimizationRuleModel from "@/models/optimization-rule";
@@ -571,18 +570,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => ModelModel.findByIdForAudit(id, orgId),
   },
 
-  // MCP installation requests & internal catalog
-  "/api/mcp_server_installation_requests": {
-    resourceType: "mcpServerInstallationRequest",
-    fetchById: (id, _orgId) =>
-      McpServerInstallationRequestModel.findByIdForAudit(id, _orgId),
-  },
-  "/api/mcp_server_installation_requests/:id": {
-    resourceType: "mcpServerInstallationRequest",
-    fetchById: (id, orgId) =>
-      McpServerInstallationRequestModel.findByIdForAudit(id, orgId),
-  },
-
+  // Internal catalog
   "/api/internal_mcp_catalog": {
     resourceType: "internalMcpCatalog",
     fetchById: (id, _orgId) =>
@@ -799,27 +787,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "connector.updated",
     fetchById: (id, orgId) =>
       KnowledgeBaseConnectorModel.findByIdForAudit(id, orgId),
-  },
-
-  // Installation-request review actions (approve/decline/notes) are POSTs
-  // carrying :id; register directly so they log the update, not unknown.created.
-  "/api/mcp_server_installation_requests/:id/approve": {
-    resourceType: "mcpServerInstallationRequest",
-    action: "mcpServerInstallationRequest.updated",
-    fetchById: (id, orgId) =>
-      McpServerInstallationRequestModel.findByIdForAudit(id, orgId),
-  },
-  "/api/mcp_server_installation_requests/:id/decline": {
-    resourceType: "mcpServerInstallationRequest",
-    action: "mcpServerInstallationRequest.updated",
-    fetchById: (id, orgId) =>
-      McpServerInstallationRequestModel.findByIdForAudit(id, orgId),
-  },
-  "/api/mcp_server_installation_requests/:id/notes": {
-    resourceType: "mcpServerInstallationRequest",
-    action: "mcpServerInstallationRequest.updated",
-    fetchById: (id, orgId) =>
-      McpServerInstallationRequestModel.findByIdForAudit(id, orgId),
   },
 
   // Agent import (creates agents in bulk — no single resourceId, like skill

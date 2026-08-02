@@ -85,6 +85,10 @@ export const AuditEventNameSchema = z.enum([
   "mcpServer.deleted",
   "mcpServer.restored",
   "mcpServer.reinstalled",
+  // Retired with the MCP server installation request feature. Kept in the
+  // vocabulary because audit rows written before its removal still carry these
+  // names — dropping them would render that history as raw dotted keys. No
+  // route produces them any more.
   "mcpServerInstallationRequest.created",
   "mcpServerInstallationRequest.updated",
   "member.created",

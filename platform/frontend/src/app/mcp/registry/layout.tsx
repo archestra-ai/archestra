@@ -31,10 +31,7 @@ export default function McpCatalogLayout({
 
   // Detail/edit/new/catalog pages carry their own headers — render bare
   // content (no overflow wrapper, so in-page sticky footers pin to the viewport).
-  // Installation-requests pages keep the shared PageLayout chrome.
-  const isFullPage =
-    pathname.startsWith("/mcp/registry/") &&
-    !pathname.startsWith("/mcp/registry/installation-requests");
+  const isFullPage = pathname.startsWith("/mcp/registry/");
   if (isFullPage) {
     return (
       <McpRegistryLayoutContext.Provider value={contextValue}>

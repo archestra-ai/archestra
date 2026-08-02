@@ -580,18 +580,28 @@ jobs:
           # duplicated ~4 min setup buys test wall-clock. The nightly
           # cross-browser projects ride the api leg: they only carry the
           # small @firefox/@webkit-tagged subset.
+          # The chromium legs cap Playwright at 2 workers: the config's CI
+          # default (90% of cores ≈ 3) oversubscribes a standard runner that
+          # is also hosting the whole lite stack, and the resulting CPU
+          # starvation is what makes the heavy dialog-interaction specs
+          # (static-credentials, chat) miss their interaction windows. The
+          # api leg keeps the default — API-bound specs gain from parallelism
+          # and don't fight for paint time.
           - name: api
             projects_default: api --project=identity-providers
             projects_nightly: api --project=identity-providers --project=firefox --project=webkit
             shard: ""
+            workers_arg: ""
           - name: chromium-1of2
             projects_default: chromium
             projects_nightly: chromium
             shard: "--shard=1/2"
+            workers_arg: "--workers=2"
           - name: chromium-2of2
             projects_default: chromium
             projects_nightly: chromium
             shard: "--shard=2/2"
+            workers_arg: "--workers=2"
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
@@ -662,7 +672,7 @@ jobs:
           # only carry the @firefox/@webkit-tagged tests.
           projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.projects_nightly || matrix.projects_default }}
           shard: ${{ matrix.shard }}
-          extra_args: "--grep-invert '@quickstart'"
+          extra_args: "--grep-invert '@quickstart' ${{ matrix.workers_arg }}"
           timeout: "20"
           env_file: /tmp/lite-e2e.env
 

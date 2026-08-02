@@ -161,7 +161,18 @@ async function openCatalogToolAssignment({
   await expect(editButton).toBeVisible({ timeout: 30_000 });
   await editButton.click();
 
-  const dialog = page.getByRole("dialog", { name: dialogTitle });
+  // Anchor the dialog by its visible heading, not its accessible name: the
+  // dialog's aria-labelledby wiring breaks when the title re-renders after
+  // the gateway data loads (captured in a failure's ARIA snapshot — the
+  // dialog node ends up with an EMPTY accessible name), after which every
+  // name-scoped lookup dead-ends. Fast machines finish the flow before that
+  // re-render; standard CI runners do not. The broken accessible name is a
+  // real product a11y bug — screen readers lose the dialog title the same
+  // way — tracked separately from this locator hardening.
+  const dialog = page
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: dialogTitle }) })
+    .first();
   await expect(dialog).toBeVisible({ timeout: 15_000 });
 
   const toolsSectionAnchor = dialog.getByTestId(E2eTestId.AgentToolsSection);

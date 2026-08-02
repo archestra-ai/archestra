@@ -72,7 +72,7 @@ describe("SidebarUserMenu", () => {
     await user.click(trigger);
 
     expect(
-      await screen.findByRole("menuitem", { name: /Ada Lovelace/ }),
+      await screen.findByRole("menuitem", { name: /personal settings/i }),
     ).toHaveAttribute("href", "/account");
     expect(screen.getByRole("menuitem", { name: /sign out/i })).toHaveAttribute(
       "href",

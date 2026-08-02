@@ -499,7 +499,7 @@ export function GenericAuthRow({
           href="/account?highlight=personal-token"
           className="underline hover:text-foreground"
         >
-          your account
+          Personal Settings
         </Link>
         .
       </div>

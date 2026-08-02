@@ -272,10 +272,7 @@ async function openCatalogToolAssignment({
       .waitFor({ state: "visible", timeout: 5_000 })
       .then(() => true)
       .catch(() => false);
-    if (
-      !modalAppeared &&
-      (await searchInput.isVisible().catch(() => false))
-    ) {
+    if (!modalAppeared && (await searchInput.isVisible().catch(() => false))) {
       await toolsSectionHeading.click();
     }
   }

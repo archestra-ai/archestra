@@ -2680,6 +2680,9 @@ class AgentModel {
    * win the final re-check after some interactions were already unlinked;
    * acceptable, since unlinking LLM history is already what an agent purge
    * does. On the rollback path both loops exit on the first empty round.
+   * Every other destructive step — trigger-task cleanup, default-pointer
+   * nulling, the row itself — runs inside the transaction after the re-check,
+   * so a winning restore loses nothing but already-unlinked history.
    */
   static async hardDelete(
     id: string,
@@ -2711,21 +2714,6 @@ class AgentModel {
           WHERE id IN (SELECT id FROM mcp_tool_calls WHERE agent_id = ${id} LIMIT ${UNLINK_BATCH_SIZE})`,
     );
 
-    // Queued runs of this agent's schedule triggers reference trigger/run rows
-    // that cascade with the agent; tasks have no FK (ids live in the payload),
-    // so drop them or the worker keeps dequeuing work whose rows are gone.
-    const triggers = await db
-      .select({ id: schema.scheduleTriggersTable.id })
-      .from(schema.scheduleTriggersTable)
-      .where(eq(schema.scheduleTriggersTable.agentId, id));
-    for (const trigger of triggers) {
-      await TaskModel.deleteQueuedForPayloadValue({
-        taskType: "schedule_trigger_run_execute",
-        key: "triggerId",
-        value: trigger.id,
-      });
-    }
-
     return await withDbTransaction(async (tx) => {
       if (
         !(await lockRowForPurge(
@@ -2736,6 +2724,27 @@ class AgentModel {
         ))
       ) {
         return false;
+      }
+
+      // Queued runs of this agent's schedule triggers reference trigger/run
+      // rows that cascade with the agent; tasks have no FK (ids live in the
+      // payload), so drop them or the worker keeps dequeuing work whose rows
+      // are gone. Inside the transaction, after the FOR UPDATE re-check, so a
+      // restore that wins the race keeps its queued runs (same shape as
+      // ProjectModel.hardDelete).
+      const triggers = await tx
+        .select({ id: schema.scheduleTriggersTable.id })
+        .from(schema.scheduleTriggersTable)
+        .where(eq(schema.scheduleTriggersTable.agentId, id));
+      for (const trigger of triggers) {
+        await TaskModel.deleteQueuedForPayloadValue(
+          {
+            taskType: "schedule_trigger_run_execute",
+            key: "triggerId",
+            value: trigger.id,
+          },
+          tx,
+        );
       }
 
       // organization's three default-agent FKs exist only in SQL (migrations

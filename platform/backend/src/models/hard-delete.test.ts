@@ -18,7 +18,7 @@ import {
   TaskModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { Skill } from "@/types";
 
 const FORTY_DAYS_AGO = () => new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
@@ -431,4 +431,110 @@ describe("AgentModel.hardDelete", () => {
       .where(eq(schema.agentsTable.id, agent.id));
     expect(agentRow?.deletedAt).toBeInstanceOf(Date);
   });
+
+  test("purges queued trigger runs with the row", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const user = await makeUser();
+    await seedQueuedTriggerRun({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: user.id,
+    });
+    await db
+      .update(schema.agentsTable)
+      .set({ deletedAt: FORTY_DAYS_AGO() })
+      .where(eq(schema.agentsTable.id, agent.id));
+
+    expect(
+      await AgentModel.hardDelete(agent.id, { onlyIfDeletedForDays: 30 }),
+    ).toBe(true);
+
+    const tasks = await db
+      .select()
+      .from(schema.tasksTable)
+      .where(eq(schema.tasksTable.taskType, "schedule_trigger_run_execute"));
+    expect(tasks).toEqual([]);
+  });
+
+  test("a restore that wins the purge race keeps the queued trigger runs", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const user = await makeUser();
+    await seedQueuedTriggerRun({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorUserId: user.id,
+    });
+    await db
+      .update(schema.agentsTable)
+      .set({ deletedAt: FORTY_DAYS_AGO() })
+      .where(eq(schema.agentsTable.id, agent.id));
+
+    // Simulate a restore committing in the window between the eligibility
+    // pre-check and the purge transaction — the batched interaction unlink
+    // runs in exactly that window.
+    const unlinkSpy = vi
+      .spyOn(
+        AgentModel as unknown as { nullReferencesInBatches: () => void },
+        "nullReferencesInBatches",
+      )
+      .mockImplementation(async () => {
+        await db
+          .update(schema.agentsTable)
+          .set({ deletedAt: null })
+          .where(eq(schema.agentsTable.id, agent.id));
+      });
+    try {
+      expect(
+        await AgentModel.hardDelete(agent.id, { onlyIfDeletedForDays: 30 }),
+      ).toBe(false);
+    } finally {
+      unlinkSpy.mockRestore();
+    }
+
+    // The restored agent survives with its queued scheduled run intact.
+    const [agentRow] = await db
+      .select({ deletedAt: schema.agentsTable.deletedAt })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, agent.id));
+    expect(agentRow?.deletedAt).toBeNull();
+    const tasks = await db
+      .select()
+      .from(schema.tasksTable)
+      .where(eq(schema.tasksTable.taskType, "schedule_trigger_run_execute"));
+    expect(tasks).toHaveLength(1);
+  });
 });
+
+/** A schedule trigger for the agent plus one queued run-execute task. */
+async function seedQueuedTriggerRun(params: {
+  organizationId: string;
+  agentId: string;
+  actorUserId: string;
+}): Promise<void> {
+  const [trigger] = await db
+    .insert(schema.scheduleTriggersTable)
+    .values({
+      organizationId: params.organizationId,
+      name: "nightly",
+      agentId: params.agentId,
+      actorUserId: params.actorUserId,
+      messageTemplate: "run",
+      cronExpression: "0 0 * * *",
+      timezone: "UTC",
+    })
+    .returning();
+  await TaskModel.create({
+    taskType: "schedule_trigger_run_execute",
+    payload: { runId: crypto.randomUUID(), triggerId: trigger.id },
+  });
+}

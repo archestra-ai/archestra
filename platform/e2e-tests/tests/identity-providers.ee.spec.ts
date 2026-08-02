@@ -130,31 +130,6 @@ async function ensureAdminAuthenticated(page: Page): Promise<void> {
   ).toBeVisible({ timeout: 10000 });
 }
 
-/**
- * Fill in the standard OIDC provider form fields.
- */
-async function fillOidcProviderForm(
-  page: Page,
-  providerName: string,
-): Promise<void> {
-  await page.getByLabel("Provider ID").fill(providerName);
-  await page.getByLabel("Issuer").fill(KEYCLOAK_OIDC.issuer);
-  const allowedDomainsInput = page.getByLabel("Allowed Email Domains");
-  if (await allowedDomainsInput.isVisible().catch(() => false)) {
-    await allowedDomainsInput.fill(SSO_DOMAIN);
-  }
-  await page.getByLabel("Client ID").fill(KEYCLOAK_OIDC.clientId);
-  await page.getByLabel("Client Secret").fill(KEYCLOAK_OIDC.clientSecret);
-  await page
-    .getByLabel("Discovery Endpoint")
-    .fill(KEYCLOAK_OIDC.discoveryEndpoint);
-  await page
-    .getByLabel("Authorization Endpoint")
-    .fill(KEYCLOAK_OIDC.authorizationEndpoint);
-  await page.getByLabel("Token Endpoint").fill(KEYCLOAK_OIDC.tokenEndpoint);
-  await page.getByLabel("JWKS Endpoint").fill(KEYCLOAK_OIDC.jwksEndpoint);
-}
-
 async function createOidcProviderViaApi(
   page: Page,
   providerName: string,
@@ -471,6 +446,37 @@ async function expectIdentityProviderToExistViaApi(
     expect(
       providers.some((provider) => provider.providerId === providerName),
     ).toBe(true);
+  }).toPass({ timeout: 15_000, intervals: [500, 1000, 2000] });
+}
+
+/**
+ * Poll until the provider's persisted role mapping has the expected number of
+ * rules. Used after saving role mapping in the dialog: the dialog closing does
+ * not prove the PUT landed, and the SSO login that follows depends on it.
+ */
+async function expectIdentityProviderRoleMappingRulesViaApi(
+  page: Page,
+  providerName: string,
+  expectedRuleCount: number,
+): Promise<void> {
+  await expect(async () => {
+    const response = await page.request.get(
+      `${UI_BASE_URL}/api/identity-providers`,
+    );
+    await expectApiResponseOk(response, "list identity providers");
+
+    const providers = (await response.json()) as Array<{
+      providerId: string;
+      roleMapping?: { rules?: unknown[] } | string | null;
+    }>;
+    const provider = providers.find((item) => item.providerId === providerName);
+    expect(provider, `provider ${providerName} not found`).toBeDefined();
+
+    const roleMapping =
+      typeof provider?.roleMapping === "string"
+        ? (JSON.parse(provider.roleMapping) as { rules?: unknown[] })
+        : provider?.roleMapping;
+    expect(roleMapping?.rules).toHaveLength(expectedRuleCount);
   }).toPass({ timeout: 15_000, intervals: [500, 1000, 2000] });
 }
 
@@ -971,17 +977,28 @@ test.describe("Identity Provider Role Mapping E2E", () => {
   test("should evaluate second rule when first rule does not match", async ({
     page,
     browser,
-    goToPage,
   }) => {
     test.slow();
     const providerName = `MultiRuleOIDC${Date.now()}`;
 
-    // STEP 1: Authenticate and clean up any existing provider
+    // STEP 1: Authenticate and clean up THIS spec's leftovers from earlier
+    // attempts, scoped to our own name prefix. The old
+    // deleteExistingProviderIfExists loop deleted every non-trusted OIDC
+    // provider it could open — including providers the api project's parallel
+    // JWKS specs had just created and bound to their gateways (seen in CI as
+    // their provider GETs 404ing mid-test with the agent binding FK-nulled).
     await ensureAdminAuthenticated(page);
-    await deleteExistingProviderIfExists(page, "Generic OIDC");
+    await deleteLeftoverProvidersByPrefixViaApi(page, ["MultiRuleOIDC"]);
 
-    // STEP 2: Fill in OIDC provider form
-    await fillOidcProviderForm(page, providerName);
+    // STEP 2: Create the provider via API, then configure role mapping through
+    // the dialog opened by the ?edit=<id> deep link. Creating through the
+    // "Generic OIDC" type card is inherently racy under parallel workers: the
+    // card only offers a create dialog when no non-trusted OIDC provider
+    // exists, which is why the old flow had to delete foreign providers first.
+    const providerDbId = await createOidcProviderViaApi(page, providerName, {
+      teamSync: false,
+    });
+    await openIdentityProviderDialogById(page, providerDbId);
 
     // STEP 3: Configure Role Mapping with TWO rules
     // The first rule will NOT match (looks for a non-existent group)
@@ -1020,9 +1037,12 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       await page.getByRole("option", { name: "Member" }).click();
     }
 
-    // Submit the form
-    await page.getByTestId(E2eTestId.IdentityProviderCreateButton).click();
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    // Submit the changes and wait for the role mapping to be persisted before
+    // the SSO login below relies on it — dialog close alone doesn't confirm
+    // the PUT landed.
+    await page.getByTestId(E2eTestId.IdentityProviderUpdateButton).click();
+    await expectIdentityProviderRoleMappingRulesViaApi(page, providerName, 2);
+    await settleIdentityProviderDialog(page);
 
     // STEP 4: Test SSO login with admin user (in archestra-admins group)
     // The first rule should NOT match, but the second rule SHOULD match
@@ -1031,27 +1051,31 @@ test.describe("Identity Provider Role Mapping E2E", () => {
     // the whole fresh-context login flow before considering this a real failure.
     await expectRolesPageAfterSsoLogin(browser, providerName);
 
-    // STEP 6: Cleanup - delete the provider
-    await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("domcontentloaded");
-    await openIdentityProviderDialog(page, "Generic OIDC");
-    await deleteProviderViaDialog(page);
+    // STEP 6: Cleanup - delete OUR provider via the API (deterministic; the
+    // "Generic OIDC" card binds to whichever provider is listed first)
+    await deleteProviderByProviderIdViaApi(page, providerName);
   });
 
   test("should map admin group to admin role via OIDC", async ({
     page,
     browser,
-    goToPage,
   }) => {
     test.slow();
     const providerName = `RoleMappingOIDC${Date.now()}`;
 
-    // STEP 1: Authenticate and clean up any existing provider
+    // STEP 1: Authenticate and clean up THIS spec's leftovers from earlier
+    // attempts, scoped to our own name prefix (see the multi-rule test above
+    // for why the unscoped delete-every-OIDC-card loop is not safe alongside
+    // the api project's parallel JWKS specs).
     await ensureAdminAuthenticated(page);
-    await deleteExistingProviderIfExists(page, "Generic OIDC");
+    await deleteLeftoverProvidersByPrefixViaApi(page, ["RoleMappingOIDC"]);
 
-    // STEP 2: Fill in OIDC provider form
-    await fillOidcProviderForm(page, providerName);
+    // STEP 2: Create the provider via API and configure role mapping through
+    // the ?edit=<id> deep-linked dialog (deterministic under parallel workers).
+    const providerDbId = await createOidcProviderViaApi(page, providerName, {
+      teamSync: false,
+    });
+    await openIdentityProviderDialogById(page, providerDbId);
 
     // STEP 2: Configure Role Mapping
     await openIdentityProviderDialogSection(page, "role-mapping");
@@ -1083,9 +1107,11 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       await page.getByRole("option", { name: "Member" }).click();
     }
 
-    // Submit the form
-    await page.getByTestId(E2eTestId.IdentityProviderCreateButton).click();
-    await expect(page.getByRole("dialog")).not.toBeVisible({ timeout: 10000 });
+    // Submit the changes and wait for the role mapping to be persisted before
+    // the SSO login below relies on it.
+    await page.getByTestId(E2eTestId.IdentityProviderUpdateButton).click();
+    await expectIdentityProviderRoleMappingRulesViaApi(page, providerName, 1);
+    await settleIdentityProviderDialog(page);
 
     // STEP 3: Test SSO login with admin user (in archestra-admins group)
     // The admin user is configured in Keycloak with the archestra-admins group
@@ -1134,11 +1160,9 @@ test.describe("Identity Provider Role Mapping E2E", () => {
       await ssoContext.close();
     }
 
-    // STEP 4: Cleanup - delete the provider
-    await goToPage(page, "/settings/identity-providers");
-    await page.waitForLoadState("domcontentloaded");
-    await openIdentityProviderDialog(page, "Generic OIDC");
-    await deleteProviderViaDialog(page);
+    // STEP 4: Cleanup - delete OUR provider via the API (deterministic; the
+    // "Generic OIDC" card binds to whichever provider is listed first)
+    await deleteProviderByProviderIdViaApi(page, providerName);
   });
 });
 

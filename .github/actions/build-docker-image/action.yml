@@ -1,5 +1,11 @@
 name: Build Docker Image
-description: Build a Docker image using the Blacksmith builder
+description: |
+  Build a Docker image with `docker buildx build` and registry-backed layer
+  caching. Deliberately a shell invocation rather than docker/build-push-action:
+  every input reaches the command through an environment variable, so no
+  workflow expression ever expands into a code-executing action input
+  (zizmor's template-injection remediation), and the interface stays in one
+  place for all callers.
 
 inputs:
   context:
@@ -26,7 +32,7 @@ inputs:
     required: false
     default: ""
   outputs:
-    description: "Custom outputs configuration (e.g., for push-by-digest)"
+    description: "Custom --output configuration (e.g., for push-by-digest). Takes precedence over push/load."
     required: false
     default: ""
   target:
@@ -34,7 +40,7 @@ inputs:
     required: false
     default: ""
   provenance:
-    description: "SLSA provenance attestation. Empty preserves buildx defaults (on for pushes); set 'false' to skip for images that are not published."
+    description: "SLSA provenance attestation. Empty preserves buildx defaults; set 'false' to skip for images that are not published."
     required: false
     default: ""
   version:
@@ -43,6 +49,14 @@ inputs:
     default: ""
   previous-image:
     description: "Optional previously published image to extract static assets from before building"
+    required: false
+    default: ""
+  cache-from:
+    description: "External cache sources (e.g. type=registry,ref=...)"
+    required: false
+    default: ""
+  cache-to:
+    description: "Cache export destinations. Leave empty when the job has no push credentials for the cache registry (fork PRs)."
     required: false
     default: ""
   # Secrets must be passed as regular inputs in composite actions
@@ -96,48 +110,73 @@ runs:
         INPUT_CONTEXT: ${{ inputs.context }}
         INPUT_PREVIOUS_IMAGE: ${{ inputs.previous-image }}
 
-    - name: Prepare build secrets
-      id: prepare-secrets
-      shell: bash
-      run: |
-        {
-          echo "value<<EOF"
-
-          if [ -n "${INPUT_TURBO_TEAM}" ]; then
-            echo "turbo_team=${INPUT_TURBO_TEAM}"
-          fi
-
-          if [ -n "${INPUT_TURBO_TOKEN}" ]; then
-            echo "turbo_token=${INPUT_TURBO_TOKEN}"
-          fi
-
-          if [ -n "${INPUT_SENTRY_AUTH_TOKEN}" ]; then
-            echo "sentry_auth_token=${INPUT_SENTRY_AUTH_TOKEN}"
-          fi
-
-          echo "EOF"
-        } >> "${GITHUB_OUTPUT}"
-      env:
-        INPUT_SENTRY_AUTH_TOKEN: ${{ inputs.sentry-auth-token }}
-        INPUT_TURBO_TEAM: ${{ inputs.turbo-team }}
-        INPUT_TURBO_TOKEN: ${{ inputs.turbo-token }}
-
-    - name: Setup Blacksmith Builder
-      uses: ./.github/actions/setup-blacksmith-builder
+    - name: Setup Docker Builder
+      uses: ./.github/actions/setup-docker-builder
 
     - name: Build Docker image
       id: build
-      uses: ./.github/actions/blacksmith-build-push
-      with:
-        context: ${{ inputs.context }}
-        file: ${{ inputs.dockerfile != '' && inputs.dockerfile || format('{0}/Dockerfile', inputs.context) }}
-        push: ${{ inputs.push }}
-        load: ${{ inputs.load }}
-        platforms: ${{ inputs.platforms }}
-        tags: ${{ inputs.tags }}
-        outputs: ${{ inputs.outputs }}
-        target: ${{ inputs.target }}
-        provenance: ${{ inputs.provenance }}
-        network: host
-        build-args: ${{ inputs.version != '' && format('VERSION={0}', inputs.version) || '' }}
-        secrets: ${{ steps.prepare-secrets.outputs.value }}
+      shell: bash
+      env:
+        INPUT_CONTEXT: ${{ inputs.context }}
+        INPUT_DOCKERFILE: ${{ inputs.dockerfile }}
+        INPUT_PUSH: ${{ inputs.push }}
+        INPUT_LOAD: ${{ inputs.load }}
+        INPUT_PLATFORMS: ${{ inputs.platforms }}
+        INPUT_TAGS: ${{ inputs.tags }}
+        INPUT_OUTPUTS: ${{ inputs.outputs }}
+        INPUT_TARGET: ${{ inputs.target }}
+        INPUT_PROVENANCE: ${{ inputs.provenance }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_CACHE_FROM: ${{ inputs.cache-from }}
+        INPUT_CACHE_TO: ${{ inputs.cache-to }}
+        SECRET_TURBO_TEAM: ${{ inputs.turbo-team }}
+        SECRET_TURBO_TOKEN: ${{ inputs.turbo-token }}
+        SECRET_SENTRY_AUTH_TOKEN: ${{ inputs.sentry-auth-token }}
+      run: |
+        set -euo pipefail
+
+        FILE="${INPUT_DOCKERFILE:-${INPUT_CONTEXT}/Dockerfile}"
+        METADATA_FILE="${RUNNER_TEMP}/build-docker-image-metadata.json"
+
+        ARGS=(
+          --file "${FILE}"
+          --network host
+          --metadata-file "${METADATA_FILE}"
+        )
+
+        [ -n "${INPUT_PLATFORMS}" ] && ARGS+=( --platform "${INPUT_PLATFORMS}" )
+        [ -n "${INPUT_TARGET}" ] && ARGS+=( --target "${INPUT_TARGET}" )
+        [ -n "${INPUT_CACHE_FROM}" ] && ARGS+=( --cache-from "${INPUT_CACHE_FROM}" )
+        [ -n "${INPUT_CACHE_TO}" ] && ARGS+=( --cache-to "${INPUT_CACHE_TO}" )
+        [ -n "${INPUT_PROVENANCE}" ] && ARGS+=( --provenance "${INPUT_PROVENANCE}" )
+        [ -n "${INPUT_VERSION}" ] && ARGS+=( --build-arg "VERSION=${INPUT_VERSION}" )
+
+        # Tags arrive newline- or comma-separated.
+        while IFS= read -r tag; do
+          tag="$(echo "${tag}" | xargs)"
+          [ -n "${tag}" ] && ARGS+=( --tag "${tag}" )
+        done < <(echo "${INPUT_TAGS}" | tr ',' '\n')
+
+        # Build secrets are exposed to RUN steps via --secret env references;
+        # the values never appear in the command line.
+        [ -n "${SECRET_TURBO_TEAM}" ] && ARGS+=( --secret "id=turbo_team,env=SECRET_TURBO_TEAM" )
+        [ -n "${SECRET_TURBO_TOKEN}" ] && ARGS+=( --secret "id=turbo_token,env=SECRET_TURBO_TOKEN" )
+        [ -n "${SECRET_SENTRY_AUTH_TOKEN}" ] && ARGS+=( --secret "id=sentry_auth_token,env=SECRET_SENTRY_AUTH_TOKEN" )
+
+        # A custom --output wins (it can encode push-by-digest / compression /
+        # push=true itself); otherwise fall back to the push/load shorthands.
+        if [ -n "${INPUT_OUTPUTS}" ]; then
+          ARGS+=( --output "${INPUT_OUTPUTS}" )
+        elif [ "${INPUT_PUSH}" = "true" ]; then
+          ARGS+=( --push )
+        elif [ "${INPUT_LOAD}" = "true" ]; then
+          ARGS+=( --load )
+        fi
+
+        docker buildx build "${ARGS[@]}" "${INPUT_CONTEXT}"
+
+        DIGEST=""
+        if [ -f "${METADATA_FILE}" ]; then
+          DIGEST=$(jq -r '."containerimage.digest" // empty' "${METADATA_FILE}")
+        fi
+        echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"

@@ -88,7 +88,7 @@ jobs:
       matrix:
         include:
           - name: Platform
-            runner: blacksmith-16vcpu-ubuntu-2404
+            runner: ubuntu-latest
             context: ./platform
             dockerfile: ""
             artifact-name: platform-docker-image
@@ -96,7 +96,7 @@ jobs:
             local-tag-prefix: archestra-platform
             use-build-action: true
           - name: MCP Server Base
-            runner: blacksmith-4vcpu-ubuntu-2404
+            runner: ubuntu-latest
             context: ./platform/mcp_server_docker_image
             dockerfile: ./platform/mcp_server_docker_image/Dockerfile
             artifact-name: mcp-server-base-docker-image
@@ -104,6 +104,12 @@ jobs:
             local-tag-prefix: mcp-server-base
             use-build-action: false
     steps:
+      # Standard runners ship ~14 GB free with ~25 GB of unused toolchains on
+      # the volume; delete the big ones in the background so the image build
+      # never runs out of disk mid-layer. The rm races nothing it touches.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -127,6 +133,9 @@ jobs:
           provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          # Read-only cache: the buildcache tag is anonymously readable, but
+          # forks have no registry credentials to export back.
+          cache-from: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
@@ -215,18 +224,21 @@ jobs:
           provenance: "false"
           turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
           turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          # Registry-backed layer cache: ephemeral runners have no persistent
+          # BuildKit state, so warm layers live in a buildcache tag next to
+          # the image (same-region GAR pulls are free).
+          cache-from: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache,mode=max
 
       # Slim variant for the K8s e2e job: the same image minus the ~352MB
       # Dagger engine tar that only the quickstart job uses. Every layer is already in
       # the builder cache from the full build above, so this push takes
-      # seconds. (blacksmith-build-push directly: the builder is already set
-      # up from the full build.)
+      # seconds.
       - name: Build slim Platform image (K8s job, no Dagger engine tar) and push
         if: ${{ matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && steps.platform-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/blacksmith-build-push
+        uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
-          file: ${{ matrix.context }}/Dockerfile
           push: "true"
           target: unified-slim
           # Same dual-tag scheme as the full image: the SHA tag the K8s job
@@ -235,10 +247,11 @@ jobs:
             ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:${{ github.sha }}-slim
             ${{ steps.platform-reuse.outputs.slim_tree_tag }}
           provenance: "false"
-          network: host
-          secrets: |
-            turbo_team=${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
-            turbo_token=${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+          turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+          # All slim layers are a subset of the full build just done on this
+          # builder; the registry ref only backstops a same-run builder loss.
+          cache-from: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
 
       - name: Authenticate to Google Artifact Registry
         if: ${{ !matrix.use-build-action && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) }}
@@ -276,24 +289,21 @@ jobs:
           fi
           echo "reuse=${REUSE}" >> "${GITHUB_OUTPUT}"
 
-      # The builder is only needed for an actual build; the reuse check above
-      # talks straight to the registry. Fork PRs always build.
-      - name: Setup Blacksmith Builder
-        if: ${{ !matrix.use-build-action && ((github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) || steps.mcp-base-reuse.outputs.reuse != 'true') }}
-        uses: ./.github/actions/setup-blacksmith-builder
-
       - name: Build MCP server base image
         if: ${{ !matrix.use-build-action && steps.mcp-base-reuse.outputs.reuse != 'true' }}
-        uses: ./.github/actions/blacksmith-build-push
+        uses: ./.github/actions/build-docker-image
         with:
           context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
+          dockerfile: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           load: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'true' || 'false' }}
           # Non-fork pushes tag both the commit SHA (what the jobs pull) and the
           # tree OID (what the reuse step above checks next time).
           tags: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('{0}/{1}:{2},{3}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha, steps.mcp-base-reuse.outputs.tree_tag) || format('{0}:{1}', matrix.local-tag-prefix, github.sha) }}
+          cache-from: type=registry,ref=${{ env.MCP_SERVER_BASE_IMAGE_REGISTRY }}/${{ env.MCP_SERVER_BASE_IMAGE_NAME }}:buildcache
+          # Forks have no registry credentials to export the cache back.
+          cache-to: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('type=registry,ref={0}/{1}:buildcache,mode=max', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME) || '' }}
 
       # Export as artifact for fast co-located downloads in E2E jobs. Fork PRs
       # only: they are the sole consumer (test jobs use source=artifact for forks,
@@ -353,14 +363,12 @@ jobs:
   # servers, and the Vault K8s-auth boot. Everything else runs in the lite
   # job below against the container harness.
   #
-  # One 8vcpu environment, no sharding: every extra shard pays the full
-  # ~4min environment setup again to split a few minutes of tests, and bigger
-  # runners don't speed the tests up either (the serial spec groups set the
-  # floor). 8vcpu is enough because the job is wait-bound, not compute-bound:
-  # setup blocks on image pulls and pod readiness probes, and the tests are
-  # API-bound Playwright specs. 16vcpu was sized for the old full-suite
-  # sharded runs, and measurements showed 16 vs 32 vcpu made no difference
-  # to test time. The required check is "Merge E2E Test Reports", not this job.
+  # One environment, no sharding: the whole job runs ~4-5 min, so every extra
+  # shard would pay the full environment setup again to split a couple of
+  # minutes of tests. A standard runner suffices because the job is
+  # wait-bound, not compute-bound: setup blocks on image pulls and pod
+  # readiness probes, and the tests are API-bound Playwright specs.
+  # The required check is "Merge E2E Test Reports", not this job.
   platform-e2e-k8s-tests:
     name: Platform E2E Tests (K8s)
     # Deliberately NO `needs: [platform-e2e-build]`: this job starts alongside
@@ -373,15 +381,21 @@ jobs:
     # instead of being skipped — the merge is still blocked either way by the
     # required "Build ... Image" checks.
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    # Observed worst-case wall-clock is ~10 min (setup + tests); 30 caps a
-    # hung run instead of letting it burn a runner for the GitHub default.
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    # Worst case = the 25-min image-poll ceiling (cold build, see
+    # image-pull-timeout-seconds below) plus setup and the ~4 min of tests;
+    # 40 caps a hung run instead of letting it burn a runner for the GitHub
+    # default.
+    timeout-minutes: 40
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
       actions: read # Required to poll for build artifacts on fork PRs (wait-timeout-seconds).
     steps:
+      # See the reclaim note in the build job.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -440,7 +454,12 @@ jobs:
           # Fork PRs load a local artifact tag, which must be kind-loaded.
           platform-image-in-cluster-pull: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && 'false' || 'true' }}
           mcp-server-base-image-tag: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == true) && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
-          image-pull-timeout-seconds: "900"
+          # Must cover the platform image build this job deliberately does not
+          # `needs`: warm registry-cache builds finish well inside this, but a
+          # fully cold build (empty buildcache after a cache-invalidating
+          # change) measured 20 min on a standard runner. A failed build still
+          # cancels this run early via platform-e2e-cancel-on-build-failure.
+          image-pull-timeout-seconds: "1500"
 
       - name: Run K8s-bound E2E tests
         id: e2e
@@ -460,8 +479,11 @@ jobs:
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
+      # always() so this still runs when a failing setup step aborts the job
+      # (a plain outcome check is implicitly ANDed with success() and gets
+      # skipped exactly when the diagnostics matter most).
       - name: Show logs on failure or flaky tests
-        if: steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true'
+        if: always() && (steps.setup-platform.outcome == 'failure' || steps.e2e.outcome == 'failure' || steps.e2e.outputs.has_flaky_tests == 'true')
         run: |
           echo "=== Kubernetes Pods ==="
           kubectl get pods -o wide || true
@@ -543,15 +565,51 @@ jobs:
   # below: this environment seeds chat API keys for the provider matrix, so
   # the org here is never in the "no keys yet" state that job exists to cover.
   platform-e2e-lite-tests:
-    name: Platform E2E Tests (Lite)
+    name: Platform E2E Tests (Lite ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      # A failing leg must not cancel its siblings; we want the full failure
+      # picture in one pass.
+      fail-fast: false
+      matrix:
+        include:
+          # Each leg boots its own full lite stack — on free runners that
+          # duplicated ~4 min setup buys test wall-clock. The nightly
+          # cross-browser projects ride the api leg: they only carry the
+          # small @firefox/@webkit-tagged subset.
+          # The chromium legs cap Playwright at 2 workers: the config's CI
+          # default (90% of cores ≈ 3) oversubscribes a standard runner that
+          # is also hosting the whole lite stack, and the resulting CPU
+          # starvation is what makes the heavy dialog-interaction specs
+          # (static-credentials, chat) miss their interaction windows. The
+          # api leg keeps the default — API-bound specs gain from parallelism
+          # and don't fight for paint time.
+          - name: api
+            projects_default: api --project=identity-providers
+            projects_nightly: api --project=identity-providers --project=firefox --project=webkit
+            shard: ""
+            workers_arg: ""
+          - name: chromium-1of2
+            projects_default: chromium
+            projects_nightly: chromium
+            shard: "--shard=1/2"
+            workers_arg: "--workers=2"
+          - name: chromium-2of2
+            projects_default: chromium
+            projects_nightly: chromium
+            shard: "--shard=2/2"
+            workers_arg: "--workers=2"
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
+      # See the reclaim note in the build job.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -612,8 +670,9 @@ jobs:
           # Merge queue / on-demand label runs cover chromium only. The nightly
           # schedule (and manual workflow_dispatch) add firefox + webkit, which
           # only carry the @firefox/@webkit-tagged tests.
-          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'chromium --project=firefox --project=webkit --project=api --project=identity-providers' || 'chromium --project=api --project=identity-providers' }}
-          extra_args: "--grep-invert '@quickstart'"
+          projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.projects_nightly || matrix.projects_default }}
+          shard: ${{ matrix.shard }}
+          extra_args: "--grep-invert '@quickstart' ${{ matrix.workers_arg }}"
           timeout: "20"
           env_file: /tmp/lite-e2e.env
 
@@ -621,7 +680,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: ./.github/actions/github-upload-artifact
         with:
-          name: blob-report-lite
+          name: blob-report-lite-${{ matrix.name }}
           path: platform/e2e-tests/blob-report/
           retention-days: 1
 
@@ -649,12 +708,16 @@ jobs:
     name: Platform E2E Tests (Quickstart)
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || github.event_name == 'merge_group' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read # Required to checkout the repository and read test assets.
       id-token: write # Required for Workload Identity Federation in setup actions.
     steps:
+      # See the reclaim note in the build job.
+      - name: Reclaim disk space (background)
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -724,12 +787,18 @@ jobs:
           #
           # supply-chain-policy: allow-latest quickstart needs a published public fallback
           # Provider base URLs point to WireMock so quickstart tests can mock LLM responses
+          # Rate limiting is disabled like in the lite and K8s environments:
+          # the auth setup's sign-in/sign-out churn (amplified by Playwright
+          # retries) trips better-auth's per-IP limiter and fails user setup
+          # with 429s — measured on standard runners, where slower cores
+          # bunch the retries tighter than the old hardware did.
           docker run -d \
             --name archestra-quickstart \
             --network archestra-quickstart-net \
             -p 127.0.0.1:9000:9000 \
             -p 127.0.0.1:3000:3000 \
             -e ARCHESTRA_QUICKSTART=true \
+            -e ARCHESTRA_AUTH_RATE_LIMIT_DISABLED=true \
             -e ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/mcp-server-base:latest \
             -e ARCHESTRA_ANALYTICS=disabled \
             -e ARCHESTRA_OPENAI_BASE_URL=http://archestra-wiremock:8080/v1 \

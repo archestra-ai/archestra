@@ -25,13 +25,15 @@ RUN apk add --no-cache \
 COPY --from=uv-bin /uv /usr/local/bin/uv
 RUN chmod +x /usr/local/bin/uv
 
-# Create virtual environment and install Python MCP dependencies from a locked manifest
+# Create virtual environment and install Python MCP dependencies from a locked manifest.
+# The venv stays bare (uv venv installs no pip/setuptools/wheel, and uv
+# performs the sync from outside it): the pip+wheel previously installed
+# here existed only to patch their own CVEs, and pip additionally VENDORS
+# setuptools 70.3.0 and msgpack 1.1.2 copies (CVE-2025-47273,
+# GHSA-6v7p-g79w-8964) that scanners flag and pip upstream has not bumped.
 RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 COPY pyproject.toml requirements.lock /tmp/python-deps/
-# CVE-2026-24049: wheel path traversal fixed in wheel >= 0.46.2
-# CVE-2025-8869: pip link-following issue fixed in pip >= 25.3
-RUN uv pip install --upgrade wheel>=0.46.2 pip>=25.3
 RUN uv pip sync \
    --no-cache \
    --require-hashes \
@@ -120,8 +122,19 @@ COPY --from=node-builder /usr/local/lib/node_modules/npm /usr/local/lib/node_mod
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
     ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
-# Upgrade system pip to fix CVE-2025-8869 (Link Following vulnerability in pip <= 25.2)
-RUN pip install --upgrade pip>=25.3
+# Remove pip and setuptools from the system interpreter instead of chasing
+# their CVEs: the base image ships setuptools 70.3.0 (CVE-2025-47273) and a
+# pip whose _vendor tree carries setuptools 70.3.0 and msgpack 1.1.2
+# (GHSA-6v7p-g79w-8964) — versions pip upstream still vendors, so no
+# upgrade fixes them. Nothing in this image installs with pip: uv is the
+# installer, and the skill sandbox already shims pip off (see
+# sandbox-core's dagger backend). The shim left behind gives a clear error
+# instead of "command not found".
+RUN python -m pip uninstall -y setuptools pip && \
+    printf '%s\n' '#!/bin/sh' 'echo "error: pip is not available in this image. Use uv instead." >&2' 'exit 1' > /usr/local/bin/pip && \
+    chmod +x /usr/local/bin/pip && \
+    ln -sf pip /usr/local/bin/pip3 && \
+    ln -sf pip /usr/local/bin/pip3.12
 
 # Copy Python environment from builder
 COPY --from=python-builder /opt/venv /opt/venv

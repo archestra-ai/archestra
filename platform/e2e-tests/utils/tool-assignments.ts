@@ -249,11 +249,14 @@ async function openCatalogToolAssignment({
 
   if (catalogAssignmentState === "enabled") {
     await enabledCatalogItem.click();
-    // Close the combobox only if it stayed open — pressing Escape
-    // unconditionally can close the outer Edit dialog when the combobox has
-    // already collapsed on click, which leaves the assignment in "missing".
+    // Close a still-open combobox by clicking a neutral element inside the
+    // dialog. Escape is banned here: on slow runners searchInput.isVisible()
+    // keeps returning true through the popover's close animation, so a
+    // "guarded" Escape routinely landed after the popover was functionally
+    // closed and dismissed the outer edit dialog instead — from which no
+    // retry can recover.
     if (await searchInput.isVisible().catch(() => false)) {
-      await page.keyboard.press("Escape");
+      await toolsSectionHeading.click();
     }
   }
 
@@ -291,9 +294,10 @@ async function openCatalogToolAssignment({
   // commits — a single click can land on a node that detaches mid-action and
   // silently open nothing. Retry until the dropdown is verifiably open,
   // probing for the always-present "Resolve at call time" option (unique to
-  // this dropdown — the tools combobox also renders role=option items). A
-  // still-open combobox would also swallow the trigger click, so close it
-  // first (guarded: a bare Escape with no combobox closes the edit dialog).
+  // this dropdown — the tools combobox also renders role=option items).
+  // No Escape anywhere in this loop (see the comment above): a still-open
+  // combobox just swallows the first trigger click as its outside-dismiss,
+  // and the next retry's click then opens the dropdown.
   const dynamicCredentialOption = page
     .getByRole("option", { name: /Resolve at call time/ })
     .first();
@@ -301,12 +305,9 @@ async function openCatalogToolAssignment({
     if (await dynamicCredentialOption.isVisible().catch(() => false)) {
       return;
     }
-    if (await searchInput.isVisible().catch(() => false)) {
-      await page.keyboard.press("Escape");
-    }
     await visibleTokenSelect.click({ timeout: 2_000 });
     await expect(dynamicCredentialOption).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 15_000 });
+  }).toPass({ timeout: 20_000 });
 }
 
 function escapeRegExp(value: string): string {

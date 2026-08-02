@@ -46,6 +46,7 @@ import {
   ResourceVisibilityScopeSchema,
   UuidIdSchema,
 } from "@/types";
+import { isManagedSecretEnvVar } from "@/utils/catalog-plaintext-secrets";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 import { archestraMcpBranding } from "./branding";
 import {
@@ -89,7 +90,9 @@ const EnvVarSchema = z
     value: z
       .string()
       .optional()
-      .describe("Literal environment variable value."),
+      .describe(
+        'Literal environment variable value. Managed secret values (type "secret" without promptOnInstallation) cannot be set when editing an existing server — the user manages those in the registry UI.',
+      ),
     promptOnInstallation: z
       .boolean()
       .describe("Whether to prompt for this value during installation."),
@@ -188,7 +191,7 @@ const McpConfigToolSchema = z
       .optional()
       .describe("[Remote] Authentication field definitions."),
     oauthConfig: LooseObjectSchema.optional().describe(
-      "[Remote] OAuth configuration for the server.",
+      "[Remote] OAuth configuration for the server. client_secret cannot be set when editing an existing server — the user manages it in the registry UI.",
     ),
     command: z
       .string()
@@ -460,7 +463,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_EDIT_MCP_CONFIG_SHORT_NAME,
     title: "Edit MCP Server Configuration",
-    description: `Edit an MCP server's technical configuration. For remote servers: use serverUrl, auth, and OAuth fields. For local (K8s) servers: use command, arguments, environment, Docker, and transport fields. Local config fields are merged into the existing configuration — only specified fields are overwritten. Use ${TOOL_GET_MCP_SERVERS_SHORT_NAME} to look up IDs by name.`,
+    description: `Edit an MCP server's technical configuration. For remote servers: use serverUrl, auth, and OAuth fields. For local (K8s) servers: use command, arguments, environment, Docker, and transport fields. Local config fields are merged into the existing configuration — only specified fields are overwritten. Secret values (secret-typed environment variables, OAuth client_secret) cannot be set with this tool — direct the user to the registry UI for those. Use ${TOOL_GET_MCP_SERVERS_SHORT_NAME} to look up IDs by name.`,
     schema: EditMcpConfigToolArgsSchema,
     handler: ({ args, context }) => handleEditMcpConfig(args, context),
   }),
@@ -875,6 +878,18 @@ async function handleEditMcpConfig(
       return errorResult("user/organization context not available.");
     }
 
+    // Secret values are rejected at the tool boundary: when the row has a
+    // secret bundle the model's write strip would silently drop them, and on
+    // bundle-less rows they would persist as row plaintext. Metadata edits to
+    // secret env vars (description, required, ...) remain allowed.
+    const secretValuePaths = collectSecretValueArgPaths(args);
+    if (secretValuePaths.length > 0) {
+      return errorResult(
+        `Secret values cannot be set via this tool: ${secretValuePaths.join(", ")}. ` +
+          "Remove the value fields and retry. Secret env var metadata (description, required, promptOnInstallation) can be edited here; to set or rotate secret values, ask the user to update the server in the registry UI at /mcp/registry.",
+      );
+    }
+
     const checker = await getMcpCatalogPermissionChecker({
       userId: context.userId,
       organizationId,
@@ -883,6 +898,8 @@ async function handleEditMcpConfig(
     // Raw row, not the expanded view: `existing` feeds permission checks and
     // the localConfig spread below, and an expanded read would materialize
     // secret values into a payload that is then written back via update().
+    // Incoming secret values were rejected above, so the merged write below
+    // stays free of plaintext secrets from both directions.
     const existing = await InternalMcpCatalogModel.findById(args.id, {
       userId: context.userId,
       isAdmin: checker.isAdmin,
@@ -1819,4 +1836,25 @@ async function authorizeDeployScope(params: {
   }
 
   return null;
+}
+
+/**
+ * Paths in edit_mcp_config args that carry plaintext secret values. Uses the
+ * same predicate as the model's write-boundary strip
+ * (`stripManagedPlaintextSecretFields`), so the tool rejects exactly what the
+ * model would otherwise silently drop — or, on bundle-less rows, persist as
+ * row plaintext. Prompt-on-install secret vars are excluded on purpose: their
+ * values are per-install user input, not catalog secrets.
+ */
+function collectSecretValueArgPaths(args: EditMcpConfigArgs): string[] {
+  const paths: string[] = [];
+  for (const envVar of args.environment ?? []) {
+    if (isManagedSecretEnvVar(envVar) && envVar.value) {
+      paths.push(`environment[${envVar.key}].value`);
+    }
+  }
+  if (args.oauthConfig?.client_secret) {
+    paths.push("oauthConfig.client_secret");
+  }
+  return paths;
 }

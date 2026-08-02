@@ -11,6 +11,7 @@ import {
 import {
   EnvironmentModel,
   InternalMcpCatalogModel,
+  InternalMcpCatalogVersionModel,
   OrganizationModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
@@ -336,6 +337,176 @@ describe("mcp server tool execution", () => {
       "@modelcontextprotocol/server-github",
     ]);
     expect(updatedCatalog?.localConfig?.transportType).toBe("stdio");
+  });
+
+  test("edit_mcp_config rejects managed secret env var values and applies nothing", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Secret Guard Server",
+      serverType: "local",
+      organizationId,
+      localConfig: { command: "npx", arguments: ["server"] },
+    });
+    const versionsBefore = await InternalMcpCatalogVersionModel.listForCatalog({
+      catalogId: catalog.id,
+      pagination: { limit: 200, offset: 0 },
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`,
+      {
+        id: catalog.id,
+        command: "node",
+        environment: [
+          {
+            key: "API_KEY",
+            type: "secret",
+            value: "super-secret-value",
+            promptOnInstallation: false,
+          },
+        ],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "Secret values cannot be set via this tool",
+    );
+    expect((result.content[0] as any).text).toContain(
+      "environment[API_KEY].value",
+    );
+
+    // The whole call is rejected: the non-secret command change did not
+    // apply, and no new version row was forked.
+    const unchanged = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(unchanged?.localConfig?.command).toBe("npx");
+    const versionsAfter = await InternalMcpCatalogVersionModel.listForCatalog({
+      catalogId: catalog.id,
+      pagination: { limit: 200, offset: 0 },
+    });
+    expect(versionsAfter.data.length).toBe(versionsBefore.data.length);
+  });
+
+  test("edit_mcp_config rejects oauthConfig containing client_secret", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "OAuth Guard Server",
+      serverType: "remote",
+      serverUrl: "https://mcp.example.com",
+      organizationId,
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`,
+      {
+        id: catalog.id,
+        oauthConfig: { client_id: "abc", client_secret: "shh" },
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "oauthConfig.client_secret",
+    );
+
+    const unchanged = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(unchanged?.oauthConfig).toBeFalsy();
+  });
+
+  test("edit_mcp_config allows secret env var metadata edits and plain_text values", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Metadata Edit Server",
+      serverType: "local",
+      organizationId,
+      localConfig: { command: "npx", arguments: ["server"] },
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`,
+      {
+        id: catalog.id,
+        environment: [
+          {
+            key: "API_KEY",
+            type: "secret",
+            promptOnInstallation: false,
+            required: true,
+            description: "API token, set via the registry UI",
+          },
+          {
+            key: "LOG_LEVEL",
+            type: "plain_text",
+            value: "debug",
+            promptOnInstallation: false,
+          },
+        ],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const updated = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    const envVars = updated?.localConfig?.environment ?? [];
+    expect(envVars).toEqual([
+      expect.objectContaining({
+        key: "API_KEY",
+        type: "secret",
+        required: true,
+      }),
+      expect.objectContaining({ key: "LOG_LEVEL", value: "debug" }),
+    ]);
+    expect(
+      envVars.find((envVar: any) => envVar.key === "API_KEY"),
+    ).not.toHaveProperty("value");
+  });
+
+  test("edit_mcp_config allows prompt-on-install secret template values", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      name: "Prompted Secret Server",
+      serverType: "local",
+      organizationId,
+      localConfig: { command: "npx", arguments: ["server"] },
+    });
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`,
+      {
+        id: catalog.id,
+        environment: [
+          {
+            key: "TOKEN",
+            type: "secret",
+            value: "per-install-template",
+            promptOnInstallation: true,
+          },
+        ],
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+
+    const updated = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(updated?.localConfig?.environment).toEqual([
+      expect.objectContaining({ key: "TOKEN", value: "per-install-template" }),
+    ]);
   });
 });
 

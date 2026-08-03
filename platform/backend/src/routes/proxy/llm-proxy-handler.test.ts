@@ -11,6 +11,8 @@ import {
   CHAT_API_KEY_ID_HEADER,
   DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   PROVIDER_BASE_URL_HEADER,
+  SESSION_ID_HEADER,
+  SOURCE_HEADER,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
@@ -586,6 +588,63 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         .from(schema.interactionsTable)
         .where(eq(schema.interactionsTable.profileId, testAgent.id));
       expect(rows).toHaveLength(1);
+    });
+
+    test("a Slack ChatOps stream without usage keeps its source and shows up in the sessions listing", async () => {
+      // T-953: Slack ChatOps runs reach the proxy as streams tagged
+      // `chatops:slack`, and their upstream (frequently another Archestra,
+      // whose own SSE omits the trailing usage chunk) reports no usage. The
+      // usage-gated persist made those runs vanish from LLM Logs entirely.
+      // Recording the row is not enough — it has to keep `source`, or the
+      // "Slack" entry of the Source filter can never find it again.
+      openAiStubOptions.interruptAtChunk = 2;
+
+      const sessionId = "slack-C0B2AGC0AFQ-1784887557";
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test-key",
+          [SOURCE_HEADER]: "chatops:slack",
+          [SESSION_ID_HEADER]: sessionId,
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello from Slack!" }],
+          stream: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      const rows = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].source).toBe("chatops:slack");
+      expect(rows[0].sessionId).toBe(sessionId);
+
+      // The unfiltered listing is the view the bug report screenshotted.
+      const unfiltered = await InteractionModel.getSessions(
+        { limit: 10, offset: 0 },
+        undefined,
+        true,
+        { sessionId },
+      );
+      expect(unfiltered.pagination.total).toBe(1);
+      expect(unfiltered.data[0].source).toBe("chatops:slack");
+      expect(unfiltered.data[0].sources).toContain("chatops:slack");
+
+      // ...and the Source filter's "Slack" entry must keep it.
+      const filtered = await InteractionModel.getSessions(
+        { limit: 10, offset: 0 },
+        undefined,
+        true,
+        { sessionId, source: "chatops:slack" },
+      );
+      expect(filtered.pagination.total).toBe(1);
     });
   });
 

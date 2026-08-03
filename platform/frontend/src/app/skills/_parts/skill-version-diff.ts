@@ -61,9 +61,40 @@ export function compareSkillVersionFiles<T extends ComparableFile>(
   return compared.sort((a, b) => a.path.localeCompare(b.path));
 }
 
-/** Whether anything other than resource-file ordering actually differs. */
-export function hasFileChanges(
-  compared: ComparedSkillFile<ComparableFile>[],
-): boolean {
-  return compared.some((file) => file.change !== "unchanged");
+/** One level of the file tree: a named folder, or the root when `folder` is null. */
+export interface SkillFileFolder<T> {
+  folder: string | null;
+  files: T[];
+}
+
+/**
+ * Group files into the single-level tree a skill directory actually has —
+ * `scripts/`, `references/`, `assets/` and loose files at the root. Folders come
+ * first, sorted, then the root group, matching the skill editor's tree.
+ */
+export function groupFilesByFolder<T extends { path: string }>(
+  files: T[],
+): SkillFileFolder<T>[] {
+  const byFolder = new Map<string, T[]>();
+  const rootFiles: T[] = [];
+  for (const file of files) {
+    const separator = file.path.indexOf("/");
+    if (separator === -1) {
+      rootFiles.push(file);
+      continue;
+    }
+    const folder = file.path.slice(0, separator);
+    const entries = byFolder.get(folder);
+    if (entries) {
+      entries.push(file);
+    } else {
+      byFolder.set(folder, [file]);
+    }
+  }
+
+  const groups: SkillFileFolder<T>[] = [...byFolder.keys()]
+    .sort((a, b) => a.localeCompare(b))
+    .map((folder) => ({ folder, files: byFolder.get(folder) ?? [] }));
+  if (rootFiles.length > 0) groups.push({ folder: null, files: rootFiles });
+  return groups;
 }

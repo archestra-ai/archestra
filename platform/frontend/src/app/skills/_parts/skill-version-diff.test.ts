@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { compareSkillVersionFiles, hasFileChanges } from "./skill-version-diff";
+import {
+  compareSkillVersionFiles,
+  groupFilesByFolder,
+} from "./skill-version-diff";
 
 const file = (path: string, content: string) => ({ path, content });
 
@@ -63,18 +66,45 @@ describe("compareSkillVersionFiles", () => {
     ]);
   });
 
-  it("reports no changes when the two versions hold identical files", () => {
+  it("reports every path as unchanged when the two versions hold identical files", () => {
     const compared = compareSkillVersionFiles(
       [file("a.md", "same"), file("b.md", "same")],
       [file("b.md", "same"), file("a.md", "same")],
     );
 
-    expect(hasFileChanges(compared)).toBe(false);
+    expect(compared.every((entry) => entry.change === "unchanged")).toBe(true);
+  });
+});
+
+describe("groupFilesByFolder", () => {
+  it("puts sorted folders first and loose files last", () => {
+    const groups = groupFilesByFolder([
+      { path: "README.md" },
+      { path: "scripts/extract.py" },
+      { path: "assets/logo.png" },
+      { path: "scripts/split.py" },
+    ]);
+
+    expect(
+      groups.map((group) => [group.folder, group.files.map((f) => f.path)]),
+    ).toEqual([
+      ["assets", ["assets/logo.png"]],
+      ["scripts", ["scripts/extract.py", "scripts/split.py"]],
+      [null, ["README.md"]],
+    ]);
   });
 
-  it("reports changes when a file was only removed", () => {
-    const compared = compareSkillVersionFiles([], [file("a.md", "gone")]);
+  it("omits the root group when every file lives in a folder", () => {
+    const groups = groupFilesByFolder([{ path: "scripts/only.py" }]);
 
-    expect(hasFileChanges(compared)).toBe(true);
+    expect(groups.map((group) => group.folder)).toEqual(["scripts"]);
+  });
+
+  it("keeps nested paths in their top-level folder, the only level a skill has", () => {
+    const groups = groupFilesByFolder([{ path: "references/deep/nested.md" }]);
+
+    expect(groups).toEqual([
+      { folder: "references", files: [{ path: "references/deep/nested.md" }] },
+    ]);
   });
 });

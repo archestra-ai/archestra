@@ -292,38 +292,22 @@ describe("SkillVersionHistoryDialog", () => {
     ).toBeInTheDocument();
   });
 
-  it("lists a version's changed resource files alongside SKILL.md", async () => {
+  it("lists only changed resource files, nested under their folder", async () => {
     const user = userEvent.setup();
-    mockVersionDetails({
-      3: versionDetail({
-        version: 3,
-        content: HEAD_BODY,
-        contentHash: "hash-head",
-        files: [
-          file("scripts/extract.py", "new"),
-          file("scripts/keep.py", "s"),
-        ],
-      }),
-      2: versionDetail({
-        version: 2,
-        content: OLD_BODY,
-        contentHash: "hash-two",
-        files: [
-          file("scripts/extract.py", "old"),
-          file("scripts/keep.py", "s"),
-        ],
-      }),
-    });
+    mockChangedScript();
     renderDialog();
 
     await user.click(screen.getByRole("button", { name: /v3/ }));
 
     expect(
-      screen.getByRole("button", { name: /scripts\/extract\.py/ }),
+      screen.getByRole("button", { name: "scripts/" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "extract.py" }),
     ).toBeInTheDocument();
     // an untouched file is not part of the change set
     expect(
-      screen.queryByRole("button", { name: /scripts\/keep\.py/ }),
+      screen.queryByRole("button", { name: "keep.py" }),
     ).not.toBeInTheDocument();
   });
 
@@ -348,35 +332,104 @@ describe("SkillVersionHistoryDialog", () => {
 
     await user.click(screen.getByRole("button", { name: /v3/ }));
 
-    expect(screen.getByRole("tab", { name: /Changes/ })).toHaveTextContent(
-      "Changes(1)",
+    expect(screen.getByRole("button", { name: /^Changes/ })).toHaveTextContent(
+      "Changes (1)",
     );
+    // SKILL.md did not move, so it is not in the change list at all
+    expect(
+      screen.queryByRole("button", { name: "SKILL.md" }),
+    ).not.toBeInTheDocument();
   });
 
-  it("diffs a resource file when its chip is chosen", async () => {
+  it("diffs a resource file when its row is chosen", async () => {
     const user = userEvent.setup();
+    mockChangedScript();
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v3/ }));
+    await user.click(screen.getByRole("button", { name: "extract.py" }));
+
+    expect(screen.getByTestId("diff-original")).toHaveTextContent("old script");
+    expect(screen.getByTestId("diff-modified")).toHaveTextContent("new script");
+  });
+
+  it("shows the whole version, diff-free, once switched to all files", async () => {
+    const user = userEvent.setup();
+    mockChangedScript();
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v3/ }));
+    await user.click(screen.getByRole("button", { name: /^All files/ }));
+
+    // the untouched file the change list hid is part of the version
+    expect(screen.getByRole("button", { name: "keep.py" })).toBeInTheDocument();
+    expect(screen.getByTestId("editor")).toHaveTextContent("head body");
+    expect(screen.queryByTestId("diff")).not.toBeInTheDocument();
+  });
+
+  it("does not claim nothing changed while the baseline is still loading", () => {
+    // only the selected version has arrived; its predecessor is still in flight
     mockVersionDetails({
       3: versionDetail({
         version: 3,
         content: HEAD_BODY,
         contentHash: "hash-head",
-        files: [file("scripts/extract.py", "new script")],
-      }),
-      2: versionDetail({
-        version: 2,
-        content: OLD_BODY,
-        contentHash: "hash-two",
-        files: [file("scripts/extract.py", "old script")],
+        files: [file("scripts/extract.py", "new")],
       }),
     });
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /v3/ }));
-    await user.click(
-      screen.getByRole("button", { name: /scripts\/extract\.py/ }),
-    );
+    expect(screen.getByText("Loading changes...")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Nothing changed in this version/),
+    ).not.toBeInTheDocument();
+  });
 
-    expect(screen.getByTestId("diff-original")).toHaveTextContent("old script");
-    expect(screen.getByTestId("diff-modified")).toHaveTextContent("new script");
+  it("reads the earliest version as newly added, having nothing to diff against", async () => {
+    const user = userEvent.setup();
+    mockVersionDetails({
+      1: versionDetail({
+        version: 1,
+        content: OLD_BODY,
+        contentHash: "hash-one",
+        files: [file("scripts/extract.py", "first")],
+      }),
+    });
+    renderDialog();
+
+    await user.click(screen.getByRole("button", { name: /v1/ }));
+
+    // both the manifest and the file count as added, so nothing is hidden
+    expect(screen.getByRole("button", { name: /^Changes/ })).toHaveTextContent(
+      "Changes (2)",
+    );
+    expect(
+      screen.getByRole("button", { name: "extract.py" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Earliest version/)).toBeInTheDocument();
   });
 });
+
+/** v3 rewrites one script and leaves another alone. */
+function mockChangedScript() {
+  mockVersionDetails({
+    3: versionDetail({
+      version: 3,
+      content: HEAD_BODY,
+      contentHash: "hash-head",
+      files: [
+        file("scripts/extract.py", "new script"),
+        file("scripts/keep.py", "same"),
+      ],
+    }),
+    2: versionDetail({
+      version: 2,
+      content: OLD_BODY,
+      contentHash: "hash-two",
+      files: [
+        file("scripts/extract.py", "old script"),
+        file("scripts/keep.py", "same"),
+      ],
+    }),
+  });
+}

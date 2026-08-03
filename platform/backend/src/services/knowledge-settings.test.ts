@@ -108,4 +108,32 @@ describe("knowledgeSettingsService.validateRerankerConfig", () => {
       "Failed to verify reranker model. Raw error: model does not exist",
     );
   });
+
+  test("explains the mismatch when a dedicated rerank-API model fails verification", async ({
+    makeOrganization,
+    makeSecret,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "k" } });
+    const key = await LlmProviderApiKeyModel.create({
+      organizationId: org.id,
+      secretId: secret.id,
+      name: "Reranker Key",
+      provider: "azure",
+      scope: "org",
+      userId: null,
+    });
+    // A rerank-API deployment (e.g. Cohere Rerank) has no chat-completions
+    // route, so the provider answers the probe with a bare 404.
+    mockGenerateObject.mockRejectedValue(new Error("Not Found"));
+
+    const result = await knowledgeSettingsService.validateRerankerConfig({
+      keyId: key.id,
+      model: "Cohere-rerank-v4.0-fast",
+      organizationId: org.id,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("Raw error: Not Found");
+    expect(result.error).toContain("select a chat model instead");
+  });
 });

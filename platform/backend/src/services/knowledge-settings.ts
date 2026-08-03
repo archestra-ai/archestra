@@ -129,9 +129,17 @@ class KnowledgeSettingsService {
         { err: error },
         "[KnowledgeSettings] Reranker validation failed",
       );
+      // A dedicated rerank-API model (e.g. Cohere Rerank) is the natural pick
+      // for this setting, but it only serves its own rerank route — the
+      // provider rejects the chat-completions probe with an unhelpful raw
+      // error (a bare 404), so explain the mismatch when the name gives it
+      // away.
+      const rerankApiHint = /rerank/i.test(model)
+        ? " — this looks like a dedicated rerank-API model, which does not serve chat completions. Reranking uses a chat-capable LLM with structured output; select a chat model instead."
+        : "";
       return {
         ok: false,
-        error: `Failed to verify reranker model. Raw error: ${knowledgeValidationErrorMessage(error)}`,
+        error: `Failed to verify reranker model. Raw error: ${knowledgeValidationErrorMessage(error)}${rerankApiHint}`,
       };
     }
   }

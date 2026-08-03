@@ -337,6 +337,8 @@ function VersionTimeline({
                   isActive && "border-l-primary bg-accent",
                 )}
               >
+                {/* One line per version: the day heading already dates them,
+                    and the selected version's own header carries the time. */}
                 <span className="flex items-center gap-2">
                   <span className="font-mono text-xs font-medium">
                     v{version.version}
@@ -346,12 +348,9 @@ function VersionTimeline({
                       Current
                     </Badge>
                   ) : null}
-                  <span className="ml-auto truncate text-xs text-muted-foreground">
-                    {formatRelativeTimeFromNow(version.createdAt)}
+                  <span className="ml-auto truncate font-mono text-[11px] text-muted-foreground">
+                    {version.contentHash.slice(0, 7)}
                   </span>
-                </span>
-                <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
-                  {version.contentHash.slice(0, 7)}
                 </span>
               </button>
             );
@@ -502,16 +501,8 @@ function VersionPreview({
         </span>
       </header>
 
-      <div className="flex items-center gap-3 px-4 pt-2">
+      <div className="px-4 pt-2">
         <ButtonGroup>
-          <Button
-            type="button"
-            size="sm"
-            variant={viewMode === "changes" ? "secondary" : "outline"}
-            onClick={() => onViewModeChange("changes")}
-          >
-            Changes ({changeCount})
-          </Button>
           <Button
             type="button"
             size="sm"
@@ -520,12 +511,15 @@ function VersionPreview({
           >
             All files ({detail.files.length + 1})
           </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={viewMode === "changes" ? "secondary" : "outline"}
+            onClick={() => onViewModeChange("changes")}
+          >
+            Changes ({changeCount})
+          </Button>
         </ButtonGroup>
-        {hasPredecessor ? null : (
-          <p className="text-xs text-muted-foreground">
-            Earliest version — everything reads as newly added.
-          </p>
-        )}
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-[240px_1fr] gap-3 p-4">

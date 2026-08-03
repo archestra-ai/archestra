@@ -406,7 +406,6 @@ describe("SkillVersionHistoryDialog", () => {
     expect(
       screen.getByRole("button", { name: "extract.py" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Earliest version/)).toBeInTheDocument();
   });
 });
 

@@ -655,9 +655,12 @@ async function makeMcpServer(
       | "ownerId"
       | "teamId"
       | "scope"
+      | "serverType"
+      | "secretId"
       | "localInstallationStatus"
       | "oauthRefreshError"
       | "deploymentName"
+      | "deletedAt"
     >
   > = {},
 ) {

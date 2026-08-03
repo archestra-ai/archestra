@@ -11,6 +11,8 @@ const {
   createKnowledgeBase,
   updateKnowledgeBase,
   deleteKnowledgeBase,
+  restoreKnowledgeBase,
+  purgeKnowledgeBase,
 } = archestraApiSdk;
 
 type KnowledgeBasesQuery = NonNullable<
@@ -22,7 +24,7 @@ type KnowledgeBasesListParams = {
 };
 type KnowledgeBasesPaginatedParams = Pick<
   KnowledgeBasesQuery,
-  "limit" | "offset" | "search"
+  "limit" | "offset" | "search" | "status"
 >;
 
 /**
@@ -170,6 +172,46 @@ export function useDeleteKnowledgeBase() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
       toast.success("Knowledge base deleted successfully");
+    },
+  });
+}
+
+/** Restore a soft-deleted knowledge base from the trash view (admins). */
+export function useRestoreKnowledgeBase() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await restoreKnowledgeBase({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      toast.success("Knowledge base restored");
+    },
+  });
+}
+
+/** Permanently delete a soft-deleted knowledge base (admin-only trash action). */
+export function usePurgeKnowledgeBase() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await purgeKnowledgeBase({ path: { id } });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
+      toast.success("Knowledge base permanently deleted");
     },
   });
 }

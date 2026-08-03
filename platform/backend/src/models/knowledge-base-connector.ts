@@ -211,6 +211,7 @@ class KnowledgeBaseConnectorModel {
           schema.knowledgeBaseConnectorsTable.permissionSyncState,
         createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
         updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
+        deletedAt: schema.knowledgeBaseConnectorsTable.deletedAt,
       })
       .from(schema.knowledgeBaseConnectorAssignmentsTable)
       .innerJoin(
@@ -278,6 +279,7 @@ class KnowledgeBaseConnectorModel {
           schema.knowledgeBaseConnectorsTable.permissionSyncState,
         createdAt: schema.knowledgeBaseConnectorsTable.createdAt,
         updatedAt: schema.knowledgeBaseConnectorsTable.updatedAt,
+        deletedAt: schema.knowledgeBaseConnectorsTable.deletedAt,
         knowledgeBaseId:
           schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
       })

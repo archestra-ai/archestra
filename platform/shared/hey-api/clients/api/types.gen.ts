@@ -53568,6 +53568,7 @@ export type GetKnowledgeBasesResponses = {
             status: string;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
             connectors: Array<{
                 id: string;
                 name: string;
@@ -53680,6 +53681,7 @@ export type CreateKnowledgeBaseResponses = {
         status: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
     };
 };
 
@@ -53856,6 +53858,7 @@ export type GetKnowledgeBaseResponses = {
         status: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
     };
 };
 
@@ -53950,6 +53953,7 @@ export type UpdateKnowledgeBaseResponses = {
         status: string;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
     };
 };
 
@@ -54458,6 +54462,7 @@ export type GetConnectorsResponses = {
             aclConfigEpoch: number;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
             assignedAgents: Array<{
                 id: string;
                 name: string;
@@ -54870,6 +54875,7 @@ export type CreateConnectorResponses = {
         aclConfigEpoch: number;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
     };
 };
 
@@ -55198,6 +55204,7 @@ export type GetConnectorResponses = {
         aclConfigEpoch: number;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
         totalDocsIngested: number;
     };
 };
@@ -55597,6 +55604,7 @@ export type UpdateConnectorResponses = {
         aclConfigEpoch: number;
         createdAt: string;
         updatedAt: string;
+        deletedAt: string | null;
     };
 };
 
@@ -56874,6 +56882,7 @@ export type GetConnectorKnowledgeBasesResponses = {
             status: string;
             createdAt: string;
             updatedAt: string;
+            deletedAt: string | null;
         }>;
     };
 };

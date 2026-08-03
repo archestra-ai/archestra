@@ -209505,6 +209505,11 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "deletedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
                           "connectors": {
                             "type": "array",
                             "items": {
@@ -209660,6 +209665,7 @@
                           "status",
                           "createdAt",
                           "updatedAt",
+                          "deletedAt",
                           "connectors",
                           "totalDocsIndexed",
                           "assignedAgents"
@@ -210014,6 +210020,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -210023,7 +210034,8 @@
                     "description",
                     "status",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -210319,6 +210331,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -210328,7 +210345,8 @@
                     "description",
                     "status",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -210642,6 +210660,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -210651,7 +210674,8 @@
                     "description",
                     "status",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -213125,6 +213149,11 @@
                             "type": "string",
                             "format": "date-time"
                           },
+                          "deletedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
                           "assignedAgents": {
                             "type": "array",
                             "items": {
@@ -213172,6 +213201,7 @@
                           "aclConfigEpoch",
                           "createdAt",
                           "updatedAt",
+                          "deletedAt",
                           "assignedAgents"
                         ],
                         "additionalProperties": false
@@ -215322,6 +215352,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -215346,7 +215381,8 @@
                     "checkpoint",
                     "aclConfigEpoch",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -216559,6 +216595,11 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
+                    },
                     "totalDocsIngested": {
                       "type": "number"
                     }
@@ -216586,6 +216627,7 @@
                     "aclConfigEpoch",
                     "createdAt",
                     "updatedAt",
+                    "deletedAt",
                     "totalDocsIngested"
                   ],
                   "additionalProperties": false
@@ -218586,6 +218628,11 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "deletedAt": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time"
                     }
                   },
                   "required": [
@@ -218610,7 +218657,8 @@
                     "checkpoint",
                     "aclConfigEpoch",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "deletedAt"
                   ],
                   "additionalProperties": false
                 }
@@ -223677,6 +223725,11 @@
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "deletedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
                           }
                         },
                         "required": [
@@ -223686,7 +223739,8 @@
                           "description",
                           "status",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "deletedAt"
                         ],
                         "additionalProperties": false
                       }

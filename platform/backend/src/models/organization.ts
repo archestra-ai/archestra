@@ -4,11 +4,13 @@ import {
   MEMBER_ROLE_NAME,
   type OrganizationCustomFont,
   type SupportedProvider,
+  TimeInMs,
 } from "@archestra/shared";
 import { and, eq, isNull } from "drizzle-orm";
-import { CacheKey, cacheManager } from "@/cache-manager";
+import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type {
   AppearanceSettings,
   NetworkPolicy,
@@ -17,6 +19,22 @@ import type {
 } from "@/types";
 
 class OrganizationModel {
+  /**
+   * Process-local cache for {@link getAppearanceSettings}. The appearance
+   * settings back white-labeling on the unauthenticated login page (and every
+   * subsequent page load), so without a cache each page view costs a database
+   * query for a row that only changes when an admin edits appearance. Being
+   * process-local (not the Postgres-backed cacheManager) it also keeps the
+   * hot path off the database connection pool entirely. Writes in this
+   * process clear it immediately; other pods converge within the TTL.
+   */
+  private static readonly appearanceSettingsCache = registerProcessLocalCache(
+    new LRUCacheManager<AppearanceSettings>({
+      maxSize: 1,
+      defaultTtl: TimeInMs.Minute,
+    }),
+  );
+
   /**
    * Get the first organization in the database (fallback for various operations)
    */
@@ -185,6 +203,7 @@ class OrganizationModel {
     );
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
+    OrganizationModel.appearanceSettingsCache.clear();
     return updatedOrganization || null;
   }
 
@@ -430,10 +449,18 @@ class OrganizationModel {
   }
 
   /**
-   * Get appearance settings
+   * Get appearance settings, cached process-locally for the unauthenticated
+   * white-labeling hot path (login page, every page load).
    * Returns default appearance settings if no organization exists.
    */
   static async getAppearanceSettings(): Promise<AppearanceSettings> {
+    const cached = OrganizationModel.appearanceSettingsCache.get(
+      APPEARANCE_SETTINGS_CACHE_KEY,
+    );
+    if (cached) {
+      return cached;
+    }
+
     const [organization] = await db
       .select({
         theme: schema.organizationsTable.theme,
@@ -478,6 +505,10 @@ class OrganizationModel {
       };
     }
 
+    OrganizationModel.appearanceSettingsCache.set(
+      APPEARANCE_SETTINGS_CACHE_KEY,
+      organization,
+    );
     return organization;
   }
 
@@ -577,6 +608,9 @@ class OrganizationModel {
   }
 }
 export default OrganizationModel;
+
+/** Single-org table (`limit 1` read), so one fixed key is enough. */
+const APPEARANCE_SETTINGS_CACHE_KEY = "appearance-settings";
 
 function getOrganizationSettingsCacheKey(organizationId: string) {
   return `${CacheKey.OrganizationSettings}-${organizationId}` as const;

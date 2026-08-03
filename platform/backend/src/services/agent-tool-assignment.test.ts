@@ -670,6 +670,161 @@ describe("assignToolToApp", () => {
   });
 });
 
+describe("credentialConnection:use gating of other people's connections", () => {
+  const otherUsersConnection = {
+    ownerId: "colleague",
+    teamId: null,
+    scope: "personal" as const,
+  };
+  const orgTarget = {
+    organizationId: "org-1",
+    scope: "org" as const,
+    authorId: "me",
+    teamIds: [],
+  };
+
+  test("without the permission, another user's personal connection is not assignable", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    // The owner IS an org member — the only thing withholding the server is
+    // the missing permission, not org membership.
+    const org = await makeOrganization();
+    const colleague = await makeUser();
+    await makeMember(colleague.id, org.id);
+
+    const assignable = await isMcpServerAssignableToTarget({
+      mcpServer: { ...otherUsersConnection, ownerId: colleague.id },
+      target: { ...orgTarget, organizationId: org.id },
+      actor: { userId: "me", canUseOthersCredentialConnections: false },
+    });
+
+    expect(assignable).toBe(false);
+  });
+
+  test("with the permission, it is assignable again", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const colleague = await makeUser();
+    await makeMember(colleague.id, org.id);
+
+    const assignable = await isMcpServerAssignableToTarget({
+      mcpServer: { ...otherUsersConnection, ownerId: colleague.id },
+      target: { ...orgTarget, organizationId: org.id },
+      actor: { userId: "me", canUseOthersCredentialConnections: true },
+    });
+
+    expect(assignable).toBe(true);
+  });
+
+  test("your OWN personal connection never needs the permission", async () => {
+    const assignable = await isMcpServerAssignableToTarget({
+      mcpServer: { ownerId: "me", teamId: null, scope: "personal" },
+      target: { ...orgTarget, scope: "personal" },
+      actor: { userId: "me", canUseOthersCredentialConnections: false },
+    });
+
+    expect(assignable).toBe(true);
+  });
+
+  test("org- and team-scoped servers are unaffected — they are shared resources, not someone's credentials", async () => {
+    const orgScoped = await isMcpServerAssignableToTarget({
+      mcpServer: { ownerId: "colleague", teamId: null, scope: "org" },
+      target: orgTarget,
+      actor: { userId: "me", canUseOthersCredentialConnections: false },
+    });
+
+    expect(orgScoped).toBe(true);
+  });
+
+  test("system paths that pass no actor keep the pre-permission behavior", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const colleague = await makeUser();
+    await makeMember(colleague.id, org.id);
+
+    const assignable = await isMcpServerAssignableToTarget({
+      mcpServer: { ...otherUsersConnection, ownerId: colleague.id },
+      target: { ...orgTarget, organizationId: org.id },
+    });
+
+    expect(assignable).toBe(true);
+  });
+
+  test("the picker filter drops what the write path would reject", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const org = await makeOrganization();
+    const colleague = await makeUser();
+    const me = await makeUser();
+    // Both are org members, so org membership is not what separates them here.
+    await makeMember(colleague.id, org.id);
+    await makeMember(me.id, org.id);
+
+    const mine = { ownerId: me.id, teamId: null, scope: "personal" as const };
+    const theirs = { ...otherUsersConnection, ownerId: colleague.id };
+
+    const visible = await filterMcpServersAssignableToTarget({
+      mcpServers: [mine, theirs],
+      target: { ...orgTarget, organizationId: org.id, authorId: me.id },
+      actor: { userId: me.id, canUseOthersCredentialConnections: false },
+    });
+
+    expect(visible).toEqual([mine]);
+  });
+
+  test("validateAssignment reports the block as forbidden, not a scope validation error", async ({
+    makeAgent,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const me = await makeUser();
+    const colleague = await makeUser();
+    await makeMember(me.id, org.id, { role: "member" });
+    await makeMember(colleague.id, org.id, { role: "member" });
+
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: me.id,
+      scope: "org",
+      teams: [],
+    });
+    const tool = await makeTool({});
+    const theirs = await makeMcpServer({
+      scope: "personal",
+      ownerId: colleague.id,
+    });
+
+    const result = await validateAssignment({
+      agentId: agent.id,
+      toolId: tool.id,
+      mcpServerId: theirs.id,
+      actor: { userId: me.id, canUseOthersCredentialConnections: false },
+    });
+
+    // The generic scope message would mislead here — the owner IS an org
+    // member; the caller is blocked purely for lacking `credentialConnection:use`.
+    expect(result).toMatchObject({
+      code: "forbidden",
+      error: { type: "permission_denied" },
+    });
+    expect(result?.error.message).toContain("permission");
+  });
+});
+
 describe("isMcpServerAssignableToTarget", () => {
   test("org-scoped server is assignable to org-scoped target", async () => {
     const assignable = await isMcpServerAssignableToTarget({

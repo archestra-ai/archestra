@@ -23,7 +23,7 @@ import type {
 } from "@/types";
 
 export type ToolAssignmentError = {
-  code: "not_found" | "validation_error";
+  code: "not_found" | "validation_error" | "forbidden";
   error: { message: string; type: string };
 };
 
@@ -64,6 +64,22 @@ interface AgentToolAssignmentRequest {
    * one version, not one per tool.
    */
   deferVersionFork?: boolean;
+  /** Who is performing this assignment. See {@link AssignmentActor}. */
+  actor?: AssignmentActor;
+}
+
+/**
+ * The human performing an assignment, used to gate binding OTHER users'
+ * personal MCP connections (`credentialConnection:use`).
+ *
+ * Omitted on system paths that act on nobody's behalf in particular — agent
+ * import, app capability resolution, internal re-validation — which keep the
+ * pre-permission behavior. Surfaces where a person picks a server (the agent
+ * and app tool routes, and their MCP-tool equivalents) pass it.
+ */
+export interface AssignmentActor {
+  userId: string | null;
+  canUseOthersCredentialConnections: boolean;
 }
 
 export async function assignToolToAgent(
@@ -77,6 +93,7 @@ export async function assignToolToAgent(
     credentialResolutionMode,
     mcpServerId: params.mcpServerId,
     preFetchedData: params.preFetchedData,
+    actor: params.actor,
   });
 
   if (validationError) {
@@ -172,6 +189,7 @@ export async function validateAssignment(
       mcpServerId,
       tool,
       preFetchedServer,
+      actor: params.actor,
     });
     if (validationError) {
       return validationError;
@@ -278,6 +296,7 @@ export async function assignToolToApp(params: {
   toolId: string;
   mcpServerId?: string | null;
   credentialResolutionMode?: CredentialResolutionMode;
+  actor?: AssignmentActor;
 }): Promise<ToolAssignmentError | "duplicate" | "updated" | null> {
   const credentialResolutionMode = normalizeCredentialResolutionMode(params);
 
@@ -369,6 +388,7 @@ export async function assignToolToApp(params: {
       mcpServerId: params.mcpServerId,
       tool,
       preFetchedServer: mcpServer,
+      actor: params.actor,
     });
     if (validationError) {
       return validationError;
@@ -461,8 +481,10 @@ async function validateAssignedMcpServer(params: {
     PrefetchedMcpServer,
     "id" | "ownerId" | "catalogId" | "teamId" | "scope"
   > | null;
+  actor?: AssignmentActor;
 }): Promise<ToolAssignmentError | null> {
-  const { getOwnerContext, mcpServerId, tool, preFetchedServer } = params;
+  const { getOwnerContext, mcpServerId, tool, preFetchedServer, actor } =
+    params;
 
   const mcpServer =
     preFetchedServer !== undefined
@@ -490,9 +512,24 @@ async function validateAssignedMcpServer(params: {
     };
   }
 
+  // Report the credential gate as a permission failure, not a validation one —
+  // the generic scope message ("owner must be a member of a team…") would
+  // mislead a caller who is blocked purely for lacking `credentialConnection:use`.
+  if (blocksOthersCredentialConnection({ mcpServer, actor })) {
+    return {
+      code: "forbidden",
+      error: {
+        message:
+          "You do not have permission to act through other users' connections.",
+        type: "permission_denied",
+      },
+    };
+  }
+
   const isAllowed = await isMcpServerAssignableToTarget({
     mcpServer,
     target: await getOwnerContext(),
+    actor,
   });
 
   if (!isAllowed) {
@@ -552,6 +589,29 @@ async function isOrgAdmin(
   return membership?.role === "admin";
 }
 
+/**
+ * Someone else's personal MCP connection carries THEIR credentials, so binding
+ * it to an agent or app means acting as them. That needs
+ * `credentialConnection:use`; your own connection never does.
+ *
+ * Returns true (no gate) when there is no actor — see {@link AssignmentActor}.
+ */
+function blocksOthersCredentialConnection(params: {
+  mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">;
+  actor?: AssignmentActor;
+}): boolean {
+  const { mcpServer, actor } = params;
+  if (!actor || actor.canUseOthersCredentialConnections) {
+    return false;
+  }
+  // Only personal connections carry an individual's credentials; team- and
+  // org-scoped installs are shared resources governed by their own rules.
+  if (mcpServer.scope !== "personal" || !mcpServer.ownerId) {
+    return false;
+  }
+  return mcpServer.ownerId !== actor.userId;
+}
+
 /** @public — exported for testability */
 export async function isMcpServerAssignableToTarget(params: {
   mcpServer: Pick<PrefetchedMcpServer, "ownerId" | "teamId" | "scope">;
@@ -561,8 +621,13 @@ export async function isMcpServerAssignableToTarget(params: {
     authorId: string | null;
     teamIds: string[];
   };
+  actor?: AssignmentActor;
 }): Promise<boolean> {
-  const { mcpServer, target } = params;
+  const { mcpServer, target, actor } = params;
+
+  if (blocksOthersCredentialConnection({ mcpServer, actor })) {
+    return false;
+  }
 
   if (mcpServer.scope === "org") {
     return true;
@@ -615,8 +680,15 @@ export async function filterMcpServersAssignableToTarget<
     authorId: string | null;
     teamIds: string[];
   };
+  actor?: AssignmentActor;
 }): Promise<TMcpServer[]> {
-  const { mcpServers, target } = params;
+  const { target, actor } = params;
+  // Drop other people's personal connections up front when the caller lacks
+  // `credentialConnection:use`, so the picker never offers a server the write
+  // path would reject.
+  const mcpServers = params.mcpServers.filter(
+    (mcpServer) => !blocksOthersCredentialConnection({ mcpServer, actor }),
+  );
   if (mcpServers.length === 0) {
     return [];
   }

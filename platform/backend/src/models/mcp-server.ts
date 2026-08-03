@@ -186,6 +186,25 @@ class McpServerModel {
   }
 
   /**
+   * IDs of every personal install in the deployment, for callers holding
+   * `credentialConnection:use` — the permission to see and assign OTHER users'
+   * personal connections. Own connections already arrive via the personal
+   * junction, so this only ever widens the set.
+   */
+  private static async getAllPersonalMcpServerIds(): Promise<string[]> {
+    const rows = await db
+      .select({ id: schema.mcpServersTable.id })
+      .from(schema.mcpServersTable)
+      .where(
+        and(
+          eq(schema.mcpServersTable.scope, "personal"),
+          notDeleted(schema.mcpServersTable),
+        ),
+      );
+    return rows.map((r) => r.id);
+  }
+
+  /**
    * Get IDs of org-scoped MCP servers visible to every member of the
    * organization.
    */
@@ -305,6 +324,14 @@ class McpServerModel {
     isMcpServerAdmin?: boolean,
     organizationId?: string,
     environmentId?: string | null,
+    /**
+     * Caller holds `credentialConnection:use`, so other users' personal
+     * connections join their visible set (visible ⇔ assignable). Separate from
+     * `isMcpServerAdmin`: acting through a colleague's credentials is a
+     * different privilege from managing installs, and a role can be granted it
+     * without gaining the full admin bypass.
+     */
+    canUseOthersCredentialConnections?: boolean,
   ): Promise<McpServer[]> {
     // Single query with LEFT JOINs for all related data including assigned users,
     // eliminating the consecutive DB query for user details.
@@ -365,14 +392,20 @@ class McpServerModel {
       // 1. Team membership (servers assigned to user's teams)
       // 2. Personal access (user's own servers)
       // 3. Org-scoped servers (visible to all org members)
+      // 4. Every other user's personal servers, when the caller holds
+      //    `credentialConnection:use`
       const [
         teamAccessibleMcpServerIds,
         personalMcpServerIds,
         orgScopedMcpServerIds,
+        othersPersonalMcpServerIds,
       ] = await Promise.all([
         McpServerModel.getUserAccessibleMcpServerIdsByTeam(userId),
         McpServerUserModel.getUserPersonalMcpServerIds(userId),
         McpServerModel.getOrgScopedMcpServerIds(),
+        canUseOthersCredentialConnections
+          ? McpServerModel.getAllPersonalMcpServerIds()
+          : Promise.resolve([]),
       ]);
 
       // Combine all lists
@@ -381,6 +414,7 @@ class McpServerModel {
           ...teamAccessibleMcpServerIds,
           ...personalMcpServerIds,
           ...orgScopedMcpServerIds,
+          ...othersPersonalMcpServerIds,
         ]),
       ];
 

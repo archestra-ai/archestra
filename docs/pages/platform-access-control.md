@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-08-01
+lastUpdated: 2026-08-03
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -34,9 +34,9 @@ The admin role has **all permissions** on every resource.
 
 ### Platform Admin
 
-Runs the platform — everything an admin can do, except reading other users' logs, reading the audit log, and impersonating users
+Runs the platform — everything an admin can do, except reading other users' logs, reading the audit log, impersonating users, and acting through other users' MCP connections
 
-Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, and `member:impersonate` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, and impersonation stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
+Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, `member:impersonate`, and `credentialConnection:use` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, impersonation, and acting through other users' MCP connections stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
 
 ### Editor
 
@@ -180,6 +180,7 @@ The following table lists all available permissions that can be assigned to cust
 | `chatAgentPicker:enable` | Show agent picker in chat |
 | `chatExpandToolCalls:enable` | Allow expanding tool call details in chat |
 | `chatProviderSettings:enable` | Show model and API key selectors in chat |
+| `credentialConnection:use` | See other users' personal MCP connections and assign them to agents and apps, which then act through their credentials |
 | `environment:read` | View and list deployment environments |
 | `environment:create` | Create deployment environments |
 | `environment:update` | Modify deployment environments, including the org default environment |

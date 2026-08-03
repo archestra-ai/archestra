@@ -1266,16 +1266,32 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
+      // Pinning an app tool to someone else's personal connection runs the app
+      // through their credentials — gated by `credentialConnection:use`.
+      const canUseOthersCreds = await userHasPermission(
+        user.id,
+        organizationId,
+        "credentialConnection",
+        "use",
+      );
       const result = await assignToolToApp({
         appId,
         organizationId,
         toolId,
         mcpServerId: body?.mcpServerId,
         credentialResolutionMode: body?.credentialResolutionMode,
+        actor: {
+          userId: user.id,
+          canUseOthersCredentialConnections: canUseOthersCreds,
+        },
       });
       if (isAssignmentError(result)) {
         throw new ApiError(
-          result.code === "not_found" ? 404 : 400,
+          result.code === "not_found"
+            ? 404
+            : result.code === "forbidden"
+              ? 403
+              : 400,
           result.error.message,
         );
       }

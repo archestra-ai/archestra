@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
+import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -14,7 +15,10 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
-import { assignToolToAgent } from "@/services/agent-tool-assignment";
+import {
+  type AssignmentActor,
+  assignToolToAgent,
+} from "@/services/agent-tool-assignment";
 import { isUniqueConstraintError } from "@/utils/db";
 import type { ArchestraContext } from "./types";
 
@@ -85,9 +89,34 @@ type ArchestraToolDefinitionInput<
 
 export const EmptyToolArgsSchema = z.strictObject({});
 
+/**
+ * Build the {@link AssignmentActor} for an MCP-tool caller, so pinning another
+ * user's personal MCP connection is gated by `credentialConnection:use` the
+ * same way it is on the REST routes. Returns undefined when the call has no
+ * user/org context (nothing to check against).
+ */
+export async function resolveAssignmentActor(
+  context: ArchestraContext,
+): Promise<AssignmentActor | undefined> {
+  const { userId, organizationId } = context;
+  if (!userId || !organizationId) {
+    return undefined;
+  }
+  return {
+    userId,
+    canUseOthersCredentialConnections: await userHasPermission(
+      userId,
+      organizationId,
+      "credentialConnection",
+      "use",
+    ),
+  };
+}
+
 export async function assignToolAssignments(
   agentId: string,
   assignments: ToolAssignmentInput[],
+  actor?: AssignmentActor,
 ): Promise<ToolAssignmentResult[]> {
   const results: ToolAssignmentResult[] = [];
   const preFetchedData = await buildAgentToolAssignmentPrefetch({
@@ -103,6 +132,7 @@ export async function assignToolAssignments(
         resolveAtCallTime: assignment.resolveAtCallTime,
         mcpServerId: assignment.mcpServerId,
         preFetchedData,
+        actor,
       });
 
       if (result === null || result === "updated") {

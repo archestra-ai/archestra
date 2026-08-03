@@ -9,6 +9,7 @@ import {
   getAgentTypePermissionChecker,
   requireAgentModifyPermission,
 } from "@/auth/agent-type-permissions";
+import { userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -78,7 +79,7 @@ const BulkAgentAssignmentResultSchema = z
     toolId: UuidIdSchema.describe("The tool ID."),
     error: z.string().optional().describe("Validation or assignment error."),
     errorCode: z
-      .enum(["not_found", "validation_error"])
+      .enum(["not_found", "validation_error", "forbidden"])
       .optional()
       .describe("Structured assignment error code."),
     errorType: z
@@ -94,7 +95,7 @@ const BulkMcpGatewayAssignmentResultSchema = z
     toolId: UuidIdSchema.describe("The tool ID."),
     error: z.string().optional().describe("Validation or assignment error."),
     errorCode: z
-      .enum(["not_found", "validation_error"])
+      .enum(["not_found", "validation_error", "forbidden"])
       .optional()
       .describe("Structured assignment error code."),
     errorType: z
@@ -251,14 +252,23 @@ async function handleBulkAssignTool(params: {
         assignments.map((assignment) => getBulkAssignmentTargetId(assignment)),
       ),
     ];
-    const [targetAgents, checker, callerEnvironmentId] = await Promise.all([
-      AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
-      getAgentTypePermissionChecker({
-        userId,
-        organizationId,
-      }),
-      AgentModel.findEnvironmentId(contextAgent.id),
-    ]);
+    const [targetAgents, checker, callerEnvironmentId, canUseOthersCreds] =
+      await Promise.all([
+        AgentModel.findByIdsForPermissionCheck(uniqueTargetIds),
+        getAgentTypePermissionChecker({
+          userId,
+          organizationId,
+        }),
+        AgentModel.findEnvironmentId(contextAgent.id),
+        // Pinning another user's personal connection acts through their
+        // credentials — gated by `credentialConnection:use`.
+        userHasPermission(
+          userId,
+          organizationId,
+          "credentialConnection",
+          "use",
+        ),
+      ]);
     // Environment isolation: writing an assignment is a configuration change,
     // so the TARGET must be in the calling agent's environment — otherwise an
     // agent in one environment reconfigures another. The tool end is
@@ -300,6 +310,10 @@ async function handleBulkAssignTool(params: {
           toolId: assignment.toolId,
           resolveAtCallTime: assignment.resolveAtCallTime,
           mcpServerId: assignment.mcpServerId ?? undefined,
+          actor: {
+            userId,
+            canUseOthersCredentialConnections: canUseOthersCreds,
+          },
           // One version for the whole batch, forked below.
           deferVersionFork: true,
         });

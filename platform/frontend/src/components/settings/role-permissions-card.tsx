@@ -68,6 +68,7 @@ const actionLabels: Record<Action, string> = {
   "read-all": "Read All Chats",
   "share-org": "Share Org-Wide",
   impersonate: "Impersonate",
+  use: "Use",
 };
 
 export function RolePermissionsCard() {

@@ -118,14 +118,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(deleted);
       }
 
-      const { success: isMcpServerAdmin } = await hasPermission(
-        { mcpServerInstallation: ["admin"] },
-        headers,
-      );
+      const [{ success: isMcpServerAdmin }, { success: canUseOthersCreds }] =
+        await Promise.all([
+          hasPermission({ mcpServerInstallation: ["admin"] }, headers),
+          hasPermission({ credentialConnection: ["use"] }, headers),
+        ]);
       let allServers = await McpServerModel.findAll(
         user.id,
         isMcpServerAdmin,
         organizationId,
+        undefined,
+        canUseOthersCreds,
       );
 
       // serverType:"app" backings are managed on the Apps surface, not listed as
@@ -146,9 +149,17 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds: assignmentTeamIds ?? [],
         };
 
+        // Thread the caller as assignment actor so the picker never offers a
+        // connection the write path would reject — matters for callers whose
+        // visibility exceeds their `use` grant (`mcpServerInstallation:admin`
+        // without `credentialConnection:use`).
         allServers = await filterMcpServersAssignableToTarget({
           mcpServers: allServers,
           target,
+          actor: {
+            userId: user.id,
+            canUseOthersCredentialConnections: canUseOthersCreds,
+          },
         });
       }
 

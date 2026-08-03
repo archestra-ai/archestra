@@ -19,6 +19,7 @@ import {
   requireMcpCatalogModifyPermission,
   withCatalogTeamFkErrorMapped,
 } from "@/auth/mcp-catalog-permissions";
+import { userHasPermission } from "@/auth/utils";
 import config from "@/config";
 import {
   generateDeploymentYamlTemplate,
@@ -735,6 +736,35 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         writeMembershipTeamIds,
         userId: request.user.id,
       });
+
+      // Pinning the connection agents authenticate as means every call-time
+      // resolution runs as that connection's owner. Pointing it at someone
+      // else's personal connection therefore needs `credentialConnection:use`,
+      // the same gate the agent and app tool-assignment routes apply.
+      if (restBody.dynamicConnectionMcpServerId) {
+        const pinned = await McpServerModel.findByIdInOrg(
+          restBody.dynamicConnectionMcpServerId,
+          request.organizationId,
+        );
+        const isOthersPersonalConnection =
+          pinned?.scope === "personal" &&
+          !!pinned.ownerId &&
+          pinned.ownerId !== request.user.id;
+        if (
+          isOthersPersonalConnection &&
+          !(await userHasPermission(
+            request.user.id,
+            request.organizationId,
+            "credentialConnection",
+            "use",
+          ))
+        ) {
+          throw new ApiError(
+            403,
+            "You do not have permission to act through other users' connections.",
+          );
+        }
+      }
 
       // Re-authorize and re-sync teams only when scope, team assignments, or
       // their access levels actually change. A content-only edit that echoes

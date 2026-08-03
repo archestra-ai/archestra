@@ -105,6 +105,67 @@ describe("McpServerModel", () => {
     });
   });
 
+  describe("findAll credentialConnection:use visibility", () => {
+    test("a non-admin does not see another user's personal connection without the permission", async ({
+      makeMcpServer,
+      makeUser,
+    }) => {
+      const me = await makeUser();
+      const colleague = await makeUser();
+      const theirs = await makeMcpServer({
+        scope: "personal",
+        ownerId: colleague.id,
+      });
+      await McpServerUserModel.assignUserToMcpServer(theirs.id, colleague.id);
+
+      const visible = await McpServerModel.findAll(me.id, false);
+
+      expect(visible.find((s) => s.id === theirs.id)).toBeUndefined();
+    });
+
+    test("credentialConnection:use reveals it — without granting the full install-admin bypass", async ({
+      makeMcpServer,
+      makeUser,
+    }) => {
+      const me = await makeUser();
+      const colleague = await makeUser();
+      const theirs = await makeMcpServer({
+        scope: "personal",
+        ownerId: colleague.id,
+      });
+      await McpServerUserModel.assignUserToMcpServer(theirs.id, colleague.id);
+      // A team install the caller has no membership in stays hidden, proving
+      // the new flag widens visibility ONLY for personal connections.
+      const foreignTeamServer = await makeMcpServer({ scope: "team" });
+
+      const visible = await McpServerModel.findAll(
+        me.id,
+        false,
+        undefined,
+        undefined,
+        true,
+      );
+
+      expect(visible.find((s) => s.id === theirs.id)).toBeDefined();
+      expect(
+        visible.find((s) => s.id === foreignTeamServer.id),
+      ).toBeUndefined();
+    });
+
+    test("own personal connections are visible without the permission", async ({
+      makeMcpServer,
+      makeUser,
+    }) => {
+      const me = await makeUser();
+      const mine = await makeMcpServer({ scope: "personal", ownerId: me.id });
+      await McpServerUserModel.assignUserToMcpServer(mine.id, me.id);
+
+      const visible = await McpServerModel.findAll(me.id, false);
+
+      expect(visible.find((s) => s.id === mine.id)).toBeDefined();
+    });
+  });
+
   describe("findAll", () => {
     test("returns servers with user details from combined query", async ({
       makeMcpServer,

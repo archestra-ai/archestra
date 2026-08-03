@@ -22841,7 +22841,7 @@ export type AzureEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -22951,7 +22951,7 @@ export type AzureEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -33889,7 +33889,7 @@ export type GeminiEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -33999,7 +33999,7 @@ export type GeminiEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -37998,7 +37998,7 @@ export type GetInteractionsResponses = {
                 data: Array<{
                     object: 'embedding';
                     embedding: Array<number>;
-                    index?: number;
+                    index: number;
                     truncatedFrom?: number;
                 }>;
                 model: string;
@@ -38109,7 +38109,7 @@ export type GetInteractionsResponses = {
                 data: Array<{
                     object: 'embedding';
                     embedding: Array<number>;
-                    index?: number;
+                    index: number;
                     truncatedFrom?: number;
                 }>;
                 model: string;
@@ -38220,7 +38220,7 @@ export type GetInteractionsResponses = {
                 data: Array<{
                     object: 'embedding';
                     embedding: Array<number>;
-                    index?: number;
+                    index: number;
                     truncatedFrom?: number;
                 }>;
                 model: string;
@@ -44225,7 +44225,7 @@ export type GetInteractionResponses = {
             data: Array<{
                 object: 'embedding';
                 embedding: Array<number>;
-                index?: number;
+                index: number;
                 truncatedFrom?: number;
             }>;
             model: string;
@@ -44336,7 +44336,7 @@ export type GetInteractionResponses = {
             data: Array<{
                 object: 'embedding';
                 embedding: Array<number>;
-                index?: number;
+                index: number;
                 truncatedFrom?: number;
             }>;
             model: string;
@@ -44447,7 +44447,7 @@ export type GetInteractionResponses = {
             data: Array<{
                 object: 'embedding';
                 embedding: Array<number>;
-                index?: number;
+                index: number;
                 truncatedFrom?: number;
             }>;
             model: string;
@@ -62844,7 +62844,7 @@ export type MistralEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -62954,7 +62954,7 @@ export type MistralEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -63766,7 +63766,7 @@ export type ModelRouterEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -63876,7 +63876,7 @@ export type ModelRouterEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -64583,7 +64583,7 @@ export type OllamaEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -64693,7 +64693,7 @@ export type OllamaEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -65407,7 +65407,7 @@ export type OpenAiEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -65517,7 +65517,7 @@ export type OpenAiEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -67186,7 +67186,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate' | 'use'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -67210,7 +67210,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate' | 'use'>;
         };
     };
     path?: never;
@@ -67294,7 +67294,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate' | 'use'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -67480,7 +67480,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate' | 'use'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -67495,7 +67495,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate' | 'use'>;
         };
     };
     path: {
@@ -67584,7 +67584,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate' | 'use'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -81056,7 +81056,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'team-admin' | 'admin' | 'cancel' | 'enable' | 'query' | 'execute' | 'deploy-to-restricted' | 'manage' | 'manage-deleted' | 'read-all' | 'share-org' | 'impersonate' | 'use'>;
     };
 };
 
@@ -82126,7 +82126,7 @@ export type VllmEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -82236,7 +82236,7 @@ export type VllmEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -82712,7 +82712,7 @@ export type ZhipuaiEmbeddingsWithDefaultAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {
@@ -82822,7 +82822,7 @@ export type ZhipuaiEmbeddingsWithAgentResponses = {
         data: Array<{
             object: 'embedding';
             embedding: Array<number>;
-            index?: number;
+            index: number;
         }>;
         model: string;
         usage: {

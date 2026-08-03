@@ -162,12 +162,16 @@ export function ManageUsersContent({
     useMcpServers();
   const { data: catalogItems } = useInternalMcpCatalog({});
 
-  const allServers = allServersUnfiltered.filter(
-    (s) => s.catalogId === catalogId,
-  );
-
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
+
+  // Seeing OTHER people's personal connections — and who owns them — takes
+  // `credentialConnection:use` or the install-admin bypass, mirroring the
+  // backend list filter. The endpoint already withholds them, so dropping them
+  // here is defense in depth (and keeps a stale cache from leaking them).
+  const { data: canUseOthersConnections } = useHasPermissions({
+    credentialConnection: ["use"],
+  });
 
   // Get user's teams and permissions for re-authentication checks
   const { data: userTeams } = useMyTeams();
@@ -181,6 +185,14 @@ export function ManageUsersContent({
     mcpServerInstallation: ["admin"],
   });
 
+  const allServers = allServersUnfiltered.filter(
+    (s) =>
+      s.catalogId === catalogId &&
+      (canUseOthersConnections ||
+        hasMcpServerAdminPermission ||
+        !isOthersPersonalConnection(s, currentUserId)),
+  );
+
   const [serviceAccountDialogOpen, setServiceAccountDialogOpen] =
     useState(false);
 
@@ -191,12 +203,6 @@ export function ManageUsersContent({
   const catalogItem = catalogItems?.find((item) => item.id === catalogId);
   const isOAuthServer = !!catalogItem?.oauthConfig;
 
-  const getServerScope = (
-    mcpServer: (typeof allServers)[number],
-  ): "personal" | "team" | "org" => {
-    return mcpServer.scope ?? (mcpServer.teamId ? "team" : "personal");
-  };
-
   const canReauthenticate = useCanReauthenticate();
 
   // Get tooltip message for disabled re-authenticate button
@@ -204,7 +210,7 @@ export function ManageUsersContent({
     if (!hasMcpServerCreatePermission) {
       return "You need MCP server create permission to re-authenticate";
     }
-    const scope = getServerScope(mcpServer);
+    const scope = resolveServerScope(mcpServer);
     if (scope === "org") {
       return "Only an organization admin can re-authenticate an organization connection";
     }
@@ -222,7 +228,7 @@ export function ManageUsersContent({
   // Personal: owner OR mcpServer:update. Team: team admin role OR (mcpServer:update AND membership).
   // Org: mcpServerInstallation:admin.
   const canRevoke = (mcpServer: (typeof allServers)[number]) => {
-    const scope = getServerScope(mcpServer);
+    const scope = resolveServerScope(mcpServer);
     if (scope === "org") return !!hasMcpServerAdminPermission;
     if (scope === "personal") {
       return (
@@ -247,7 +253,7 @@ export function ManageUsersContent({
 
   // Get tooltip message for disabled revoke button
   const getRevokeTooltip = (mcpServer: (typeof allServers)[number]): string => {
-    const scope = getServerScope(mcpServer);
+    const scope = resolveServerScope(mcpServer);
     if (scope === "org") {
       return "Only an organization admin can revoke an organization connection";
     }
@@ -326,16 +332,18 @@ export function ManageUsersContent({
   type Server = (typeof allServers)[number];
   function splitByScope(servers: Server[]) {
     const teamServers = servers.filter(
-      (s) => getServerScope(s) === "team" && !!s.teamId,
+      (s) => resolveServerScope(s) === "team" && !!s.teamId,
     );
-    const orgServers = servers.filter((s) => getServerScope(s) === "org");
+    const orgServers = servers.filter((s) => resolveServerScope(s) === "org");
     const teamsWithConnection = new Set(teamServers.map((s) => s.teamId));
     const myPersonalServer =
       servers.find(
-        (s) => getServerScope(s) === "personal" && s.ownerId === currentUserId,
+        (s) =>
+          resolveServerScope(s) === "personal" && s.ownerId === currentUserId,
       ) ?? null;
     const otherPersonalServers = servers.filter(
-      (s) => getServerScope(s) === "personal" && s.ownerId !== currentUserId,
+      (s) =>
+        resolveServerScope(s) === "personal" && s.ownerId !== currentUserId,
     );
     const availableTeamsForShared =
       userTeams?.filter((t) => !teamsWithConnection.has(t.id)) ?? [];
@@ -351,7 +359,7 @@ export function ManageUsersContent({
   }
 
   const getCredentialOwnerName = (mcpServer: Server): string => {
-    const scope = getServerScope(mcpServer);
+    const scope = resolveServerScope(mcpServer);
     if (scope === "org") return "Organization";
     if (scope === "team") return mcpServer.teamDetails?.name || "Team";
     return mcpServer.ownerEmail || "Deleted user";
@@ -791,6 +799,26 @@ function ConnectionsTable({
   );
 }
 
+// `scope` is nullable on rows created before it existed; a team id implies a
+// team connection, and everything else without a scope is personal.
+function resolveServerScope(server: ServerEntry): "personal" | "team" | "org" {
+  return server.scope ?? (server.teamId ? "team" : "personal");
+}
+
+// A personal connection somebody else authenticated with. Seeing one takes
+// `credentialConnection:use` or the install-admin bypass; binding one to an
+// agent or app — acting through their credentials — takes `use` specifically.
+// Your own connection needs neither.
+function isOthersPersonalConnection(
+  server: ServerEntry,
+  currentUserId: string | undefined,
+): boolean {
+  return (
+    resolveServerScope(server) === "personal" &&
+    server.ownerId !== currentUserId
+  );
+}
+
 // Multi-tenant catalogs alias one pod across N caller rows. Each row's
 // K8sDeployment instance tracks its own state independently, so the row that
 // didn't observe the pod first stays "pending" while the other goes "failed".
@@ -846,11 +874,28 @@ function AgentConnectionsSection({
   const updateMutation = useUpdateInternalMcpCatalogItem();
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
+  // Pinning someone else's personal connection makes every call authenticate as
+  // them, which is exactly what `credentialConnection:use` governs.
+  const { data: canUseOthersConnections } = useHasPermissions({
+    credentialConnection: ["use"],
+  });
+  // Visibility mirrors the backend list filter: `use` or the install-admin
+  // bypass. Install-admins without `use` still see rows — the per-item
+  // `disabled` below is what keeps them from pinning one.
+  const { data: hasMcpServerAdminPermission } = useHasPermissions({
+    mcpServerInstallation: ["admin"],
+  });
+  const canSeeOthersConnections =
+    canUseOthersConnections || hasMcpServerAdminPermission;
   const pinnedId = item.dynamicConnectionMcpServerId ?? null;
   const pinnedConnection = pinnedId
     ? connections.find((connection) => connection.id === pinnedId)
     : undefined;
-  const pinRemoved = Boolean(pinnedId) && !pinnedConnection;
+  // A pin we cannot resolve is either genuinely gone or simply not ours to see —
+  // never claim it was removed when the caller just lacks visibility.
+  const pinUnresolved = Boolean(pinnedId) && !pinnedConnection;
+  const pinHidden = pinUnresolved && !canSeeOthersConnections;
+  const pinRemoved = pinUnresolved && !pinHidden;
 
   const [pendingPersonalDefault, setPendingPersonalDefault] = useState<{
     id: string;
@@ -874,10 +919,14 @@ function AgentConnectionsSection({
       return;
     }
     const connection = connections.find((c) => c.id === value);
-    const scope = connection
-      ? (connection.scope ?? (connection.teamId ? "team" : "personal"))
-      : undefined;
-    if (connection && scope === "personal") {
+    if (
+      connection &&
+      isOthersPersonalConnection(connection, currentUserId) &&
+      !canUseOthersConnections
+    ) {
+      return;
+    }
+    if (connection && resolveServerScope(connection) === "personal") {
       setPendingPersonalDefault({
         id: value,
         mcpName: connection.catalogName ?? item.name,
@@ -890,7 +939,7 @@ function AgentConnectionsSection({
   };
 
   const connectionLabel = (connection: (typeof connections)[number]) => {
-    const scope = connection.scope ?? (connection.teamId ? "team" : "personal");
+    const scope = resolveServerScope(connection);
     if (scope === "org") return "Organization account";
     if (scope === "team")
       return `Team — ${connection.teamDetails?.name ?? "Unknown team"}`;
@@ -909,6 +958,11 @@ function AgentConnectionsSection({
                 uses their own connection if they have one, otherwise a team or
                 organization connection they can access. Applies in Auto mode
                 and to Custom tool assignments that resolve at call time.
+              </>
+            ) : pinHidden ? (
+              <>
+                Agents always connect as one account, and you do not have
+                permission to see which one.
               </>
             ) : pinRemoved ? (
               <>
@@ -940,12 +994,16 @@ function AgentConnectionsSection({
           </p>
         </div>
         <Select
-          value={pinRemoved ? "" : (pinnedId ?? ON_BEHALF_OF_VALUE)}
+          value={pinUnresolved ? "" : (pinnedId ?? ON_BEHALF_OF_VALUE)}
           disabled={!canModify || updateMutation.isPending}
           onValueChange={handleSelectDefault}
         >
           <SelectTrigger className="w-[320px]">
-            <SelectValue placeholder="Connection removed" />
+            <SelectValue
+              placeholder={
+                pinHidden ? "Hidden connection" : "Connection removed"
+              }
+            />
           </SelectTrigger>
           <SelectContent>
             <SelectItem
@@ -963,18 +1021,31 @@ function AgentConnectionsSection({
                 <div className="px-2 pt-2 pb-1 text-xs text-muted-foreground">
                   Always use one account
                 </div>
-                {connections.map((connection) => (
-                  <SelectItem
-                    key={connection.id}
-                    value={connection.id}
-                    className="cursor-pointer"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <KeyRound className="h-3.5! w-3.5! text-muted-foreground" />
-                      <span>{connectionLabel(connection)}</span>
-                    </div>
-                  </SelectItem>
-                ))}
+                {connections.map((connection) => {
+                  const needsUsePermission =
+                    isOthersPersonalConnection(connection, currentUserId) &&
+                    !canUseOthersConnections;
+                  return (
+                    <SelectItem
+                      key={connection.id}
+                      value={connection.id}
+                      className={
+                        needsUsePermission ? undefined : "cursor-pointer"
+                      }
+                      disabled={needsUsePermission}
+                      description={
+                        needsUsePermission
+                          ? "You do not have permission to act through other users' connections"
+                          : undefined
+                      }
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <KeyRound className="h-3.5! w-3.5! text-muted-foreground" />
+                        <span>{connectionLabel(connection)}</span>
+                      </div>
+                    </SelectItem>
+                  );
+                })}
               </>
             )}
           </SelectContent>

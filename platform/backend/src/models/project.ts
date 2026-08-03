@@ -303,10 +303,11 @@ class ProjectModel {
         );
       }
 
+      // Read-only: the rows themselves cascade with the project. This is only
+      // here to capture the storage pointers, which are unreachable once the
+      // rows are gone. Deleting them row-by-row here would duplicate the
+      // cascade at one round-trip per file.
       const files = await FileModel.listAllByProject(id, tx);
-      for (const file of files) {
-        await FileModel.deleteById(file.id, tx);
-      }
       purgeBytes = () => deleteRowsBytesBestEffort(files);
 
       const count = await hardDeleteRows(

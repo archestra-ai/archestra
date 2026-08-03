@@ -668,10 +668,9 @@ class AppModel {
       ) {
         return false;
       }
+      // Read-only: the rows cascade with the app. This only captures the
+      // storage pointers, which are unreachable once the rows are gone.
       const files = await FileModel.listAllByApp(id, tx);
-      for (const file of files) {
-        await FileModel.deleteById(file.id, tx);
-      }
       purgeBytes = () => deleteRowsBytesBestEffort(files);
       await tx
         .delete(schema.appVersionsTable)

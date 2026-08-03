@@ -1,5 +1,6 @@
 import {
   type ArchestraToolShortName,
+  BUILT_IN_AGENT_IDS,
   DEFAULT_LLM_PROXY_NAME,
   getCreationDefaultArchestraToolShortNames,
   type PaginationQuery,
@@ -1662,6 +1663,29 @@ class AgentModel {
       .where(notDeleted(schema.agentsTable));
 
     return agents.map((agent) => agent.id);
+  }
+
+  /**
+   * Whether the org's advisor built-in agent has a model configured.
+   *
+   * One column, one row — `getBuiltInAgent` hydrates teams, labels, tools and
+   * knowledge bases, which is far more than a `tools/list` needs to decide
+   * whether to advertise the advisor at all.
+   */
+  static async hasConfiguredAdvisor(organizationId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ modelId: schema.agentsTable.modelId })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.ADVISOR}`,
+          notDeleted(schema.agentsTable),
+        ),
+      )
+      .limit(1);
+
+    return row?.modelId != null;
   }
 
   /**

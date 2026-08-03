@@ -13,6 +13,7 @@ import {
   OAUTH_TOKEN_ID_PREFIX,
   parseFullToolName,
   platformExecutedAs,
+  TOOL_ADVISOR_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
@@ -447,7 +448,7 @@ export async function createAgentServer(params: {
       advertiseUiResourceTools: surface.advertiseUiTools,
       tools: candidateTools.filter((t) => permittedNames.has(t.name)),
     });
-    const permittedTools = surface.keepChatOnlyTools
+    const chatOnlyFiltered = surface.keepChatOnlyTools
       ? exposureFiltered
       : exposureFiltered.filter((tool) => {
           // A null short name is not an Archestra built-in at all, so it is
@@ -458,6 +459,27 @@ export async function createAgentServer(params: {
             !CHAT_ONLY_ARCHESTRA_SHORT_NAMES.has(shortName)
           );
         });
+
+    // The advisor refuses every call until an administrator configures its
+    // model, and its description is long enough to be worth real tokens in
+    // every request. Advertising a tool that can only fail costs the model a
+    // wasted call and every other org the prompt weight, so withhold it until
+    // it can actually answer. The handler still refuses on its own — a client
+    // may hold a tool list from before the model was cleared.
+    const advertisesAdvisor = chatOnlyFiltered.some(
+      (tool) =>
+        archestraMcpBranding.getToolShortName(tool.name) ===
+        TOOL_ADVISOR_SHORT_NAME,
+    );
+    const permittedTools =
+      advertisesAdvisor &&
+      !(await AgentModel.hasConfiguredAdvisor(agent.organizationId))
+        ? chatOnlyFiltered.filter(
+            (tool) =>
+              archestraMcpBranding.getToolShortName(tool.name) !==
+              TOOL_ADVISOR_SHORT_NAME,
+          )
+        : chatOnlyFiltered;
 
     // Resolve the backing catalogs of the advertised tools once: their names
     // feed both the search_tools description and the app launch-tool title and

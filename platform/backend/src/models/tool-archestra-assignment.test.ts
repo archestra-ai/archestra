@@ -12,7 +12,7 @@ import {
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -45,6 +45,18 @@ describe("Archestra Tools Dynamic Assignment", () => {
       )
       .where(eq(schema.agentToolsTable.agentId, agentId));
     return rows.map((row) => row.name);
+  }
+
+  /** Tool ids for the given short names, from the Archestra catalog. */
+  async function defaultToolIds(): Promise<string[]> {
+    const names = DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.map((n) =>
+      getArchestraToolFullName(n),
+    );
+    const rows = await db
+      .select({ id: schema.toolsTable.id })
+      .from(schema.toolsTable)
+      .where(inArray(schema.toolsTable.name, names as string[]));
+    return rows.map((r) => r.id);
   }
 
   test("agents get Archestra tools after explicit assignment", async ({
@@ -505,11 +517,8 @@ describe("Archestra Tools Dynamic Assignment", () => {
 
     // The state a two-stage rollout leaves behind: the tool row exists but the
     // agent never received it, and no later seed reports it as newly created.
-    const defaultToolIds = await ToolModel.getToolIdsForOrgByShortNames(
-      org.id,
-      [...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES],
-    );
-    for (const toolId of defaultToolIds) {
+    const seededIds = await defaultToolIds();
+    for (const toolId of seededIds) {
       await db
         .delete(schema.agentToolsTable)
         .where(eq(schema.agentToolsTable.toolId, toolId));
@@ -552,9 +561,7 @@ describe("Archestra Tools Dynamic Assignment", () => {
   }) => {
     const org = await makeOrganization();
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
-    const toolIds = await ToolModel.getToolIdsForOrgByShortNames(org.id, [
-      ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-    ]);
+    const toolIds = await defaultToolIds();
     expect(toolIds.length).toBeGreaterThan(1);
 
     const complete = await makeAgent({ organizationId: org.id, name: "Full" });

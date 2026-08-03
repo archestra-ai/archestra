@@ -32,6 +32,7 @@ import {
   AgentModel,
   AppModel,
   McpServerModel,
+  ModelModel,
   SkillModel,
   TeamTokenModel,
   ToolModel,
@@ -1392,7 +1393,6 @@ describe("MCP Gateway (stateless mode)", () => {
       .result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames.sort()).toEqual(
       [
-        TOOL_ADVISOR_FULL_NAME,
         TOOL_LIST_SKILLS_FULL_NAME,
         TOOL_LOAD_SKILL_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
@@ -1400,6 +1400,63 @@ describe("MCP Gateway (stateless mode)", () => {
       ].sort(),
     );
     expect(toolNames).not.toContain(TOOL_TODO_WRITE_FULL_NAME);
+    // No advisor model is configured above, so the advisor is withheld — see
+    // the pair of advisor tests below.
+    expect(toolNames).not.toContain(TOOL_ADVISOR_FULL_NAME);
+  });
+
+  test("withholds the advisor from tools/list until an advisor model is configured", async ({
+    makeAgent,
+    makeOrganization,
+    seedAndAssignArchestraTools,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await seedAndAssignArchestraTools(agent.id);
+    // An advisor agent with no model: the tool would refuse every call.
+    const advisor = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      builtInAgentConfig: { name: "advisor-agent" },
+    });
+
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+
+    const listTools = async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 2 },
+      });
+      expect(response.statusCode).toBe(200);
+      return response
+        .json()
+        .result.tools.map((tool: { name: string }) => tool.name);
+    };
+
+    expect(await listTools()).not.toContain(TOOL_ADVISOR_FULL_NAME);
+
+    const model = await ModelModel.create({
+      externalId: "anthropic/advisor-model",
+      provider: "anthropic",
+      modelId: "advisor-model",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await AgentModel.update(advisor.id, { modelId: model.id });
+
+    expect(await listTools()).toContain(TOOL_ADVISOR_FULL_NAME);
   });
 
   test("keeps sandbox runtime tools top-level in tools/list when the sandbox runtime is enabled", async ({
@@ -1465,7 +1522,6 @@ describe("MCP Gateway (stateless mode)", () => {
       // whole app surface is reached through search_tools/run_tool.
       expect(toolNames.sort()).toEqual(
         [
-          TOOL_ADVISOR_FULL_NAME,
           TOOL_DELETE_FILE_FULL_NAME,
           TOOL_DOWNLOAD_FILE_FULL_NAME,
           TOOL_EDIT_FILE_FULL_NAME,

@@ -305,7 +305,7 @@ export default function LlmSettingsPage() {
                   Set the model on the{" "}
                   <Link
                     href="/agents?scope=built_in"
-                    className="text-primary hover:underline"
+                    className="text-primary underline underline-offset-4"
                   >
                     Advisor agent
                   </Link>

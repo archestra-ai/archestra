@@ -109,10 +109,12 @@ function VersionHistory({
   const activeVersion = selectedVersion ?? headVersion;
   const isHead = activeVersion !== null && activeVersion === headVersion;
 
-  const { data: detail, isPending: isDetailLoading } = useSkillVersion(
-    open ? skillId : null,
-    activeVersion,
-  );
+  const {
+    data: detail,
+    isPending: isDetailLoading,
+    isError: isDetailUnavailable,
+    refetch: refetchDetail,
+  } = useSkillVersion(open ? skillId : null, activeVersion);
   // Versions are contiguous from 1, so the diff baseline is simply the previous
   // number; version 1 has none and renders as an all-new document.
   const hasPredecessor = activeVersion !== null && activeVersion > 1;
@@ -269,6 +271,8 @@ function VersionHistory({
               isBaselineUnavailable={isBaselineUnavailable}
               onRetryBaseline={() => predecessorQuery.refetch()}
               isLoading={isDetailLoading}
+              isUnavailable={isDetailUnavailable}
+              onRetry={() => refetchDetail()}
               comparedFiles={comparedFiles}
               activeFilePath={activeFilePath}
               onSelectFile={setActiveFilePath}
@@ -357,20 +361,10 @@ function VersionTimeline({
   // that is never true of a live skill.
   if (isError && versions.length === 0) {
     return (
-      <div className="space-y-2 px-3 py-3">
-        <p className="text-sm text-muted-foreground">
-          Could not load this skill&apos;s versions.
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={onRetry}
-        >
-          Retry
-        </Button>
-      </div>
+      <LoadFailure
+        message="Could not load this skill's versions."
+        onRetry={onRetry}
+      />
     );
   }
   if (versions.length === 0) {
@@ -438,6 +432,30 @@ function VersionTimeline({
 }
 
 /**
+ * A read that failed, offered with a way to try again. Kept distinct from the
+ * "no such version" copy on purpose: a transport failure supports no claim
+ * about what the history holds, so it must not be phrased as one.
+ */
+function LoadFailure({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    // Sized to content rather than to the column: this renders both in the
+    // 12rem timeline and across the full width of the preview pane.
+    <div className="flex flex-col items-start gap-2 px-3 py-3">
+      <p className="text-sm text-muted-foreground">{message}</p>
+      <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+        Retry
+      </Button>
+    </div>
+  );
+}
+
+/**
  * One row of the version's file tree. `path` is null for SKILL.md, which is not
  * a resource file but reads as one here.
  */
@@ -461,6 +479,8 @@ function VersionPreview({
   isBaselineUnavailable,
   onRetryBaseline,
   isLoading,
+  isUnavailable,
+  onRetry,
   comparedFiles,
   activeFilePath,
   onSelectFile,
@@ -474,6 +494,9 @@ function VersionPreview({
   isBaselineUnavailable: boolean;
   onRetryBaseline: () => void;
   isLoading: boolean;
+  /** This version itself could not be read — distinct from it not existing. */
+  isUnavailable: boolean;
+  onRetry: () => void;
   comparedFiles: ComparedVersionFile[];
   activeFilePath: string | null;
   onSelectFile: (path: string | null) => void;
@@ -487,8 +510,17 @@ function VersionPreview({
       <p className="p-6 text-sm text-muted-foreground">Loading version...</p>
     );
   }
+  // A 404 is the only reading that supports "no longer available": the version
+  // was pruned. A failed read supports nothing about the history at all, so it
+  // gets the same treatment as a failed baseline — say what happened, and offer
+  // a way back rather than leaving the dialog with no route out.
   if (!detail) {
-    return (
+    return isUnavailable ? (
+      <LoadFailure
+        message={`Version ${version} could not be loaded.`}
+        onRetry={onRetry}
+      />
+    ) : (
       <p className="p-6 text-sm text-muted-foreground">
         This version is no longer available.
       </p>

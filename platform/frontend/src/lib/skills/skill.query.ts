@@ -160,7 +160,10 @@ export function useSkillVersions(id: string | null) {
         path: { id: id as string },
         query: { limit: SKILL_VERSIONS_PAGE_SIZE, offset: pageParam },
       });
-      throwOnApiError(error);
+      // The history dialog renders its own failure state with a retry, and a
+      // query retries before it settles — toasting here would stack one per
+      // attempt behind a dialog that already says the same thing.
+      throwOnApiError(error, { toastOnError: false });
       return data;
     },
     getNextPageParam: (lastPage, allPages) =>
@@ -190,7 +193,10 @@ export function useSkillVersion(id: string | null, version: number | null) {
       const { data, error } = await getSkillVersion({
         path: { id: id as string, version: version as number },
       });
-      throwOnApiError(error, { allowNotFound: true });
+      // Silent for the same reason as the list: every caller of this hook
+      // renders the failure itself, either as the preview's retry or as the
+      // baseline banner, and both distinguish a failed read from a pruned one.
+      throwOnApiError(error, { allowNotFound: true, toastOnError: false });
       return data ?? null;
     },
   });

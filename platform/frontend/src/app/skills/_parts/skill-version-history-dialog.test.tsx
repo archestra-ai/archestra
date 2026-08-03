@@ -514,6 +514,23 @@ describe("SkillVersionHistoryDialog", () => {
     expect(refetch).toHaveBeenCalled();
   });
 
+  it("offers a retry instead of calling a version gone when it fails to load", async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    // The selected version itself failed — not its baseline. A pruned version
+    // answers 404 and settles as `null`; this one was never read at all.
+    mockVersionDetails({ 3: "error" }, refetch);
+    renderDialog();
+
+    expect(screen.queryByText(/no longer available/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Version 3 could not be loaded/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
   it("says the manifest row holds the body alone, not the editor's SKILL.md", async () => {
     const user = userEvent.setup();
     renderDialog();

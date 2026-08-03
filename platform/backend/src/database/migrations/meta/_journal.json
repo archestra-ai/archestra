@@ -2766,6 +2766,13 @@
       "when": 1785756813025,
       "tag": "0394_purge_orphaned_personal_mcp_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 395,
+      "version": "7",
+      "when": 1785783742289,
+      "tag": "0395_purge_ex_member_personal_mcp_credentials",
+      "breakpoints": true
     }
   ]
 }

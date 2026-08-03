@@ -291,10 +291,10 @@ describe("ConversationSearchPalette", () => {
     });
 
     // Press 'd' once to enter pending deletion state
-    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+    fireEvent.keyDown(window, { key: "d", code: "KeyD", altKey: true });
 
     // Press 'd' again to confirm deletion
-    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+    fireEvent.keyDown(window, { key: "d", code: "KeyD", altKey: true });
 
     // Should have called deleteMutation.mutate with the conversation ID
     expect(mockDeleteMutate).toHaveBeenCalledWith(
@@ -317,10 +317,10 @@ describe("ConversationSearchPalette", () => {
     });
 
     // Press 'd' once to enter pending deletion state
-    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+    fireEvent.keyDown(window, { key: "d", code: "KeyD", altKey: true });
 
     // Press 'd' again to confirm deletion
-    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+    fireEvent.keyDown(window, { key: "d", code: "KeyD", altKey: true });
 
     // Should have called deleteMutation.mutate
     expect(mockDeleteMutate).toHaveBeenCalledWith(
@@ -341,8 +341,8 @@ describe("ConversationSearchPalette", () => {
     });
 
     // Press 'd' twice to delete
-    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
-    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+    fireEvent.keyDown(window, { key: "d", code: "KeyD", altKey: true });
+    fireEvent.keyDown(window, { key: "d", code: "KeyD", altKey: true });
 
     expect(mockDeleteMutate).toHaveBeenCalledWith(
       "conv-1",
@@ -360,17 +360,43 @@ describe("ConversationSearchPalette", () => {
     });
 
     // Press 'd' once → pending state
-    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+    fireEvent.keyDown(window, { key: "d", code: "KeyD", altKey: true });
     // Press 'd' again → confirms deletion
-    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+    fireEvent.keyDown(window, { key: "d", code: "KeyD", altKey: true });
 
     expect(mockDeleteMutate).toHaveBeenCalledTimes(1);
 
     // Rapid third 'd' press in the same frame — should be ignored
     // because the ref guard prevents double-deletion before React re-renders
-    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+    fireEvent.keyDown(window, { key: "d", code: "KeyD", altKey: true });
 
     expect(mockDeleteMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores bare character keys — shortcuts require the Alt modifier", () => {
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    act(() => {
+      capturedOnValueChange?.("conv-conv-1");
+    });
+
+    // Bare "d" (no modifier) must not trigger deletion (WCAG 2.1.4)
+    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+    fireEvent.keyDown(window, { key: "d", code: "KeyD" });
+
+    expect(mockDeleteMutate).not.toHaveBeenCalled();
+  });
+
+  it("announces the delete confirmation prompt via a live region", () => {
+    render(<ConversationSearchPalette {...defaultProps} />);
+
+    act(() => {
+      capturedOnValueChange?.("conv-conv-1");
+    });
+
+    fireEvent.keyDown(window, { key: "d", code: "KeyD", altKey: true });
+
+    expect(screen.getByRole("status")).toHaveTextContent("again to confirm");
   });
 
   it("navigates to conversation when selecting it", () => {

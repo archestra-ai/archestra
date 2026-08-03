@@ -2,7 +2,7 @@
 
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
-import type * as React from "react";
+import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -68,17 +68,42 @@ function DialogContent({
   children,
   showCloseButton = true,
   overlayClassName,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
   /** Override the backdrop, e.g. a heavier dim for immersive surfaces. */
   overlayClassName?: string;
 }) {
+  // Almost every dialog in the app is controlled via `open`/`onOpenChange`
+  // without a `DialogTrigger`, so Radix has no trigger ref to restore focus to
+  // on close (it suppresses its own fallback), and keyboard focus drops to
+  // <body>. Capture the opener ourselves and restore it (WCAG 2.4.3).
+  const returnFocusRef = React.useRef<HTMLElement | null>(null);
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        onOpenAutoFocus={(event) => {
+          // Fires before Radix moves focus into the dialog, so the active
+          // element is still the control that opened it.
+          returnFocusRef.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
+          onOpenAutoFocus?.(event);
+        }}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event);
+          if (event.defaultPrevented) return;
+          event.preventDefault();
+          const opener = returnFocusRef.current;
+          if (opener?.isConnected) {
+            opener.focus();
+          }
+        }}
         className={cn(
           // Please keep this class when updating dialog component
           // `overflow-hidden` is load-bearing: it makes DialogContent the

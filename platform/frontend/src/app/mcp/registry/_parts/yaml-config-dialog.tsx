@@ -1,8 +1,10 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { ChevronDown } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { AlertCircle, ChevronDown } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -20,6 +22,8 @@ import {
 } from "@/components/ui/dialog";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
+  CATALOG_STALE_WRITE_CODE,
+  getCatalogMutationErrorCode,
   useGetDeploymentYamlPreview,
   useUpdateInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -58,8 +62,11 @@ export function YamlConfigContent({
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
   // Fetch the deployment YAML preview (generates default if not stored)
-  const { data: yamlPreview, isLoading: isLoadingYaml } =
-    useGetDeploymentYamlPreview(item?.id ?? null);
+  const {
+    data: yamlPreview,
+    isLoading: isLoadingYaml,
+    refetch: refetchYamlPreview,
+  } = useGetDeploymentYamlPreview(item?.id ?? null);
 
   // Local state for form fields
   const [deploymentYaml, setDeploymentYaml] = useState("");
@@ -68,24 +75,86 @@ export function YamlConfigContent({
 
   // Optimistic-concurrency token for the item as it stood when this editor
   // was filled. A whole deployment document is the widest single-field
-  // overwrite in the registry, so it is worth guarding.
+  // overwrite in the registry, so it is worth guarding. Taken from the preview
+  // response rather than from `item`, so the token and the document on screen
+  // always describe the same read.
   const [expectedRevision, setExpectedRevision] = useState<number | null>(null);
 
-  // Initialize form state when YAML preview is loaded
+  // Check if YAML has been modified
+  const hasYamlChanged = deploymentYaml !== originalYaml;
+
+  // Which preview snapshot this editor was filled from. TanStack refetches on
+  // window focus, so the query re-delivers while the user is mid-edit; filling
+  // again would discard what they typed and re-arm the token against a document
+  // they never saw. So a new snapshot is ignored while the editor is dirty:
+  // their text and its token both stand, and the save conflicts if the item
+  // moved on. A clean editor still adopts it — otherwise this tab would sit on
+  // a stale manifest for as long as it stays open. Same guard, same reasons, as
+  // the one in `mcp-catalog-form.tsx`.
+  const hydratedFromRef = useRef<typeof yamlPreview>(undefined);
+
+  // Initialize form state when YAML preview is loaded.
+  //
+  // A new snapshot is the only trigger. `hasYamlChanged` is read but must NOT
+  // be a dependency: it flips to false the moment a save or a reset
+  // re-baselines, which would re-run this against the pre-write snapshot still
+  // in cache and undo the re-baseline it just performed.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: hasYamlChanged is read, not a trigger — see above
   useEffect(() => {
-    if (yamlPreview?.yaml) {
-      setDeploymentYaml(yamlPreview.yaml);
-      setOriginalYaml(yamlPreview.yaml);
-      setExpectedRevision(item?.revision ?? null);
-    }
-  }, [yamlPreview, item?.revision]);
+    if (!yamlPreview?.yaml) return;
+    if (hydratedFromRef.current === yamlPreview) return;
+    if (hasYamlChanged) return;
+    hydratedFromRef.current = yamlPreview;
+    setDeploymentYaml(yamlPreview.yaml);
+    setOriginalYaml(yamlPreview.yaml);
+    setExpectedRevision(yamlPreview.revision);
+  }, [yamlPreview]);
 
   const handleClose = useCallback(() => {
     onClose();
   }, [onClose]);
 
-  // Check if YAML has been modified
-  const hasYamlChanged = deploymentYaml !== originalYaml;
+  // A stale-write 409 leaves the editor holding a document the server has moved
+  // past, and the guard above deliberately keeps it there so the user's text
+  // survives the failure. That makes the conflict unrecoverable in place —
+  // every retry carries the same spent token — so recovery has to be something
+  // they choose: this drops their text and re-baselines on the current server
+  // document, token included.
+  //
+  // Reset to default is guarded by the same token and fails the same way, so it
+  // raises the same banner instead of a toast of its own — the reload is the
+  // only thing that resolves either one.
+  const [hasResetConflict, setHasResetConflict] = useState(false);
+  const isStaleWriteConflict =
+    hasResetConflict ||
+    getCatalogMutationErrorCode(updateMutation.error) ===
+      CATALOG_STALE_WRITE_CODE;
+
+  const handleResetConflict = useCallback(() => {
+    setHasResetConflict(true);
+  }, []);
+
+  const handleReloadFromServer = useCallback(async () => {
+    const result = await refetchYamlPreview();
+    // Status, not `data`: a failed refetch still RESOLVES, keeping the last
+    // successful value in `data`. Testing `data` alone would pass on failure
+    // and re-baseline onto the very snapshot the conflict is about — throwing
+    // away the user's text (nothing else holds it) and clearing the banner, so
+    // the next save would 409 again with no visible cause.
+    if (result.isError || !result.data?.yaml) {
+      toast.error(
+        "Couldn't load the latest deployment YAML. Your changes are still here — try again.",
+      );
+      return;
+    }
+    const data = result.data;
+    hydratedFromRef.current = data;
+    setDeploymentYaml(data.yaml);
+    setOriginalYaml(data.yaml);
+    setExpectedRevision(data.revision);
+    setHasResetConflict(false);
+    updateMutation.reset();
+  }, [refetchYamlPreview, updateMutation.reset]);
 
   const handleSave = async () => {
     if (!item) return;
@@ -96,20 +165,49 @@ export function YamlConfigContent({
       return;
     }
 
-    await updateMutation.mutateAsync({
-      id: item.id,
-      data: {
-        deploymentSpecYaml: deploymentYaml || undefined,
-        ...(expectedRevision === null ? {} : { expectedRevision }),
-      },
-    });
+    try {
+      const updated = await updateMutation.mutateAsync({
+        id: item.id,
+        data: {
+          deploymentSpecYaml: deploymentYaml || undefined,
+          ...(expectedRevision === null ? {} : { expectedRevision }),
+        },
+      });
 
-    handleClose();
+      // Re-baseline on the write that just landed: the saved document becomes
+      // the new "unchanged" state and the response's token replaces the one
+      // captured at fill time. The invalidated preview delivers both eventually,
+      // but not necessarily before the user saves again from the call site that
+      // stays mounted (the registry detail page) — that second save would carry
+      // a spent token and conflict with this user's own edit.
+      setOriginalYaml(deploymentYaml);
+      setExpectedRevision(updated.revision);
+
+      handleClose();
+    } catch {
+      // The mutation's onError surfaces the failure; keep the editor open on
+      // the user's text so they can retry or copy it out. Swallowed because
+      // DialogForm invokes this unawaited, where a rejection would escape as
+      // an unhandled promise rejection.
+    }
   };
 
   const handleYamlChange = useCallback((value: string) => {
     setDeploymentYaml(value);
   }, []);
+
+  // The reset is already persisted, so this is a re-baseline, not an edit: the
+  // returned document becomes the new "unchanged" state (disabling Save), and
+  // its token replaces the one captured at fill time.
+  const handleYamlReset = useCallback(
+    ({ yaml, revision }: { yaml: string; revision: number }) => {
+      setDeploymentYaml(yaml);
+      setOriginalYaml(yaml);
+      setExpectedRevision(revision);
+      setHasResetConflict(false);
+    },
+    [],
+  );
 
   // Only show for local servers that have been saved
   const isLocalServer = item?.serverType === "local";
@@ -212,6 +310,31 @@ export function YamlConfigContent({
         </Collapsible>
       </div>
 
+      {isStaleWriteConflict && (
+        <Alert
+          variant="default"
+          className="mt-3 shrink-0 border-yellow-500/50 bg-yellow-50 dark:bg-yellow-950/20"
+        >
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                Someone else changed this deployment while you were editing.
+                Your changes are still here, but saving would overwrite theirs.
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleReloadFromServer}
+              >
+                Discard mine & reload
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <DialogForm
         onSubmit={handleSave}
         className="flex min-h-0 flex-1 flex-col"
@@ -227,6 +350,9 @@ export function YamlConfigContent({
               catalogId={item.id}
               value={deploymentYaml}
               onChange={handleYamlChange}
+              onReset={handleYamlReset}
+              expectedRevision={expectedRevision}
+              onResetConflict={handleResetConflict}
               isSaved={true}
             />
           ))}

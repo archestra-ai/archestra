@@ -3828,7 +3828,14 @@ export const validateDeploymentYaml = <ThrowOnError extends boolean = false>(opt
  *
  * `mcpRegistry:update`: Modify MCP registry entries
  */
-export const resetDeploymentYaml = <ThrowOnError extends boolean = false>(options: Options<ResetDeploymentYamlData, ThrowOnError>) => (options.client ?? client).post<ResetDeploymentYamlResponses, ResetDeploymentYamlErrors, ThrowOnError>({ url: '/api/internal_mcp_catalog/{id}/reset-deployment-yaml', ...options });
+export const resetDeploymentYaml = <ThrowOnError extends boolean = false>(options: Options<ResetDeploymentYamlData, ThrowOnError>) => (options.client ?? client).post<ResetDeploymentYamlResponses, ResetDeploymentYamlErrors, ThrowOnError>({
+    url: '/api/internal_mcp_catalog/{id}/reset-deployment-yaml',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * List Kubernetes docker-registry secrets available for imagePullSecrets

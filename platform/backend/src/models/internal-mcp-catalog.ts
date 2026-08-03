@@ -668,12 +668,24 @@ class InternalMcpCatalogModel {
    * awaits `deploymentNamesAdopted` first — because post-adopt a still-NULL
    * row provably has no live deployment, so the frozen value cannot orphan
    * anything.
+   *
+   * Returns the row's revision after the rename, so a caller that follows up
+   * with a compare-and-set `update` can pass a token describing the row it
+   * just wrote instead of the one the client last read.
    */
   static async renameCascade(params: {
     id: string;
     newName: string;
     flagReinstallRequired: boolean;
     freezeDeploymentNames: boolean;
+    /**
+     * Compare-and-set for the cascade itself. The route's own gate runs well
+     * before this — a name-conflict query and the startup adopt await sit in
+     * between — so re-checking under the write is what keeps a save that went
+     * stale in that window from renaming installs, tool slugs, and limits on
+     * its way to being rejected. Omitting it keeps last-writer-wins.
+     */
+    expectedRevision?: number;
     /**
      * Suppress this cascade's own version fork. Pass true only when the
      * caller follows the rename with another fork-hook write in the same
@@ -684,11 +696,16 @@ class InternalMcpCatalogModel {
      * write — the same tolerance `forkIfChangedBestEffort` documents.
      */
     skipVersionFork?: boolean;
-  }): Promise<void> {
-    const { id, newName, flagReinstallRequired, freezeDeploymentNames } =
-      params;
+  }): Promise<number> {
+    const {
+      id,
+      newName,
+      flagReinstallRequired,
+      freezeDeploymentNames,
+      expectedRevision,
+    } = params;
 
-    await withDbTransaction(async (tx) => {
+    const newRevision = await withDbTransaction(async (tx) => {
       const [catalog] = await tx
         .select()
         .from(schema.internalMcpCatalogTable)
@@ -738,13 +755,41 @@ class InternalMcpCatalogModel {
       // Bumped with the name so a rename is visible to the concurrency token:
       // an editor holding a pre-rename revision must be told to re-read rather
       // than allowed to clobber the new name.
-      await tx
+      // With `expectedRevision` the bump doubles as the compare-and-set: no row
+      // matches when someone else has written since, and the throw below rolls
+      // the whole cascade back rather than leaving installs half-renamed.
+      const [renamed] = await tx
         .update(schema.internalMcpCatalogTable)
         .set({
           name: newName,
           revision: sql`${schema.internalMcpCatalogTable.revision} + 1`,
         })
-        .where(eq(schema.internalMcpCatalogTable.id, id));
+        .where(
+          expectedRevision === undefined
+            ? eq(schema.internalMcpCatalogTable.id, id)
+            : and(
+                eq(schema.internalMcpCatalogTable.id, id),
+                eq(schema.internalMcpCatalogTable.revision, expectedRevision),
+              ),
+        )
+        .returning({ revision: schema.internalMcpCatalogTable.revision });
+      if (!renamed) {
+        // The row exists (selected above, in this transaction), so a miss here
+        // is always a stale token — no 404 disambiguation needed. Re-read for
+        // the message rather than reusing the opening SELECT: under READ
+        // COMMITTED the UPDATE re-evaluates its predicate against a version
+        // that SELECT may not have seen.
+        const [current] = await tx
+          .select({ revision: schema.internalMcpCatalogTable.revision })
+          .from(schema.internalMcpCatalogTable)
+          .where(eq(schema.internalMcpCatalogTable.id, id));
+        throw new ApiError(
+          409,
+          `Catalog item is at revision ${current?.revision ?? catalog.revision}, not ${expectedRevision}; re-read and retry.`,
+          // Kept in sync with the frontend constant of the same value.
+          "catalog_stale_write",
+        );
+      }
 
       // (3) Install names. Pairs map each install's ACTUAL old name (which
       // may predate the rename-consistency era) to its new derived name.
@@ -798,6 +843,8 @@ class InternalMcpCatalogModel {
 
       // (5) Name-string-keyed limits.
       await LimitModel.renameNameKeys({ serverNamePairs, toolNamePairs }, tx);
+
+      return renamed.revision;
     });
 
     // The name is part of the canonical config, so a rename forks a version.
@@ -805,6 +852,8 @@ class InternalMcpCatalogModel {
     if (!params.skipVersionFork) {
       await InternalMcpCatalogVersionModel.forkIfChangedBestEffort(id);
     }
+
+    return newRevision;
   }
 
   /**
@@ -988,6 +1037,22 @@ class InternalMcpCatalogModel {
         .select()
         .from(schema.internalMcpCatalogTable)
         .where(eq(schema.internalMcpCatalogTable.id, id));
+
+      // A no-op still honours the token: there is no write to refuse here, but
+      // the row this returns must be the one the caller certified, or a stale
+      // editor would read 200 and believe it was current.
+      if (
+        dbItem &&
+        opts?.expectedRevision !== undefined &&
+        dbItem.revision !== opts.expectedRevision
+      ) {
+        throw new ApiError(
+          409,
+          `Catalog item is at revision ${dbItem.revision}, not ${opts.expectedRevision}; re-read and retry.`,
+          // Kept in sync with the frontend constant of the same value.
+          "catalog_stale_write",
+        );
+      }
     }
 
     if (!dbItem) {

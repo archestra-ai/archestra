@@ -140,6 +140,66 @@ describe("PUT /api/internal_mcp_catalog/:id — optimistic concurrency", () => {
     expect(row.name).toBe("cas-rename");
   });
 
+  test("a rename carrying a current expectedRevision applies the whole payload", async () => {
+    const catalog = await createCatalog({
+      name: "cas-rename-current",
+      serverType: "local",
+      localConfig: { command: "node" },
+    });
+    const current = await revisionOf(catalog.id);
+
+    // The rename cascade writes the row itself and bumps the token, so the
+    // model's compare-and-set further down must be re-armed with what the
+    // cascade left — otherwise the request conflicts with its OWN rename and
+    // lands half-applied: renamed, but with the rest of the payload dropped.
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        name: "cas-rename-current-renamed",
+        description: "edited",
+        expectedRevision: current,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [row] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+    expect(row.name).toBe("cas-rename-current-renamed");
+    expect(row.description).toBe("edited");
+  });
+
+  test("the cascade re-checks the token under its own write and rolls back", async () => {
+    const catalog = await createCatalog({
+      name: "cas-cascade-gate",
+      serverType: "local",
+      localConfig: { command: "node" },
+    });
+    const stale = await revisionOf(catalog.id);
+    await InternalMcpCatalogModel.update(catalog.id, { description: "theirs" });
+
+    // The route's gate runs well before the cascade — a name-conflict query
+    // and the startup adopt await sit in between — so the cascade carries its
+    // own check. Nothing may be renamed on the way to being rejected.
+    await expect(
+      InternalMcpCatalogModel.renameCascade({
+        id: catalog.id,
+        newName: "cas-cascade-gate-renamed",
+        flagReinstallRequired: false,
+        freezeDeploymentNames: false,
+        expectedRevision: stale,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    const [row] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+    expect(row.name).toBe("cas-cascade-gate");
+  });
+
   test("omitting expectedRevision keeps last-writer-wins", async () => {
     const catalog = await createCatalog({
       name: "cas-optout",
@@ -196,6 +256,115 @@ describe("PUT /api/internal_mcp_catalog/:id — optimistic concurrency", () => {
     // dialog neither bumps updatedAt nor reshuffles the registry listing.
     await InternalMcpCatalogModel.update(catalog.id, {});
     expect(await revisionOf(catalog.id)).toBe(afterSharing);
+  });
+
+  /**
+   * Reset to default sits one button away from the guarded save in the same
+   * dialog, and clears the whole stored manifest before cascading every pod
+   * onto the generated template. Leaving it unguarded would make it a way to
+   * destroy exactly what the save protects.
+   */
+  test("a stale reset-deployment-yaml is refused and leaves the winning document in place", async () => {
+    const catalog = await createCatalog({
+      name: "cas-reset-stale",
+      serverType: "local",
+      localConfig: { command: "node" },
+    });
+    const stale = await revisionOf(catalog.id);
+
+    // Another admin saves a hand-tuned manifest while our editor sits open.
+    await InternalMcpCatalogModel.update(catalog.id, {
+      deploymentSpecYaml: "kind: Deployment # theirs\n",
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${catalog.id}/reset-deployment-yaml`,
+      payload: { expectedRevision: stale },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.internal_code).toBe("catalog_stale_write");
+
+    const [row] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+    expect(row.deploymentSpecYaml).toBe("kind: Deployment # theirs\n");
+  });
+
+  test("a matching reset token clears the document and answers with a usable one", async () => {
+    const catalog = await createCatalog({
+      name: "cas-reset-match",
+      serverType: "local",
+      localConfig: { command: "node" },
+    });
+    await InternalMcpCatalogModel.update(catalog.id, {
+      deploymentSpecYaml: "kind: Deployment # mine\n",
+    });
+    const current = await revisionOf(catalog.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/internal_mcp_catalog/${catalog.id}/reset-deployment-yaml`,
+      payload: { expectedRevision: current },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [row] = await db
+      .select()
+      .from(schema.internalMcpCatalogTable)
+      .where(eq(schema.internalMcpCatalogTable.id, catalog.id));
+    expect(row.deploymentSpecYaml).toBeNull();
+
+    // The editor re-baselines on this response instead of reopening, so the
+    // token it answers with has to be one a following save is allowed to use.
+    const save = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        description: "saved after reset",
+        expectedRevision: response.json().revision,
+      },
+    });
+    expect(save.statusCode).toBe(200);
+  });
+
+  test("a no-op honours the token even though it writes nothing", async () => {
+    const catalog = await createCatalog({
+      name: "cas-noop",
+      serverType: "local",
+      localConfig: { command: "node" },
+    });
+    const stale = await revisionOf(catalog.id);
+
+    await InternalMcpCatalogModel.update(catalog.id, { description: "moved" });
+    const current = await revisionOf(catalog.id);
+    expect(current).toBeGreaterThan(stale);
+
+    // The route gates on the token before reaching here, so this only fires
+    // for a direct caller. Refusing still matters: the row this returns is not
+    // the one the caller certified, and a 200 would tell a stale editor that
+    // its snapshot is current.
+    await expect(
+      InternalMcpCatalogModel.update(
+        catalog.id,
+        {},
+        { expectedRevision: stale },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      internalCode: "catalog_stale_write",
+    });
+
+    // A current token passes through untouched — no write, no bump.
+    const unchanged = await InternalMcpCatalogModel.update(
+      catalog.id,
+      {},
+      { expectedRevision: current },
+    );
+    expect(unchanged?.revision).toBe(current);
+    expect(await revisionOf(catalog.id)).toBe(current);
   });
 
   async function revisionOf(catalogId: string): Promise<number> {

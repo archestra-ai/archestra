@@ -373,15 +373,32 @@ export function useValidateDeploymentYaml() {
 /**
  * Reset deployment YAML to default by clearing the custom YAML from the database.
  * Returns the freshly generated default YAML.
+ *
+ * `expectedRevision` guards the reset the same way the save is guarded: it
+ * clears a whole deployment document and cascades the pods onto the generated
+ * default, so a reset built on a snapshot the row has moved past must be
+ * refused rather than delete the edit that won the race.
  */
 export function useResetDeploymentYaml() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (catalogId: string) => {
-      const response = await resetDeploymentYaml({ path: { id: catalogId } });
-      return response.data;
+    mutationFn: async ({
+      catalogId,
+      expectedRevision,
+    }: {
+      catalogId: string;
+      expectedRevision?: number;
+    }) => {
+      const { data, error } = await resetDeploymentYaml({
+        path: { id: catalogId },
+        body: expectedRevision === undefined ? {} : { expectedRevision },
+      });
+      // The client is configured with `throwOnError: false`, so without this a
+      // failed reset would resolve as success and toast as one.
+      if (error) throw catalogMutationError(error.error);
+      return data;
     },
-    onSuccess: (_data, catalogId) => {
+    onSuccess: (_data, { catalogId }) => {
       // Invalidate the main catalog query to refresh the form data
       queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
       // Invalidate the preview query
@@ -391,6 +408,13 @@ export function useResetDeploymentYaml() {
       toast.success("Deployment YAML reset to default");
     },
     onError: (error) => {
+      if (getCatalogMutationErrorCode(error) === CATALOG_STALE_WRITE_CODE) {
+        // Someone else moved the row. Refresh the cached item so the winning
+        // version is a refetch away, and stay quiet: the editor raises the
+        // conflict banner, which carries the reload that actually resolves it.
+        queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+        return;
+      }
       console.error("Reset deployment YAML error:", error);
       toast.error("Failed to reset deployment YAML");
     },

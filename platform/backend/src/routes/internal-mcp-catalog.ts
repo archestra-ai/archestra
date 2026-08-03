@@ -865,6 +865,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // undefined leaves the existing rows untouched.
       restBody.teams = scopeChanged || teamsChanged ? newTeams : undefined;
 
+      // The token the model's compare-and-set compares against. It starts as
+      // the client's, but tracks the ROW rather than the request: the writes
+      // below are this request's own, so re-arming after each one is what
+      // keeps the save from conflicting with itself. The user-facing staleness
+      // check is the gate above; from here the token only covers the window
+      // between our own writes.
+      let casRevision = expectedRevision;
+
       // ── Rename ─────────────────────────────────────────────────────────
       // A name change never flows into the generic update below: it is
       // gated (409) and applied atomically by renameCascade — a pure DB
@@ -911,7 +919,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           restBody.deploymentSpecYaml !== undefined
             ? restBody.deploymentSpecYaml
             : originalCatalogItemForGate.deploymentSpecYaml;
-        await InternalMcpCatalogModel.renameCascade({
+        const renamedRevision = await InternalMcpCatalogModel.renameCascade({
           id,
           newName: newCatalogName,
           flagReinstallRequired:
@@ -920,11 +928,19 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               effectiveDeploymentSpecYaml?.includes(SERVER_NAME_PLACEHOLDER),
             ),
           freezeDeploymentNames: k8sRuntimeConfigured,
+          // Re-check under the cascade's own write: the gate above ran before
+          // the name-conflict query and the startup adopt await, both of which
+          // can leave a real gap. A miss rolls the whole cascade back.
+          expectedRevision,
           // The generic update() below always runs and forks this PUT's
           // version; forking here too would record an extra intermediate
           // version (new name, old rest-of-config) the user never saved.
           skipVersionFork: true,
         });
+        // The cascade bumped the row itself, so the pre-rename token would
+        // now fail the model's compare-and-set — against this very request.
+        casRevision =
+          expectedRevision === undefined ? undefined : renamedRevision;
 
         // Downstream must see NO name diff: the row is already renamed, and
         // the reinstall gates below would otherwise misread the rename as a
@@ -1266,7 +1282,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       // Update the catalog item
       const catalogItem = await withCatalogTeamFkErrorMapped(() =>
-        InternalMcpCatalogModel.update(id, restBody, { expectedRevision }),
+        InternalMcpCatalogModel.update(id, restBody, {
+          expectedRevision: casRevision,
+        }),
       );
 
       if (!catalogItem) {
@@ -1746,6 +1764,13 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   // Schema for deployment YAML preview response
   const DeploymentYamlPreviewSchema = z.object({
     yaml: z.string(),
+    // The editor's optimistic-concurrency token, carried on the SAME response
+    // as the document it describes. The YAML editor is the one registry
+    // surface whose content comes from a different query than the catalog
+    // item, so taking the token from the item would let the two drift: a
+    // token newer than the document on screen turns the guard into a licence
+    // to overwrite whatever landed in between.
+    revision: z.number().int(),
   });
 
   // Schema for deployment YAML validation response
@@ -1796,6 +1821,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (catalogItem.deploymentSpecYaml) {
         return reply.send({
           yaml: catalogItem.deploymentSpecYaml,
+          revision: catalogItem.revision,
         });
       }
 
@@ -1822,7 +1848,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         imagePullSecrets: imagePullSecretsForYaml,
       });
 
-      return reply.send({ yaml: yamlTemplate });
+      return reply.send({ yaml: yamlTemplate, revision: catalogItem.revision });
     },
   );
 
@@ -1856,11 +1882,25 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
+        // Nullish as a whole so callers that send no body at all keep
+        // last-writer-wins, matching the PUT's optional token. Fastify hands
+        // the handler `null` for an absent body, not `undefined`.
+        body: z
+          .object({
+            // Optimistic concurrency, same contract as the PUT: the `revision`
+            // the client last read. Discarding the stored document is the
+            // widest write in this endpoint family, so a reset that lost a
+            // race has to be refused rather than delete the winner's manifest
+            // and cascade every pod onto the generated default.
+            expectedRevision: z.number().int().positive().optional(),
+          })
+          .nullish(),
         response: constructResponseSchema(DeploymentYamlPreviewSchema),
       },
     },
     async (request, reply) => {
       const { id } = request.params;
+      const expectedRevision = request.body?.expectedRevision;
       const { success: isAdmin } = await hasPermission(
         { mcpServerInstallation: ["admin"] },
         request.headers,
@@ -1882,10 +1922,14 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Clear the custom deployment YAML
-      const updated = await InternalMcpCatalogModel.update(id, {
-        deploymentSpecYaml: null,
-      });
+      // Clear the custom deployment YAML. The token is compared under the
+      // write itself, so a reset that raced another admin's save is refused
+      // with a 409 instead of silently discarding their document.
+      const updated = await InternalMcpCatalogModel.update(
+        id,
+        { deploymentSpecYaml: null },
+        { expectedRevision },
+      );
 
       // Cascade-reinstall installed pods so they pick up the
       // auto-generated manifest. Without this, existing pods would keep
@@ -1919,7 +1963,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         imagePullSecrets: imagePullSecretsForYaml,
       });
 
-      return reply.send({ yaml: yamlTemplate });
+      // The reset itself bumped the token, so answer with the post-write value
+      // — the editor saves again from this response without reopening.
+      return reply.send({
+        yaml: yamlTemplate,
+        revision: updated?.revision ?? catalogItem.revision,
+      });
     },
   );
 

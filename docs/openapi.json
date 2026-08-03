@@ -204896,10 +204896,16 @@
                   "properties": {
                     "yaml": {
                       "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
-                    "yaml"
+                    "yaml",
+                    "revision"
                   ],
                   "additionalProperties": false
                 }
@@ -205447,6 +205453,24 @@
           "MCP Catalog"
         ],
         "description": "Reset the deployment YAML to default by clearing the custom YAML\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpRegistry:update`: Modify MCP registry entries",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "nullable": true,
+                "type": "object",
+                "properties": {
+                  "expectedRevision": {
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  }
+                }
+              }
+            }
+          }
+        },
         "parameters": [
           {
             "schema": {
@@ -205469,10 +205493,16 @@
                   "properties": {
                     "yaml": {
                       "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
-                    "yaml"
+                    "yaml",
+                    "revision"
                   ],
                   "additionalProperties": false
                 }

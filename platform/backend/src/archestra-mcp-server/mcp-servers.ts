@@ -989,6 +989,11 @@ async function handleEditMcpConfig(
 
     const validatedUpdate =
       PartialUpdateInternalMcpCatalogSchema.parse(updateData);
+    // Deliberately no `expectedRevision`, unlike the registry UI's PUT: that
+    // token guards a document a human read minutes ago and may be editing
+    // against a screen that has since moved. This tool reads `existing` and
+    // writes in the same call, so there is no such window — a token here would
+    // only turn benign concurrency into failures the model cannot resolve.
     const updated = await InternalMcpCatalogModel.update(
       existing.id,
       validatedUpdate,

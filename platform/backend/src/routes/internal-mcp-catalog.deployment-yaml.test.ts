@@ -104,6 +104,68 @@ describe("internal MCP catalog deployment YAML routes", () => {
       expect(yaml).toContain("name: mcp-server");
     });
 
+    /**
+     * The YAML editor is the one registry surface whose document comes from a
+     * different query than the catalog item, so it arms its optimistic-
+     * concurrency token from this response rather than from the item. That only
+     * works while `revision` describes the very read that produced `yaml` — a
+     * token newer than the document on screen turns the guard into a licence to
+     * overwrite whatever landed in between. Zod can only check that the field
+     * is an integer, so the relationship is pinned here.
+     */
+    test("carries the token for the read that produced the document", async () => {
+      const catalog = await makeLocalCatalog();
+
+      const first = await app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${catalog.id}/deployment-yaml-preview`,
+      });
+
+      expect(first.statusCode).toBe(200);
+      expect(first.json().revision).toBe(catalog.revision);
+
+      // An unrelated edit moves the row on. The next preview has to answer with
+      // the token for the row it just read, not a remembered one.
+      const edit = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+        payload: { description: "edited elsewhere" },
+      });
+      expect(edit.statusCode).toBe(200);
+
+      const second = await app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${catalog.id}/deployment-yaml-preview`,
+      });
+
+      expect(second.json().revision).toBeGreaterThan(catalog.revision);
+      expect(second.json().revision).toBe(edit.json().revision);
+    });
+
+    test("carries the token on the stored-document branch too", async () => {
+      // A stored `deploymentSpecYaml` returns through its own early `send`,
+      // which is easy to leave behind when the response shape changes.
+      const catalog = await InternalMcpCatalogModel.create(
+        {
+          name: "local-server-stored-yaml",
+          serverType: "local",
+          scope: "org",
+          localConfig: { dockerImage: "registry.example.com/mcp:latest" },
+          deploymentSpecYaml: VALID_DEPLOYMENT_YAML,
+        },
+        { organizationId, authorId: user.id },
+      );
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${catalog.id}/deployment-yaml-preview`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().yaml).toBe(VALID_DEPLOYMENT_YAML);
+      expect(response.json().revision).toBe(catalog.revision);
+    });
+
     test("returns 404 for an unknown catalog id", async () => {
       const response = await app.inject({
         method: "GET",
@@ -199,6 +261,47 @@ describe("internal MCP catalog deployment YAML routes", () => {
       expect(response.json().yaml).toContain("kind: Deployment");
       const reloaded = await InternalMcpCatalogModel.findById(catalog.id);
       expect(reloaded?.deploymentSpecYaml).toBeNull();
+    });
+
+    /**
+     * A reset is itself a write, and the editor re-baselines on this response
+     * instead of reopening. Answering with the token read before the write
+     * would hand it one the row has already moved past, so the user's next save
+     * would be refused for a conflict with nobody.
+     */
+    test("answers with the post-write token, not the one it read", async () => {
+      const catalog = await InternalMcpCatalogModel.create(
+        {
+          name: "local-server-reset-token",
+          serverType: "local",
+          scope: "org",
+          localConfig: { dockerImage: "registry.example.com/mcp:latest" },
+          deploymentSpecYaml: VALID_DEPLOYMENT_YAML,
+        },
+        { organizationId, authorId: user.id },
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/internal_mcp_catalog/${catalog.id}/reset-deployment-yaml`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { revision } = response.json();
+      expect(revision).toBeGreaterThan(catalog.revision);
+
+      // Live, not merely larger: a compare-and-set carrying it is accepted, so
+      // the editor can save again without reopening.
+      const save = await app.inject({
+        method: "PUT",
+        url: `/api/internal_mcp_catalog/${catalog.id}`,
+        payload: {
+          description: "saved after reset",
+          expectedRevision: revision,
+        },
+      });
+
+      expect(save.statusCode).toBe(200);
     });
 
     test("returns 404 for an unknown catalog id", async () => {

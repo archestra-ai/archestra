@@ -52136,6 +52136,7 @@ export type GetDeploymentYamlPreviewResponses = {
      */
     200: {
         yaml: string;
+        revision: number;
     };
 };
 
@@ -52229,7 +52230,9 @@ export type ValidateDeploymentYamlResponses = {
 export type ValidateDeploymentYamlResponse = ValidateDeploymentYamlResponses[keyof ValidateDeploymentYamlResponses];
 
 export type ResetDeploymentYamlData = {
-    body?: never;
+    body: {
+        expectedRevision?: number;
+    } | null;
     path: {
         id: string;
     };
@@ -52308,6 +52311,7 @@ export type ResetDeploymentYamlResponses = {
      */
     200: {
         yaml: string;
+        revision: number;
     };
 };
 

@@ -6,6 +6,8 @@ import { Editor } from "@/components/editor";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
+  CATALOG_STALE_WRITE_CODE,
+  getCatalogMutationErrorCode,
   useResetDeploymentYaml,
   useValidateDeploymentYaml,
 } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -17,6 +19,27 @@ interface K8sYamlEditorProps {
   value: string | undefined;
   /** Callback when YAML changes */
   onChange: (value: string) => void;
+  /**
+   * Callback when "Reset to default" persists. Unlike an edit, the reset has
+   * already been written, so the parent must adopt the whole response — the
+   * fresh document AND the concurrency token that write left behind. Carrying
+   * on with the pre-reset token would make the next save conflict with this
+   * one.
+   */
+  onReset: (result: { yaml: string; revision: number }) => void;
+  /**
+   * Concurrency token the parent's document was hydrated from. Sent with the
+   * reset so clearing the stored manifest is refused when someone else has
+   * saved one in the meantime — otherwise this button would be an unguarded
+   * way to destroy exactly what the guarded Save beside it protects.
+   */
+  expectedRevision?: number | null;
+  /**
+   * Called when the reset is refused as a stale write. The parent owns the
+   * token and the conflict banner (which offers the reload that resolves it),
+   * so the failure has to surface there rather than as a toast here.
+   */
+  onResetConflict?: () => void;
   /** Whether the catalog item has been saved */
   isSaved?: boolean;
 }
@@ -30,6 +53,9 @@ export function K8sYamlEditor({
   catalogId,
   value,
   onChange,
+  onReset,
+  expectedRevision,
+  onResetConflict,
   isSaved = false,
 }: K8sYamlEditorProps) {
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -74,14 +100,25 @@ export function K8sYamlEditor({
 
   const handleResetToDefault = useCallback(() => {
     if (!catalogId) return;
-    resetYaml.mutate(catalogId, {
-      onSuccess: (data) => {
-        if (data?.yaml) {
-          onChange(data.yaml);
-        }
+    resetYaml.mutate(
+      {
+        catalogId,
+        expectedRevision: expectedRevision ?? undefined,
       },
-    });
-  }, [catalogId, resetYaml, onChange]);
+      {
+        onSuccess: (data) => {
+          if (data?.yaml) {
+            onReset({ yaml: data.yaml, revision: data.revision });
+          }
+        },
+        onError: (error) => {
+          if (getCatalogMutationErrorCode(error) === CATALOG_STALE_WRITE_CODE) {
+            onResetConflict?.();
+          }
+        },
+      },
+    );
+  }, [catalogId, expectedRevision, resetYaml, onReset, onResetConflict]);
 
   // Show placeholder when not saved yet
   if (!isSaved) {

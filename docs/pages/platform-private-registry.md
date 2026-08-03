@@ -3,7 +3,7 @@ title: Private MCP Registry
 category: MCP
 order: 2
 description: Managing your organization's MCP servers in a private registry
-lastUpdated: 2026-08-02
+lastUpdated: 2026-08-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -111,6 +111,16 @@ Version history is an API surface today:
 
 - **List versions**: `GET /api/internal_mcp_catalog/:id/versions` — newest first, paginated.
 - **Get one version**: `GET /api/internal_mcp_catalog/:id/versions/:version`.
+
+## Concurrent Edits
+
+Two admins can edit the same entry at once. By default the second save wins — it overwrites the first without warning.
+
+Every entry carries a `revision` that increments on each change. `PUT /api/internal_mcp_catalog/:id` and `POST /api/internal_mcp_catalog/:id/reset-deployment-yaml` both take an optional `expectedRevision` to guard against the overwrite. Send the revision you read, and Archestra refuses the write if the entry has moved on since.
+
+A refused write returns `409` with `internal_code: "catalog_stale_write"`. Re-read the entry and retry with its new revision — retrying with the old one fails again.
+
+Omit `expectedRevision` to keep last-writer-wins. The registry UI sends it for you when you edit an entry, save its deployment YAML, or reset that YAML to the default.
 
 ## Uninstalling and Restoring
 

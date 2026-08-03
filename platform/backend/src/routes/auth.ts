@@ -1388,7 +1388,22 @@ function relayBetterAuthResponse(params: {
 
   reply.status(response.status);
   response.headers.forEach((value: string, key: string) => {
-    if (skipContentLength && key.toLowerCase() === "content-length") {
+    const name = key.toLowerCase();
+    if (skipContentLength && name === "content-length") {
+      return;
+    }
+    // A response with no body must not claim to carry one. better-call builds
+    // its router misses with `new Response(null, …)`, which has no headers at
+    // all — but an `APIError` thrown without a body (better-auth's admin plugin
+    // and authorization middleware both do this) is turned into a bodyless
+    // response that still declares `content-type: application/json`. Forwarding
+    // that pairs an empty body with a JSON content type, so a client that
+    // trusts the header and calls `.json()` gets a parse error — the same class
+    // of failure this whole change exists to remove.
+    if (
+      body === null &&
+      (name === "content-type" || name === "content-length")
+    ) {
       return;
     }
     reply.header(key, value);

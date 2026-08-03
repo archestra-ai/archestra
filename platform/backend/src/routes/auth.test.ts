@@ -1424,6 +1424,30 @@ describe("auth routes", () => {
       expect(response.body).toBe("");
     });
 
+    test("a bodyless response does not claim to carry JSON", async () => {
+      // better-call turns an `APIError` thrown without a body — better-auth's
+      // admin plugin and authorization middleware both do this — into a
+      // bodyless response that still declares `content-type: application/json`.
+      // Relaying that header with an empty body hands the client a response
+      // that contradicts itself, so `.json()` throws a parse error.
+      vi.mocked(betterAuth.handler).mockResolvedValue(
+        new Response(null, {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/admin/has-permission",
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.body).toBe("");
+      expect(response.headers["content-type"]).toBeUndefined();
+    });
+
     test("a real better-auth body is still relayed verbatim", async () => {
       const tokenError = JSON.stringify({
         error: "invalid_grant",

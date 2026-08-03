@@ -101,10 +101,11 @@ function mockVersionReads({
   snapshot = versionResponse(),
   head = versionResponse({ content: "current body", contentHash: "hash-head" }),
 }: {
-  snapshot?: ReturnType<typeof versionResponse>;
-  head?:
-    | ReturnType<typeof versionResponse>
-    | { data: undefined; error: unknown };
+  // `versionResponse` is cast to `never` to satisfy the generated SDK's return
+  // type, so naming its shape here would say nothing. Both slots are just
+  // whatever `getSkillVersion` resolves to, hit or miss.
+  snapshot?: unknown;
+  head?: unknown;
 } = {}) {
   sdk.getSkillVersion.mockImplementation((async (args: {
     path: { version: number };

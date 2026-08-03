@@ -148,10 +148,11 @@ export function useSkillVersions(id: string | null) {
   return useInfiniteQuery({
     queryKey: ["skills", id, "versions"],
     enabled: !!id,
-    // Version rows are immutable, so a loaded page never goes stale on its own.
-    // The only change that matters is a *new* version appearing, which arrives
-    // through the `["skills"]` invalidation every skill mutation already fires.
-    staleTime: Number.POSITIVE_INFINITY,
+    // Deliberately not cached past staleness, unlike `useSkillVersion`. Each row
+    // is immutable but the *list* is append-only, and three writers outside this
+    // tab extend it: the GitHub sync worker, the MCP skill tools, and other
+    // users. Holding a page forever would leave the timeline missing the head
+    // that `useSkill` reports on the very next open.
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
       const { data, error } = await getSkillVersions({
@@ -375,7 +376,6 @@ export function useRestoreSkillVersion() {
       // hash shortcut above concluded. Reporting success here would name a
       // version that does not exist.
       if (data && data.latestVersion === expectedHeadVersion) {
-        queryClient.invalidateQueries({ queryKey: ["skills"] });
         toast.info(
           `Version ${version} is identical to the current version — nothing to restore.`,
         );
@@ -385,10 +385,15 @@ export function useRestoreSkillVersion() {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
-      queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success(
         `Restored version ${variables.version} — created version ${data.latestVersion}`,
       );
+    },
+    // Every outcome refreshes, not just the write. An abort means the head moved
+    // under the preview, and a suppressed fork still touched the skill row — in
+    // both cases what is on screen is the thing that was just proven stale.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
     },
   });
 }

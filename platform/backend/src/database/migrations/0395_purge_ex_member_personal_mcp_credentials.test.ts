@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { sql } from "drizzle-orm";
-import db from "@/database";
+import { eq, sql } from "drizzle-orm";
+import db, { schema } from "@/database";
 import AppModel from "@/models/app";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpServerModel from "@/models/mcp-server";
@@ -156,6 +156,15 @@ describe("0395 ex-member personal MCP credential purge", () => {
     expect(await AppModel.findById(exMemberApp.id)).toBeNull();
     expect(await McpServerModel.findById(backingServerId)).toBeNull();
     expect(await InternalMcpCatalogModel.findById(backingCatalogId)).toBeNull();
+    // The catalog's launch tool went down with it.
+    const launchTools = await db
+      .select()
+      .from(schema.toolsTable)
+      .where(eq(schema.toolsTable.catalogId, backingCatalogId));
+    expect(launchTools.length).toBeGreaterThan(0);
+    for (const tool of launchTools) {
+      expect(tool.deletedAt).not.toBeNull();
+    }
     expect(await AppModel.findById(memberApp.id)).not.toBeNull();
   });
 

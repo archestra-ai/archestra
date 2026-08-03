@@ -231,11 +231,6 @@ export async function propagateAppCatalogChange(
 }
 
 /**
- * Tear down an app's backing rows. Deleting the catalog cascade-removes the
- * `open` launch tool (and its assignments); the server is removed explicitly first
- * (its `catalogId` FK only nulls on catalog delete). Best-effort.
- */
-/**
  * Delete a user's personal apps ahead of a personal-install purge, running the
  * canonical deletion pair (app soft-delete + backing teardown) per app so the
  * backing catalog and its launch tool go down with the app. Without this, a
@@ -273,7 +268,14 @@ export async function purgePersonalAppsForUser(params: {
   return purgedAppIds;
 }
 
-export async function deleteAppBacking(app: App): Promise<void> {
+/**
+ * Tear down an app's backing rows. Deleting the catalog cascade-removes the
+ * `open` launch tool (and its assignments); the server is removed explicitly first
+ * (its `catalogId` FK only nulls on catalog delete). Best-effort.
+ */
+export async function deleteAppBacking(
+  app: Pick<App, "id" | "mcpServerId">,
+): Promise<void> {
   if (!app.mcpServerId) return;
   try {
     const server = await McpServerModel.findById(app.mcpServerId);

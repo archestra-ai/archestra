@@ -1110,7 +1110,26 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
     beforeRequest
   ) {
     const memberIdOrEmail = body.memberIdOrEmail as string | undefined;
-    if (memberIdOrEmail) {
+    // Resolve the organization the way the endpoint itself does (explicit
+    // body value, else the caller's active organization) and scope the
+    // snapshot to it — an unscoped lookup could stash a same-email membership
+    // from a different organization than the one the removal targets.
+    let requestOrganizationId = body.organizationId as string | undefined;
+    if (memberIdOrEmail && !requestOrganizationId) {
+      try {
+        const resolved = await auth.api.getSession({
+          headers: new Headers(beforeRequest.headers as HeadersInit),
+        });
+        requestOrganizationId =
+          resolved?.session?.activeOrganizationId ?? undefined;
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth] failed to resolve organization before member removal",
+        );
+      }
+    }
+    if (memberIdOrEmail && requestOrganizationId) {
       const [existing] = await db
         .select({
           id: schema.membersTable.id,
@@ -1126,9 +1145,12 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
           eq(schema.membersTable.userId, schema.usersTable.id),
         )
         .where(
-          memberIdOrEmail.includes("@")
-            ? eq(schema.usersTable.email, memberIdOrEmail)
-            : eq(schema.membersTable.id, memberIdOrEmail),
+          and(
+            memberIdOrEmail.includes("@")
+              ? eq(schema.usersTable.email, memberIdOrEmail)
+              : eq(schema.membersTable.id, memberIdOrEmail),
+            eq(schema.membersTable.organizationId, requestOrganizationId),
+          ),
         )
         .limit(1);
       if (existing) {
@@ -2319,6 +2341,12 @@ async function cleanupAfterMembershipRemoval(params: {
       userId,
       organizationId,
     );
+    // Known micro-race, accepted: a membership created between this check and
+    // the delete would be cascaded away. The window is a few milliseconds, the
+    // failure mode is bounded and recoverable (re-invite the user), and
+    // closing it would force the transaction-scoped purge variant, which
+    // cannot tear down K8s deployments or Vault-backed secrets — a worse
+    // everyday trade than the race.
     if (!(await MemberModel.hasAnyMembership(userId))) {
       await UserModel.delete(userId);
     }

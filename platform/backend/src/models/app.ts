@@ -252,9 +252,12 @@ class AppModel {
   static async findBackedByPersonalInstallsOfUser(params: {
     userId: string;
     organizationId?: string;
-  }): Promise<App[]> {
+  }): Promise<Pick<App, "id" | "mcpServerId">[]> {
     const rows = await db
-      .select(getTableColumns(schema.appsTable))
+      .select({
+        id: schema.appsTable.id,
+        mcpServerId: schema.appsTable.mcpServerId,
+      })
       .from(schema.appsTable)
       .innerJoin(
         schema.mcpServersTable,
@@ -277,7 +280,7 @@ class AppModel {
             : undefined,
         ),
       );
-    return rows as App[];
+    return rows;
   }
 
   /** A single active app scoped to an org. */

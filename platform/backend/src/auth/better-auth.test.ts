@@ -3740,7 +3740,7 @@ describe("auth event audit logging", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: member.id },
+        body: { memberIdOrEmail: member.id, organizationId: org.id },
         request: beforeRequest,
       }),
     );
@@ -3762,7 +3762,7 @@ describe("auth event audit logging", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: member.id },
+        body: { memberIdOrEmail: member.id, organizationId: org.id },
         request: beforeRequest,
       }),
     );
@@ -3814,7 +3814,7 @@ describe("auth event audit logging", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: target.email },
+        body: { memberIdOrEmail: target.email, organizationId: org.id },
         request: beforeRequest,
       }),
     );
@@ -3836,7 +3836,7 @@ describe("auth event audit logging", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: target.email },
+        body: { memberIdOrEmail: target.email, organizationId: org.id },
         request: beforeRequest,
       }),
     );
@@ -3968,7 +3968,7 @@ describe("membership removal cleanup", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: membership.id },
+        body: { memberIdOrEmail: membership.id, organizationId: orgA.id },
         request: beforeRequest,
       }),
     );
@@ -3988,7 +3988,7 @@ describe("membership removal cleanup", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: membership.id },
+        body: { memberIdOrEmail: membership.id, organizationId: orgA.id },
         request: beforeRequest,
       }),
     );
@@ -4034,7 +4034,7 @@ describe("membership removal cleanup", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: membership.id },
+        body: { memberIdOrEmail: membership.id, organizationId: org.id },
         request: beforeRequest,
       }),
     );
@@ -4051,7 +4051,7 @@ describe("membership removal cleanup", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: membership.id },
+        body: { memberIdOrEmail: membership.id, organizationId: org.id },
         request: beforeRequest,
       }),
     );
@@ -4094,7 +4094,7 @@ describe("membership removal cleanup", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: membership.id },
+        body: { memberIdOrEmail: membership.id, organizationId: org.id },
         request: beforeRequest,
       }),
     );
@@ -4106,7 +4106,7 @@ describe("membership removal cleanup", () => {
       createMockContext({
         path: "/organization/remove-member",
         method: "POST",
-        body: { memberIdOrEmail: membership.id },
+        body: { memberIdOrEmail: membership.id, organizationId: org.id },
         request: beforeRequest,
       }),
     );
@@ -4119,9 +4119,7 @@ describe("membership removal cleanup", () => {
       limit: 10,
       offset: 0,
     });
-    expect(
-      data.filter((r) => r.action === "member.deleted"),
-    ).toHaveLength(0);
+    expect(data.filter((r) => r.action === "member.deleted")).toHaveLength(0);
   });
 
   test("organization leave is audited and cleaned up like remove-member", async ({

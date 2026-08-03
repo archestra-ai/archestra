@@ -26,6 +26,8 @@ import {
 } from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import InvitationModel from "@/models/invitation";
+import McpServerModel from "@/models/mcp-server";
+import SecretModel from "@/models/secret";
 import { beforeEach, describe, expect, test } from "@/test";
 
 // Create a hoisted ref to control disableInvitations in tests
@@ -3884,5 +3886,256 @@ describe("auth event audit logging", () => {
     const auditRows = data.filter((r) => r.action === "auth.signed_in");
     expect(auditRows).toHaveLength(1);
     expect(auditRows[0].organizationId).toBe(org.id);
+  });
+});
+
+describe("membership removal cleanup", () => {
+  // Cleanup runs inside the after-hook and is awaited there, but audit rows on
+  // some paths are fire-and-forget — give them a beat before asserting.
+  async function settle() {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+
+  async function makePersonalInstall(params: {
+    ownerId: string;
+    organizationId: string;
+    makeInternalMcpCatalog: (
+      overrides: Record<string, unknown>,
+    ) => Promise<{ id: string }>;
+    makeMcpServer: (
+      overrides: Record<string, unknown>,
+    ) => Promise<{ id: string }>;
+  }) {
+    const catalog = await params.makeInternalMcpCatalog({
+      organizationId: params.organizationId,
+      serverType: "remote",
+    });
+    const secret = await SecretModel.create({
+      name: `cred-${crypto.randomUUID().substring(0, 8)}`,
+      secret: { access_token: "at" },
+    });
+    const server = await params.makeMcpServer({
+      ownerId: params.ownerId,
+      scope: "personal",
+      serverType: "remote",
+      catalogId: catalog.id,
+      secretId: secret.id,
+    });
+    return { server, secret };
+  }
+
+  test("remove-member purges the organization's personal installs but keeps a user with other memberships", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const admin = await makeUser();
+    const target = await makeUser();
+    const orgA = await makeOrganization();
+    const orgB = await makeOrganization();
+    await makeMember(admin.id, orgA.id, { role: "admin" });
+    const membership = await makeMember(target.id, orgA.id, { role: "member" });
+    await makeMember(target.id, orgB.id, { role: "member" });
+
+    const inA = await makePersonalInstall({
+      ownerId: target.id,
+      organizationId: orgA.id,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    });
+    const inB = await makePersonalInstall({
+      ownerId: target.id,
+      organizationId: orgB.id,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    });
+
+    const beforeRequest = new Request(
+      "http://localhost/api/auth/organization/remove-member",
+      { method: "POST" },
+    );
+    await handleBeforeHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: membership.id },
+        request: beforeRequest,
+      }),
+    );
+
+    // Simulate better-auth's own removal, which happens between the hooks.
+    await MemberModel.deleteByMemberOrUserId(target.id, orgA.id);
+
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: admin.id, email: admin.email, name: admin.name },
+        session: { id: "sess-cleanup-a", activeOrganizationId: orgA.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+    await handleAfterHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: membership.id },
+        request: beforeRequest,
+      }),
+    );
+    await settle();
+    getSessionSpy.mockRestore();
+
+    // Org A residue is gone, credentials included.
+    expect(await McpServerModel.findById(inA.server.id)).toBeNull();
+    expect(await SecretModel.findById(inA.secret.id)).toBeNull();
+    // The other organization's install — and the user — survive.
+    expect(await McpServerModel.findById(inB.server.id)).not.toBeNull();
+    const [userRow] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, target.id));
+    expect(userRow).toBeDefined();
+  });
+
+  test("removing the last membership deletes the user outright", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const admin = await makeUser();
+    const target = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const membership = await makeMember(target.id, org.id, { role: "member" });
+    const install = await makePersonalInstall({
+      ownerId: target.id,
+      organizationId: org.id,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    });
+
+    const beforeRequest = new Request(
+      "http://localhost/api/auth/organization/remove-member",
+      { method: "POST" },
+    );
+    await handleBeforeHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: membership.id },
+        request: beforeRequest,
+      }),
+    );
+    await MemberModel.deleteByMemberOrUserId(target.id, org.id);
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: admin.id, email: admin.email, name: admin.name },
+        session: { id: "sess-cleanup-b", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+    await handleAfterHook(
+      createMockContext({
+        path: "/organization/remove-member",
+        method: "POST",
+        body: { memberIdOrEmail: membership.id },
+        request: beforeRequest,
+      }),
+    );
+    await settle();
+    getSessionSpy.mockRestore();
+
+    expect(await McpServerModel.findById(install.server.id)).toBeNull();
+    expect(await SecretModel.findById(install.secret.id)).toBeNull();
+    const [userRow] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, target.id));
+    expect(userRow).toBeUndefined();
+  });
+
+  test("organization leave is audited and cleaned up like remove-member", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const leaver = await makeUser({ name: "Leaver" });
+    const org = await makeOrganization();
+    const membership = await makeMember(leaver.id, org.id, { role: "member" });
+    const install = await makePersonalInstall({
+      ownerId: leaver.id,
+      organizationId: org.id,
+      makeInternalMcpCatalog,
+      makeMcpServer,
+    });
+
+    const beforeRequest = new Request(
+      "http://localhost/api/auth/organization/leave",
+      { method: "POST" },
+    );
+    // The before-hook resolves the leaver from their session.
+    const getSessionSpy = vi
+      .spyOn(auth.api, "getSession")
+      .mockResolvedValueOnce({
+        user: { id: leaver.id, email: leaver.email, name: leaver.name },
+        session: { id: "sess-leave", activeOrganizationId: org.id },
+      } as unknown as NonNullable<
+        Awaited<ReturnType<typeof auth.api.getSession>>
+      >);
+    await handleBeforeHook(
+      createMockContext({
+        path: "/organization/leave",
+        method: "POST",
+        body: { organizationId: org.id },
+        request: beforeRequest,
+      }),
+    );
+    getSessionSpy.mockRestore();
+
+    await MemberModel.deleteByMemberOrUserId(leaver.id, org.id);
+
+    await handleAfterHook(
+      createMockContext({
+        path: "/organization/leave",
+        method: "POST",
+        body: { organizationId: org.id },
+        request: beforeRequest,
+      }),
+    );
+    await settle();
+
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      limit: 10,
+      offset: 0,
+    });
+    const rows = data.filter(
+      (r) => r.resourceType === "member" && r.action === "member.deleted",
+    );
+    expect(rows).toHaveLength(1);
+    // The account deletion below set-nulls the actor FK; the snapshot columns
+    // keep identifying who left.
+    expect(rows[0].actorEmail).toBe(leaver.email);
+    expect(rows[0].resourceId).toBe(membership.id);
+    expect(rows[0].before).toMatchObject({
+      email: leaver.email,
+      role: "member",
+    });
+
+    expect(await McpServerModel.findById(install.server.id)).toBeNull();
+    expect(await SecretModel.findById(install.secret.id)).toBeNull();
+    // Last membership — the account itself is unreachable residue and goes too.
+    const [userRow] = await db
+      .select()
+      .from(schema.usersTable)
+      .where(eq(schema.usersTable.id, leaver.id));
+    expect(userRow).toBeUndefined();
   });
 });

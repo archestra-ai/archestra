@@ -1435,7 +1435,6 @@ class McpServerModel {
     const servers = await db
       .select({
         id: schema.mcpServersTable.id,
-        name: schema.mcpServersTable.name,
         serverType: schema.mcpServersTable.serverType,
         secretId: schema.mcpServersTable.secretId,
       })
@@ -1447,51 +1446,42 @@ class McpServerModel {
         ),
       );
 
-    if (servers.length === 0) {
-      return [];
-    }
+    return McpServerModel.purgeInstallRows(userId, servers);
+  }
 
-    const purgedIds: string[] = [];
+  /**
+   * Like {@link purgePersonalServersForUser}, but limited to installs whose
+   * catalog belongs to the given organization — the shape of cleanup that runs
+   * when a user loses their MEMBERSHIP in one organization rather than their
+   * account. `mcp_server` has no organization column, so the catalog's
+   * `organization_id` is the discriminator; installs on catalogs without one
+   * (legacy/system-seeded, globally visible) are deliberately left alone
+   * because they cannot be attributed to the organization being left.
+   */
+  static async purgePersonalServersForUserInOrganization(
+    userId: string,
+    organizationId: string,
+  ): Promise<string[]> {
+    const servers = await db
+      .select({
+        id: schema.mcpServersTable.id,
+        serverType: schema.mcpServersTable.serverType,
+        secretId: schema.mcpServersTable.secretId,
+      })
+      .from(schema.mcpServersTable)
+      .innerJoin(
+        schema.internalMcpCatalogTable,
+        eq(schema.mcpServersTable.catalogId, schema.internalMcpCatalogTable.id),
+      )
+      .where(
+        and(
+          eq(schema.mcpServersTable.ownerId, userId),
+          eq(schema.mcpServersTable.scope, "personal"),
+          eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+        ),
+      );
 
-    for (const server of servers) {
-      // Tear the deployment (and its live K8s Secret) down before dropping the
-      // row — `removeMcpServer` resolves the deployment through the DB row.
-      if (server.serverType === "local") {
-        try {
-          await McpServerRuntimeManager.removeMcpServer(server.id);
-        } catch (error) {
-          logger.error(
-            { err: error, userId, mcpServerId: server.id },
-            "McpServerModel.purgePersonalServersForUser: failed to tear down K8s deployment",
-          );
-        }
-      }
-
-      await McpServerModel.hardDelete(server.id);
-      purgedIds.push(server.id);
-
-      if (server.secretId) {
-        try {
-          // Goes through the secret manager, not a raw row delete, so
-          // Vault/BYOS-backed material is removed from the backing store too.
-          await secretManager().deleteSecret(server.secretId);
-        } catch (error) {
-          // The install is already gone, so nothing points at this secret
-          // anymore. Log the id loudly — it needs a manual sweep.
-          logger.error(
-            { err: error, userId, secretId: server.secretId },
-            "McpServerModel.purgePersonalServersForUser: failed to delete credential secret; it is now orphaned",
-          );
-        }
-      }
-    }
-
-    logger.info(
-      { userId, purgedCount: purgedIds.length },
-      "McpServerModel.purgePersonalServersForUser: purged personal MCP installs and their credentials",
-    );
-
-    return purgedIds;
+    return McpServerModel.purgeInstallRows(userId, servers);
   }
 
   /**
@@ -1950,6 +1940,66 @@ class McpServerModel {
           }
         : null,
     }));
+  }
+
+  /**
+   * Shared body of the personal-install purges: tear down the K8s deployment
+   * for local installs, hard-delete each row, and delete its credential secret
+   * through the secret manager (so Vault/BYOS-backed material is removed from
+   * the backing store too). Best-effort per install — a wedged deployment or
+   * secret must not block the rest of the purge.
+   */
+  private static async purgeInstallRows(
+    userId: string,
+    servers: {
+      id: string;
+      serverType: string | null;
+      secretId: string | null;
+    }[],
+  ): Promise<string[]> {
+    if (servers.length === 0) {
+      return [];
+    }
+
+    const purgedIds: string[] = [];
+
+    for (const server of servers) {
+      // Tear the deployment (and its live K8s Secret) down before dropping the
+      // row — `removeMcpServer` resolves the deployment through the DB row.
+      if (server.serverType === "local") {
+        try {
+          await McpServerRuntimeManager.removeMcpServer(server.id);
+        } catch (error) {
+          logger.error(
+            { err: error, userId, mcpServerId: server.id },
+            "McpServerModel.purgeInstallRows: failed to tear down K8s deployment",
+          );
+        }
+      }
+
+      await McpServerModel.hardDelete(server.id);
+      purgedIds.push(server.id);
+
+      if (server.secretId) {
+        try {
+          await secretManager().deleteSecret(server.secretId);
+        } catch (error) {
+          // The install is already gone, so nothing points at this secret
+          // anymore. Log the id loudly — it needs a manual sweep.
+          logger.error(
+            { err: error, userId, secretId: server.secretId },
+            "McpServerModel.purgeInstallRows: failed to delete credential secret; it is now orphaned",
+          );
+        }
+      }
+    }
+
+    logger.info(
+      { userId, purgedCount: purgedIds.length },
+      "McpServerModel.purgeInstallRows: purged personal MCP installs and their credentials",
+    );
+
+    return purgedIds;
   }
 }
 

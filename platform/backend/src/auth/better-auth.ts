@@ -47,6 +47,7 @@ import OrganizationRoleModel from "@/models/organization-role";
 import SessionModel from "@/models/session";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
+import { purgePersonalAppsForUser } from "@/services/apps/app-mcp-backing";
 import type { AuditEventName } from "@/types/audit-log";
 import { devAutoLoginPlugin } from "./dev-auto-login";
 // SPDX-SnippetBegin
@@ -378,6 +379,20 @@ export const auth = betterAuth({
               "[databaseHooks:user] Failed to delete personal LLM proxies",
             );
           }
+          // Personal apps first: purging their backing install without
+          // deleting the app leaves the app detached with a live catalog and
+          // launch tool (`apps.mcp_server_id` only nulls). Handled here rather
+          // than in UserModel.delete because the app teardown is a service the
+          // model layer cannot import; the raw UserModel.delete callers only
+          // ever delete pending/shell users, who cannot own apps.
+          try {
+            await purgePersonalAppsForUser({ userId: user.id });
+          } catch (error) {
+            logger.error(
+              { err: error, userId: user.id },
+              "[databaseHooks:user] Failed to purge personal apps",
+            );
+          }
           // Mirrors UserModel.delete — the app-driven deletion paths are raw
           // Drizzle deletes that bypass this hook, while better-auth's
           // self-service delete-user endpoint reaches ONLY this hook. The
@@ -533,6 +548,13 @@ type MemberRemoveStash = {
 };
 
 const memberRemoveByRequest = new WeakMap<Request, MemberRemoveStash>();
+
+/**
+ * Same shape for `/organization/leave` — the self-service twin of
+ * remove-member, which better-auth mounts unconditionally. Stashed separately
+ * so each after-hook consumes only its own path's snapshot.
+ */
+const memberLeaveByRequest = new WeakMap<Request, MemberRemoveStash>();
 
 type ImpersonationStash = {
   impersonatorId: string;
@@ -1118,6 +1140,55 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
           email: existing.email,
           name: existing.name ?? null,
         });
+      }
+    }
+  }
+
+  if (path === "/organization/leave" && method === "POST" && beforeRequest) {
+    const organizationId = body.organizationId as string | undefined;
+    if (organizationId) {
+      try {
+        const resolved = await auth.api.getSession({
+          headers: new Headers(beforeRequest.headers as HeadersInit),
+        });
+        if (resolved?.user) {
+          const [existing] = await db
+            .select({
+              id: schema.membersTable.id,
+              userId: schema.membersTable.userId,
+              organizationId: schema.membersTable.organizationId,
+              role: schema.membersTable.role,
+              email: schema.usersTable.email,
+              name: schema.usersTable.name,
+            })
+            .from(schema.membersTable)
+            .innerJoin(
+              schema.usersTable,
+              eq(schema.membersTable.userId, schema.usersTable.id),
+            )
+            .where(
+              and(
+                eq(schema.membersTable.userId, resolved.user.id),
+                eq(schema.membersTable.organizationId, organizationId),
+              ),
+            )
+            .limit(1);
+          if (existing) {
+            memberLeaveByRequest.set(beforeRequest, {
+              memberId: existing.id,
+              userId: existing.userId,
+              organizationId: existing.organizationId,
+              role: existing.role,
+              email: existing.email,
+              name: existing.name ?? null,
+            });
+          }
+        }
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth] failed to snapshot membership before organization leave",
+        );
       }
     }
   }
@@ -1741,6 +1812,62 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
           "[auth] failed to sync system role after member removal",
         );
       }
+      await cleanupAfterMembershipRemoval(stash);
+    }
+  }
+
+  // Self-service leave: better-auth mounts this endpoint unconditionally, and
+  // it removes the membership exactly like remove-member — audit it and clean
+  // up the same way.
+  if (path === "/organization/leave" && method === "POST" && request) {
+    const stash = memberLeaveByRequest.get(request);
+    memberLeaveByRequest.delete(request);
+    if (stash) {
+      try {
+        await AuditLogModel.create({
+          organizationId: stash.organizationId,
+          actorId: stash.userId,
+          actorType: "user",
+          actorName: stash.name,
+          actorEmail: stash.email,
+          action: "member.deleted",
+          outcome: "success",
+          resourceType: "member",
+          resourceId: stash.memberId,
+          before: {
+            email: stash.email,
+            name: stash.name,
+            role: stash.role,
+          },
+          after: null,
+          httpMethod: "POST",
+          httpPath: path,
+          httpRoute: null,
+          httpStatus: null,
+          requestId: null,
+          sourceIp: resolveAuthClientIp(request),
+          userAgent: request.headers.get("user-agent") ?? null,
+          occurredAt: new Date(),
+        });
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth:audit] failed to write organization-leave audit row",
+        );
+        reportAuditWriteFailure({ source: "auth", resourceType: "member" });
+      }
+      try {
+        await syncSystemRoleWithOrgPermissions(
+          stash.userId,
+          stash.organizationId,
+        );
+      } catch (err) {
+        logger.error(
+          { err },
+          "[auth] failed to sync system role after organization leave",
+        );
+      }
+      await cleanupAfterMembershipRemoval(stash);
     }
   }
 
@@ -2147,6 +2274,39 @@ async function assertSsoEmailDomainAllowed(params: {
   throw new APIError("FORBIDDEN", {
     message: "Your email domain is not allowed for this identity provider.",
   });
+}
+
+/**
+ * Resource cleanup after a membership was removed (`remove-member` or
+ * `leave`) — the removal itself already succeeded, so everything here is
+ * best-effort. Personal apps go first (their backing catalog and launch tool
+ * come down with them), then the remaining personal installs for the
+ * organization's catalogs. When that was the user's LAST membership, the
+ * account itself is unreachable residue — no organization can ever list or
+ * restore it — so it is deleted outright, which also sweeps any cross-org
+ * leftovers (installs on org-less catalogs, personal gateways/proxies) and
+ * cascades sessions and accounts.
+ */
+async function cleanupAfterMembershipRemoval(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<void> {
+  const { userId, organizationId } = params;
+  try {
+    await purgePersonalAppsForUser({ userId, organizationId });
+    await McpServerModel.purgePersonalServersForUserInOrganization(
+      userId,
+      organizationId,
+    );
+    if (!(await MemberModel.hasAnyMembership(userId))) {
+      await UserModel.delete(userId);
+    }
+  } catch (err) {
+    logger.error(
+      { err, userId, organizationId },
+      "[auth] failed to clean up personal resources after membership removal",
+    );
+  }
 }
 
 async function cleanupRejectedSsoLogin(params: {

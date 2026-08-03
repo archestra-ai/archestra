@@ -69,6 +69,8 @@ Installations can be personal or team-scoped.
 
 Deleting a user deletes their personal installations and the credentials stored with them. Team and organization installations survive, even when the person who installed them is the one being removed.
 
+Removing someone from the organization — or their leaving it — likewise removes their personal installations for that organization's servers, including their personal apps. When that was their last organization, the account itself is removed too.
+
 When assigning tools to an Agent or MCP Gateway, you can pin a specific installation or use **Resolve at call time**. Resolve-at-call-time resolves deterministically from the caller identity and the available personal or team-scoped credentials. If no credential can be resolved, Archestra returns an error with an install link.
 
 See [Credential Resolution](/docs/mcp-authentication#credential-resolution) for the resolution order and missing credential behavior.

@@ -163655,7 +163655,8 @@
                                   "knowledge:reranker",
                                   "knowledge:query-expansion",
                                   "app:llm_complete",
-                                  "app:recording_enhancement"
+                                  "app:recording_enhancement",
+                                  "advisor:consultation"
                                 ]
                               },
                               "authMethod": {
@@ -194514,7 +194515,8 @@
                             "knowledge:reranker",
                             "knowledge:query-expansion",
                             "app:llm_complete",
-                            "app:recording_enhancement"
+                            "app:recording_enhancement",
+                            "advisor:consultation"
                           ]
                         },
                         "authMethod": {

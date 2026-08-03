@@ -755,9 +755,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Tool-assignment routes: agent-type update checked dynamically in handler
   [RouteId.AssignToolToAgent]: {},
   [RouteId.BulkAssignTools]: {},
-  [RouteId.BulkUpdateAgentTools]: {
-    toolPolicy: ["update"],
-  },
+  [RouteId.BulkUpdateAgentTools]: {},
   [RouteId.AutoConfigureAgentToolPolicies]: {
     toolPolicy: ["update"],
   },
@@ -1820,6 +1818,9 @@ export const requiredEndpointPermissionsMap: Partial<
     agent: ["read"],
   },
   [RouteId.CreateHook]: {
+    agent: ["update"],
+  },
+  [RouteId.BulkCreateHooks]: {
     agent: ["update"],
   },
   [RouteId.UpdateHook]: {

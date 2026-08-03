@@ -3,7 +3,7 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-07-31
+lastUpdated: 2026-08-03
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -111,7 +111,7 @@ The **Convert to skill** action on the agents page opens a confirmation dialog w
 
 ## Version History
 
-Archestra snapshots an agent's configuration every time it changes — prompt, tools, hooks, knowledge, or settings. A save that changes nothing does not create a version.
+Archestra snapshots an agent's configuration every time it changes — prompt, tools, hooks, knowledge, or settings. A save that changes nothing does not create a version. A bulk change — adding an MCP server's tools, for example — records one version, not one per tool.
 
 The history is available through the API. `GET /api/agents/:id/versions` lists versions as metadata, newest first. `GET /api/agents/:id/versions/:version` returns one full configuration snapshot. Key material is never captured, so you can review what changed without exposing secrets.
 

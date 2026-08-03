@@ -10,6 +10,7 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentToolModel,
+  AgentVersionModel,
   InternalMcpCatalogModel,
   McpServerModel,
   ToolModel,
@@ -88,6 +89,10 @@ export const EmptyToolArgsSchema = z.strictObject({});
 export async function assignToolAssignments(
   agentId: string,
   assignments: ToolAssignmentInput[],
+  options?: {
+    /** See `AgentToolAssignmentRequest.deferVersionFork`. */
+    deferVersionFork?: boolean;
+  },
 ): Promise<ToolAssignmentResult[]> {
   const results: ToolAssignmentResult[] = [];
   const preFetchedData = await buildAgentToolAssignmentPrefetch({
@@ -103,6 +108,9 @@ export async function assignToolAssignments(
         resolveAtCallTime: assignment.resolveAtCallTime,
         mcpServerId: assignment.mcpServerId,
         preFetchedData,
+        // One batch is one user action — the fork happens once below (or in
+        // the caller when it defers further), not once per tool.
+        deferVersionFork: true,
       });
 
       if (result === null || result === "updated") {
@@ -133,12 +141,23 @@ export async function assignToolAssignments(
     }
   }
 
+  if (
+    !options?.deferVersionFork &&
+    results.some((r) => r.status === "success")
+  ) {
+    await AgentVersionModel.forkIfChangedBestEffort(agentId);
+  }
+
   return results;
 }
 
 export async function assignSubAgentDelegations(
   agentId: string,
   subAgentIds: string[],
+  options?: {
+    /** See `AgentToolAssignmentRequest.deferVersionFork`. */
+    deferVersionFork?: boolean;
+  },
 ): Promise<SubAgentResult[]> {
   const results: SubAgentResult[] = [];
   for (const subAgentId of subAgentIds) {
@@ -156,7 +175,10 @@ export async function assignSubAgentDelegations(
         results.push({ id: subAgentId, status: "self_delegation_blocked" });
         continue;
       }
-      await AgentToolModel.assignDelegation(agentId, subAgentId);
+      await AgentToolModel.assignDelegation(agentId, subAgentId, {
+        // One batch is one user action — fork once below, not per delegation.
+        deferVersionFork: true,
+      });
       results.push({ id: subAgentId, status: "success" });
     } catch (error) {
       logger.error(
@@ -166,6 +188,14 @@ export async function assignSubAgentDelegations(
       results.push({ id: subAgentId, status: "error" });
     }
   }
+
+  if (
+    !options?.deferVersionFork &&
+    results.some((r) => r.status === "success")
+  ) {
+    await AgentVersionModel.forkIfChangedBestEffort(agentId);
+  }
+
   return results;
 }
 

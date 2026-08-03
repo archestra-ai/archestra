@@ -11,6 +11,7 @@ import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
   TeamModel,
@@ -340,12 +341,22 @@ export async function handleCreateResource<
 
     const toolAssignmentResults =
       targetAgentType === "agent" && (args.toolAssignments?.length ?? 0) > 0
-        ? await assignToolAssignments(created.id, args.toolAssignments ?? [])
+        ? await assignToolAssignments(created.id, args.toolAssignments ?? [], {
+            deferVersionFork: true,
+          })
         : [];
     const subAgentResults =
       targetAgentType === "agent" && (args.subAgentIds?.length ?? 0) > 0
-        ? await assignSubAgentDelegations(created.id, args.subAgentIds ?? [])
+        ? await assignSubAgentDelegations(created.id, args.subAgentIds ?? [], {
+            deferVersionFork: true,
+          })
         : [];
+    // One MCP call is one user action — a single fork covers both the tool
+    // assignments and the sub-agent delegations above (no-op when neither
+    // changed anything; create() already forked the base version).
+    if (toolAssignmentResults.length > 0 || subAgentResults.length > 0) {
+      await AgentVersionModel.forkIfChangedBestEffort(created.id);
+    }
 
     const editLink = `${config.frontendBaseUrl}/agents?edit=${created.id}`;
     const lines = [
@@ -608,12 +619,22 @@ export async function handleEditResource<
 
     const toolAssignmentResults =
       expectedType === "agent" && (args.toolAssignments?.length ?? 0) > 0
-        ? await assignToolAssignments(args.id, args.toolAssignments ?? [])
+        ? await assignToolAssignments(args.id, args.toolAssignments ?? [], {
+            deferVersionFork: true,
+          })
         : [];
     const subAgentResults =
       expectedType === "agent" && (args.subAgentIds?.length ?? 0) > 0
-        ? await assignSubAgentDelegations(args.id, args.subAgentIds ?? [])
+        ? await assignSubAgentDelegations(args.id, args.subAgentIds ?? [], {
+            deferVersionFork: true,
+          })
         : [];
+    // One MCP call is one user action — a single fork covers both the tool
+    // assignments and the sub-agent delegations above (no-op when neither
+    // changed anything; update() already forked for the field changes).
+    if (toolAssignmentResults.length > 0 || subAgentResults.length > 0) {
+      await AgentVersionModel.forkIfChangedBestEffort(args.id);
+    }
 
     const editLink = `${config.frontendBaseUrl}/agents?edit=${updated.id}`;
     const lines = [

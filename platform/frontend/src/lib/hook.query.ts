@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError, throwOnApiError } from "./utils";
 
-const { getHooks, createHook, updateHook, deleteHook } = archestraApiSdk;
+const { getHooks, createHook, bulkCreateHooks, updateHook, deleteHook } =
+  archestraApiSdk;
 
 export type AgentHook = archestraApiTypes.GetHooksResponses["200"][number];
 
@@ -39,18 +40,18 @@ export function useAgentHooks(agentId: string | undefined) {
 
 /**
  * Persist hooks that were staged in the agent create form, now that the agent
- * exists. Sequential so the 409-uniqueness contract stays deterministic.
- * Throws on the first failure (with a toast) so the caller's create rollback
- * can kick in.
+ * exists. One atomic bulk call: a conflict rejects the whole batch (with every
+ * conflicting pair listed) and nothing is created, and the backend forks a
+ * single agent config version instead of one per hook. Throws on failure
+ * (with a toast) so the caller's create rollback can kick in.
  */
 export async function createHooksForAgent(
   agentId: string,
   hooks: Array<Omit<CreateHookInput, "agentId">>,
 ): Promise<void> {
-  for (const hook of hooks) {
-    const { error } = await createHook({ body: { ...hook, agentId } });
-    throwOnApiError(error);
-  }
+  if (hooks.length === 0) return;
+  const { error } = await bulkCreateHooks({ body: { agentId, hooks } });
+  throwOnApiError(error);
 }
 
 // Create a hook

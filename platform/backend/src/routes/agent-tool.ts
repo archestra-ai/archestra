@@ -363,6 +363,200 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.post(
+    "/api/agents/tools/bulk-update",
+    {
+      schema: {
+        operationId: RouteId.BulkUpdateAgentTools,
+        description:
+          "Atomically assign, unassign, and re-credential tools across agents. " +
+          "All-or-nothing: any validation failure applies no changes. One config " +
+          "version is forked per affected agent for the whole batch.",
+        tags: ["Agent Tools"],
+        body: z.object({
+          assign: z.array(BulkAgentToolAssignmentSchema).max(1000),
+          unassign: z
+            .array(z.object({ agentId: UuidIdSchema, toolId: UuidIdSchema }))
+            .max(1000),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            assigned: z.number(),
+            updated: z.number(),
+            unchanged: z.number(),
+            unassigned: z.number(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      // Last-wins dedup within each list so the atomic insert cannot conflict
+      // with itself when a pair is listed twice.
+      const assignments = [
+        ...new Map(
+          request.body.assign.map((a) => [`${a.agentId}:${a.toolId}`, a]),
+        ).values(),
+      ];
+      const unassignments = [
+        ...new Map(
+          request.body.unassign.map((u) => [`${u.agentId}:${u.toolId}`, u]),
+        ).values(),
+      ];
+
+      if (assignments.length === 0 && unassignments.length === 0) {
+        return reply.send({
+          assigned: 0,
+          updated: 0,
+          unchanged: 0,
+          unassigned: 0,
+        });
+      }
+
+      const uniqueAgentIds = [
+        ...new Set(
+          [...assignments, ...unassignments].map((item) => item.agentId),
+        ),
+      ];
+      const uniqueToolIds = [...new Set(assignments.map((a) => a.toolId))];
+
+      const [agentsForPermCheck, checker] = await Promise.all([
+        AgentModel.findByIdsForPermissionCheck(uniqueAgentIds),
+        getAgentTypePermissionChecker({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+        }),
+      ]);
+
+      // All-or-nothing and fail-closed: an agent that cannot be resolved
+      // cannot be permission-checked, so it fails the whole batch (this also
+      // covers unassign-only agents, which skip assignment validation below).
+      const missingAgentId = uniqueAgentIds.find(
+        (id) => !agentsForPermCheck.has(id),
+      );
+      if (missingAgentId) {
+        throw new ApiError(404, `Agent with ID ${missingAgentId} not found`);
+      }
+
+      let userTeamIds: string[] | null = null;
+      for (const [, agent] of agentsForPermCheck) {
+        checker.require(agent.agentType, "update");
+        if (!checker.isAdmin(agent.agentType) && userTeamIds === null) {
+          userTeamIds = await TeamModel.getUserTeamIds(request.user.id);
+        }
+        requireAgentModifyPermission({
+          checker,
+          agentType: agent.agentType,
+          agentScope: agent.scope,
+          agentAuthorId: agent.authorId,
+          agentTeamIds: agent.teamIds,
+          userTeamIds: userTeamIds ?? [],
+          userId: request.user.id,
+        });
+      }
+
+      // Batch fetch validation data for the assignment half (unassigns need
+      // none — deleting a row that is already gone is a benign no-op).
+      const tools = await ToolModel.getByIds(uniqueToolIds);
+      const toolsMap = new Map(tools.map((tool) => [tool.id, tool]));
+      const uniqueCatalogIds = [
+        ...new Set(
+          tools.filter((t) => t.catalogId).map((t) => t.catalogId as string),
+        ),
+      ];
+      const catalogItemsMap =
+        uniqueCatalogIds.length > 0
+          ? await InternalMcpCatalogModel.getByIds(uniqueCatalogIds)
+          : new Map<string, InternalMcpCatalog>();
+      const uniqueMcpServerIds = [
+        ...new Set(
+          assignments
+            .map((a) => a.mcpServerId)
+            .filter((id): id is string => id != null),
+        ),
+      ];
+      const mcpServersBasicMap = new Map<string, PrefetchedMcpServer>();
+      if (uniqueMcpServerIds.length > 0) {
+        const servers = await McpServerModel.findByIdsBasic(uniqueMcpServerIds);
+        for (const s of servers) {
+          mcpServersBasicMap.set(s.id, s);
+        }
+      }
+      const preFetchedData = {
+        existingAgentIds: new Set(agentsForPermCheck.keys()),
+        toolsMap,
+        catalogItemsMap,
+        mcpServersBasicMap,
+      };
+
+      // Validate every assignment before any write; a single failure rejects
+      // the batch with all offending items listed.
+      const validated: typeof assignments = [];
+      const failures: {
+        agentId: string;
+        toolId: string;
+        code: "not_found" | "validation_error";
+        message: string;
+      }[] = [];
+      for (const assignment of assignments) {
+        const normalizedAssignment =
+          normalizeBulkAssignmentCredentialResolutionMode({
+            assignment,
+            toolsMap,
+            catalogItemsMap,
+          });
+        const validationError = await validateAssignment({
+          agentId: normalizedAssignment.agentId,
+          toolId: normalizedAssignment.toolId,
+          mcpServerId: normalizedAssignment.mcpServerId,
+          preFetchedData,
+          resolveAtCallTime: normalizedAssignment.resolveAtCallTime,
+          credentialResolutionMode:
+            normalizedAssignment.credentialResolutionMode,
+        });
+        if (validationError) {
+          failures.push({
+            agentId: assignment.agentId,
+            toolId: assignment.toolId,
+            code: validationError.code,
+            message: validationError.error.message,
+          });
+        } else {
+          validated.push(normalizedAssignment);
+        }
+      }
+      if (failures.length > 0) {
+        throw new ApiError(
+          mapAgentToolAssignmentErrorCodeToHttpStatus(failures[0].code),
+          `No changes applied — ${failures.length} of ${assignments.length} assignments failed validation: ` +
+            failures
+              .map((f) => `tool ${f.toolId} → agent ${f.agentId}: ${f.message}`)
+              .join("; "),
+        );
+      }
+
+      const result = await AgentToolModel.bulkApply({
+        assignments: validated,
+        unassignments,
+      });
+
+      for (const agentId of result.changedAgentIds) {
+        clearChatMcpClient(agentId);
+      }
+
+      // One save is one user action — exactly one fork per changed agent,
+      // after the batch transaction committed (forkIfChanged takes its own
+      // agent row lock and must not run inside it).
+      await AgentVersionModel.forkAgentsBestEffort(result.changedAgentIds);
+
+      return reply.send({
+        assigned: result.assigned,
+        updated: result.updated,
+        unchanged: result.unchanged,
+        unassigned: result.unassigned,
+      });
+    },
+  );
+
+  fastify.post(
     "/api/agent-tools/auto-configure-policies",
     {
       schema: {

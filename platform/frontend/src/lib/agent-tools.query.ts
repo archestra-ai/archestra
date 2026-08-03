@@ -8,12 +8,11 @@ import {
 import { getApiErrorMessage, handleApiError, throwOnApiError } from "./utils";
 
 const {
-  assignToolToAgent,
   autoConfigureAgentToolPolicies,
   bulkAssignTools,
+  bulkUpdateAgentTools,
   getAllAgentTools,
   unassignToolFromAgent,
-  updateAgentTool,
   getAgentDelegations,
   syncAgentDelegations,
   deleteAgentDelegation,
@@ -22,9 +21,6 @@ const {
 type GetAllProfileToolsQueryParams = NonNullable<
   archestraApiTypes.GetAllAgentToolsData["query"]
 >;
-type CredentialResolutionMode = NonNullable<
-  archestraApiTypes.AssignToolToAgentData["body"]
->["credentialResolutionMode"];
 
 export function useAllProfileTools({
   initialData,
@@ -103,71 +99,6 @@ export function useAllProfileTools({
   });
 }
 
-export function useAssignTool() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({
-      agentId,
-      toolId,
-      mcpServerId,
-      resolveAtCallTime,
-      credentialResolutionMode,
-      skipInvalidation,
-    }: {
-      agentId: string;
-      toolId: string;
-      mcpServerId?: string | null;
-      resolveAtCallTime?: boolean;
-      credentialResolutionMode?: CredentialResolutionMode;
-      skipInvalidation?: boolean;
-    }) => {
-      const body =
-        mcpServerId ||
-        resolveAtCallTime !== undefined ||
-        credentialResolutionMode
-          ? {
-              mcpServerId: mcpServerId ?? undefined,
-              resolveAtCallTime,
-              credentialResolutionMode,
-            }
-          : null;
-
-      const { data, error } = await assignToolToAgent({
-        path: { agentId, toolId },
-        body,
-      });
-      if (error) {
-        throw new Error(getApiErrorMessage(error));
-      }
-      return { success: data?.success ?? false, agentId, skipInvalidation };
-    },
-    onSuccess: (result) => {
-      if (result.skipInvalidation) return;
-
-      const { agentId } = result;
-      // Invalidate queries to refetch data
-      queryClient.invalidateQueries({ queryKey: ["agents", agentId, "tools"] });
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
-      queryClient.invalidateQueries({ queryKey: ["tools"] });
-      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
-      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
-      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      // Invalidate all MCP server queries (including nested tools queries for assignment counts)
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      // Invalidate all MCP catalog queries (including tools for assignment counts on cards)
-      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
-      // Invalidate chat MCP tools for this agent and all chat queries
-      queryClient.invalidateQueries({
-        queryKey: ["chat", "agents", agentId, "mcp-tools"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["chat", "agents"],
-      });
-    },
-  });
-}
-
 export function useBulkAssignTools() {
   const queryClient = useQueryClient();
 
@@ -228,6 +159,58 @@ export function useBulkAssignTools() {
   });
 }
 
+/**
+ * Atomic assign/unassign/re-credential batch. All-or-nothing on the backend:
+ * a failure applies no changes, and one config version is forked per affected
+ * agent for the whole batch — use this instead of looping the single-tool
+ * mutations, which fork a version per call.
+ */
+export function useBulkUpdateAgentTools() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      assign,
+      unassign,
+      skipInvalidation,
+    }: NonNullable<archestraApiTypes.BulkUpdateAgentToolsData["body"]> & {
+      skipInvalidation?: boolean;
+    }) => {
+      const { data, error } = await bulkUpdateAgentTools({
+        body: { assign, unassign },
+      });
+      if (error) {
+        throw new Error(getApiErrorMessage(error));
+      }
+      const agentIds = [
+        ...new Set([...assign, ...unassign].map((item) => item.agentId)),
+      ];
+      return { ...data, agentIds, skipInvalidation };
+    },
+    onSuccess: (result) => {
+      if (!result || result.skipInvalidation) return;
+
+      for (const agentId of result.agentIds) {
+        queryClient.invalidateQueries({
+          queryKey: ["agents", agentId, "tools"],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["chat", "agents", agentId, "mcp-tools"],
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["tools"], exact: true });
+      queryClient.invalidateQueries({ queryKey: ["tools", "unassigned"] });
+      queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["chat", "agents"] });
+    },
+  });
+}
+
 export function useUnassignTool() {
   const queryClient = useQueryClient();
 
@@ -267,45 +250,6 @@ export function useUnassignTool() {
       queryClient.invalidateQueries({
         queryKey: ["chat", "agents", agentId, "mcp-tools"],
       });
-      queryClient.invalidateQueries({
-        queryKey: ["chat", "agents"],
-      });
-    },
-  });
-}
-
-export function useProfileToolPatchMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (
-      updatedProfileTool: archestraApiTypes.UpdateAgentToolData["body"] & {
-        id: string;
-        skipInvalidation?: boolean;
-      },
-    ) => {
-      const { skipInvalidation, ...body } = updatedProfileTool;
-      const result = await updateAgentTool({
-        body,
-        path: { id: updatedProfileTool.id },
-      });
-      if (result.error) {
-        throw new Error(getApiErrorMessage(result.error));
-      }
-      return { data: result.data ?? null, skipInvalidation };
-    },
-    onSuccess: (result) => {
-      if (result.skipInvalidation) return;
-
-      // Invalidate all agent-tools queries to refetch updated data
-      queryClient.invalidateQueries({
-        queryKey: ["agent-tools"],
-      });
-      queryClient.invalidateQueries({ queryKey: ["agents"] });
-      // Invalidate all MCP server queries (including nested tools queries for assignment counts)
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
-      // Invalidate all MCP catalog queries (including tools for assignment counts on cards)
-      queryClient.invalidateQueries({ queryKey: ["mcp-catalog"] });
-      // Invalidate all chat MCP tools queries (we don't know which agent was affected)
       queryClient.invalidateQueries({
         queryKey: ["chat", "agents"],
       });

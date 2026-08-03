@@ -69,7 +69,7 @@ import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAgentDelegations,
   useAllProfileTools,
-  useAssignTool,
+  useBulkUpdateAgentTools,
   useRemoveAgentDelegation,
   useSyncAgentDelegations,
   useUnassignTool,
@@ -1141,7 +1141,7 @@ function AddToolView({
   const { data: catalogItems = [], isPending } = useInternalMcpCatalog();
   const allCredentials = useMcpServersGroupedByCatalog();
   const [search, setSearch] = useState("");
-  const assignTool = useAssignTool();
+  const bulkUpdateTools = useBulkUpdateAgentTools();
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const [addingCatalogId, setAddingCatalogId] = useState<string | null>(null);
 
@@ -1216,16 +1216,17 @@ function AddToolView({
       const servers = allCredentials?.[catalog.id] ?? [];
       const isBuiltin = catalog.serverType === "builtin";
       const credentialId = servers[0]?.id;
-      await Promise.all(
-        tools.map((tool) =>
-          assignTool.mutateAsync({
-            agentId,
-            toolId: tool.id,
-            mcpServerId: !isBuiltin ? (credentialId ?? undefined) : undefined,
-            skipInvalidation: true,
-          }),
-        ),
-      );
+      // One atomic call → one config version for the whole catalog, instead
+      // of a version per tool.
+      await bulkUpdateTools.mutateAsync({
+        assign: tools.map((tool) => ({
+          agentId,
+          toolId: tool.id,
+          mcpServerId: !isBuiltin ? (credentialId ?? undefined) : undefined,
+        })),
+        unassign: [],
+        skipInvalidation: true,
+      });
       invalidateAllQueries(agentId);
       onBack();
     } finally {
@@ -1440,8 +1441,7 @@ function ConfigureToolView({
     skipPagination: true,
     enabled: !!agentId,
   });
-  const assignTool = useAssignTool();
-  const unassignTool = useUnassignTool();
+  const bulkUpdateTools = useBulkUpdateAgentTools();
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
 
   // Get currently assigned tool IDs and agent-tool IDs for this catalog
@@ -1493,9 +1493,11 @@ function ConfigureToolView({
       const useDynamicCredential =
         !credential || credential === DYNAMIC_CREDENTIAL_VALUE;
 
-      await Promise.all([
-        ...toAdd.map((toolId) =>
-          assignTool.mutateAsync({
+      // One atomic call → one config version for the whole save, instead of
+      // a version per changed tool.
+      if (toAdd.length > 0 || toRemove.length > 0) {
+        await bulkUpdateTools.mutateAsync({
+          assign: toAdd.map((toolId) => ({
             agentId,
             toolId,
             mcpServerId:
@@ -1508,18 +1510,10 @@ function ConfigureToolView({
                 ? ("dynamic" as const)
                 : ("static" as const),
             }),
-            skipInvalidation: true,
-          }),
-        ),
-        ...toRemove.map((toolId) =>
-          unassignTool.mutateAsync({
-            agentId,
-            toolId,
-            skipInvalidation: true,
-          }),
-        ),
-      ]);
-      if (toAdd.length > 0 || toRemove.length > 0) {
+          })),
+          unassign: toRemove.map((toolId) => ({ agentId, toolId })),
+          skipInvalidation: true,
+        });
         invalidateAllQueries(agentId);
       }
       onDone();

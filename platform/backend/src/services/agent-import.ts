@@ -150,6 +150,11 @@ export async function importAgentFromPayload(
     warnings,
   );
 
+  // An import is one user action: steps 8–9 defer their per-item forks, and
+  // this single fork snapshots the imported tool set and delegations together
+  // (create() already forked the base version in step 7).
+  await AgentVersionModel.forkIfChangedBestEffort(agent.id);
+
   // Re-fetch the fully populated agent to return
   const populatedAgent = await AgentModel.findById(agent.id, userId, true);
 
@@ -248,8 +253,7 @@ async function resolveAndAssignTools(
         agentId,
         toolId: tool.id,
         credentialResolutionMode: ref.credentialResolutionMode,
-        // An import is one action; it forks once after the whole tool set
-        // lands rather than once per tool.
+        // The import's single fork (importAgentFromPayload) covers these.
         deferVersionFork: true,
       });
 
@@ -272,8 +276,6 @@ async function resolveAndAssignTools(
       });
     }
   }
-
-  await AgentVersionModel.forkIfChangedBestEffort(agentId);
 }
 
 /**
@@ -366,7 +368,10 @@ async function resolveAndAssignDelegations(
     }
 
     try {
-      await AgentToolModel.assignDelegation(agentId, targetAgentId);
+      await AgentToolModel.assignDelegation(agentId, targetAgentId, {
+        // The import's single fork (importAgentFromPayload) covers these.
+        deferVersionFork: true,
+      });
     } catch (error) {
       logger.warn(
         { agentId, targetAgentName: ref.targetAgentName, error: String(error) },

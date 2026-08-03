@@ -687,6 +687,7 @@ export const RouteId = {
   // Hook File Routes
   GetHooks: "getHooks",
   CreateHook: "createHook",
+  BulkCreateHooks: "bulkCreateHooks",
   UpdateHook: "updateHook",
   DeleteHook: "deleteHook",
 

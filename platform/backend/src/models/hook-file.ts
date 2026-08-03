@@ -21,6 +21,28 @@ class HookFileModel {
     return row;
   }
 
+  /**
+   * Insert a batch of hook files for ONE agent atomically: a single multi-row
+   * INSERT, so any constraint violation (e.g. a duplicate `(agent, event,
+   * file_name)` racing past the route's pre-check) applies nothing. The batch
+   * is one user action — staged hooks flushed on agent create — so it forks a
+   * single config version, not one per hook.
+   */
+  static async createMany(data: InsertHookFile[]): Promise<HookFile[]> {
+    if (data.length === 0) return [];
+    const parsed = data.map((d) => InsertHookFileSchema.parse(d));
+    const agentIds = new Set(parsed.map((p) => p.agentId));
+    if (agentIds.size !== 1) {
+      throw new Error("createMany requires all hooks to target the same agent");
+    }
+    const rows = await db
+      .insert(schema.hookFilesTable)
+      .values(parsed)
+      .returning();
+    await AgentVersionModel.forkIfChangedBestEffort(parsed[0].agentId);
+    return rows;
+  }
+
   static async findById(
     id: string,
     organizationId: string,

@@ -20,7 +20,7 @@ import {
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
   createPaginatedResult,
@@ -89,6 +89,10 @@ class AgentToolModel {
   static async assignDelegation(
     agentId: string,
     targetAgentId: string,
+    options?: {
+      /** See `AgentToolAssignmentRequest.deferVersionFork`. */
+      deferVersionFork?: boolean;
+    },
   ): Promise<void> {
     // Dynamically import to avoid circular dependency
     const { default: ToolModel } = await import("./tool");
@@ -100,7 +104,9 @@ class AgentToolModel {
     await AgentToolModel.createIfNotExists(agentId, tool.id);
 
     // Delegation assignment changes the agent's tool surface — fork a version.
-    await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    if (!options?.deferVersionFork) {
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    }
   }
 
   /**
@@ -109,6 +115,10 @@ class AgentToolModel {
   static async removeDelegation(
     agentId: string,
     targetAgentId: string,
+    options?: {
+      /** See `AgentToolAssignmentRequest.deferVersionFork`. */
+      deferVersionFork?: boolean;
+    },
   ): Promise<boolean> {
     // Dynamically import to avoid circular dependency
     const { default: ToolModel } = await import("./tool");
@@ -118,7 +128,11 @@ class AgentToolModel {
       return false;
     }
 
-    return AgentToolModel.delete({ agentId, toolId: tool.id });
+    return AgentToolModel.delete({
+      agentId,
+      toolId: tool.id,
+      deferVersionFork: options?.deferVersionFork,
+    });
   }
 
   /**
@@ -189,12 +203,22 @@ class AgentToolModel {
 
     // Remove old delegations
     for (const target of toRemove) {
-      await AgentToolModel.removeDelegation(agentId, target.id);
+      await AgentToolModel.removeDelegation(agentId, target.id, {
+        deferVersionFork: true,
+      });
     }
 
     // Add new delegations
     for (const targetId of toAdd) {
-      await AgentToolModel.assignDelegation(agentId, targetId);
+      await AgentToolModel.assignDelegation(agentId, targetId, {
+        deferVersionFork: true,
+      });
+    }
+
+    // One sync is one user action — fork a single version covering the whole
+    // add/remove set instead of one per delegation.
+    if (toAdd.length > 0 || toRemove.length > 0) {
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
     }
 
     return {
@@ -910,6 +934,145 @@ class AgentToolModel {
     }
 
     return results;
+  }
+
+  /**
+   * Atomically apply a mixed assign/unassign batch: one transaction, so a
+   * failure rolls the whole batch back and a save can never half-apply.
+   * Unassignments run first, so a pair present in both lists nets out to the
+   * (re)assignment. Assignments upsert: new pairs insert, existing pairs with
+   * different credentials update, identical pairs count as unchanged.
+   *
+   * Deliberately forks NO version: `forkIfChanged` must never run inside a
+   * caller-held transaction (its FOR UPDATE would deadlock; see
+   * AgentVersionModel.forkIfChanged). The caller forks once per agent in
+   * `changedAgentIds` after commit.
+   */
+  static async bulkApply(params: {
+    assignments: Array<{
+      agentId: string;
+      toolId: string;
+      mcpServerId?: string | null;
+      resolveAtCallTime?: boolean;
+      credentialResolutionMode?: CredentialResolutionMode;
+    }>;
+    unassignments: Array<{ agentId: string; toolId: string }>;
+  }): Promise<{
+    assigned: number;
+    updated: number;
+    unchanged: number;
+    unassigned: number;
+    /** Distinct agents whose tool surface actually changed. */
+    changedAgentIds: string[];
+  }> {
+    const { assignments, unassignments } = params;
+    if (assignments.length === 0 && unassignments.length === 0) {
+      return {
+        assigned: 0,
+        updated: 0,
+        unchanged: 0,
+        unassigned: 0,
+        changedAgentIds: [],
+      };
+    }
+
+    return await withDbTransaction(async (tx) => {
+      const changedAgentIds = new Set<string>();
+      let assigned = 0;
+      let updated = 0;
+      let unchanged = 0;
+      let unassigned = 0;
+
+      if (unassignments.length > 0) {
+        const deletedRows = await tx
+          .delete(schema.agentToolsTable)
+          .where(
+            or(
+              ...unassignments.map((u) =>
+                and(
+                  eq(schema.agentToolsTable.agentId, u.agentId),
+                  eq(schema.agentToolsTable.toolId, u.toolId),
+                ),
+              ),
+            ),
+          )
+          .returning({ agentId: schema.agentToolsTable.agentId });
+        unassigned = deletedRows.length;
+        for (const row of deletedRows) {
+          changedAgentIds.add(row.agentId);
+        }
+      }
+
+      if (assignments.length > 0) {
+        const existing = await tx
+          .select()
+          .from(schema.agentToolsTable)
+          .where(
+            or(
+              ...assignments.map((a) =>
+                and(
+                  eq(schema.agentToolsTable.agentId, a.agentId),
+                  eq(schema.agentToolsTable.toolId, a.toolId),
+                ),
+              ),
+            ),
+          );
+        const existingMap = new Map(
+          existing.map((e) => [`${e.agentId}:${e.toolId}`, e]),
+        );
+
+        const toCreate: typeof assignments = [];
+        for (const assignment of assignments) {
+          const existingRow = existingMap.get(
+            `${assignment.agentId}:${assignment.toolId}`,
+          );
+          if (!existingRow) {
+            toCreate.push(assignment);
+            assigned++;
+            changedAgentIds.add(assignment.agentId);
+            continue;
+          }
+          const needsUpdate =
+            existingRow.mcpServerId !== (assignment.mcpServerId ?? null) ||
+            existingRow.credentialResolutionMode !==
+              normalizeCredentialResolutionMode(assignment);
+          if (needsUpdate) {
+            await tx
+              .update(schema.agentToolsTable)
+              .set({
+                mcpServerId: assignment.mcpServerId ?? null,
+                credentialResolutionMode:
+                  normalizeCredentialResolutionMode(assignment),
+                updatedAt: new Date(),
+              })
+              .where(eq(schema.agentToolsTable.id, existingRow.id));
+            updated++;
+            changedAgentIds.add(assignment.agentId);
+          } else {
+            unchanged++;
+          }
+        }
+
+        if (toCreate.length > 0) {
+          await tx.insert(schema.agentToolsTable).values(
+            toCreate.map((a) => ({
+              agentId: a.agentId,
+              toolId: a.toolId,
+              ...(a.mcpServerId ? { mcpServerId: a.mcpServerId } : {}),
+              credentialResolutionMode: normalizeCredentialResolutionMode(a),
+            })),
+          );
+        }
+      }
+
+      return {
+        assigned,
+        updated,
+        unchanged,
+        unassigned,
+        changedAgentIds: [...changedAgentIds],
+      };
+    });
   }
 
   static async update(

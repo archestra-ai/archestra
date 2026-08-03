@@ -28,9 +28,7 @@ import { useProfiles } from "@/lib/agent.query";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import {
   useAllProfileTools,
-  useBulkAssignTools,
-  useProfileToolPatchMutation,
-  useUnassignTool,
+  useBulkUpdateAgentTools,
 } from "@/lib/agent-tools.query";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import {
@@ -145,9 +143,7 @@ export function McpAssignmentsDialog({
   const [isSaving, setIsSaving] = useState(false);
 
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
-  const unassignTool = useUnassignTool();
-  const bulkAssign = useBulkAssignTools();
-  const patchTool = useProfileToolPatchMutation();
+  const bulkUpdateTools = useBulkUpdateAgentTools();
 
   // Update pending changes for a profile
   const updatePendingChanges = useCallback(
@@ -187,6 +183,16 @@ export function McpAssignmentsDialog({
     setIsSaving(true);
     const affectedAgentIds = new Set<string>();
 
+    // Accumulated across ALL profiles and sent as ONE atomic bulk-update: the
+    // backend applies everything or nothing and forks a single config version
+    // per affected agent for the whole save.
+    const assign: NonNullable<
+      archestraApiTypes.BulkUpdateAgentToolsData["body"]
+    >["assign"] = [];
+    const unassign: NonNullable<
+      archestraApiTypes.BulkUpdateAgentToolsData["body"]
+    >["unassign"] = [];
+
     try {
       for (const [profileId, changes] of pendingChanges) {
         const current = assignmentsByProfile.get(profileId);
@@ -213,38 +219,31 @@ export function McpAssignmentsDialog({
           : useDynamicCredential
             ? "dynamic"
             : "static";
+        const pinnedMcpServerId =
+          !useDynamicCredential && !useEnterpriseManagedCredential
+            ? changes.credentialId
+            : null;
 
         // Track affected agents for invalidation
         if (toAdd.length > 0 || toRemove.length > 0) {
           affectedAgentIds.add(profileId);
         }
 
-        // Remove tools (skip invalidation, will do it once at the end)
         for (const toolId of toRemove) {
-          await unassignTool.mutateAsync({
+          unassign.push({ agentId: profileId, toolId });
+        }
+        for (const toolId of toAdd) {
+          assign.push({
             agentId: profileId,
             toolId,
-            skipInvalidation: true,
+            mcpServerId: pinnedMcpServerId,
+            resolveAtCallTime: useDynamicCredential,
+            credentialResolutionMode,
           });
         }
 
-        // Add new tools (skip invalidation, will do it once at the end)
-        if (toAdd.length > 0) {
-          const assignments = toAdd.map((toolId) => ({
-            agentId: profileId,
-            toolId,
-            mcpServerId:
-              !useDynamicCredential && !useEnterpriseManagedCredential
-                ? changes.credentialId
-                : null,
-            resolveAtCallTime: useDynamicCredential,
-            credentialResolutionMode,
-          }));
-
-          await bulkAssign.mutateAsync({ assignments, skipInvalidation: true });
-        }
-
-        // Update credential for existing tools if it changed
+        // Re-credential existing tools if the credential changed; the bulk
+        // endpoint upserts, so these ride the same call.
         if (
           changes.credentialId !== currentCredential &&
           current?.tools.length &&
@@ -255,17 +254,22 @@ export function McpAssignmentsDialog({
             (at) => !toRemove.includes(at.tool.id),
           );
           for (const at of toolsToUpdate) {
-            await patchTool.mutateAsync({
-              id: at.id,
-              mcpServerId:
-                !useDynamicCredential && !useEnterpriseManagedCredential
-                  ? changes.credentialId
-                  : null,
+            assign.push({
+              agentId: profileId,
+              toolId: at.tool.id,
+              mcpServerId: pinnedMcpServerId,
               credentialResolutionMode,
-              skipInvalidation: true,
             });
           }
         }
+      }
+
+      if (assign.length > 0 || unassign.length > 0) {
+        await bulkUpdateTools.mutateAsync({
+          assign,
+          unassign,
+          skipInvalidation: true,
+        });
       }
 
       // Invalidate all queries once at the end

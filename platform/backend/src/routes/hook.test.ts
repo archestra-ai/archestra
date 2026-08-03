@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { HookFileModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
@@ -120,6 +122,141 @@ describe("hook routes", () => {
         payload,
       });
       expect(second.statusCode).toBe(409);
+    });
+  });
+
+  describe("POST /api/hooks/bulk", () => {
+    async function getLatestVersion(id: string): Promise<number> {
+      const [row] = await db
+        .select({ latestVersion: schema.agentsTable.latestVersion })
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, id));
+      return row?.latestVersion ?? -1;
+    }
+
+    test("creates all hooks and forks exactly one agent version", async () => {
+      const versionBefore = await getLatestVersion(agentId);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/hooks/bulk",
+        payload: {
+          agentId,
+          hooks: [
+            {
+              event: "session_start",
+              fileName: "setup.py",
+              content: "print('one')",
+            },
+            {
+              event: "session_start",
+              fileName: "extra.py",
+              content: "print('two')",
+            },
+            {
+              event: "pre_tool_use",
+              fileName: "check.py",
+              content: "print('three')",
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body).toHaveLength(3);
+      expect(body.map((h: { fileName: string }) => h.fileName).sort()).toEqual([
+        "check.py",
+        "extra.py",
+        "setup.py",
+      ]);
+
+      const persisted = await HookFileModel.listByAgent(
+        agentId,
+        organizationId,
+      );
+      expect(persisted).toHaveLength(3);
+
+      // The batch is one user action → exactly one new config version.
+      expect(await getLatestVersion(agentId)).toBe(versionBefore + 1);
+    });
+
+    test("rejects the whole batch on conflicts, listing every pair", async () => {
+      await HookFileModel.create({
+        agentId,
+        organizationId,
+        event: "session_start",
+        fileName: "setup.py",
+        content: "print('existing')",
+        requirements: [],
+      });
+      const versionBefore = await getLatestVersion(agentId);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/hooks/bulk",
+        payload: {
+          agentId,
+          hooks: [
+            // Collides with the persisted hook.
+            {
+              event: "session_start",
+              fileName: "setup.py",
+              content: "print('dup')",
+            },
+            // Fine on its own...
+            {
+              event: "pre_tool_use",
+              fileName: "check.py",
+              content: "print('ok')",
+            },
+            // ...but duplicated within the payload.
+            {
+              event: "pre_tool_use",
+              fileName: "check.py",
+              content: "print('intra dup')",
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const message = response.json().error.message;
+      expect(message).toContain("(session_start, setup.py)");
+      expect(message).toContain("(pre_tool_use, check.py)");
+
+      // All-or-nothing: nothing was created, nothing was forked.
+      const persisted = await HookFileModel.listByAgent(
+        agentId,
+        organizationId,
+      );
+      expect(persisted).toHaveLength(1);
+      expect(await getLatestVersion(agentId)).toBe(versionBefore);
+    });
+
+    test("returns 404 when the agent belongs to another organization", async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const otherOrg = await makeOrganization();
+      const otherAgent = await makeAgent({ organizationId: otherOrg.id });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/hooks/bulk",
+        payload: {
+          agentId: otherAgent.id,
+          hooks: [
+            {
+              event: "session_start",
+              fileName: "setup.py",
+              content: "print('hello')",
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
     });
   });
 

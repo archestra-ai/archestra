@@ -662,6 +662,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, _orgId) =>
       AgentToolModel.countAssignmentsForOrganization(id),
   },
+  "/api/agents/tools/bulk-update": {
+    resourceType: "agentTool",
+    action: "agentTool.bulk_updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (id, _orgId) =>
+      AgentToolModel.countAssignmentsForOrganization(id),
+  },
   "/api/agent-tools/auto-configure-policies": {
     resourceType: "toolInvocationPolicy",
     action: "toolInvocationPolicy.auto_configured",

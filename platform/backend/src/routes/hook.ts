@@ -58,6 +58,68 @@ const hookRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/hooks/bulk",
+    {
+      schema: {
+        operationId: RouteId.BulkCreateHooks,
+        description:
+          "Create multiple hook files for one agent atomically. All-or-nothing: " +
+          "any conflict rejects the whole batch with every conflicting " +
+          "(event, fileName) pair listed. Forks one agent config version for " +
+          "the batch.",
+        tags: ["Hooks"],
+        body: z.object({
+          agentId: UuidIdSchema,
+          hooks: z
+            .array(
+              InsertHookFileSchema.omit({
+                organizationId: true,
+                agentId: true,
+              }),
+            )
+            .min(1)
+            .max(50),
+        }),
+        response: constructResponseSchema(z.array(SelectHookFileSchema)),
+      },
+    },
+    async ({ body: { agentId, hooks }, organizationId }, reply) => {
+      await requireAgentInOrg(agentId, organizationId);
+
+      // Reject the whole batch up front, listing EVERY conflicting
+      // (event, fileName) pair — both intra-payload duplicates and collisions
+      // with already-persisted hooks. The unique constraint (translated by
+      // withUniqueHookConflict below) backstops races past this check.
+      const existing = await HookFileModel.listByAgent(agentId, organizationId);
+      const existingKeys = new Set(
+        existing.map((h) => `${h.event}\0${h.fileName}`),
+      );
+      const seenKeys = new Set<string>();
+      const conflicts: string[] = [];
+      for (const hook of hooks) {
+        const key = `${hook.event}\0${hook.fileName}`;
+        if (existingKeys.has(key) || seenKeys.has(key)) {
+          conflicts.push(`(${hook.event}, ${hook.fileName})`);
+        }
+        seenKeys.add(key);
+      }
+      if (conflicts.length > 0) {
+        throw new ApiError(
+          409,
+          `No hooks created — conflicting (event, fileName) pairs: ${conflicts.join(", ")}`,
+        );
+      }
+
+      const rows = await withUniqueHookConflict(() =>
+        HookFileModel.createMany(
+          hooks.map((hook) => ({ ...hook, agentId, organizationId })),
+        ),
+      );
+      return reply.send(rows);
+    },
+  );
+
   fastify.put(
     "/api/hooks/:id",
     {

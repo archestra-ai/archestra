@@ -25,6 +25,7 @@ export const AuditEventNameSchema = z.enum([
   "agentTool.deleted",
   "agentTool.bulk_assigned",
   "agentTool.bulk_removed",
+  "agentTool.bulk_updated",
   "apiKey.created",
   "apiKey.deleted",
   "app.created",

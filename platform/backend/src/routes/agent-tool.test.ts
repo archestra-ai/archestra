@@ -872,6 +872,222 @@ describe("POST /api/agents/tools/bulk-assign", () => {
   });
 });
 
+describe("POST /api/agents/tools/bulk-update", () => {
+  let app: FastifyInstanceWithZod;
+  let adminUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeUser, makeOrganization, makeMember }) => {
+    adminUser = await makeUser();
+    const org = await makeOrganization();
+    organizationId = org.id;
+
+    await makeMember(adminUser.id, organizationId, { role: ADMIN_ROLE_NAME });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: unknown }).user = adminUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+
+    const { default: agentToolRoutes } = await import("./agent-tool");
+    await app.register(agentToolRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  async function getLatestVersion(agentId: string): Promise<number> {
+    const [row] = await db
+      .select({ latestVersion: schema.agentsTable.latestVersion })
+      .from(schema.agentsTable)
+      .where(eq(schema.agentsTable.id, agentId));
+    return row?.latestVersion ?? -1;
+  }
+
+  test("applies a mixed assign/unassign batch and forks exactly one version", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const [keptTool, droppedTool, newTool] = await Promise.all([
+      makeTool(),
+      makeTool(),
+      makeTool(),
+    ]);
+    await makeAgentTool(agent.id, keptTool.id);
+    await makeAgentTool(agent.id, droppedTool.id);
+    const versionBefore = await getLatestVersion(agent.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assign: [{ agentId: agent.id, toolId: newTool.id }],
+        unassign: [{ agentId: agent.id, toolId: droppedTool.id }],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      assigned: 1,
+      unassigned: 1,
+      updated: 0,
+      unchanged: 0,
+    });
+
+    const rows = await db
+      .select({ toolId: schema.agentToolsTable.toolId })
+      .from(schema.agentToolsTable)
+      .where(eq(schema.agentToolsTable.agentId, agent.id));
+    const toolIds = rows.map((r) => r.toolId);
+    expect(toolIds).toContain(keptTool.id);
+    expect(toolIds).toContain(newTool.id);
+    expect(toolIds).not.toContain(droppedTool.id);
+
+    // The whole batch is one user action → exactly one new version.
+    expect(await getLatestVersion(agent.id)).toBe(versionBefore + 1);
+  });
+
+  test("credential-only change reports updated and forks one version", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const tool = await makeTool();
+    await makeAgentTool(agent.id, tool.id);
+    const versionBefore = await getLatestVersion(agent.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assign: [
+          {
+            agentId: agent.id,
+            toolId: tool.id,
+            credentialResolutionMode: "dynamic",
+          },
+        ],
+        unassign: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ updated: 1, assigned: 0 });
+
+    const [row] = await db
+      .select({
+        credentialResolutionMode:
+          schema.agentToolsTable.credentialResolutionMode,
+      })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(row?.credentialResolutionMode).toBe("dynamic");
+    expect(await getLatestVersion(agent.id)).toBe(versionBefore + 1);
+  });
+
+  test("rejects the whole batch when any assignment fails validation", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const validTool = await makeTool();
+    const versionBefore = await getLatestVersion(agent.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assign: [
+          { agentId: agent.id, toolId: validTool.id },
+          {
+            agentId: agent.id,
+            toolId: "00000000-0000-0000-0000-000000000000",
+          },
+        ],
+        unassign: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error.message).toContain("No changes applied");
+
+    // All-or-nothing: the valid assignment must not have been applied.
+    const rows = await db
+      .select({ toolId: schema.agentToolsTable.toolId })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, validTool.id),
+        ),
+      );
+    expect(rows).toHaveLength(0);
+    expect(await getLatestVersion(agent.id)).toBe(versionBefore);
+  });
+
+  test("rejects the whole batch when an unassign references an unknown agent", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const tool = await makeTool();
+    await makeAgentTool(agent.id, tool.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assign: [],
+        unassign: [
+          { agentId: agent.id, toolId: tool.id },
+          {
+            agentId: "00000000-0000-0000-0000-000000000000",
+            toolId: tool.id,
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+
+    // The valid unassign must not have been applied either.
+    const rows = await db
+      .select({ toolId: schema.agentToolsTable.toolId })
+      .from(schema.agentToolsTable)
+      .where(
+        and(
+          eq(schema.agentToolsTable.agentId, agent.id),
+          eq(schema.agentToolsTable.toolId, tool.id),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+  });
+});
+
 describe("GET /api/agents/:agentId/tools", () => {
   let app: FastifyInstanceWithZod;
   let user: User;

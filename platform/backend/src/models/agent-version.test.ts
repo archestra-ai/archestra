@@ -489,4 +489,28 @@ describe("AgentVersionModel fork-on-write coverage", () => {
       tools.map((t) => t.id).sort(),
     );
   });
+
+  test("delegation sync yields one version for the whole add/remove set", async ({
+    makeAgent,
+  }) => {
+    const source = await makeAgent({ agentType: "agent" });
+    const [targetA, targetB, targetC] = await Promise.all([
+      makeAgent({ agentType: "agent" }),
+      makeAgent({ agentType: "agent" }),
+      makeAgent({ agentType: "agent" }),
+    ]);
+
+    await AgentToolModel.syncDelegations(source.id, [targetA.id, targetB.id]);
+    // Version 1 is the create; two added delegations fork exactly once.
+    expect(await listVersions(source)).toHaveLength(2);
+
+    // Mixed add + remove (drop A, keep B, add C) is still one action → one fork.
+    await AgentToolModel.syncDelegations(source.id, [targetB.id, targetC.id]);
+    const versions = await listVersions(source);
+    expect(versions).toHaveLength(3);
+
+    // A no-op sync forks nothing.
+    await AgentToolModel.syncDelegations(source.id, [targetB.id, targetC.id]);
+    expect(await listVersions(source)).toHaveLength(3);
+  });
 });

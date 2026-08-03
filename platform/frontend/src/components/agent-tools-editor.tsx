@@ -31,7 +31,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useInvalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
-import { useAssignTool, useUnassignTool } from "@/lib/agent-tools.query";
+import { useBulkUpdateAgentTools } from "@/lib/agent-tools.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { useProfileToolsWithIds } from "@/lib/chat/chat.query";
 import { useFeature } from "@/lib/config/config.query";
@@ -235,8 +235,7 @@ const AgentToolsEditorContent = forwardRef<
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
-  const assignTool = useAssignTool();
-  const unassignTool = useUnassignTool();
+  const bulkUpdateTools = useBulkUpdateAgentTools();
 
   // Fetch catalog items (MCP servers in registry; the gateway dialog also opts
   // in to assignable App backings via includeAppCatalogs).
@@ -546,7 +545,15 @@ const AgentToolsEditorContent = forwardRef<
       if (!targetAgentId) return;
 
       const allChanges = Array.from(pendingChangesRef.current.entries());
-      let hasChanges = false;
+      // Accumulated across ALL catalogs and sent as ONE atomic bulk-update:
+      // the backend applies everything or nothing and forks a single config
+      // version for the whole save.
+      const assign: NonNullable<
+        archestraApiTypes.BulkUpdateAgentToolsData["body"]
+      >["assign"] = [];
+      const unassign: NonNullable<
+        archestraApiTypes.BulkUpdateAgentToolsData["body"]
+      >["unassign"] = [];
 
       for (const [catalogId, changes] of allChanges) {
         const currentAssigned = assignedToolsByCatalog.get(catalogId) ?? [];
@@ -572,15 +579,9 @@ const AgentToolsEditorContent = forwardRef<
           (id) => !changes.selectedToolIds.has(id),
         );
 
-        if (toAdd.length > 0 || toRemove.length > 0) {
-          hasChanges = true;
-        }
-
-        const _isLocal = changes.catalogItem.serverType === "local";
         const prefersEnterpriseManaged =
           changes.catalogItem.enterpriseManagedConfig != null;
 
-        // Remove and add tools in parallel (skip invalidation, will do it once at the end)
         // Apps resolve their launch tool in-process per viewer, so they bind
         // dynamically like Playwright — there is no credential to pick.
         const useDynamicCredential =
@@ -589,45 +590,30 @@ const AgentToolsEditorContent = forwardRef<
           changes.credentialSourceId === DYNAMIC_CREDENTIAL_VALUE;
         const useEnterpriseManagedCredential =
           prefersEnterpriseManaged && useDynamicCredential;
+        const credentialResolutionMode = useEnterpriseManagedCredential
+          ? "enterprise_managed"
+          : useDynamicCredential
+            ? "dynamic"
+            : "static";
 
-        const results = await Promise.allSettled([
-          ...toRemove.map((toolId) =>
-            unassignTool.mutateAsync({
-              agentId: targetAgentId,
-              toolId,
-              skipInvalidation: true,
-            }),
-          ),
-          ...toAdd.map((toolId) =>
-            assignTool.mutateAsync({
-              agentId: targetAgentId,
-              toolId,
-              mcpServerId:
-                !useDynamicCredential && !useEnterpriseManagedCredential
-                  ? changes.credentialSourceId
-                  : undefined,
-              resolveAtCallTime: useDynamicCredential,
-              credentialResolutionMode: useEnterpriseManagedCredential
-                ? "enterprise_managed"
-                : useDynamicCredential
-                  ? "dynamic"
-                  : "static",
-              skipInvalidation: true,
-            }),
-          ),
-        ]);
-
-        const failures = results.filter((r) => r.status === "rejected");
-        if (failures.length > 0) {
-          throw new Error(
-            formatToolAssignmentErrorMessage(
-              resourceLabel,
-              (failures[0] as PromiseRejectedResult).reason,
-            ),
-          );
+        for (const toolId of toRemove) {
+          unassign.push({ agentId: targetAgentId, toolId });
+        }
+        for (const toolId of toAdd) {
+          assign.push({
+            agentId: targetAgentId,
+            toolId,
+            mcpServerId:
+              !useDynamicCredential && !useEnterpriseManagedCredential
+                ? changes.credentialSourceId
+                : undefined,
+            resolveAtCallTime: useDynamicCredential,
+            credentialResolutionMode,
+          });
         }
 
-        // Update credential on tools that remain assigned but whose credential changed
+        // Re-credential tools that remain assigned but whose credential
+        // changed; the bulk endpoint upserts, so these ride the same call.
         const toKeep = currentAssigned.filter((at) =>
           changes.selectedToolIds.has(at.tool.id),
         );
@@ -639,27 +625,32 @@ const AgentToolsEditorContent = forwardRef<
                 ? DYNAMIC_CREDENTIAL_VALUE
                 : (agentTool.mcpServerId ?? null);
           if (currentCred !== changes.credentialSourceId) {
-            hasChanges = true;
-            await assignTool.mutateAsync({
+            assign.push({
               agentId: targetAgentId,
               toolId: agentTool.tool.id,
               mcpServerId:
                 !useDynamicCredential && !useEnterpriseManagedCredential
                   ? (changes.credentialSourceId ?? undefined)
                   : null,
-              credentialResolutionMode: useEnterpriseManagedCredential
-                ? "enterprise_managed"
-                : useDynamicCredential
-                  ? "dynamic"
-                  : "static",
-              skipInvalidation: true,
+              credentialResolutionMode,
             });
           }
         }
       }
 
-      // Invalidate all queries once at the end
-      if (hasChanges) {
+      if (assign.length > 0 || unassign.length > 0) {
+        try {
+          await bulkUpdateTools.mutateAsync({
+            assign,
+            unassign,
+            skipInvalidation: true,
+          });
+        } catch (error) {
+          throw new Error(
+            formatToolAssignmentErrorMessage(resourceLabel, error),
+          );
+        }
+        // Invalidate all queries once at the end
         invalidateAllQueries(targetAgentId);
       }
 

@@ -1,7 +1,11 @@
 import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { predefinedPermissionsMap } from "@archestra/shared/access-control";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { beforeEach, describe, expect, test } from "@/test";
+import McpServerModel from "./mcp-server";
 import MemberModel from "./member";
+import SecretModel from "./secret";
 import UserModel from "./user";
 
 describe("User.getUserPermissions", () => {
@@ -137,5 +141,149 @@ describe("UserModel.delete", () => {
     const deleted = await UserModel.delete(crypto.randomUUID());
 
     expect(deleted).toBe(false);
+  });
+});
+
+/**
+ * Deleting a user must take their personal MCP credentials with them.
+ * `mcp_server.owner_id` is `set null`, so without an explicit purge the install
+ * survives ownerless with its secret bag (OAuth tokens, prompted secrets) intact.
+ *
+ * These go through `UserModel.delete` rather than the model method directly:
+ * the original bug was that the cleanup lived in better-auth's
+ * `user.delete.before` hook, which a raw Drizzle delete never fires. Testing
+ * the real deletion entry point is the point.
+ */
+describe("UserModel.delete personal MCP credential cleanup", () => {
+  test("purges the user's personal MCP install and its credential secret", async ({
+    makeUser,
+    makeMcpServer,
+  }) => {
+    const user = await makeUser();
+    const secret = await SecretModel.create({
+      name: "personal-oauth",
+      secret: { access_token: "at-1", refresh_token: "rt-1" },
+    });
+    const server = await makeMcpServer({
+      ownerId: user.id,
+      scope: "personal",
+      serverType: "remote",
+      secretId: secret.id,
+    });
+
+    await UserModel.delete(user.id);
+
+    expect(await McpServerModel.findById(server.id)).toBeNull();
+    expect(await SecretModel.findById(secret.id)).toBeNull();
+  });
+
+  test("purges soft-deleted personal installs, whose secrets uninstall deliberately retains", async ({
+    makeUser,
+    makeMcpServer,
+  }) => {
+    const user = await makeUser();
+    const secret = await SecretModel.create({
+      name: "retained-after-uninstall",
+      secret: { access_token: "at-2" },
+    });
+    // Uninstall keeps the row + secret so a restore can recover credentials.
+    // Once the owner is gone nobody can restore it, so it is pure residue.
+    const server = await makeMcpServer({
+      ownerId: user.id,
+      scope: "personal",
+      serverType: "remote",
+      secretId: secret.id,
+      deletedAt: new Date(),
+    });
+
+    await UserModel.delete(user.id);
+
+    const [row] = await db
+      .select()
+      .from(schema.mcpServersTable)
+      .where(eq(schema.mcpServersTable.id, server.id));
+    expect(row).toBeUndefined();
+    expect(await SecretModel.findById(secret.id)).toBeNull();
+  });
+
+  test("leaves org- and team-scoped installs owned by the user alone", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeMcpServer,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+
+    // scope is the discriminator, NOT owner_id — shared installs legitimately
+    // outlive the person who happened to install them.
+    const orgSecret = await SecretModel.create({
+      name: "org-cred",
+      secret: { access_token: "org" },
+    });
+    const orgServer = await makeMcpServer({
+      ownerId: user.id,
+      scope: "org",
+      serverType: "remote",
+      secretId: orgSecret.id,
+    });
+    const teamSecret = await SecretModel.create({
+      name: "team-cred",
+      secret: { access_token: "team" },
+    });
+    const teamServer = await makeMcpServer({
+      ownerId: user.id,
+      scope: "team",
+      teamId: team.id,
+      serverType: "remote",
+      secretId: teamSecret.id,
+    });
+
+    await UserModel.delete(user.id);
+
+    expect(await McpServerModel.findById(orgServer.id)).not.toBeNull();
+    expect(await SecretModel.findById(orgSecret.id)).not.toBeNull();
+    expect(await McpServerModel.findById(teamServer.id)).not.toBeNull();
+    expect(await SecretModel.findById(teamSecret.id)).not.toBeNull();
+  });
+
+  test("leaves another user's personal install alone", async ({
+    makeUser,
+    makeMcpServer,
+  }) => {
+    const deletedUser = await makeUser();
+    const otherUser = await makeUser();
+    const otherSecret = await SecretModel.create({
+      name: "other-cred",
+      secret: { access_token: "other" },
+    });
+    const otherServer = await makeMcpServer({
+      ownerId: otherUser.id,
+      scope: "personal",
+      serverType: "remote",
+      secretId: otherSecret.id,
+    });
+
+    await UserModel.delete(deletedUser.id);
+
+    expect(await McpServerModel.findById(otherServer.id)).not.toBeNull();
+    expect(await SecretModel.findById(otherSecret.id)).not.toBeNull();
+  });
+
+  test("still deletes the user when an install carries no secret", async ({
+    makeUser,
+    makeMcpServer,
+  }) => {
+    const user = await makeUser();
+    const server = await makeMcpServer({
+      ownerId: user.id,
+      scope: "personal",
+      serverType: "remote",
+      secretId: null,
+    });
+
+    expect(await UserModel.delete(user.id)).toBe(true);
+    expect(await McpServerModel.findById(server.id)).toBeNull();
   });
 });

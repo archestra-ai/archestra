@@ -2759,6 +2759,13 @@
       "when": 1785622126748,
       "tag": "0393_drop_mcp_server_installation_request",
       "breakpoints": true
+    },
+    {
+      "idx": 394,
+      "version": "7",
+      "when": 1785756813025,
+      "tag": "0394_purge_orphaned_personal_mcp_credentials",
+      "breakpoints": true
     }
   ]
 }

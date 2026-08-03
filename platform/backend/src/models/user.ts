@@ -9,6 +9,8 @@ import config from "@/config";
 import db, { schema, type Transaction } from "@/database";
 import logger from "@/logging";
 import type { UpdateUser } from "@/types";
+import AgentModel from "./agent";
+import McpServerModel from "./mcp-server";
 import MemberModel from "./member";
 import OrganizationRoleModel from "./organization-role";
 
@@ -77,7 +79,18 @@ class UserModel {
   }
 
   /**
-   * Get a user by ID with their organization membership
+   * Get a user by ID with their organization membership.
+   *
+   * This is what resolves `request.organizationId` for both session and
+   * API-key auth (auth/fastify-plugin/middleware.ts), so the membership picked
+   * here decides which org a request is scoped to.
+   *
+   * The ordering is load-bearing for users who belong to more than one org:
+   * `limit(1)` on an unordered join lets Postgres return a different membership
+   * across queries or plans, which would make org-scoped results flicker. It
+   * matches `MemberModel.getFirstMembershipForUser` exactly so the org resolved
+   * here agrees with the `activeOrganizationId` better-auth stamps on the
+   * session (auth/better-auth.ts session-create hook).
    */
   static async getById(id: string) {
     logger.trace("UserModel.getById: fetching user");
@@ -92,6 +105,7 @@ class UserModel {
         eq(schema.usersTable.id, schema.membersTable.userId),
       )
       .where(eq(schema.usersTable.id, id))
+      .orderBy(schema.membersTable.createdAt, schema.membersTable.id)
       .limit(1);
     logger.trace({ found: !!user }, "UserModel.getById: completed");
     return user;
@@ -215,10 +229,57 @@ class UserModel {
   }
 
   /**
-   * Delete a user by ID
+   * Delete a user by ID, along with the personal resources that must not
+   * outlive them.
+   *
+   * The cleanup lives HERE and not in better-auth's `user.delete.before`
+   * database hook: every real deletion path (member removal, pending-member
+   * delete, linked-IdP auth, rejected-SSO cleanup) calls this method, and a
+   * raw Drizzle delete does not run better-auth hooks. Cleanup placed in that
+   * hook looks correct and never fires.
+   *
+   * Runs before the delete because it resolves rows through `owner_id`, which
+   * the `set null` FK would clear.
    */
   static async delete(userId: string, tx?: Transaction): Promise<boolean> {
     logger.debug("UserModel.delete: deleting user");
+
+    // Personal MCP installs hold the user's own credentials (OAuth tokens,
+    // prompted secrets). `mcp_server.owner_id` is `set null`, so without this
+    // the install survives ownerless with its secret bag intact.
+    try {
+      await McpServerModel.purgePersonalServersForUser(userId);
+    } catch (error) {
+      // Don't block the deletion on cleanup failure — a user who asked to be
+      // removed must still be removed. Individual install failures are already
+      // swallowed one level down; this catches a total failure of the query.
+      logger.error(
+        { err: error, userId },
+        "UserModel.delete: failed to purge personal MCP servers",
+      );
+    }
+
+    // Personal gateways/proxies are agents the deletion guard in
+    // routes/agent.ts refuses to delete while `is_personal_gateway` is true,
+    // so an orphan here is undeletable. better-auth's hook also does this, for
+    // the paths that go through better-auth; both are idempotent.
+    try {
+      await AgentModel.deletePersonalMcpGatewaysForUser(userId);
+    } catch (error) {
+      logger.error(
+        { err: error, userId },
+        "UserModel.delete: failed to delete personal MCP gateways",
+      );
+    }
+    try {
+      await AgentModel.deletePersonalLlmProxiesForUser(userId);
+    } catch (error) {
+      logger.error(
+        { err: error, userId },
+        "UserModel.delete: failed to delete personal LLM proxies",
+      );
+    }
+
     const dbOrTx = tx ?? db;
     const result = await dbOrTx
       .delete(schema.usersTable)

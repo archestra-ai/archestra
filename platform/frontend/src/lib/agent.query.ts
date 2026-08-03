@@ -376,8 +376,12 @@ export function useRestoreProfile() {
   });
 }
 
-/** Permanently delete a soft-deleted agent (admin-only trash action). */
-export function usePurgeProfile() {
+/**
+ * Permanently delete a soft-deleted agent (admin-only trash action). One
+ * endpoint serves every agent type, so callers pass the label their surface
+ * uses ("MCP Gateway", "LLM Proxy") to keep the toast in the user's language.
+ */
+export function usePurgeProfile(entityLabel = "Agent") {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
@@ -390,7 +394,7 @@ export function usePurgeProfile() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      toast.success("Agent permanently deleted");
+      toast.success(`${entityLabel} permanently deleted`);
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });

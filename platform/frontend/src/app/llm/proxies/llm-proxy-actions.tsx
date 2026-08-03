@@ -16,6 +16,7 @@ type LlmProxyActionsProps = {
   onEdit: (agent: Proxy) => void;
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;
+  onPurge: (agent: Proxy) => void;
   onClone: (agent: Proxy) => void;
 };
 
@@ -26,6 +27,7 @@ export function LlmProxyActions({
   onEdit,
   onDelete,
   onRestore,
+  onPurge,
   onClone,
 }: LlmProxyActionsProps) {
   if (agent.deletedAt) {
@@ -43,6 +45,18 @@ export function LlmProxyActions({
           }}
         >
           <RotateCcw className="h-4 w-4" />
+        </PermissionButton>
+        <PermissionButton
+          permissions={{ llmProxy: ["admin"] }}
+          aria-label="Delete permanently"
+          variant="outline"
+          size="icon-sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPurge(agent);
+          }}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
         </PermissionButton>
       </ButtonGroup>
     );

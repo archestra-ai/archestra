@@ -12,6 +12,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { DeletedRowMeta } from "@/components/deleted-row-meta";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -41,6 +42,7 @@ import {
   useDeleteProfile,
   useProfile,
   useProfilesPaginated,
+  usePurgeProfile,
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -209,7 +211,11 @@ function McpGateways({
   const [cloningGateway, setCloningGateway] = useState<GatewayData | null>(
     null,
   );
+  const [purgingGateway, setPurgingGateway] = useState<GatewayData | null>(
+    null,
+  );
   const restoreGateway = useRestoreProfile();
+  const purgeGateway = usePurgeProfile("MCP Gateway");
 
   const handleSortingChange = useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
@@ -389,6 +395,18 @@ function McpGateways({
         />
       ),
     },
+    ...(isDeletedView
+      ? [
+          {
+            id: "deleted",
+            header: "Deleted",
+            enableSorting: false,
+            cell: ({ row }) => (
+              <DeletedRowMeta deletedAt={row.original.deletedAt} />
+            ),
+          } satisfies ColumnDef<GatewayData>,
+        ]
+      : []),
     {
       id: "actions",
       header: "Actions",
@@ -423,6 +441,7 @@ function McpGateways({
                 },
               });
             }}
+            onPurge={setPurgingGateway}
             onClone={setCloningGateway}
           />
         );
@@ -617,6 +636,22 @@ function McpGateways({
                 agentId={deletingGatewayId}
                 open={!!deletingGatewayId}
                 onOpenChange={(open) => !open && setDeletingGatewayId(null)}
+              />
+            )}
+
+            {purgingGateway && (
+              <DeleteConfirmDialog
+                open={!!purgingGateway}
+                onOpenChange={(open) => !open && setPurgingGateway(null)}
+                title="Delete MCP Gateway permanently"
+                description={`This permanently deletes "${purgingGateway.name}" and unlinks its LLM interaction history. The data cannot be recovered.`}
+                isPending={purgeGateway.isPending}
+                onConfirm={async () => {
+                  const ok = await purgeGateway.mutateAsync(purgingGateway.id);
+                  if (ok) setPurgingGateway(null);
+                }}
+                confirmLabel="Delete permanently"
+                pendingLabel="Deleting..."
               />
             )}
 

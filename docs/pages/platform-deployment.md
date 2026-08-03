@@ -1597,7 +1597,9 @@ Automatic deletion of content-bearing records after a configurable number of day
 
 ### Soft-Delete Retention
 
-Deleting a resource — a project, agent, skill, app, knowledge source, or MCP server — soft-deletes it: the record is hidden but kept, and an admin can restore it. This sweep permanently deletes soft-deleted records once they are older than the window. It is part of the core platform; no license is required. Each purge writes an audit log entry. Admins can also permanently delete a project, agent, or skill from its Deleted view at any time, whether or not the sweep is enabled.
+Deleting a resource — a project, agent, skill, app, knowledge source, or MCP server — soft-deletes it: the record is hidden but kept, and an admin can restore it. This sweep permanently deletes soft-deleted records once they are older than the window. It is part of the core platform; no license is required. Each purge writes an audit log entry to the organization that owned the record. Admins can also permanently delete a project, agent, skill, MCP gateway, or LLM proxy from its Deleted view at any time, whether or not the sweep is enabled.
+
+The sweep leaves a record in place when it cannot trace that record to an organization, and logs a warning instead. An MCP server install belongs to an organization through its team, its catalog entry, or its owner's membership.
 
 - **`ARCHESTRA_SOFT_DELETE_RETENTION_ENABLED`** - Master switch for the daily purge sweep.
   - Default: `false` (soft-deleted records are kept indefinitely).

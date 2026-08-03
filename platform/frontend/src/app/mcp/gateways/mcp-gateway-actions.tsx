@@ -18,6 +18,7 @@ type McpGatewayActionsProps = {
   onEdit: (agent: Gateway) => void;
   onDelete: (agentId: string) => void;
   onRestore: (agentId: string) => void;
+  onPurge: (agent: Gateway) => void;
   onClone: (agent: Gateway) => void;
 };
 
@@ -28,6 +29,7 @@ export function McpGatewayActions({
   onEdit,
   onDelete,
   onRestore,
+  onPurge,
   onClone,
 }: McpGatewayActionsProps) {
   if (agent.deletedAt) {
@@ -45,6 +47,18 @@ export function McpGatewayActions({
           }}
         >
           <RotateCcw className="h-4 w-4" />
+        </PermissionButton>
+        <PermissionButton
+          permissions={{ mcpGateway: ["admin"] }}
+          aria-label="Delete permanently"
+          variant="outline"
+          size="icon-sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPurge(agent);
+          }}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
         </PermissionButton>
       </ButtonGroup>
     );

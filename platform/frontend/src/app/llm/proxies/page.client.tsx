@@ -12,6 +12,7 @@ import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { DeletedRowMeta } from "@/components/deleted-row-meta";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { LoadingSpinner, LoadingWrapper } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
@@ -39,6 +40,7 @@ import {
   useDeleteProfile,
   useProfile,
   useProfilesPaginated,
+  usePurgeProfile,
   useRestoreProfile,
 } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -181,7 +183,9 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
   });
   const [deletingProxyId, setDeletingProxyId] = useState<string | null>(null);
   const [cloningProxy, setCloningProxy] = useState<ProxyData | null>(null);
+  const [purgingProxy, setPurgingProxy] = useState<ProxyData | null>(null);
   const restoreProxy = useRestoreProfile();
+  const purgeProxy = usePurgeProfile("LLM Proxy");
 
   const handleSortingChange = useCallback(
     (updater: SortingState | ((old: SortingState) => SortingState)) => {
@@ -294,6 +298,18 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
         />
       ),
     },
+    ...(isDeletedView
+      ? [
+          {
+            id: "deleted",
+            header: "Deleted",
+            enableSorting: false,
+            cell: ({ row }) => (
+              <DeletedRowMeta deletedAt={row.original.deletedAt} />
+            ),
+          } satisfies ColumnDef<ProxyData>,
+        ]
+      : []),
     {
       id: "actions",
       header: "Actions",
@@ -328,6 +344,7 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 },
               });
             }}
+            onPurge={setPurgingProxy}
             onClone={setCloningProxy}
           />
         );
@@ -476,6 +493,22 @@ function LlmProxies({ initialData }: { initialData?: LlmProxiesInitialData }) {
                 agentId={deletingProxyId}
                 open={!!deletingProxyId}
                 onOpenChange={(open) => !open && setDeletingProxyId(null)}
+              />
+            )}
+
+            {purgingProxy && (
+              <DeleteConfirmDialog
+                open={!!purgingProxy}
+                onOpenChange={(open) => !open && setPurgingProxy(null)}
+                title="Delete LLM Proxy permanently"
+                description={`This permanently deletes "${purgingProxy.name}" and unlinks its LLM interaction history. The data cannot be recovered.`}
+                isPending={purgeProxy.isPending}
+                onConfirm={async () => {
+                  const ok = await purgeProxy.mutateAsync(purgingProxy.id);
+                  if (ok) setPurgingProxy(null);
+                }}
+                confirmLabel="Delete permanently"
+                pendingLabel="Deleting..."
               />
             )}
 

@@ -854,6 +854,32 @@ jobs:
 
           echo "All services are ready!"
 
+      # `localhost` must reach the backend from INSIDE the container. Every
+      # service binds 0.0.0.0, but getaddrinfo ranks ::1 first (RFC 6724), so
+      # without the entrypoint pinning `localhost` to IPv4 this fails against a
+      # perfectly healthy backend -- which is what issue #4917 hit, and what
+      # made #6933 look like "port 9000 was removed". The host-side curls above
+      # cannot catch it: they exercise Docker port mapping, not in-container
+      # name resolution.
+      - name: Assert localhost resolves to the backend inside the container
+        run: |
+          if ! docker exec archestra-quickstart wget -qO- -T5 http://localhost:9000/health; then
+            echo "FAILED: http://localhost:9000/health unreachable inside the container"
+            docker exec archestra-quickstart cat /etc/hosts || true
+            docker logs archestra-quickstart --tail=100 || true
+            exit 1
+          fi
+
+          # IPv6 loopback itself must survive: only the `localhost` alias is
+          # dropped, not the ::1 entry.
+          if ! docker exec archestra-quickstart getent hosts ip6-localhost | grep -q '::1'; then
+            echo "FAILED: ip6-localhost no longer resolves to ::1"
+            docker exec archestra-quickstart cat /etc/hosts || true
+            exit 1
+          fi
+
+          echo "localhost -> backend OK, IPv6 loopback intact"
+
       # Assert the embedded Dagger Engine (skill sandbox / code runtime) actually
       # came up. The entrypoint deploys it and gates on readiness, but that gate
       # is non-fatal: on timeout it disables the runtime and the container still

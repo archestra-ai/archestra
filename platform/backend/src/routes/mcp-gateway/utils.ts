@@ -466,20 +466,25 @@ export async function createAgentServer(params: {
     // wasted call and every other org the prompt weight, so withhold it until
     // it can actually answer. The handler still refuses on its own — a client
     // may hold a tool list from before the model was cleared.
+    // These come from the agent's assigned tool rows, which outlive both the
+    // beta flag and the advisor's model — an org that once had either keeps the
+    // row. Withhold on the current state instead.
     const advertisesAdvisor = chatOnlyFiltered.some(
       (tool) =>
         archestraMcpBranding.getToolShortName(tool.name) ===
         TOOL_ADVISOR_SHORT_NAME,
     );
-    const permittedTools =
+    const withholdAdvisor =
       advertisesAdvisor &&
-      !(await AgentModel.hasConfiguredAdvisor(agent.organizationId))
-        ? chatOnlyFiltered.filter(
-            (tool) =>
-              archestraMcpBranding.getToolShortName(tool.name) !==
-              TOOL_ADVISOR_SHORT_NAME,
-          )
-        : chatOnlyFiltered;
+      (!config.advisor.enabled ||
+        !(await AgentModel.hasConfiguredAdvisor(agent.organizationId)));
+    const permittedTools = withholdAdvisor
+      ? chatOnlyFiltered.filter(
+          (tool) =>
+            archestraMcpBranding.getToolShortName(tool.name) !==
+            TOOL_ADVISOR_SHORT_NAME,
+        )
+      : chatOnlyFiltered;
 
     // Resolve the backing catalogs of the advertised tools once: their names
     // feed both the search_tools description and the app launch-tool title and

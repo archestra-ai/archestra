@@ -2431,6 +2431,15 @@ const config = {
     enabled: skillsSandboxEnabled,
   },
   /**
+   * BETA gate for Advisor Mode — the `advisor` tool and its built-in agent.
+   * Off by default; a blank value falls back to the ARCHESTRA_BETA master
+   * switch (see betaFeatureEnabled). While off the tool is not registered at
+   * all, so it reaches no surface and the built-in agent has nothing to back.
+   */
+  advisor: {
+    enabled: betaFeatureEnabled(process.env.ARCHESTRA_ADVISOR_ENABLED),
+  },
+  /**
    * unified Dagger runtime — a per-target pool of pre-warmed base-container
    * sessions that host the code execution sandbox commands. The Rust crate
    * (`@archestra/sandbox-rs`) owns the sessions; this block only carries

@@ -117820,6 +117820,9 @@
                         "kbAutoSyncPermissionsEnabled": {
                           "type": "boolean"
                         },
+                        "advisorEnabled": {
+                          "type": "boolean"
+                        },
                         "hackathonRecorderEnabled": {
                           "type": "boolean"
                         },
@@ -117875,6 +117878,7 @@
                         "agentHooksEnabled",
                         "chatopsTelegramEnabled",
                         "kbAutoSyncPermissionsEnabled",
+                        "advisorEnabled",
                         "hackathonRecorderEnabled",
                         "hackathonVideoDownloadEnabled",
                         "hackathonMaxFinalCutMs",

@@ -100,6 +100,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               chatopsTelegramEnabled: z.boolean(),
               /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
               kbAutoSyncPermissionsEnabled: z.boolean(),
+              advisorEnabled: z.boolean(),
               /** App session recording (record/replay/download app demos). */
               hackathonRecorderEnabled: z.boolean(),
               /**
@@ -177,6 +178,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentHooksEnabled: config.hooks.enabled,
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
           kbAutoSyncPermissionsEnabled: config.kb.autoSyncPermissionsEnabled,
+          advisorEnabled: config.advisor.enabled,
           hackathonRecorderEnabled: config.hackathonRecorder.enabled,
           hackathonVideoDownloadEnabled:
             config.hackathonRecorder.videoDownloadEnabled,

@@ -6,6 +6,7 @@ import {
 } from "@archestra/shared";
 import { APICallError, generateText } from "ai";
 import { vi } from "vitest";
+import config from "@/config";
 import { ModelModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
@@ -358,5 +359,25 @@ describe("advisor consultation", () => {
     expect(archestraError(result as any).type).toBe("advisor_unavailable");
     expect(vi.mocked(resolveAgentLlmOrDefault)).not.toHaveBeenCalled();
     expect(vi.mocked(generateText)).not.toHaveBeenCalled();
+  });
+
+  test("refuses while the beta gate is off, even if fully configured", async ({
+    makeAgent,
+  }) => {
+    await makeAdvisorAgent(makeAgent, { modelId: advisorModelId });
+    const advisorConfig = config.advisor as { enabled: boolean };
+    const original = advisorConfig.enabled;
+    advisorConfig.enabled = false;
+    try {
+      const result = await executeArchestraTool(
+        advisorTool,
+        { question: "A or B?" },
+        context,
+      );
+      expect(archestraError(result as any).type).toBe("advisor_unavailable");
+      expect(vi.mocked(generateText)).not.toHaveBeenCalled();
+    } finally {
+      advisorConfig.enabled = original;
+    }
   });
 });

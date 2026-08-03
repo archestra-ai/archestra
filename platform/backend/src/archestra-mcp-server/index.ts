@@ -169,7 +169,7 @@ export function getArchestraMcpTools() {
     ...appTools,
     ...appDataTools,
     ...appLlmTools,
-    ...advisorTools,
+    ...(config.advisor.enabled ? advisorTools : []),
   ];
 
   // Descriptions are shipped strings frozen at module load, so they cannot read

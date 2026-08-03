@@ -33,6 +33,7 @@ vi.mock("@archestra/shared", async () => {
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/config/config.query");
 
 import {
   useHasPermissions,

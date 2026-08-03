@@ -1580,6 +1580,12 @@ export function AgentDialog({
                   {!isBuiltIn && (
                     <AgentBadge type={scope} className="font-normal" />
                   )}
+                  {agent?.builtInAgentConfig?.name ===
+                    BUILT_IN_AGENT_IDS.ADVISOR && (
+                    <Badge variant="outline" className="font-normal">
+                      Beta
+                    </Badge>
+                  )}
                 </DialogTitle>
                 {isBuiltIn && agent?.description && (
                   <p className="pt-2 text-sm text-muted-foreground">

@@ -14,6 +14,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { Badge } from "@/components/ui/badge";
 import { CardTitle } from "@/components/ui/card";
 import { MultiSelect } from "@/components/ui/multi-select";
 import {
@@ -23,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import {
   useOrganization,
@@ -61,6 +63,7 @@ export default function LlmSettingsPage() {
     "platform-costs-and-limits",
     "toon-compression",
   );
+  const advisorEnabled = useFeature("advisorEnabled");
   const advisorDocsUrl = getFrontendDocsUrl(
     "platform-built-in-subagents",
     "advisor-agent",
@@ -276,47 +279,57 @@ export default function LlmSettingsPage() {
         onSave={handleSave}
         onCancel={handleCancel}
       />
-      {/* Built-in agents are admin-only, so anyone who cannot reach them would
-          follow this link to an empty page and a filter they cannot select. */}
-      <WithPermissions
-        permissions={{ agent: ["admin"] }}
-        noPermissionHandle="hide"
-      >
-        <SettingsBlock
-          title="Advisor"
-          description={
-            <>
-              Let agents ask a stronger model for a second opinion at the
-              decisions that matter, so routine work still runs on a cheaper
-              one.
-              <span className="mt-2 block">
-                Set the model on the{" "}
-                <Link
-                  href="/agents?scope=built_in"
-                  className="text-primary hover:underline"
-                >
-                  Advisor agent
-                </Link>
-                . Until you pick one, agents cannot consult an advisor. Each
-                consultation is billed at that model&apos;s own rates.
-                {advisorDocsUrl && (
-                  <>
-                    {" "}
-                    <ExternalDocsLink
-                      href={advisorDocsUrl}
-                      className="text-inherit underline underline-offset-4"
-                      showIcon={false}
-                    >
-                      Learn how the advisor works
-                    </ExternalDocsLink>
-                    .
-                  </>
-                )}
+      {/* Beta-gated, and built-in agents are admin-only — anyone who cannot
+          reach them would follow this link to an empty page and a scope filter
+          they cannot select. */}
+      {advisorEnabled && (
+        <WithPermissions
+          permissions={{ agent: ["admin"] }}
+          noPermissionHandle="hide"
+        >
+          <SettingsBlock
+            title={
+              <span className="flex items-center gap-2">
+                Advisor
+                <Badge variant="outline" className="font-normal">
+                  Beta
+                </Badge>
               </span>
-            </>
-          }
-        />
-      </WithPermissions>
+            }
+            description={
+              <>
+                Let agents ask a stronger model for a second opinion at the
+                decisions that matter, so routine work still runs on a cheaper
+                one.
+                <span className="mt-2 block">
+                  Set the model on the{" "}
+                  <Link
+                    href="/agents?scope=built_in"
+                    className="text-primary hover:underline"
+                  >
+                    Advisor agent
+                  </Link>
+                  . Until you pick one, agents cannot consult an advisor. Each
+                  consultation is billed at that model&apos;s own rates.
+                  {advisorDocsUrl && (
+                    <>
+                      {" "}
+                      <ExternalDocsLink
+                        href={advisorDocsUrl}
+                        className="text-inherit underline underline-offset-4"
+                        showIcon={false}
+                      >
+                        Learn how the advisor works
+                      </ExternalDocsLink>
+                      .
+                    </>
+                  )}
+                </span>
+              </>
+            }
+          />
+        </WithPermissions>
+      )}
       <WithPermissions
         permissions={{ llmLimit: ["read"] }}
         noPermissionHandle="hide"

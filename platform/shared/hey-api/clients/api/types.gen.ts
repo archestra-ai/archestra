@@ -32454,6 +32454,7 @@ export type GetConfigResponses = {
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
             kbAutoSyncPermissionsEnabled: boolean;
+            advisorEnabled: boolean;
             hackathonRecorderEnabled: boolean;
             hackathonVideoDownloadEnabled: boolean;
             hackathonMaxFinalCutMs: number;

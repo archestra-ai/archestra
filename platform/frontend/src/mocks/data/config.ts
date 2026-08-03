@@ -54,6 +54,7 @@ export function makeConfig(
       agentHooksEnabled: false,
       chatopsTelegramEnabled: false,
       kbAutoSyncPermissionsEnabled: false,
+      advisorEnabled: false,
       hackathonRecorderEnabled: true,
       // Off by default, exactly as a real deployment has it.
       hackathonVideoDownloadEnabled: false,

@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { APICallError, generateText } from "ai";
 import { z } from "zod";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
+import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, ModelModel } from "@/models";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
@@ -92,6 +93,15 @@ async function runAdvisorConsultation(
   args: z.infer<typeof AdvisorSchema>,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
+  // The tool is unregistered while the beta gate is off, but an assigned tool
+  // row outlives the flag — so a direct call or run_tool can still land here.
+  if (!config.advisor.enabled) {
+    return advisorErrorResult(
+      "advisor_unavailable",
+      "Advisor Mode is not enabled on this deployment.",
+    );
+  }
+
   const { userId, organizationId, sessionId } = context;
   if (!userId || !organizationId) {
     return advisorErrorResult(

@@ -41,6 +41,7 @@ import AccountModel from "@/models/account";
 import AgentModel from "@/models/agent";
 import AuditLogModel from "@/models/audit-log";
 import InvitationModel from "@/models/invitation";
+import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
 import OrganizationRoleModel from "@/models/organization-role";
 import SessionModel from "@/models/session";
@@ -375,6 +376,18 @@ export const auth = betterAuth({
             logger.error(
               { err: error, userId: user.id },
               "[databaseHooks:user] Failed to delete personal LLM proxies",
+            );
+          }
+          // Mirrors UserModel.delete — the app-driven deletion paths are raw
+          // Drizzle deletes that bypass this hook, while better-auth's
+          // self-service delete-user endpoint reaches ONLY this hook. The
+          // purge is idempotent, so both paths calling it is harmless.
+          try {
+            await McpServerModel.purgePersonalServersForUser(user.id);
+          } catch (error) {
+            logger.error(
+              { err: error, userId: user.id },
+              "[databaseHooks:user] Failed to purge personal MCP credentials",
             );
           }
         },

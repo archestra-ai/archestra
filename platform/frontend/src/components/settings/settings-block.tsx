@@ -14,7 +14,8 @@ import { cn } from "@/lib/utils";
 interface SettingsBlockProps {
   title: ReactNode;
   description?: ReactNode;
-  control: ReactNode;
+  /** Omit for a block that only explains something and links elsewhere. */
+  control?: ReactNode;
   notice?: ReactNode;
   children?: ReactNode;
   /** Anchor for a link that points at this specific setting. */

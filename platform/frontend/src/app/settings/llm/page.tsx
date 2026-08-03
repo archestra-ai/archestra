@@ -2,6 +2,7 @@
 
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DefaultUserLimitsSection } from "@/app/settings/llm/_parts/default-user-limits-section";
@@ -59,6 +60,10 @@ export default function LlmSettingsPage() {
   const toonDocsUrl = getFrontendDocsUrl(
     "platform-costs-and-limits",
     "toon-compression",
+  );
+  const advisorDocsUrl = getFrontendDocsUrl(
+    "platform-built-in-subagents",
+    "advisor-agent",
   );
 
   const updateLlmSettingsMutation = useUpdateLlmSettings(
@@ -271,6 +276,47 @@ export default function LlmSettingsPage() {
         onSave={handleSave}
         onCancel={handleCancel}
       />
+      {/* Built-in agents are admin-only, so anyone who cannot reach them would
+          follow this link to an empty page and a filter they cannot select. */}
+      <WithPermissions
+        permissions={{ agent: ["admin"] }}
+        noPermissionHandle="hide"
+      >
+        <SettingsBlock
+          title="Advisor"
+          description={
+            <>
+              Let agents ask a stronger model for a second opinion at the
+              decisions that matter, so routine work still runs on a cheaper
+              one.
+              <span className="mt-2 block">
+                Set the model on the{" "}
+                <Link
+                  href="/agents?scope=built_in"
+                  className="text-primary hover:underline"
+                >
+                  Advisor agent
+                </Link>
+                . Until you pick one, agents cannot consult an advisor. Each
+                consultation is billed at that model&apos;s own rates.
+                {advisorDocsUrl && (
+                  <>
+                    {" "}
+                    <ExternalDocsLink
+                      href={advisorDocsUrl}
+                      className="text-inherit underline underline-offset-4"
+                      showIcon={false}
+                    >
+                      Learn how the advisor works
+                    </ExternalDocsLink>
+                    .
+                  </>
+                )}
+              </span>
+            </>
+          }
+        />
+      </WithPermissions>
       <WithPermissions
         permissions={{ llmLimit: ["read"] }}
         noPermissionHandle="hide"

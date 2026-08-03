@@ -1,7 +1,13 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
+import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
   getApiErrorMessage,
   handleApiError,
@@ -13,6 +19,8 @@ const {
   getSkill,
   getSkillSourceRepos,
   getSkillUsageStatistics,
+  getSkillVersion,
+  getSkillVersions,
   createSkill,
   updateSkill,
   updateSkillGithubSync,
@@ -27,6 +35,16 @@ const {
 
 export type SkillCatalogResult =
   archestraApiTypes.SearchSkillCatalogResponses["200"]["results"][number];
+
+/** One row of a skill's version history (no SKILL.md body). */
+export type SkillVersionSummary =
+  archestraApiTypes.GetSkillVersionsResponses["200"]["data"][number];
+
+/** One immutable version with its SKILL.md body and resource files. */
+export type SkillVersionDetail =
+  archestraApiTypes.GetSkillVersionResponses["200"];
+
+const SKILL_VERSIONS_PAGE_SIZE = 20;
 
 type SkillsQuery = NonNullable<archestraApiTypes.GetSkillsData["query"]>;
 type SkillsPaginatedParams = Pick<
@@ -125,6 +143,49 @@ export function useSkill(id: string | null) {
   });
 }
 
+/** A skill's version history, newest first, one page at a time. */
+export function useSkillVersions(id: string | null) {
+  return useInfiniteQuery({
+    queryKey: ["skills", id, "versions"],
+    enabled: !!id,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await getSkillVersions({
+        path: { id: id as string },
+        query: { limit: SKILL_VERSIONS_PAGE_SIZE, offset: pageParam },
+      });
+      throwOnApiError(error);
+      return data;
+    },
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage?.pagination.hasNext
+        ? allPages.reduce(
+            (loaded, page) => loaded + (page?.data.length ?? 0),
+            0,
+          )
+        : undefined,
+  });
+}
+
+/**
+ * One version's SKILL.md body and resource files. A missing version resolves to
+ * null rather than an error: the diff view asks for the predecessor of the
+ * oldest loaded row, which legitimately may not exist.
+ */
+export function useSkillVersion(id: string | null, version: number | null) {
+  return useQuery({
+    queryKey: ["skills", id, "version", version],
+    enabled: !!id && version !== null && version > 0,
+    queryFn: async () => {
+      const { data, error } = await getSkillVersion({
+        path: { id: id as string, version: version as number },
+      });
+      throwOnApiError(error, { allowNotFound: true });
+      return data ?? null;
+    },
+  });
+}
+
 // ===== Mutation hooks =====
 
 export function useCreateSkill() {
@@ -207,6 +268,102 @@ export function useRestoreSkill() {
       if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       toast.success("Skill restored");
+    },
+  });
+}
+
+/**
+ * Restore a skill to an earlier version by forking its payload forward: the
+ * restored bytes become a *new* head version, so nothing in the history is
+ * rewritten.
+ *
+ * Until a dedicated restore endpoint exists this rides on the regular update
+ * route, which means the concurrency guard is a client-side re-read rather than
+ * a server-side check, and the resulting version is recorded as an ordinary
+ * edit (no "restored from" provenance).
+ */
+export function useRestoreSkillVersion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      skillId,
+      version,
+      expectedHeadVersion,
+      headContentHash,
+    }: {
+      skillId: string;
+      version: number;
+      /** Head the preview was rendered against; a moved head aborts the write. */
+      expectedHeadVersion: number;
+      /** Content hash of that head, used to detect a restore that changes nothing. */
+      headContentHash: string;
+    }) => {
+      // Re-read the head at submit time: the previewed history may be minutes
+      // old, and restoring over someone else's newer edit would bury it.
+      const { data: current, error: currentError } = await getSkill({
+        path: { id: skillId },
+      });
+      if (currentError) {
+        handleApiError(currentError);
+        return null;
+      }
+      if (!current) return null;
+      if (current.latestVersion !== expectedHeadVersion) {
+        toast.error(
+          "This skill changed while you were previewing it. Review the latest version and try again.",
+        );
+        return null;
+      }
+
+      const { data: snapshot, error: snapshotError } = await getSkillVersion({
+        path: { id: skillId, version },
+      });
+      if (snapshotError) {
+        handleApiError(snapshotError);
+        return null;
+      }
+      if (!snapshot) return null;
+
+      // Identical content does not fork a version (the backend suppresses no-op
+      // forks by content hash), so reporting a restore would name a version
+      // that was never created.
+      if (snapshot.contentHash === headContentHash) {
+        toast.info(
+          `Version ${version} is identical to the current version — nothing to restore.`,
+        );
+        return null;
+      }
+
+      const { data, error } = await updateSkill({
+        path: { id: skillId },
+        body: {
+          // A version snapshots the body alone — frontmatter lives in columns
+          // and is not versioned — while the API writes a whole SKILL.md. So
+          // the old body is republished under the skill's current frontmatter,
+          // which is exactly the edit the snapshot describes.
+          content: composeManifest({ ...current, content: snapshot.content }),
+          // Always sent, even when empty: omitting `files` leaves the skill's
+          // current resource files untouched, which would pair an old body
+          // with newer files. `kind` is re-derived from the path server-side.
+          files: snapshot.files.map((file) => ({
+            path: file.path,
+            content: file.content,
+            encoding: file.encoding,
+          })),
+        },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      if (!data) return;
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+      toast.success(
+        `Restored version ${variables.version} — created version ${data.latestVersion}`,
+      );
     },
   });
 }

@@ -1,7 +1,11 @@
 /**
- * Pure SKILL.md manifest helpers for the editor: recompose a manifest from a
- * skill's structured fields, and a light frontmatter scan for editor hints.
- * The backend parser (`skills/parser.ts`) stays authoritative for semantics.
+ * Pure SKILL.md manifest helpers: recompose a manifest from a skill's
+ * structured fields, and a light frontmatter scan for editor hints.
+ *
+ * The API stores a skill's frontmatter as columns and its body as `content`,
+ * but takes a whole SKILL.md on write — so anything that writes a skill
+ * (the editor, restoring a version) has to compose one first. The backend
+ * parser (`skills/parser.ts`) stays authoritative for semantics.
  */
 
 export function composeManifest(skill: {

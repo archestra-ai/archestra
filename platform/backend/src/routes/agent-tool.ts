@@ -30,7 +30,7 @@ import {
   type PrefetchedMcpServer,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
-import type { InternalMcpCatalog, Tool } from "@/types";
+import type { InternalMcpCatalog, Tool, ToolOwnerContext } from "@/types";
 import {
   AgentToolAssignmentBodySchema,
   AgentToolFilterSchema,
@@ -45,6 +45,7 @@ import {
   UpdateAgentToolSchema,
   UuidIdSchema,
 } from "@/types";
+import { isUniqueConstraintError } from "@/utils/db";
 
 const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -288,12 +289,19 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Prepare pre-fetched data to pass to assignToolToAgent for validation
+      // Prepare pre-fetched data to pass to assignToolToAgent for validation.
+      // The permission prefetch already carries each agent's owner context;
+      // threading it through spares validateAssignment a per-item agent+teams
+      // lookup for credential-pinned assignments.
       const preFetchedData = {
         existingAgentIds,
         toolsMap,
         catalogItemsMap,
         mcpServersBasicMap,
+        ownerContextsMap: buildOwnerContextsMap(
+          agentsForPermCheck,
+          request.organizationId,
+        ),
       };
 
       // Validate all assignments first (no DB writes)
@@ -491,6 +499,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         toolsMap,
         catalogItemsMap,
         mcpServersBasicMap,
+        ownerContextsMap: buildOwnerContextsMap(
+          agentsForPermCheck,
+          request.organizationId,
+        ),
       };
 
       // Validate every assignment before any write; a single failure rejects
@@ -552,10 +564,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const result = await AgentToolModel.bulkApply({
-        assignments: validated,
-        unassignments,
-      });
+      const result = await withConcurrentAssignmentConflict(() =>
+        AgentToolModel.bulkApply({
+          assignments: validated,
+          unassignments,
+        }),
+      );
 
       for (const agentId of result.changedAgentIds) {
         clearChatMcpClient(agentId);
@@ -565,6 +579,22 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // after the batch transaction committed (forkIfChanged takes its own
       // agent row lock and must not run inside it).
       await AgentVersionModel.forkAgentsBestEffort(result.changedAgentIds);
+
+      // Credential-only rebinds leave the org-wide assignment count unchanged,
+      // so the registry's count snapshot alone would record an empty diff;
+      // supply the post-state with the batch outcome included.
+      request.auditAfter = {
+        ...(await AgentToolModel.countAssignmentsForOrganization(
+          request.organizationId,
+        )),
+        result: {
+          assigned: result.assigned,
+          updated: result.updated,
+          unchanged: result.unchanged,
+          unassigned: result.unassigned,
+        },
+        changedAgentCount: result.changedAgentIds.length,
+      };
 
       return reply.send({
         assigned: result.assigned,
@@ -1198,6 +1228,52 @@ function normalizeBulkAssignmentCredentialResolutionMode(params: {
     ...assignment,
     credentialResolutionMode: "enterprise_managed",
   };
+}
+
+/**
+ * Turn each bulk route's permission prefetch into the per-agent owner
+ * contexts assignment validation evaluates, so credential-pinned assignments
+ * don't re-resolve the agent (plus its teams) once per item.
+ */
+function buildOwnerContextsMap(
+  agentsForPermCheck: Awaited<
+    ReturnType<typeof AgentModel.findByIdsForPermissionCheck>
+  >,
+  organizationId: string,
+): Map<string, ToolOwnerContext> {
+  return new Map(
+    [...agentsForPermCheck].map(([agentId, agent]) => [
+      agentId,
+      {
+        organizationId,
+        scope: agent.scope,
+        authorId: agent.authorId,
+        teamIds: agent.teamIds,
+      },
+    ]),
+  );
+}
+
+/**
+ * Translate the `agent_tools (agent_id, tool_id)` unique violation into a 409:
+ * two concurrent bulk saves can both pass bulkApply's existing-rows read and
+ * insert the same pair. The batch transaction has already rolled back, so
+ * all-or-nothing semantics hold — the client just retries the save.
+ */
+async function withConcurrentAssignmentConflict<T>(
+  op: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await op();
+  } catch (err) {
+    if (isUniqueConstraintError(err, "agent_tools_agent_id_tool_id_unique")) {
+      throw new ApiError(
+        409,
+        "No changes applied — a concurrent request assigned one of these tools; retry the save",
+      );
+    }
+    throw err;
+  }
 }
 
 async function inferEnterpriseManagedCredentialMode(params: {

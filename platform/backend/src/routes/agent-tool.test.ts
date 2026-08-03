@@ -2,13 +2,14 @@ import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { AgentModel, AgentToolModel } from "@/models";
 import type { FastifyInstanceWithZod } from "@/server";
 import { createFastifyInstance } from "@/server";
 import {
   type PrefetchedMcpServer,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { InternalMcpCatalog, Tool, User } from "@/types";
 
 /**
@@ -1195,7 +1196,62 @@ describe("POST /api/agents/tools/bulk-update", () => {
       resourceId: organizationId,
     });
     expect(auditRows[0].before).toMatchObject({ agentToolAssignmentCount: 0 });
-    expect(auditRows[0].after).toMatchObject({ agentToolAssignmentCount: 1 });
+    expect(auditRows[0].after).toMatchObject({
+      agentToolAssignmentCount: 1,
+      result: { assigned: 1, updated: 0, unchanged: 0, unassigned: 0 },
+      changedAgentCount: 1,
+    });
+  });
+
+  test("credential-only batch leaves the count unchanged but audits the outcome", async ({
+    makeAgent,
+    makeTool,
+    makeAgentTool,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const tool = await makeTool();
+    await makeAgentTool(agent.id, tool.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assign: [
+          {
+            agentId: agent.id,
+            toolId: tool.id,
+            credentialResolutionMode: "dynamic",
+          },
+        ],
+        unassign: [],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+
+    const auditRows = await db
+      .select({
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.action, "agentTool.bulk_updated"),
+          eq(schema.auditLogsTable.resourceId, organizationId),
+        ),
+      );
+    expect(auditRows).toHaveLength(1);
+    // The org-wide count is invariant for a rebind; the handler-supplied
+    // post-state is what keeps the record's diff non-empty.
+    expect(auditRows[0].before).toMatchObject({ agentToolAssignmentCount: 1 });
+    expect(auditRows[0].after).toMatchObject({
+      agentToolAssignmentCount: 1,
+      result: { assigned: 0, updated: 1, unchanged: 0, unassigned: 0 },
+      changedAgentCount: 1,
+    });
   });
 
   test("a pair present in both lists nets out to the reassignment", async ({
@@ -1299,6 +1355,113 @@ describe("POST /api/agents/tools/bulk-update", () => {
       );
     expect(rows).toHaveLength(1);
     expect(rows[0].credentialResolutionMode).toBe("dynamic");
+  });
+
+  test("translates a concurrent duplicate-pair insert into a 409", async ({
+    makeAgent,
+    makeTool,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const tool = await makeTool();
+    const versionBefore = await getLatestVersion(agent.id);
+
+    // PGlite is single-connection, so the real race (two transactions passing
+    // bulkApply's existing-rows read before either inserts) cannot be staged;
+    // fabricate the driver error the loser of that race receives instead.
+    const uniqueViolation = Object.assign(
+      new Error(
+        'duplicate key value violates unique constraint "agent_tools_agent_id_tool_id_unique"',
+      ),
+      { code: "23505", constraint: "agent_tools_agent_id_tool_id_unique" },
+    );
+    const spy = vi
+      .spyOn(AgentToolModel, "bulkApply")
+      .mockRejectedValueOnce(uniqueViolation);
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents/tools/bulk-update",
+        payload: {
+          assign: [{ agentId: agent.id, toolId: tool.id }],
+          unassign: [],
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.message).toContain("concurrent");
+      // The failed batch must not fork a version.
+      expect(await getLatestVersion(agent.id)).toBe(versionBefore);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("validates credential-pinned assignments without per-item agent lookups", async ({
+    makeAgent,
+    makeTool,
+    makeMcpServer,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const [toolA, toolB] = await Promise.all([makeTool(), makeTool()]);
+    const server = await makeMcpServer({ scope: "org" });
+
+    // Owner contexts come from the batch permission prefetch — resolving the
+    // agent (plus teams) once per assignment is the N+1 this pins against.
+    const spy = vi.spyOn(AgentModel, "findById");
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/agents/tools/bulk-update",
+        payload: {
+          assign: [
+            { agentId: agent.id, toolId: toolA.id, mcpServerId: server.id },
+            { agentId: agent.id, toolId: toolB.id, mcpServerId: server.id },
+          ],
+          unassign: [],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ assigned: 2 });
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test("caps the failure list at 5 and reports the overflow count", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+    });
+    const missingToolIds = Array.from({ length: 7 }, () => crypto.randomUUID());
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/agents/tools/bulk-update",
+      payload: {
+        assign: missingToolIds.map((toolId) => ({
+          agentId: agent.id,
+          toolId,
+        })),
+        unassign: [],
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const message = response.json().error.message;
+    expect(message).toContain("7 of 7 assignments failed validation");
+    expect(message).toContain("… and 2 more");
+    // Exactly 5 named pairs are listed, each rendered as `"tool" on "agent"`.
+    expect(message.match(/ on "/g)).toHaveLength(5);
   });
 });
 

@@ -40,6 +40,12 @@ type AgentToolAssignmentPrefetchedData = {
   toolsMap: Map<string, Tool>;
   catalogItemsMap: ReadonlyMap<string, InternalMcpCatalog>;
   mcpServersBasicMap: Map<string, PrefetchedMcpServer>;
+  /**
+   * Owner context per agent id. Without it, every credential-pinned
+   * assignment in a bulk batch resolves the target agent (plus its teams)
+   * with its own query.
+   */
+  ownerContextsMap: Map<string, ToolOwnerContext>;
 };
 
 interface AgentToolAssignmentRequest {
@@ -168,7 +174,9 @@ export async function validateAssignment(
     const preFetchedServer =
       preFetchedData?.mcpServersBasicMap?.get(mcpServerId);
     const validationError = await validateAssignedMcpServer({
-      getOwnerContext: () => getAssignmentTargetContext(agentId),
+      getOwnerContext: async () =>
+        preFetchedData?.ownerContextsMap?.get(agentId) ??
+        getAssignmentTargetContext(agentId),
       mcpServerId,
       tool,
       preFetchedServer,

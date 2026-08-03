@@ -19,7 +19,7 @@ import {
   ToolModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Skill } from "@/types";
 
 const FORTY_DAYS_AGO = () => new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
@@ -464,14 +464,16 @@ describe("AgentModel.hardDelete", () => {
     expect(tasks).toEqual([]);
   });
 
-  test("a restore that wins the purge race keeps the queued trigger runs", async ({
+  test("a restore that beats the purge keeps the queued runs and the interactions", async ({
     makeOrganization,
     makeAgent,
     makeUser,
+    makeInteraction,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
     const user = await makeUser();
+    const interaction = await makeInteraction(agent.id);
     await seedQueuedTriggerRun({
       organizationId: org.id,
       agentId: agent.id,
@@ -482,29 +484,20 @@ describe("AgentModel.hardDelete", () => {
       .set({ deletedAt: FORTY_DAYS_AGO() })
       .where(eq(schema.agentsTable.id, agent.id));
 
-    // Simulate a restore committing in the window between the eligibility
-    // pre-check and the purge transaction — the batched interaction unlink
-    // runs in exactly that window.
-    const unlinkSpy = vi
-      .spyOn(
-        AgentModel as unknown as { nullReferencesInBatches: () => void },
-        "nullReferencesInBatches",
-      )
-      .mockImplementation(async () => {
-        await db
-          .update(schema.agentsTable)
-          .set({ deletedAt: null })
-          .where(eq(schema.agentsTable.id, agent.id));
-      });
-    try {
-      expect(
-        await AgentModel.hardDelete(agent.id, { onlyIfDeletedForDays: 30 }),
-      ).toBe(false);
-    } finally {
-      unlinkSpy.mockRestore();
-    }
+    // The sweep selected this row while it was still expired; the restore
+    // commits before the purge transaction opens. Every destructive step now
+    // lives behind the FOR UPDATE re-check, so the purge must take nothing
+    // with it — including the LLM history, which an earlier version unlinked
+    // outside the transaction and could not put back.
+    await db
+      .update(schema.agentsTable)
+      .set({ deletedAt: null })
+      .where(eq(schema.agentsTable.id, agent.id));
 
-    // The restored agent survives with its queued scheduled run intact.
+    expect(
+      await AgentModel.hardDelete(agent.id, { onlyIfDeletedForDays: 30 }),
+    ).toBe(false);
+
     const [agentRow] = await db
       .select({ deletedAt: schema.agentsTable.deletedAt })
       .from(schema.agentsTable)
@@ -515,6 +508,11 @@ describe("AgentModel.hardDelete", () => {
       .from(schema.tasksTable)
       .where(eq(schema.tasksTable.taskType, "schedule_trigger_run_execute"));
     expect(tasks).toHaveLength(1);
+    const [interactionRow] = await db
+      .select({ profileId: schema.interactionsTable.profileId })
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.id, interaction.id));
+    expect(interactionRow?.profileId).toBe(agent.id);
   });
 });
 

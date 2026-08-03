@@ -43,7 +43,6 @@ import {
   lockRowForPurge,
   restore,
   softDelete,
-  softDeleteExpired,
 } from "@/database/soft-delete";
 import {
   createPaginatedResult,
@@ -2684,45 +2683,15 @@ class AgentModel {
    * `onlyIfDeletedForDays` so only an aged-out soft-deleted row is removed,
    * re-checked under FOR UPDATE so a concurrent restore wins.
    *
-   * Before the parent delete, the two write-hot SET NULL children are
-   * unlinked in bounded batches — each batch its own transaction — so the
-   * FK's own cascade never fires one unbounded UPDATE against `interactions`
-   * (the LLM proxy's write path; same reasoning as
-   * InteractionModel.deleteExpired). A restore racing the purge can therefore
-   * win the final re-check after some interactions were already unlinked;
-   * acceptable, since unlinking LLM history is already what an agent purge
-   * does. On the rollback path both loops exit on the first empty round.
-   * Every other destructive step — trigger-task cleanup, default-pointer
-   * nulling, the row itself — runs inside the transaction after the re-check,
-   * so a winning restore loses nothing but already-unlinked history.
+   * Everything destructive happens inside that one transaction, after the
+   * re-check: `interactions.profile_id` and `mcp_tool_calls.agent_id` are
+   * nulled by their own SET NULL FKs when the row goes, so a restore that
+   * wins the race loses nothing at all. Do not hand-unlink those children
+   * ahead of the transaction to keep the cascade small — that duplicates the
+   * FK outside any transaction the re-check can roll back, and a restore
+   * arriving mid-unlink then detaches the agent's LLM history permanently.
    */
   static async hardDelete(id: string, opts?: HardDeleteOpts): Promise<boolean> {
-    if (opts?.onlyIfDeletedForDays !== undefined) {
-      // Cheap pre-check so an ineligible call never starts unlinking history.
-      const [eligible] = await db
-        .select({ id: schema.agentsTable.id })
-        .from(schema.agentsTable)
-        .where(
-          and(
-            eq(schema.agentsTable.id, id),
-            softDeleteExpired(schema.agentsTable, opts.onlyIfDeletedForDays),
-          ),
-        )
-        .limit(1);
-      if (!eligible) return false;
-    }
-
-    // Both FK columns are indexed (interactions_agent_id_idx,
-    // mcp_tool_calls_agent_id_idx), so each batch is an index scan.
-    await AgentModel.nullReferencesInBatches(
-      sql`UPDATE interactions SET profile_id = NULL
-          WHERE id IN (SELECT id FROM interactions WHERE profile_id = ${id} LIMIT ${UNLINK_BATCH_SIZE})`,
-    );
-    await AgentModel.nullReferencesInBatches(
-      sql`UPDATE mcp_tool_calls SET agent_id = NULL
-          WHERE id IN (SELECT id FROM mcp_tool_calls WHERE agent_id = ${id} LIMIT ${UNLINK_BATCH_SIZE})`,
-    );
-
     return await withDbTransaction(async (tx) => {
       if (
         !(await lockRowForPurge(
@@ -3474,20 +3443,6 @@ class AgentModel {
     return baseSlug;
   }
 
-  /**
-   * Run a limited UPDATE repeatedly until it matches no more rows. Each
-   * iteration is its own implicit transaction, so the write-hot table is
-   * never locked for one giant statement.
-   */
-  private static async nullReferencesInBatches(
-    batchUpdate: SQL,
-  ): Promise<void> {
-    for (;;) {
-      const { rowCount } = await db.execute(batchUpdate);
-      if (!rowCount) break;
-    }
-  }
-
   private static async insertWithSlugRetry(
     values: typeof schema.agentsTable.$inferInsert,
   ) {
@@ -3670,8 +3625,5 @@ function isQueryKnowledgeSourcesTool(toolName: string): boolean {
     TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME
   );
 }
-
-// Matches InteractionModel.deleteExpired's batch size for the same table.
-const UNLINK_BATCH_SIZE = 1000;
 
 export default AgentModel;

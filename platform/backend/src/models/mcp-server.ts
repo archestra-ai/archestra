@@ -1399,17 +1399,18 @@ class McpServerModel {
    *   2. the catalog's org — one catalog per install (`catalog_id` is NOT
    *      NULL), so this is deterministic wherever the entry is org-owned
    *   3. the owner's membership — the only option left for a personal install
-   *      on a global catalog entry. An owner in several orgs has no single
-   *      right answer here, so it is at least made STABLE (`ORDER BY`) rather
-   *      than left to the plan: an unordered `LIMIT 1` flips between orgs
-   *      across runs, which loses the purge record from whichever org lost
-   *      the toss.
+   *      on a global catalog entry, and only when the owner belongs to exactly
+   *      one org. An owner in several orgs has no right answer, and guessing
+   *      would write the purge record into a tenant that may never have owned
+   *      the install while leaving the one that did with no record; both are
+   *      integrity failures in the surface compliance teams read. Such rows
+   *      resolve to no org instead.
    *
-   * Rows where all three miss (unowned + teamless on a global entry, or an
-   * owner offboarded from every org) resolve to no org and are excluded —
-   * `audit_logs.organization_id` is NOT NULL, so those purges could not be
-   * recorded at all, and destroying data with no audit trail is worse than
-   * leaving it (see {@link countExpiredDeletedUnresolvable}).
+   * Rows where all three miss (unowned + teamless on a global entry, an owner
+   * offboarded from every org, or an owner in several) resolve to no org and
+   * are excluded — `audit_logs.organization_id` is NOT NULL, so those purges
+   * could not be recorded at all, and destroying data with no audit trail is
+   * worse than leaving it (see {@link countExpiredDeletedUnresolvable}).
    *
    * The catalog join is deliberately not filtered on `deleted_at`: a
    * soft-deleted catalog entry still names the org the install belonged to.
@@ -1427,12 +1428,7 @@ class McpServerModel {
       FROM mcp_server s
       LEFT JOIN team t ON t.id = s.team_id
       LEFT JOIN internal_mcp_catalog c ON c.id = s.catalog_id
-      LEFT JOIN LATERAL (
-        SELECT organization_id FROM member
-        WHERE user_id = s.owner_id
-        ORDER BY organization_id
-        LIMIT 1
-      ) m ON true
+      ${OWNER_ORG_JOIN_SQL}
       WHERE s.deleted_at < now()::timestamp - make_interval(days => ${params.retentionDays})
         AND ${RESOLVED_ORG_SQL} IS NOT NULL
       ORDER BY s.deleted_at, s.id
@@ -1454,12 +1450,7 @@ class McpServerModel {
       FROM mcp_server s
       LEFT JOIN team t ON t.id = s.team_id
       LEFT JOIN internal_mcp_catalog c ON c.id = s.catalog_id
-      LEFT JOIN LATERAL (
-        SELECT organization_id FROM member
-        WHERE user_id = s.owner_id
-        ORDER BY organization_id
-        LIMIT 1
-      ) m ON true
+      ${OWNER_ORG_JOIN_SQL}
       WHERE s.deleted_at < now()::timestamp - make_interval(days => ${params.retentionDays})
         AND ${RESOLVED_ORG_SQL} IS NULL
     `);
@@ -1958,3 +1949,18 @@ export default McpServerModel;
  * aliases those queries bind.
  */
 const RESOLVED_ORG_SQL = sql`COALESCE(t.organization_id, c.organization_id, m.organization_id)`;
+
+/**
+ * Binds the `m` alias {@link RESOLVED_ORG_SQL} reads: the owner's org, but
+ * only when they belong to exactly one. `HAVING count(*) = 1` drops the
+ * aggregate's single row for a zero-org or multi-org owner, so the LEFT JOIN
+ * yields NULL and the install falls through to the unresolvable count rather
+ * than having a tenant picked for it.
+ */
+const OWNER_ORG_JOIN_SQL = sql`
+  LEFT JOIN LATERAL (
+    SELECT min(organization_id) AS organization_id
+    FROM member
+    WHERE user_id = s.owner_id
+    HAVING count(*) = 1
+  ) m ON true`;

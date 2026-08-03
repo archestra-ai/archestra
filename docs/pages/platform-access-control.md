@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-08-01
+lastUpdated: 2026-08-04
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -286,7 +286,7 @@ The following table lists all available permissions that can be assigned to cust
 | `project:update` | Edit project descriptions, instructions, and sharing |
 | `project:delete` | Delete projects |
 | `project:share-org` | Share projects with the entire organization, and change the sharing of or delete a project that is already org-wide. Without it, projects can still be shared with teams. Additive: sharing still requires project:update and deleting still requires project:delete. |
-| `project:admin` | Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role). |
+| `project:admin` | Oversee projects owned by other members: discover them, view/edit/delete the project and its sharing, permanently delete it from the Deleted view, and view, download, or delete their files — but not read their chats. Additive: edit/delete still require project:update/delete, and schedule management rides scheduledTask:admin (all included in the Admin role). |
 | `project:read-all` | View chats that other members started in any project you can access. Without this, you only see the chats you started yourself — including in projects you own. |
 | `sandbox:execute` | Run commands and upload/download files in code execution sandboxes |
 | `scheduledTask:read` | View scheduled tasks and their run history |

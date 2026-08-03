@@ -39,16 +39,21 @@ export type PurgeableEntity = {
    * past them (see sweepEntity for why that arithmetic is sound). Rows whose
    * organization cannot be resolved are excluded: purging them would destroy
    * data with no audit trail (see `countUnresolvable`).
+   *
+   * A null `organizationId` means the row genuinely belongs to no tenant —
+   * only the global `internal_mcp_catalog` entries — and is purged without an
+   * audit row rather than skipped. Not the same case as an unresolvable org.
    */
   findExpired: (params: {
     retentionDays: number;
     limit: number;
     offset: number;
-  }) => Promise<{ id: string; organizationId: string }[]>;
+  }) => Promise<{ id: string; organizationId: string | null }[]>;
   /**
    * Expired rows `findExpired` will never return because no organization
-   * resolves for them (legacy unowned+teamless installs, orphan tools).
-   * Only the two tables without an org column can produce these.
+   * resolves for them (legacy unowned+teamless installs, orphan tools, an
+   * install whose owner belongs to several orgs). Produced by the two tables
+   * with no org column of their own.
    */
   countUnresolvable?: (params: { retentionDays: number }) => Promise<number>;
   /**
@@ -71,7 +76,7 @@ export type PurgeableEntity = {
    */
   identity: (params: {
     id: string;
-    organizationId: string;
+    organizationId: string | null;
   }) => Promise<AuditableSnapshot>;
 };
 
@@ -119,7 +124,10 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
       KnowledgeBaseConnectorModel.findExpiredDeleted(params),
     hardDelete: (id, opts) => KnowledgeBaseConnectorModel.hardDelete(id, opts),
     identity: ({ id, organizationId }) =>
-      KnowledgeBaseConnectorModel.findIdentityForAudit(id, organizationId),
+      KnowledgeBaseConnectorModel.findIdentityForAudit(
+        id,
+        requireOrg(organizationId),
+      ),
   },
   {
     key: "knowledgeBase",
@@ -128,7 +136,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     findExpired: (params) => KnowledgeBaseModel.findExpiredDeleted(params),
     hardDelete: (id, opts) => KnowledgeBaseModel.hardDelete(id, opts),
     identity: ({ id, organizationId }) =>
-      KnowledgeBaseModel.findIdentityForAudit(id, organizationId),
+      KnowledgeBaseModel.findIdentityForAudit(id, requireOrg(organizationId)),
   },
   {
     key: "app",
@@ -137,7 +145,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     findExpired: (params) => AppModel.findExpiredDeleted(params),
     hardDelete: (id, opts) => AppModel.hardDelete(id, opts),
     identity: ({ id, organizationId }) =>
-      AppModel.findIdentityForAudit(id, organizationId),
+      AppModel.findIdentityForAudit(id, requireOrg(organizationId)),
   },
   {
     key: "skill",
@@ -146,7 +154,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     findExpired: (params) => SkillModel.findExpiredDeleted(params),
     hardDelete: (id, opts) => SkillModel.hardDelete(id, opts),
     identity: ({ id, organizationId }) =>
-      SkillModel.findIdentityForAudit(id, organizationId),
+      SkillModel.findIdentityForAudit(id, requireOrg(organizationId)),
   },
   {
     key: "agent",
@@ -155,7 +163,7 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     findExpired: (params) => AgentModel.findExpiredDeleted(params),
     hardDelete: (id, opts) => AgentModel.hardDelete(id, opts),
     identity: ({ id, organizationId }) =>
-      AgentModel.findIdentityForAudit(id, organizationId),
+      AgentModel.findIdentityForAudit(id, requireOrg(organizationId)),
   },
   {
     key: "project",
@@ -164,6 +172,21 @@ export const PURGEABLE_ENTITIES: readonly PurgeableEntity[] = [
     findExpired: (params) => ProjectModel.findExpiredDeleted(params),
     hardDelete: (id, opts) => ProjectModel.hardDelete(id, opts),
     identity: ({ id, organizationId }) =>
-      ProjectModel.findIdentityForAudit(id, organizationId),
+      ProjectModel.findIdentityForAudit(id, requireOrg(organizationId)),
   },
 ];
+
+// === Internal ===
+
+/**
+ * Assert the org an entity's own NOT NULL column guarantees. Only
+ * `internal_mcp_catalog` has a nullable one, so for every other entity a null
+ * here means its findExpired stopped matching its schema; the sweep's per-row
+ * try/catch turns the throw into a skip-and-log rather than a lost row.
+ */
+function requireOrg(organizationId: string | null): string {
+  if (organizationId === null) {
+    throw new Error("purge candidate has no organization");
+  }
+  return organizationId;
+}

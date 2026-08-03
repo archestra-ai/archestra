@@ -1,5 +1,6 @@
 import {
   and,
+  asc,
   count,
   desc,
   eq,
@@ -15,12 +16,12 @@ import {
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
-  findExpiredSoftDeleted,
   type HardDeleteOpts,
   hardDelete,
   lockRowForPurge,
   restore,
   softDelete,
+  softDeleteExpired,
 } from "@/database/soft-delete";
 import {
   constructLegacyMcpDeploymentName,
@@ -1195,30 +1196,43 @@ class InternalMcpCatalogModel {
   }
 
   /**
-   * The purge sweep's find-expired scan. Rows with a NULL `organization_id`
-   * (the built-in system entries) are excluded by findExpiredSoftDeleted:
-   * without a tenant there is no audit-attributable purge.
+   * The purge sweep's find-expired scan. Deliberately not
+   * findExpiredSoftDeleted: that helper drops NULL-`organization_id` rows
+   * because a purge with no tenant has nowhere to write its audit row, but
+   * here those rows are the global/system entries, which belong to no tenant
+   * in the first place. Excluding them would leave a deleted global entry
+   * immortal and unreported, so they are returned with a null org and the
+   * sweep skips only the audit row (see the handler).
    */
   static async findExpiredDeleted(params: {
     retentionDays: number;
     limit: number;
     offset: number;
-  }): Promise<{ id: string; organizationId: string }[]> {
-    return findExpiredSoftDeleted(
-      db,
-      schema.internalMcpCatalogTable,
-      {
+  }): Promise<{ id: string; organizationId: string | null }[]> {
+    return db
+      .select({
         id: schema.internalMcpCatalogTable.id,
         organizationId: schema.internalMcpCatalogTable.organizationId,
-      },
-      params,
-    );
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        softDeleteExpired(schema.internalMcpCatalogTable, params.retentionDays),
+      )
+      .orderBy(
+        asc(schema.internalMcpCatalogTable.deletedAt),
+        asc(schema.internalMcpCatalogTable.id),
+      )
+      .limit(params.limit)
+      .offset(params.offset);
   }
 
-  /** Identity-only audit snapshot for purge audit rows; org-scoped. */
+  /**
+   * Identity-only audit snapshot for purge audit rows; org-scoped, with a
+   * null org matching the global entries rather than every org's rows.
+   */
   static async findIdentityForAudit(
     id: string,
-    organizationId: string,
+    organizationId: string | null,
   ): Promise<Record<string, unknown> | null> {
     const [row] = await db
       .select({
@@ -1231,7 +1245,9 @@ class InternalMcpCatalogModel {
       .where(
         and(
           eq(schema.internalMcpCatalogTable.id, id),
-          eq(schema.internalMcpCatalogTable.organizationId, organizationId),
+          organizationId === null
+            ? isNull(schema.internalMcpCatalogTable.organizationId)
+            : eq(schema.internalMcpCatalogTable.organizationId, organizationId),
         ),
       );
     if (!row) return null;

@@ -54,7 +54,6 @@ export async function handleSoftDeletePurge(): Promise<void> {
 // === Internal ===
 
 const BATCH_SIZE = 50;
-const MAX_BATCHES = 200;
 
 async function sweepEntity(
   entity: PurgeableEntity,
@@ -82,7 +81,7 @@ async function sweepEntity(
   // the purgeable rows behind it. (The invariant breaks if a skip path ever
   // touches deleted_at, or the scans lose their (deleted_at, id) order.)
   let skipped = 0;
-  for (let batch = 0; batch < MAX_BATCHES; batch++) {
+  for (;;) {
     const candidates = await entity.findExpired({
       retentionDays,
       limit: BATCH_SIZE,
@@ -95,21 +94,37 @@ async function sweepEntity(
       try {
         // Snapshot the identity BEFORE the delete — afterwards it is gone.
         const identity = await entity.identity(candidate);
-        const purged = await entity.hardDelete(candidate.id, {
+        const { id, organizationId } = candidate;
+        const purged = await entity.hardDelete(id, {
           onlyIfDeletedForDays: retentionDays,
           // Audit row in the delete transaction: the purge and its trail
           // commit atomically. A failed insert rolls the delete back (caught
           // and logged below) and the next sweep retries — a purge can never
           // land unrecorded.
-          onPurged: async (tx) => {
-            await AuditLogModel.create(
-              purgeAuditRow(entity, candidate, identity),
-              tx,
-            );
-          },
+          //
+          // Except for a row belonging to no tenant at all (only the global
+          // catalog entries): `audit_logs.organization_id` is NOT NULL, and
+          // no tenant's record is missing the purge because none owned the
+          // row. Leaving it unpurged instead would make it immortal, which is
+          // the worse failure — so it is purged and logged here instead.
+          onPurged:
+            organizationId === null
+              ? undefined
+              : async (tx) => {
+                  await AuditLogModel.create(
+                    purgeAuditRow(entity, { id, organizationId }, identity),
+                    tx,
+                  );
+                },
         });
         if (purged) {
           total++;
+          if (organizationId === null) {
+            logger.info(
+              { entity: entity.key, id, retentionDays },
+              "soft-delete purge sweep: purged a row with no owning organization (no audit row)",
+            );
+          }
         } else {
           // Restored meanwhile or still referenced; next sweep retries.
           skipped++;
@@ -128,8 +143,10 @@ async function sweepEntity(
     }
 
     // A short batch means the scan is exhausted. Every full batch either
-    // purged rows or advanced the offset, so the loop always progresses;
-    // MAX_BATCHES stays as the backstop.
+    // purged rows (they vanish from the scan) or advanced `skipped` (the
+    // offset), so each round moves forward by exactly BATCH_SIZE and the loop
+    // terminates. Deliberately uncapped: a batch ceiling would silently leave
+    // a backlog unpurged, which is the failure the sweep exists to prevent.
     if (candidates.length < BATCH_SIZE) break;
   }
   if (skipped > 0) {

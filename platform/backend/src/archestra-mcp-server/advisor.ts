@@ -65,12 +65,12 @@ const registry = defineArchestraTools([
 
 Consult it:
 - before committing to an approach, when more than one is viable and the wrong one is expensive to undo
-- when an approach is not converging — you have tried the same thing twice and it still fails
+- when an approach is not converging — you have tried the same thing twice and it still fails, or you are about to change tack
 - before you declare the work done, to have the result reviewed
 
 The advisor cannot see your conversation, your files, or your tools, and it cannot run anything or ask you a follow-up question. Put everything it needs in the question and context: the options you are weighing, what you already tried, and the constraints that matter.
 
-It returns a recommendation and the reasoning behind it. It does not edit anything.
+It returns a recommendation and the reasoning behind it. It does not edit anything. If it answers that it is missing something, that is a real gap in what you sent — supply it and ask again, rather than acting on an answer built without it.
 
 Consult it a few times in a task, at the decisions that matter — not every step, and not for syntax, lookups, or things you already know.`,
     schema: AdvisorSchema,
@@ -183,7 +183,15 @@ async function runAdvisorConsultation(
       // No tools: an advisor that could consult an advisor turns one decision
       // point into a chain of them, each billed.
     });
-    return structuredSuccessResult({ guidance: result.text }, result.text);
+    // A cut-off answer reads like a whole one: the executor would act on half
+    // an argument believing it had the rest. Say so in the guidance itself,
+    // which is the only part the calling model reads.
+    const guidance =
+      result.finishReason === "length"
+        ? `${result.text}\n\n[The advisor reached its output limit — this guidance is cut off. Treat it as partial, and ask a narrower question if you need the rest.]`
+        : result.text;
+
+    return structuredSuccessResult({ guidance }, guidance);
   } catch (error) {
     if (
       APICallError.isInstance(error) &&

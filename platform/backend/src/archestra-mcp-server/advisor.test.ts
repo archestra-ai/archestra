@@ -296,6 +296,42 @@ describe("advisor consultation", () => {
     expect(message).toContain("no route for");
   });
 
+  test("marks guidance the advisor could not finish", async ({ makeAgent }) => {
+    await makeAdvisorAgent(makeAgent, { modelId: advisorModelId });
+    vi.mocked(generateText).mockResolvedValue({
+      text: "Use a queue because",
+      finishReason: "length",
+    } as any);
+
+    const result = await executeArchestraTool(
+      advisorTool,
+      { question: "A or B?" },
+      context,
+    );
+
+    const guidance = (result as any).structuredContent.guidance;
+    expect(guidance).toContain("Use a queue because");
+    // Without this the executor acts on half an argument as if it were whole.
+    expect(guidance).toContain("cut off");
+    expect((result as any).isError).toBeFalsy();
+  });
+
+  test("returns complete guidance unmarked", async ({ makeAgent }) => {
+    await makeAdvisorAgent(makeAgent, { modelId: advisorModelId });
+    vi.mocked(generateText).mockResolvedValue({
+      text: "Use a queue.",
+      finishReason: "stop",
+    } as any);
+
+    const result = await executeArchestraTool(
+      advisorTool,
+      { question: "A or B?" },
+      context,
+    );
+
+    expect((result as any).structuredContent.guidance).toBe("Use a queue.");
+  });
+
   test("sends the question alone when no context is supplied", async ({
     makeAgent,
   }) => {

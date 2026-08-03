@@ -17,6 +17,7 @@
  * Source filter. The corresponding API/persistence contract is pinned by
  * backend/src/routes/proxy/llm-proxy-handler.test.ts.
  */
+import crypto from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
 import { mergeTests } from "@playwright/test";
 import { API_BASE_URL } from "../consts";
@@ -47,7 +48,8 @@ async function runSlackChatOpsCompletion(
   request: APIRequestContext,
   proxyId: string,
 ) {
-  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const nonce = crypto.randomUUID().slice(0, 8);
+  // Prefixed, so it stays a ChatOps-shaped id rather than a bare UUID.
   const sessionId = `slack-e2e-${nonce}`;
   // Contains STUB_MARKER so WireMock still matches, plus a nonce so the row is
   // uniquely identifiable among other runs' rows.

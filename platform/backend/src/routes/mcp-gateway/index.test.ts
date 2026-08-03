@@ -5,6 +5,7 @@ import {
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
   SKILL_TOOL_PREFIX,
   slugify,
+  TOOL_ADVISOR_FULL_NAME,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_EDIT_FILE_FULL_NAME,
@@ -1391,6 +1392,7 @@ describe("MCP Gateway (stateless mode)", () => {
       .result.tools.map((tool: { name: string }) => tool.name);
     expect(toolNames.sort()).toEqual(
       [
+        TOOL_ADVISOR_FULL_NAME,
         TOOL_LIST_SKILLS_FULL_NAME,
         TOOL_LOAD_SKILL_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
@@ -1463,6 +1465,7 @@ describe("MCP Gateway (stateless mode)", () => {
       // whole app surface is reached through search_tools/run_tool.
       expect(toolNames.sort()).toEqual(
         [
+          TOOL_ADVISOR_FULL_NAME,
           TOOL_DELETE_FILE_FULL_NAME,
           TOOL_DOWNLOAD_FILE_FULL_NAME,
           TOOL_EDIT_FILE_FULL_NAME,

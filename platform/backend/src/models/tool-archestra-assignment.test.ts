@@ -5,6 +5,7 @@ import {
   getArchestraToolFullName,
   getCreationDefaultArchestraToolShortNames,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+  TOOL_ADVISOR_FULL_NAME,
   TOOL_CREATE_SKILL_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
@@ -481,6 +482,108 @@ describe("Archestra Tools Dynamic Assignment", () => {
     } finally {
       sandboxConfig.enabled = originalSandbox;
     }
+  });
+
+  test("backfillDefaultToolsToAgents repairs an agent that is missing a default tool, and leaves built-in system agents alone", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    const agent = await makeAgent({ organizationId: org.id, name: "Chat" });
+    const [builtInAgent] = await db
+      .insert(schema.agentsTable)
+      .values({
+        organizationId: org.id,
+        name: "System Agent",
+        agentType: "agent",
+        scope: "org",
+        builtInAgentConfig: { name: "advisor-agent" },
+      })
+      .returning();
+
+    // The state a two-stage rollout leaves behind: the tool row exists but the
+    // agent never received it, and no later seed reports it as newly created.
+    const defaultToolIds = await ToolModel.getToolIdsForOrgByShortNames(
+      org.id,
+      [...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES],
+    );
+    for (const toolId of defaultToolIds) {
+      await db
+        .delete(schema.agentToolsTable)
+        .where(eq(schema.agentToolsTable.toolId, toolId));
+    }
+    expect(await assignedToolNames(agent.id)).not.toContain(
+      TOOL_ADVISOR_FULL_NAME,
+    );
+
+    await ToolModel.backfillDefaultToolsToAgents();
+
+    const repaired = await assignedToolNames(agent.id);
+    for (const shortName of DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES) {
+      expect(repaired).toContain(getArchestraToolFullName(shortName));
+    }
+    // An advisor must not be handed the advisor tool.
+    expect(await assignedToolNames(builtInAgent.id)).not.toContain(
+      TOOL_ADVISOR_FULL_NAME,
+    );
+  });
+
+  test("backfillDefaultToolsToAgents is idempotent across repeated boots", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const agent = await makeAgent({ organizationId: org.id, name: "Chat" });
+
+    await ToolModel.backfillDefaultToolsToAgents();
+    const afterFirst = await assignedToolNames(agent.id);
+    await ToolModel.backfillDefaultToolsToAgents();
+    const afterSecond = await assignedToolNames(agent.id);
+
+    expect(afterSecond.sort()).toEqual(afterFirst.sort());
+  });
+
+  test("findAgentIdsMissingAnyTool returns only agents missing at least one tool", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const toolIds = await ToolModel.getToolIdsForOrgByShortNames(org.id, [
+      ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+    ]);
+    expect(toolIds.length).toBeGreaterThan(1);
+
+    const complete = await makeAgent({ organizationId: org.id, name: "Full" });
+    const partial = await makeAgent({
+      organizationId: org.id,
+      name: "Partial",
+    });
+    // Clear what create-time assignment already granted, so the two agents
+    // differ only by what this test gives them.
+    for (const id of [complete.id, partial.id]) {
+      await db
+        .delete(schema.agentToolsTable)
+        .where(eq(schema.agentToolsTable.agentId, id));
+    }
+    await AgentToolModel.createManyIfNotExists(complete.id, toolIds);
+    await AgentToolModel.createManyIfNotExists(partial.id, toolIds.slice(0, 1));
+
+    const missing = await AgentToolModel.findAgentIdsMissingAnyTool(
+      [complete.id, partial.id],
+      toolIds,
+    );
+
+    expect(missing).toEqual([partial.id]);
+    expect(
+      await AgentToolModel.findAgentIdsMissingAnyTool([], toolIds),
+    ).toEqual([]);
+    expect(
+      await AgentToolModel.findAgentIdsMissingAnyTool([complete.id], []),
+    ).toEqual([]);
   });
 
   test("backfillNewSandboxToolsToAgents assigns the new sandbox tools to every agent kind, skipping built-in system agents", async ({

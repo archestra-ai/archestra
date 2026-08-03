@@ -263,4 +263,64 @@ describe("advisor consultation", () => {
     // How Archestra routes its LLM calls is not the caller's business.
     expect(error.message).not.toContain("internal.proxy");
   });
+
+  test("redacts urls the provider echoes back in its response body", async ({
+    makeAgent,
+  }) => {
+    await makeAdvisorAgent(makeAgent, { modelId: advisorModelId });
+    // The body arrives from the internal proxy, so a provider that quotes the
+    // endpoint it was called on would hand the caller that address through the
+    // one field the failure message does pass through.
+    vi.mocked(generateText).mockRejectedValue(
+      new APICallError({
+        message: "not found",
+        url: "http://localhost:9000/v1/gemini/abc",
+        requestBodyValues: {},
+        statusCode: 404,
+        responseBody:
+          "no route for http://localhost:9000/v1/gemini/abc — see https://docs.example/errors",
+      }),
+    );
+
+    const result = await executeArchestraTool(
+      advisorTool,
+      { question: "A or B?" },
+      context,
+    );
+
+    const message = archestraError(result as any).message;
+    expect(message).not.toContain("localhost:9000");
+    expect(message).not.toContain("docs.example");
+    expect(message).toContain("[url]");
+    // The non-url part of the provider's reason still reaches the caller.
+    expect(message).toContain("no route for");
+  });
+
+  test("sends the question alone when no context is supplied", async ({
+    makeAgent,
+  }) => {
+    await makeAdvisorAgent(makeAgent, { modelId: advisorModelId });
+    vi.mocked(generateText).mockResolvedValue({ text: "ok" } as any);
+
+    await executeArchestraTool(advisorTool, { question: "A or B?" }, context);
+
+    const call = vi.mocked(generateText).mock.calls[0]?.[0] as any;
+    expect(call.prompt).toBe("Question:\nA or B?");
+  });
+
+  test("refuses an unauthenticated caller before resolving an advisor", async ({
+    makeAgent,
+  }) => {
+    await makeAdvisorAgent(makeAgent, { modelId: advisorModelId });
+
+    const result = await executeArchestraTool(
+      advisorTool,
+      { question: "A or B?" },
+      { ...context, userId: undefined },
+    );
+
+    expect(archestraError(result as any).type).toBe("advisor_unavailable");
+    expect(vi.mocked(resolveAgentLlmOrDefault)).not.toHaveBeenCalled();
+    expect(vi.mocked(generateText)).not.toHaveBeenCalled();
+  });
 });

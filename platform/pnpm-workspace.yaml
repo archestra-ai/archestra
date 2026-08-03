@@ -86,10 +86,11 @@ overrides:
   fast-xml-parser: 5.7.2
   fast-xml-builder: '>=1.1.7'
   samlify: '>=2.13.0'
-  # CVE-2026-16221 / CVE-2026-13676 (HIGH, interpretation conflict) fixed in 3.1.4.
-  # Pinned exact (not a `>=` floor) because fast-uri is temporarily excluded from
+  # CVE-2026-16221 / CVE-2026-13676 (HIGH, interpretation conflict) fixed in
+  # 3.1.4, then CVE-2026-18446 (HIGH, same class) fixed in 3.1.5. Pinned exact
+  # (not a `>=` floor) because fast-uri is temporarily excluded from
   # minimumReleaseAge below, so a floor could otherwise pull an unvetted release.
-  fast-uri: 3.1.4
+  fast-uri: 3.1.5
   ajv: 8.18.0
   # GHSA-gcfj-64vw-6mp9 (HIGH, prototype pollution) affects >=1.15.2, fixed in 1.18.0.
   axios: '>=1.18.0'
@@ -118,10 +119,11 @@ overrides:
   uuid@^11: '>=11.1.1'
   ip-address: '>=10.1.1'
   # CVE-2026-13149 (HIGH, uncontrolled resource consumption) fixed in 5.0.7, then
-  # CVE-2026-14257 (HIGH, same class) fixed in 5.0.8. Pinned exact (not a `>=`
-  # floor) because brace-expansion is temporarily excluded from
-  # minimumReleaseAge below, so a floor could otherwise pull an unvetted release.
-  brace-expansion: 5.0.8
+  # CVE-2026-14257 (HIGH, same class) fixed in 5.0.8, then CVE-2026-69152 (HIGH,
+  # same class again) fixed in 5.0.9. Pinned exact (not a `>=` floor) because
+  # brace-expansion is temporarily excluded from minimumReleaseAge below, so a
+  # floor could otherwise pull an unvetted release.
+  brace-expansion: 5.0.9
   smol-toml: '>=1.6.1'
   '@opentelemetry/exporter-prometheus': 0.217.0
   '@opentelemetry/sdk-node': 0.217.0
@@ -190,13 +192,13 @@ minimumReleaseAgeExclude:
   # 2026-07-21 and clears the 7-day window on 2026-07-28. Remove on/after that
   # date — the lockfile stays pinned at 9.7.0 regardless.
   - find-my-way
-  # TEMPORARY: brace-expansion 5.0.8 (fix CVE-2026-14257, HIGH) was published
-  # 2026-07-23 and clears the 7-day window on 2026-07-30. Remove on/after that
-  # date — the lockfile stays pinned at 5.0.8 regardless.
+  # TEMPORARY: brace-expansion 5.0.9 (fix CVE-2026-69152, HIGH) was published
+  # 2026-07-30 and clears the 7-day window on 2026-08-06. Remove on/after that
+  # date — the lockfile stays pinned at 5.0.9 regardless.
   - brace-expansion
-  # TEMPORARY: fast-uri 3.1.4 (fix CVE-2026-16221 / CVE-2026-13676, HIGH) was
-  # published 2026-07-19 and clears the 7-day window on 2026-07-26. Remove
-  # on/after that date — the lockfile stays pinned at 3.1.4 regardless.
+  # TEMPORARY: fast-uri 3.1.5 (fix CVE-2026-18446, HIGH) was published
+  # 2026-07-31 and clears the 7-day window on 2026-08-07. Remove on/after that
+  # date — the lockfile stays pinned at 3.1.5 regardless.
   - fast-uri
 
 # OpenTelemetry instrumentation requires these packages hoisted to root.
